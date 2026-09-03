@@ -16,8 +16,8 @@ Default branch: `master`
 - Branch: `master`
 - Worktree: CLEAN
 - Origin: `https://github.com/gokcekmustafa/okuplus.git`
-- Local HEAD: `4d0d97161abc5439dd8b581ff2a0c28f90502ecb`
-- Remote `origin/master` HEAD: `4d0d97161abc5439dd8b581ff2a0c28f90502ecb`
+- Local HEAD: `55c494df01ca1555b96ebbf0f81063908f8dec0a`
+- Remote `origin/master` HEAD: `55c494df01ca1555b96ebbf0f81063908f8dec0a`
 - `git ls-remote origin refs/heads/master`: matched local HEAD
 - Force push: NO
 - Tags: none
@@ -30,6 +30,7 @@ The local history remains linear and includes the canonical baseline:
 4. `13c210dbe3922af83e9949c8b5915f60076023d8` — `docs: redact curriculum database URL example`
 5. `2c1e8abfd23fd413f9ba24d549f0d5184efa90dd` — `fix: make billing webhook migration idempotent`
 6. `4d0d97161abc5439dd8b581ff2a0c28f90502ecb` — `ci: use libpq-safe URL for RLS role setup`
+7. `55c494df01ca1555b96ebbf0f81063908f8dec0a` — `docs: record GitHub remote CI evidence`
 
 The evidence commit is a separate child of the release baseline. No history rewrite occurred.
 
@@ -40,8 +41,9 @@ The initial push of the clean local history succeeded as a normal fast-forward. 
 - Run `33766241115`: migration failed because the billing webhook owner migration repeated columns already created by 8H-5.
 - Run `33767455718`: migrations passed, but the RLS role step passed a Prisma `schema` query parameter to `psql`.
 - Run `33784897464`: PASS on `4d0d971`; quality job and every step passed.
+- Run `33785556426`: PASS on `55c494d`; quality job and every step passed.
 
-The verified [CI run](https://github.com/gokcekmustafa/okuplus/actions/runs/33784897464) passed install, migrations, non-superuser RLS role setup, lint, format check, typecheck, build, and test. The workflow has no deployment job.
+The verified [CI run](https://github.com/gokcekmustafa/okuplus/actions/runs/33785556426) passed install, migrations, non-superuser RLS role setup, lint, format check, typecheck, build, and test. The workflow has no deployment job.
 
 ## Repository security
 
