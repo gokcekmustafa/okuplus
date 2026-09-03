@@ -16,8 +16,8 @@ Default branch: `master`
 - Branch: `master`
 - Worktree: CLEAN
 - Origin: `https://github.com/gokcekmustafa/okuplus.git`
-- Local HEAD: `55c494df01ca1555b96ebbf0f81063908f8dec0a`
-- Remote `origin/master` HEAD: `55c494df01ca1555b96ebbf0f81063908f8dec0a`
+- Local HEAD: `4a566680b1b4275ca9fd78e3dccf14e4d7f0f576`
+- Remote `origin/master` HEAD: `4a566680b1b4275ca9fd78e3dccf14e4d7f0f576`
 - `git ls-remote origin refs/heads/master`: matched local HEAD
 - Force push: NO
 - Tags: none
@@ -31,6 +31,7 @@ The local history remains linear and includes the canonical baseline:
 5. `2c1e8abfd23fd413f9ba24d549f0d5184efa90dd` — `fix: make billing webhook migration idempotent`
 6. `4d0d97161abc5439dd8b581ff2a0c28f90502ecb` — `ci: use libpq-safe URL for RLS role setup`
 7. `55c494df01ca1555b96ebbf0f81063908f8dec0a` — `docs: record GitHub remote CI evidence`
+8. `4a566680b1b4275ca9fd78e3dccf14e4d7f0f576` — `docs: finalize GitHub CI verification`
 
 The evidence commit is a separate child of the release baseline. No history rewrite occurred.
 
@@ -42,8 +43,11 @@ The initial push of the clean local history succeeded as a normal fast-forward. 
 - Run `33767455718`: migrations passed, but the RLS role step passed a Prisma `schema` query parameter to `psql`.
 - Run `33784897464`: PASS on `4d0d971`; quality job and every step passed.
 - Run `33785556426`: PASS on `55c494d`; quality job and every step passed.
+- Run `33786105222`: PASS on `4a56668`; quality job and every step passed.
 
-The verified [CI run](https://github.com/gokcekmustafa/okuplus/actions/runs/33785556426) passed install, migrations, non-superuser RLS role setup, lint, format check, typecheck, build, and test. The workflow has no deployment job.
+The verified [CI run](https://github.com/gokcekmustafa/okuplus/actions/runs/33786105222) passed install, migrations, non-superuser RLS role setup, lint, format check, typecheck, build, and test. The workflow has no deployment job.
+
+Any later commit containing only updates to this evidence remains a documentation-only child of the CI-verified HEAD.
 
 ## Repository security
 

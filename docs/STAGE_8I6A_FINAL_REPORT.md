@@ -22,13 +22,13 @@ https://github.com/gokcekmustafa/okuplus (Public; default branch `master`)
 
 ## LOCAL HEAD
 
-`55c494df01ca1555b96ebbf0f81063908f8dec0a` (CI-verified release/evidence HEAD; this final report update is documentation-only)
+`4a566680b1b4275ca9fd78e3dccf14e4d7f0f576` (CI-verified release/evidence HEAD; this final report update is documentation-only)
 
 Canonical release baseline remains `2ce14ec0fe41e18974a951b585cb9c3a2c28d366`.
 
 ## REMOTE HEAD
 
-`55c494df01ca1555b96ebbf0f81063908f8dec0a` at the completed CI verification; the final report commit is a documentation-only child.
+`4a566680b1b4275ca9fd78e3dccf14e4d7f0f576` at the completed CI verification; the final report commit is a documentation-only child.
 
 ## EVIDENCE COMMIT
 
@@ -52,7 +52,7 @@ PASS. `.env` and other environment variants are ignored except `.env.example`; g
 
 ## CI
 
-PASS — [GitHub Actions run 33785556426](https://github.com/gokcekmustafa/okuplus/actions/runs/33785556426) on `55c494d`. The quality job passed install, Prisma migrations, RLS role preparation, lint, format check, typecheck, build, and test. CI has no deploy job.
+PASS — [GitHub Actions run 33786105222](https://github.com/gokcekmustafa/okuplus/actions/runs/33786105222) on `4a56668`. The quality job passed install, Prisma migrations, RLS role preparation, lint, format check, typecheck, build, and test. CI has no deploy job.
 
 ## BRANCH PROTECTION
 
