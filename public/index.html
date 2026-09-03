@@ -1,0 +1,4380 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oku+</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='16' font-family='sans-serif' font-weight='700' fill='%23fff' text-anchor='middle'%3EO%2B%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- ================= Login ================= -->
+    <main id="view-login" class="login-shell hidden">
+      <div class="card login-card">
+        <div class="brand">
+          <h1>Oku+</h1>
+          <p>Okuma becerileri platformuna giriş</p>
+        </div>
+        <div class="social-login" aria-label="Sosyal giriş seçenekleri">
+          <button id="google-login-btn" type="button" class="btn btn-ghost btn-block" disabled>
+            Google ile devam et
+          </button>
+          <button id="apple-login-btn" type="button" class="btn btn-ghost btn-block" disabled>
+            Apple ile devam et
+          </button>
+          <p id="social-login-status" class="muted" role="status">
+            Sosyal giriş yapılandırması kontrol ediliyor…
+          </p>
+        </div>
+        <form id="login-form" novalidate>
+          <label class="field">
+            <span>E-posta</span>
+            <input
+              id="login-email"
+              name="email"
+              type="email"
+              autocomplete="username"
+              required
+              placeholder="ornek@example.com"
+            />
+          </label>
+          <label class="field">
+            <span>Şifre</span>
+            <input
+              id="login-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="••••••••"
+            />
+          </label>
+          <p id="login-error" class="error hidden" role="alert"></p>
+          <button id="login-submit" type="submit" class="btn btn-primary btn-block">
+            <span class="btn-label">Giriş yap</span>
+            <span class="btn-spinner hidden" aria-hidden="true"></span>
+          </button>
+          <button id="show-signup-btn" type="button" class="btn btn-ghost btn-block">
+            Bireysel hesap oluştur
+          </button>
+        </form>
+        <form id="signup-form" class="hidden" novalidate>
+          <label class="field">
+            <span>Ad</span>
+            <input
+              id="signup-display-name"
+              name="displayName"
+              type="text"
+              autocomplete="name"
+              maxlength="120"
+              required
+              placeholder="Adınız"
+            />
+          </label>
+          <label class="field">
+            <span>E-posta</span>
+            <input
+              id="signup-email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+              placeholder="ornek@example.com"
+            />
+          </label>
+          <label class="field">
+            <span>Şifre</span>
+            <input
+              id="signup-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              minlength="8"
+              maxlength="128"
+              required
+              placeholder="En az 8 karakter"
+            />
+          </label>
+          <p id="signup-error" class="error hidden" role="alert"></p>
+          <button id="signup-submit" type="submit" class="btn btn-primary btn-block">
+            <span class="btn-label">Hesap oluştur</span>
+            <span class="btn-spinner hidden" aria-hidden="true"></span>
+          </button>
+          <button id="show-login-btn" type="button" class="btn btn-ghost btn-block">
+            Girişe dön
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- ================= Uygulama (auth) ================= -->
+    <div id="view-app" class="app hidden">
+      <!-- Sidebar -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark">Oku+</span>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Ana menü">
+          <button class="nav-item" data-page="dashboard" type="button">
+            <span class="nav-icon" aria-hidden="true">⌂</span>
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-page="tenants" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🏢</span>
+            <span class="nav-label">Kurumlar</span>
+          </button>
+          <button class="nav-item" data-page="users" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🧑‍🤝‍🧑</span>
+            <span class="nav-label">Kullanıcılar</span>
+          </button>
+          <button class="nav-item" data-page="students" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">👥</span>
+            <span class="nav-label">Öğrenciler</span>
+          </button>
+          <button class="nav-item" data-page="teachers" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🧑‍🏫</span>
+            <span class="nav-label">Öğretmenler</span>
+          </button>
+          <button class="nav-item" data-page="branches" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🏬</span>
+            <span class="nav-label">Şubeler</span>
+          </button>
+          <button class="nav-item" data-page="classes" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🏫</span>
+            <span class="nav-label">Sınıflar</span>
+          </button>
+          <button class="nav-item" data-page="contents" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">📚</span>
+            <span class="nav-label">İçerikler</span>
+          </button>
+          <button class="nav-item" data-page="questions" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">❓</span>
+            <span class="nav-label">Soru Bankası</span>
+          </button>
+          <button class="nav-item" data-page="templates" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">📋</span>
+            <span class="nav-label">Şablonlar</span>
+          </button>
+          <button class="nav-item" data-page="skills" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🎯</span>
+            <span class="nav-label">Beceriler</span>
+          </button>
+          <button class="nav-item" data-page="levels" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true">🪜</span>
+            <span class="nav-label">Seviyeler</span>
+          </button>
+          <button class="nav-item" data-page="assignments" type="button">
+            <span class="nav-icon" aria-hidden="true">📝</span>
+            <span class="nav-label">Ödevler</span>
+          </button>
+          <button class="nav-item" data-page="exercise" type="button">
+            <span class="nav-icon" aria-hidden="true">✏️</span>
+            <span class="nav-label">Alıştırmalar</span>
+          </button>
+          <button class="nav-item" data-page="assessments" type="button">
+            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-label">Ölçme &amp; Değerlendirme</span>
+          </button>
+          <button class="nav-item" data-page="progress" type="button">
+            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-label">İlerleme</span>
+          </button>
+          <button class="nav-item" data-page="badges" data-student type="button">
+            <span class="nav-icon" aria-hidden="true">🏅</span>
+            <span class="nav-label">Rozetler &amp; Puanlar</span>
+          </button>
+          <button class="nav-item" data-page="billing-account" data-student type="button">
+            <span class="nav-icon" aria-hidden="true">💳</span>
+            <span class="nav-label">Hesap ve Ödeme</span>
+          </button>
+          <button class="nav-item" data-page="settings" type="button">
+            <span class="nav-icon" aria-hidden="true">⚙️</span>
+            <span class="nav-label">Ayarlar</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- İçerik alanı -->
+      <div class="app-main">
+        <!-- Topbar -->
+        <header class="topbar">
+          <button
+            id="sidebar-toggle"
+            class="btn btn-icon"
+            type="button"
+            aria-label="Menüyü aç/kapat"
+            aria-expanded="false"
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
+
+          <div class="topbar-context">
+            <span class="tenant-name" id="topbar-tenant">—</span>
+            <select
+              id="context-switcher"
+              class="context-switcher hidden"
+              aria-label="Bağlam seç"
+            ></select>
+            <div
+              id="topbar-gamification"
+              class="topbar-gamification hidden"
+              aria-label="Puan ve seri"
+            >
+              <span class="gamification-badge" title="Toplam XP"
+                ><span aria-hidden="true">⭐</span> <span id="topbar-xp">0</span> XP</span
+              >
+              <span class="gamification-badge" title="Günlük seri"
+                ><span aria-hidden="true">🔥</span> <span id="topbar-streak">0</span></span
+              >
+            </div>
+          </div>
+
+          <div class="topbar-user">
+            <div class="user-chip">
+              <span class="user-avatar" id="user-avatar">?</span>
+              <div class="user-meta">
+                <span class="user-name" id="user-name">—</span>
+                <span class="user-role" id="user-role">—</span>
+              </div>
+            </div>
+            <button id="logout-btn" type="button" class="btn btn-ghost btn-sm">Çıkış yap</button>
+          </div>
+        </header>
+
+        <main class="page">
+          <!-- Onboarding -->
+          <section id="page-onboarding" class="page-view hidden">
+            <div class="onboarding-shell">
+              <div class="onboarding-card card">
+                <div
+                  class="onboarding-progress"
+                  id="onboarding-progress"
+                  aria-label="Onboarding ilerlemesi"
+                >
+                  <span class="onboarding-progress-label">Başlangıç</span>
+                  <span class="onboarding-progress-count"
+                    >Adım <span id="onboarding-step-num">1</span>/3</span
+                  >
+                  <div class="onboarding-progress-dots" aria-hidden="true">
+                    <span class="onboarding-dot active"></span
+                    ><span class="onboarding-progress-line"></span>
+                    <span class="onboarding-dot"></span
+                    ><span class="onboarding-progress-line"></span>
+                    <span class="onboarding-dot"></span>
+                  </div>
+                </div>
+                <div id="onboarding-step-1">
+                  <div class="onboarding-hero" aria-hidden="true">
+                    <div class="onboarding-mascot">📚</div>
+                    <span class="mascot-spark">✦</span>
+                  </div>
+                  <h1>Hoş geldin!</h1>
+                  <p class="onboarding-lead">Oku+’da kendi öğrenme yolunu birlikte keşfedelim.</p>
+                  <label class="field"
+                    ><span>Adın *</span
+                    ><input
+                      id="onboard-displayName"
+                      type="text"
+                      maxlength="120"
+                      placeholder="Nasıl hitap edelim?"
+                      autocomplete="given-name"
+                  /></label>
+                  <label class="field"
+                    ><span>Doğum yılın <small>(isteğe bağlı)</small></span
+                    ><input
+                      id="onboard-birthYear"
+                      type="number"
+                      min="1900"
+                      max="2026"
+                      placeholder="2012"
+                      inputmode="numeric"
+                      autocomplete="bday-year"
+                  /></label>
+                </div>
+                <div id="onboarding-step-2" class="hidden">
+                  <div class="onboarding-step-icon" aria-hidden="true">🎯</div>
+                  <h1>Bugün neye ulaşmak istiyorsun?</h1>
+                  <p class="onboarding-lead">Sana en uygun öğrenme yolunu seçelim.</p>
+                  <div class="field">
+                    <span id="goal-label">Öğrenme amacın *</span>
+                    <div class="goal-grid" role="radiogroup" aria-labelledby="goal-label">
+                      <button
+                        type="button"
+                        class="goal-card"
+                        data-goal="SPEED"
+                        role="radio"
+                        aria-checked="false"
+                      >
+                        <span class="goal-icon" aria-hidden="true">⚡</span
+                        ><span>Okuma hızımı geliştirmek</span
+                        ><span class="goal-check" aria-hidden="true">✓</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="goal-card"
+                        data-goal="COMPREHENSION"
+                        role="radio"
+                        aria-checked="false"
+                      >
+                        <span class="goal-icon" aria-hidden="true">🧠</span
+                        ><span>Okuduğumu daha iyi anlamak</span
+                        ><span class="goal-check" aria-hidden="true">✓</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="goal-card"
+                        data-goal="EXAM"
+                        role="radio"
+                        aria-checked="false"
+                      >
+                        <span class="goal-icon" aria-hidden="true">🎯</span
+                        ><span>Sınava hazırlanmak</span
+                        ><span class="goal-check" aria-hidden="true">✓</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="goal-card"
+                        data-goal="SELF_IMPROVEMENT"
+                        role="radio"
+                        aria-checked="false"
+                      >
+                        <span class="goal-icon" aria-hidden="true">🌱</span
+                        ><span>Kendimi geliştirmek</span
+                        ><span class="goal-check" aria-hidden="true">✓</span>
+                      </button>
+                    </div>
+                  </div>
+                  <label class="field"
+                    ><span>Sınıf düzeyin *</span
+                    ><select id="onboard-level">
+                      <option value="">Seviyenizi seçin…</option>
+                    </select></label
+                  >
+                </div>
+                <div id="onboarding-step-3" class="hidden">
+                  <div class="onboarding-step-icon" aria-hidden="true">🛡️</div>
+                  <h1>Neredeyse hazırsın</h1>
+                  <p class="onboarding-lead">Güvenli ve kişisel bir deneyim için son bir adım.</p>
+                  <div class="consent-list">
+                    <label class="consent-row"
+                      ><input type="checkbox" id="onboard-consent-terms" /><span
+                        >Kullanım koşullarını kabul ediyorum <b>*</b></span
+                      ></label
+                    >
+                    <label class="consent-row"
+                      ><input type="checkbox" id="onboard-consent-data" /><span
+                        >Verilerimin işlenmesini kabul ediyorum <b>*</b></span
+                      ></label
+                    >
+                    <label class="consent-row hidden" id="onboard-parental-wrap"
+                      ><input type="checkbox" id="onboard-consent-parental" /><span
+                        >Ebeveyn onayını aldım <b>*</b></span
+                      ></label
+                    >
+                  </div>
+                  <p class="consent-note">
+                    Onayların güvenli şekilde kaydedilir. İstediğinde ayarlardan geri alabilirsin.
+                  </p>
+                </div>
+                <div id="onboarding-ready" class="hidden onboarding-ready">
+                  <div class="ready-mascot" aria-hidden="true">🎉</div>
+                  <h1>Harika, hazırsın!</h1>
+                  <p class="onboarding-lead">İlk çalışmana başlayalım mı?</p>
+                  <div class="ready-actions">
+                    <button id="onboard-quickstart" type="button" class="btn btn-primary btn-block">
+                      Hızlı Başla <span aria-hidden="true">→</span></button
+                    ><button id="onboard-placement" type="button" class="btn btn-ghost btn-block">
+                      Seviyemi Ölç
+                    </button>
+                  </div>
+                </div>
+                <p id="onboarding-error" class="error hidden" role="alert"></p>
+                <div class="onboarding-actions">
+                  <button id="onboarding-prev" type="button" class="btn btn-ghost hidden">
+                    Geri
+                  </button>
+                  <button id="onboarding-next" type="button" class="btn btn-primary">
+                    Devam Et <span aria-hidden="true">→</span>
+                  </button>
+                  <button id="onboarding-complete" type="button" class="btn btn-primary hidden">
+                    Tamamla <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Dashboard -->
+          <section id="page-dashboard" class="page-view">
+            <div class="page-head">
+              <h2>Dashboard</h2>
+              <p class="muted">Hoş geldiniz, <span id="welcome-name">—</span></p>
+            </div>
+
+            <div class="stat-grid" data-admin>
+              <div class="stat-card">
+                <span class="stat-label">Aktif öğrenci</span>
+                <span class="stat-value">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Aktif öğretmen</span>
+                <span class="stat-value">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Sınıf</span>
+                <span class="stat-value">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Tamamlanan ödev</span>
+                <span class="stat-value">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Ortalama ilerleme</span>
+                <span class="stat-value">—</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Kazanılan puan</span>
+                <span class="stat-value">—</span>
+              </div>
+            </div>
+
+            <section
+              id="home-insights"
+              class="insight-home hidden"
+              data-student
+              aria-label="Kısa ilerleme özeti"
+            >
+              <div id="home-insights-values"></div>
+              <button type="button" class="btn btn-secondary" id="home-progress-link">
+                İlerlemeni gör →
+              </button>
+            </section>
+            <div id="today-card" class="card" data-student style="padding: 16px; margin-top: 16px">
+              <h3 style="margin: 0 0 8px">Bugün</h3>
+              <div id="today-next-action" class="muted">Yükleniyor…</div>
+              <div id="today-stats" class="muted" style="margin-top: 8px; font-size: 12px"></div>
+              <div id="today-recent" style="margin-top: 12px"></div>
+            </div>
+
+            <section
+              id="entitlement-card"
+              class="card entitlement-card hidden"
+              data-student
+              aria-labelledby="entitlement-title"
+            >
+              <div class="entitlement-card-head">
+                <div>
+                  <span class="eyebrow">Hesap planı</span>
+                  <h3 id="entitlement-title">Ücretsiz</h3>
+                  <p id="entitlement-scope" class="muted">Kişisel alan</p>
+                </div>
+                <div class="entitlement-badges">
+                  <span id="entitlement-plan-badge" class="badge badge-info">Aktif</span>
+                  <span id="entitlement-state" class="badge badge-neutral">Ücretsiz plan</span>
+                </div>
+              </div>
+              <div id="entitlement-usage" class="entitlement-usage" aria-live="polite"></div>
+              <div id="entitlement-premium" class="entitlement-premium">
+                <div>
+                  <strong>Premium bilgisi</strong>
+                  <p id="entitlement-premium-note" class="muted">
+                    Ödeme bağlantısı henüz etkin değil.
+                  </p>
+                </div>
+                <button
+                  id="entitlement-premium-cta"
+                  type="button"
+                  class="btn btn-secondary"
+                  data-premium-action="OPEN_PREMIUM_INFO"
+                >
+                  Premium hakkında bilgi
+                </button>
+              </div>
+              <p id="entitlement-error" class="error hidden" role="alert"></p>
+            </section>
+
+            <section
+              id="review-card"
+              class="card review-card hidden"
+              aria-labelledby="review-card-title"
+            >
+              <div class="review-card-head">
+                <div>
+                  <h3 id="review-card-title">Tekrar zamanı</h3>
+                  <p id="review-card-status" class="muted">
+                    Önceki çalışmalarından kısa bir tekrar.
+                  </p>
+                </div>
+                <span class="review-card-icon" aria-hidden="true">↺</span>
+              </div>
+              <div id="review-items" class="review-items" aria-live="polite"></div>
+            </section>
+
+            <div
+              id="learning-path-card"
+              class="card"
+              data-student
+              style="padding: 16px; margin-top: 16px"
+            >
+              <div style="display: flex; justify-content: space-between; align-items: center">
+                <h3 style="margin: 0">Öğrenme Yolu</h3>
+                <span id="learning-path-progress" class="muted" style="font-size: 12px"></span>
+              </div>
+              <div
+                id="learning-path-level"
+                class="muted"
+                style="font-size: 13px; margin: 6px 0 12px"
+              ></div>
+              <div
+                id="learning-path"
+                class="learning-path"
+                role="list"
+                aria-label="Öğrenme yolu"
+              ></div>
+            </div>
+
+            <div class="placeholder-note card" data-admin>
+              İstatistikler, ilgili modüller tamamlandığında burada gösterilecek.
+            </div>
+          </section>
+
+          <section id="page-premium-info" class="page-view hidden premium-info-page" data-student>
+            <header class="premium-info-heading">
+              <div>
+                <p class="eyebrow">PLAN BİLGİSİ</p>
+                <h2>Premium nedir?</h2>
+                <p class="muted">
+                  Premium, alıştırma ve soru kullanımındaki günlük sınırı kaldıran plan seçeneğidir.
+                </p>
+              </div>
+              <button id="premium-info-back" type="button" class="btn btn-ghost">
+                Dashboard'a dön
+              </button>
+            </header>
+            <div class="premium-info-grid">
+              <section class="card premium-info-card" aria-labelledby="premium-free-title">
+                <span class="premium-info-icon" aria-hidden="true">🌱</span>
+                <h3 id="premium-free-title">Ücretsiz planda</h3>
+                <ul>
+                  <li>Günde 3 alıştırma hakkı vardır.</li>
+                  <li>Günde 20 soru hakkı vardır.</li>
+                  <li>Haklar her gün yerel sıfırlama zamanında yenilenir.</li>
+                </ul>
+              </section>
+              <section
+                class="card premium-info-card premium-info-highlight"
+                aria-labelledby="premium-active-title"
+              >
+                <span class="premium-info-icon" aria-hidden="true">✨</span>
+                <h3 id="premium-active-title">Premium ile</h3>
+                <ul>
+                  <li>Alıştırma kullanımında günlük sınır olmaz.</li>
+                  <li>Soru kullanımında günlük sınır olmaz.</li>
+                  <li>Mevcut kişisel öğrenme akışın devam eder.</li>
+                </ul>
+              </section>
+            </div>
+            <section class="card premium-info-note" aria-labelledby="premium-future-title">
+              <h3 id="premium-future-title">İleride değerlendirilecek yetenekler</h3>
+              <p>
+                Reklamsız kullanım, gelişmiş ilerleme, gelişmiş tekrar ve Premium içerik bu aşamada
+                etkin değildir.
+              </p>
+              <p class="muted">
+                Ödeme şu anda kullanıma açık değildir. Bu ekranda fiyat, kampanya, kart veya satın
+                alma işlemi bulunmaz.
+              </p>
+              <button
+                id="premium-info-billing"
+                type="button"
+                class="btn btn-secondary"
+                data-premium-action="OPEN_BILLING_ACCOUNT"
+              >
+                Aboneliği ve ödemeleri yönet
+              </button>
+            </section>
+            <section class="card billing-sandbox-panel" aria-labelledby="billing-sandbox-title">
+              <span class="eyebrow">TEST ORTAMI</span>
+              <h3 id="billing-sandbox-title">iyzico sandbox aboneliği</h3>
+              <p id="billing-sandbox-note" class="muted">
+                Sandbox yapılandırması tamamlanmadan checkout başlatılmaz; Premium durumu yalnızca
+                doğrulanmış provider webhook'u ile değişir.
+              </p>
+              <div class="billing-sandbox-actions">
+                <button id="premium-checkout-start" type="button" class="btn btn-primary" disabled>
+                  Sandbox checkout başlat
+                </button>
+                <button id="premium-subscription-cancel" type="button" class="btn btn-ghost hidden">
+                  Aboneliği iptal et
+                </button>
+              </div>
+              <p id="billing-sandbox-status" class="muted" role="status"></p>
+              <div id="iyzico-checkout-form" class="billing-checkout-form" aria-live="polite"></div>
+            </section>
+          </section>
+
+          <section
+            id="page-billing-account"
+            class="page-view hidden billing-account-page"
+            data-student
+          >
+            <header class="billing-account-heading">
+              <div>
+                <p class="eyebrow">HESAP VE ÖDEME</p>
+                <h2>Premium aboneliğini yönet</h2>
+                <p class="muted">
+                  Bu alan yalnızca kişisel hesabındaki doğrulanmış abonelik ve ödeme kayıtlarını
+                  gösterir.
+                </p>
+              </div>
+              <button id="billing-account-back" type="button" class="btn btn-ghost">
+                Premium bilgisine dön
+              </button>
+            </header>
+
+            <div id="billing-account-error" class="error hidden" role="alert"></div>
+
+            <section
+              class="card billing-account-scope"
+              aria-labelledby="billing-account-scope-title"
+            >
+              <div>
+                <span class="eyebrow">KAPSAM</span>
+                <h3 id="billing-account-scope-title">Kişisel alan</h3>
+                <p id="billing-account-scope-note" class="muted">
+                  Kurum abonelikleri bu ekranın kapsamı dışındadır.
+                </p>
+              </div>
+              <button
+                id="billing-account-refresh"
+                type="button"
+                class="btn btn-secondary"
+                aria-label="Ödeme bilgilerini yenile"
+              >
+                Yenile
+              </button>
+            </section>
+
+            <div class="billing-account-grid">
+              <section
+                class="card billing-account-card"
+                aria-labelledby="billing-account-plan-title"
+              >
+                <span class="eyebrow">MEVCUT PLAN</span>
+                <h3 id="billing-account-plan-title">Ücretsiz</h3>
+                <p id="billing-account-state" class="billing-account-state" role="status">
+                  Plan bilgisi yükleniyor…
+                </p>
+                <p id="billing-account-summary" class="muted"></p>
+                <dl class="billing-account-details">
+                  <div>
+                    <dt>Dönem</dt>
+                    <dd id="billing-account-period">Belirtilmemiş</dd>
+                  </div>
+                  <div>
+                    <dt>Yenileme</dt>
+                    <dd id="billing-account-renewal">Belirtilmemiş</dd>
+                  </div>
+                  <div>
+                    <dt>İptal durumu</dt>
+                    <dd id="billing-account-cancellation">Yok</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section
+                class="card billing-account-card"
+                aria-labelledby="billing-account-management-title"
+              >
+                <span class="eyebrow">YÖNETİM</span>
+                <h3 id="billing-account-management-title">Abonelik yönetimi</h3>
+                <p id="billing-account-management" class="muted">Abonelik durumun doğrulanıyor…</p>
+                <div class="billing-account-actions">
+                  <button
+                    id="billing-account-checkout-start"
+                    type="button"
+                    class="btn btn-primary"
+                    disabled
+                  >
+                    Yeni Premium aboneliği başlat
+                  </button>
+                  <button id="billing-account-cancel" type="button" class="btn btn-danger hidden">
+                    Aboneliği iptal et
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <section
+              id="billing-account-free-benefits"
+              class="card billing-account-benefits"
+              aria-labelledby="billing-account-free-title"
+            >
+              <span class="eyebrow">ÜCRETSİZ PLAN</span>
+              <h3 id="billing-account-free-title">Premium avantajlarını incele</h3>
+              <p class="muted">Günlük alıştırma ve soru haklarını kullanmaya devam edebilirsin.</p>
+              <ul>
+                <li>Günde 3 alıştırma hakkı</li>
+                <li>Günde 20 soru hakkı</li>
+                <li>Premium ile bu iki kullanım sınırı kaldırılır.</li>
+              </ul>
+            </section>
+
+            <section
+              class="card billing-account-history"
+              aria-labelledby="billing-payment-history-title"
+            >
+              <div class="billing-account-section-head">
+                <div>
+                  <span class="eyebrow">ÖDEME GEÇMİŞİ</span>
+                  <h3 id="billing-payment-history-title">Doğrulanmış ödemeler</h3>
+                </div>
+                <span class="muted">Kart bilgisi gösterilmez.</span>
+              </div>
+              <div id="billing-payment-history" aria-live="polite">
+                <p class="muted">Ödeme geçmişi yükleniyor…</p>
+              </div>
+            </section>
+
+            <section class="card billing-account-invoice" aria-labelledby="billing-invoice-title">
+              <span class="eyebrow">FATURA</span>
+              <h3 id="billing-invoice-title">Fatura ve e-belge</h3>
+              <p id="billing-invoice-note" class="muted">
+                Fatura bilgileri ödeme altyapısı tamamlandığında burada gösterilecektir.
+              </p>
+            </section>
+          </section>
+
+          <!-- Kurumlar -->
+          <section id="page-tenants" class="page-view hidden">
+            <div class="page-head">
+              <h2>Kurumlar</h2>
+              <p class="muted">Platform kurumlarını yönetin</p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum ara</span>
+                  <input
+                    id="tenant-search"
+                    type="search"
+                    placeholder="Kurum adı veya slug ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="tenant-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="SUSPENDED">Askıda</option>
+                    <option value="CLOSED">Kapatıldı</option>
+                  </select>
+                </label>
+              </div>
+              <button id="tenant-create-btn" type="button" class="btn btn-primary">
+                Yeni kurum
+              </button>
+            </div>
+
+            <div id="tenant-error" class="error hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Kurum</th>
+                    <th>Tip</th>
+                    <th>Durum</th>
+                    <th>Üyeler</th>
+                    <th>Oluşturulma</th>
+                    <th class="text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody id="tenant-list-body">
+                  <tr>
+                    <td colspan="6" class="empty-cell">Yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="tenant-pagination">
+              <span id="tenant-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="tenant-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <button id="tenant-next-btn" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Yeni / düzenle formu -->
+            <div id="tenant-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="tenant-form-title">Yeni kurum</h3>
+                  <button
+                    id="tenant-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="tenant-form" novalidate>
+                  <input type="hidden" id="tenant-form-id" />
+                  <label class="field">
+                    <span>Kurum adı *</span>
+                    <input
+                      id="tenant-form-name"
+                      type="text"
+                      required
+                      maxlength="120"
+                      placeholder="Örnek Koleji"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Tip *</span>
+                    <select id="tenant-form-type">
+                      <option value="ORGANIZATION">Kurum (Organizasyon)</option>
+                      <option value="INDIVIDUAL">Bireysel</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Slug (kurumlar için)</span>
+                    <input
+                      id="tenant-form-slug"
+                      type="text"
+                      maxlength="64"
+                      placeholder="ornek-koleji"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Logo URL</span>
+                    <input
+                      id="tenant-form-logo"
+                      type="url"
+                      maxlength="500"
+                      placeholder="https://…"
+                    />
+                  </label>
+                  <p id="tenant-form-error" class="error hidden" role="alert"></p>
+                  <div class="modal-actions">
+                    <button id="tenant-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="tenant-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Detay modalı -->
+            <div id="tenant-detail-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="tenant-detail-title">Kurum detayı</h3>
+                  <button
+                    id="tenant-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="tenant-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="tenant-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="tenant-detail-delete" type="button" class="btn btn-danger">
+                    Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Kullanıcılar -->
+          <section id="page-users" class="page-view hidden">
+            <div class="page-head">
+              <h2>Kullanıcılar</h2>
+              <p class="muted">Platform kullanıcılarını ve üyeliklerini yönetin</p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kullanıcı ara</span>
+                  <input
+                    id="user-search"
+                    type="search"
+                    placeholder="Ad veya e-posta ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="user-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="INVITED">Davetli</option>
+                    <option value="SUSPENDED">Askıda</option>
+                    <option value="CLOSED">Kapatıldı</option>
+                  </select>
+                </label>
+              </div>
+              <button id="user-create-btn" type="button" class="btn btn-primary">
+                Yeni kullanıcı
+              </button>
+            </div>
+
+            <div id="user-error" class="error hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Kullanıcı</th>
+                    <th>Telefon</th>
+                    <th>Doğum Yılı</th>
+                    <th>Durum</th>
+                    <th>Üyelikler</th>
+                    <th class="text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody id="user-list-body">
+                  <tr>
+                    <td colspan="6" class="empty-cell">Yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="tenant-pagination">
+              <span id="user-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="user-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <button id="user-next-btn" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Yeni / düzenle formu -->
+            <div id="user-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="user-form-title">Yeni kullanıcı</h3>
+                  <button
+                    id="user-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="user-form" novalidate>
+                  <input type="hidden" id="user-form-id" />
+                  <label class="field">
+                    <span>Ad *</span>
+                    <input
+                      id="user-form-name"
+                      type="text"
+                      required
+                      maxlength="120"
+                      placeholder="Ad Soyad"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>E-posta *</span>
+                    <input
+                      id="user-form-email"
+                      type="email"
+                      required
+                      maxlength="254"
+                      placeholder="ornek@example.com"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Telefon</span>
+                    <input
+                      id="user-form-phone"
+                      type="text"
+                      maxlength="30"
+                      placeholder="+90 555 000 00 00"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Doğum yılı</span>
+                    <input
+                      id="user-form-birthyear"
+                      type="number"
+                      min="1900"
+                      max="2026"
+                      placeholder="1998"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Durum *</span>
+                    <select id="user-form-status">
+                      <option value="ACTIVE">Aktif</option>
+                      <option value="INVITED">Davetli</option>
+                      <option value="SUSPENDED">Askıda</option>
+                      <option value="CLOSED">Kapatıldı</option>
+                    </select>
+                  </label>
+                  <label class="field" id="user-form-password-field">
+                    <span>Parola *</span>
+                    <input
+                      id="user-form-password"
+                      type="password"
+                      minlength="8"
+                      maxlength="128"
+                      autocomplete="new-password"
+                      placeholder="En az 8 karakter"
+                    />
+                  </label>
+                  <fieldset id="user-form-initial-membership" class="fieldset-group">
+                    <legend>İlk kurum üyeliği</legend>
+                    <label class="field">
+                      <span>Kurum</span>
+                      <select id="user-form-tenant">
+                        <option value="">Kurum seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Rol</span>
+                      <select id="user-form-role">
+                        <option value="">Rol seçin…</option>
+                      </select>
+                    </label>
+                    <p class="muted field-hint">
+                      Kurum seçilirse kullanıcı oluşturulduğunda üyelik de eklenir.
+                    </p>
+                  </fieldset>
+                  <p id="user-form-error" class="error hidden" role="alert"></p>
+                  <div class="modal-actions">
+                    <button id="user-form-cancel" type="button" class="btn btn-ghost">İptal</button>
+                    <button id="user-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Detay modalı (bilgi + üyelik yönetimi) -->
+            <div id="user-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="user-detail-title">Kullanıcı detayı</h3>
+                  <button
+                    id="user-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="user-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="user-detail-edit" type="button" class="btn btn-ghost">Düzenle</button>
+                  <button id="user-detail-delete" type="button" class="btn btn-danger">Sil</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Öğrenciler -->
+          <section id="page-students" class="page-view hidden">
+            <div class="page-head">
+              <h2>Öğrenciler</h2>
+              <p class="muted">Kurum veya bireysel öğrencileri yönetin</p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Öğrenci ara</span>
+                  <input
+                    id="student-search"
+                    type="search"
+                    placeholder="Ad veya e-posta ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum filtresi</span>
+                  <select id="student-tenant-filter">
+                    <option value="">Tüm kurumlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="student-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="INVITED">Davetli</option>
+                    <option value="SUSPENDED">Askıda</option>
+                    <option value="CLOSED">Kapatıldı</option>
+                  </select>
+                </label>
+              </div>
+              <button id="student-create-btn" type="button" class="btn btn-primary">
+                Yeni öğrenci
+              </button>
+            </div>
+
+            <div id="student-error" class="error hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ad Soyad</th>
+                    <th>E-posta</th>
+                    <th>Kurum</th>
+                    <th>Sınıf</th>
+                    <th>Durum</th>
+                    <th class="text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody id="student-list-body">
+                  <tr>
+                    <td colspan="6" class="empty-cell">Yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="tenant-pagination">
+              <span id="student-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="student-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <button id="student-next-btn" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Yeni / düzenle formu -->
+            <div id="student-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="student-form-title">Yeni öğrenci</h3>
+                  <button
+                    id="student-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="student-form" novalidate>
+                  <input type="hidden" id="student-form-id" />
+                  <label class="field">
+                    <span>Ad Soyad *</span>
+                    <input
+                      id="student-form-name"
+                      type="text"
+                      required
+                      maxlength="120"
+                      placeholder="Ad Soyad"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>E-posta *</span>
+                    <input
+                      id="student-form-email"
+                      type="email"
+                      required
+                      maxlength="254"
+                      placeholder="ornek@example.com"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Telefon</span>
+                    <input
+                      id="student-form-phone"
+                      type="text"
+                      maxlength="30"
+                      placeholder="+90 555 000 00 00"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Doğum yılı</span>
+                    <input
+                      id="student-form-birthyear"
+                      type="number"
+                      min="1900"
+                      max="2026"
+                      placeholder="2012"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Durum *</span>
+                    <select id="student-form-status">
+                      <option value="ACTIVE">Aktif</option>
+                      <option value="INVITED">Davetli</option>
+                      <option value="SUSPENDED">Askıda</option>
+                      <option value="CLOSED">Kapatıldı</option>
+                    </select>
+                  </label>
+                  <label class="field" id="student-form-password-field">
+                    <span>Parola *</span>
+                    <input
+                      id="student-form-password"
+                      type="password"
+                      minlength="8"
+                      maxlength="128"
+                      autocomplete="new-password"
+                      placeholder="En az 8 karakter"
+                    />
+                  </label>
+                  <label class="field" id="student-form-tenant-field">
+                    <span>Kurum *</span>
+                    <select id="student-form-tenant">
+                      <option value="">Kurum seçin…</option>
+                    </select>
+                  </label>
+                  <fieldset id="student-form-levels" class="fieldset-group">
+                    <legend>Öğrenci profili</legend>
+                    <label class="field">
+                      <span>Mevcut seviye</span>
+                      <select id="student-form-current-level">
+                        <option value="">Seviye seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Hedef seviye</span>
+                      <select id="student-form-target-level">
+                        <option value="">Seviye seçin…</option>
+                      </select>
+                    </label>
+                  </fieldset>
+                  <fieldset id="student-form-enrollment" class="fieldset-group">
+                    <legend>Kurum kaydı (isteğe bağlı)</legend>
+                    <label class="field">
+                      <span>Akademik yıl</span>
+                      <select id="student-form-academic-year">
+                        <option value="">Akademik yıl seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Sınıf</span>
+                      <select id="student-form-class">
+                        <option value="">Sınıf seçin…</option>
+                      </select>
+                    </label>
+                    <p class="muted field-hint">
+                      Kurum seçilir ve sınıf seçilirse öğrenci oluşturulduğunda sınıf kaydı da
+                      eklenir. Bireysel kurumda sınıf gerekmez.
+                    </p>
+                  </fieldset>
+                  <label class="field" id="student-form-started-field">
+                    <span>Başlangıç tarihi</span>
+                    <input id="student-form-started" type="date" />
+                  </label>
+                  <p id="student-form-error" class="error hidden" role="alert"></p>
+                  <div class="modal-actions">
+                    <button id="student-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="student-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Detay modalı -->
+            <div id="student-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="student-detail-title">Öğrenci detayı</h3>
+                  <button
+                    id="student-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="student-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="student-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="student-detail-delete" type="button" class="btn btn-danger">
+                    Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="page-teachers" class="page-view hidden">
+            <div class="page-head">
+              <h2>Öğretmenler</h2>
+              <p class="muted">
+                Kurum öğretmenlerini, şube üyeliklerini ve sınıf atamalarını yönetin
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Öğretmen ara</span>
+                  <input
+                    id="teacher-search"
+                    type="search"
+                    placeholder="Ad veya e-posta ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum filtresi</span>
+                  <select id="teacher-tenant-filter">
+                    <option value="">Tüm kurumlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="teacher-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="INVITED">Davetli</option>
+                    <option value="SUSPENDED">Askıda</option>
+                    <option value="CLOSED">Kapatıldı</option>
+                  </select>
+                </label>
+              </div>
+              <button id="teacher-create-btn" type="button" class="btn btn-primary">
+                Yeni öğretmen
+              </button>
+            </div>
+
+            <div id="teacher-error" class="error hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ad Soyad</th>
+                    <th>E-posta</th>
+                    <th>Kurum</th>
+                    <th>Şube</th>
+                    <th>Sınıf</th>
+                    <th>Durum</th>
+                    <th class="text-right">İşlemler</th>
+                  </tr>
+                </thead>
+                <tbody id="teacher-list-body">
+                  <tr>
+                    <td colspan="7" class="empty-cell">Yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="tenant-pagination">
+              <span id="teacher-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="teacher-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <button id="teacher-next-btn" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Yeni öğretmen formu -->
+            <div id="teacher-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="teacher-form-title">Yeni öğretmen</h3>
+                  <button
+                    id="teacher-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="teacher-form" novalidate>
+                  <input type="hidden" id="teacher-form-id" />
+                  <label class="field">
+                    <span>Ad Soyad *</span>
+                    <input
+                      id="teacher-form-name"
+                      type="text"
+                      required
+                      maxlength="120"
+                      placeholder="Ad Soyad"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>E-posta *</span>
+                    <input
+                      id="teacher-form-email"
+                      type="email"
+                      required
+                      maxlength="254"
+                      placeholder="ornek@example.com"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Telefon</span>
+                    <input
+                      id="teacher-form-phone"
+                      type="text"
+                      maxlength="30"
+                      placeholder="+90 555 000 00 00"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Doğum yılı</span>
+                    <input
+                      id="teacher-form-birthyear"
+                      type="number"
+                      min="1900"
+                      max="2026"
+                      placeholder="1985"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Durum *</span>
+                    <select id="teacher-form-status">
+                      <option value="ACTIVE">Aktif</option>
+                      <option value="INVITED">Davetli</option>
+                      <option value="SUSPENDED">Askıda</option>
+                      <option value="CLOSED">Kapatıldı</option>
+                    </select>
+                  </label>
+                  <label class="field" id="teacher-form-password-field">
+                    <span>Parola *</span>
+                    <input
+                      id="teacher-form-password"
+                      type="password"
+                      minlength="8"
+                      maxlength="128"
+                      autocomplete="new-password"
+                      placeholder="En az 8 karakter"
+                    />
+                  </label>
+                  <label class="field" id="teacher-form-tenant-field">
+                    <span>Kurum *</span>
+                    <select id="teacher-form-tenant">
+                      <option value="">Kurum seçin…</option>
+                    </select>
+                    <span id="teacher-form-individual-hint" class="field-hint error hidden"
+                      >Bireysel kurumda öğretmen rolü kullanılamaz.</span
+                    >
+                  </label>
+                  <p id="teacher-form-error" class="error hidden" role="alert"></p>
+                  <div class="modal-actions">
+                    <button id="teacher-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="teacher-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Detay modalı -->
+            <div id="teacher-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="teacher-detail-title">Öğretmen detayı</h3>
+                  <button
+                    id="teacher-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="teacher-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="teacher-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="teacher-detail-delete" type="button" class="btn btn-danger">
+                    Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="page-classes" class="page-view hidden">
+            <div class="page-head">
+              <h2>Sınıf Yönetimi</h2>
+              <p class="muted">
+                Kurum sınıflarını, öğrenci kayıtlarını ve öğretmen atamalarını yönetin
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Sınıf ara</span>
+                  <input
+                    id="class-search"
+                    type="search"
+                    placeholder="Sınıf adı ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum filtresi</span>
+                  <select id="class-tenant-filter">
+                    <option value="">Tüm kurumlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Akademik yıl filtresi</span>
+                  <select id="class-year-filter" disabled>
+                    <option value="">Tüm akademik yıllar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="class-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="ARCHIVED">Arşivlenmiş</option>
+                  </select>
+                </label>
+              </div>
+              <button id="class-create-btn" type="button" class="btn btn-primary">
+                Yeni Sınıf
+              </button>
+            </div>
+
+            <div id="class-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Sınıf Adı</th>
+                      <th>Kurum</th>
+                      <th>Şube</th>
+                      <th>Akademik Yıl</th>
+                      <th class="numeric">Kademe/Sınıf</th>
+                      <th>Durum</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="class-list-body">
+                    <tr>
+                      <td colspan="7" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="class-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="class-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="class-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Sınıf form modalı -->
+            <div id="class-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="class-form-title">Yeni Sınıf</h3>
+                  <button
+                    id="class-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="class-form" novalidate>
+                  <div class="modal-body">
+                    <div id="class-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field" id="class-form-tenant-field">
+                      <span>Kurum *</span>
+                      <select id="class-form-tenant">
+                        <option value="">Kurum seçin…</option>
+                      </select>
+                      <span id="class-form-individual-hint" class="field-hint error hidden"
+                        >Bireysel kurumda sınıf oluşturulamaz.</span
+                      >
+                    </label>
+                    <label class="field" id="class-form-branch-field">
+                      <span>Şube *</span>
+                      <select id="class-form-branch" disabled>
+                        <option value="">Önce kurum seçin…</option>
+                      </select>
+                      <span class="field-hint"
+                        >Kurum seçildiğinde o kurumun aktif şubeleri yüklenir.</span
+                      >
+                    </label>
+                    <label class="field" id="class-form-year-field">
+                      <span>Akademik yıl *</span>
+                      <select id="class-form-year" disabled>
+                        <option value="">Önce kurum seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Sınıf adı *</span>
+                      <input
+                        id="class-form-name"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. 5-A"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Kademe/Sınıf düzeyi *</span>
+                      <select id="class-form-grade">
+                        <option value="">Düzey seçin…</option>
+                        <option value="1">1. sınıf</option>
+                        <option value="2">2. sınıf</option>
+                        <option value="3">3. sınıf</option>
+                        <option value="4">4. sınıf</option>
+                        <option value="5">5. sınıf</option>
+                        <option value="6">6. sınıf</option>
+                        <option value="7">7. sınıf</option>
+                        <option value="8">8. sınıf</option>
+                        <option value="9">9. sınıf</option>
+                        <option value="10">10. sınıf</option>
+                        <option value="11">11. sınıf</option>
+                        <option value="12">12. sınıf</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="class-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="class-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Sınıf detay modalı -->
+            <div id="class-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="class-detail-title">Sınıf detayı</h3>
+                  <button
+                    id="class-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="class-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="class-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="class-detail-delete" type="button" class="btn btn-danger">
+                    Sınıfı Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="page-branches" class="page-view hidden">
+            <div class="page-head">
+              <h2>Şube Yönetimi</h2>
+              <p class="muted">Kurum şubelerini, şube müdürlerini ve durumları yönetin</p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Şube ara</span>
+                  <input
+                    id="branch-search"
+                    type="search"
+                    placeholder="Şube adı veya kodu ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum filtresi</span>
+                  <select id="branch-tenant-filter">
+                    <option value="">Tüm kurumlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="branch-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="INACTIVE">Pasif</option>
+                    <option value="CLOSED">Kapalı</option>
+                  </select>
+                </label>
+              </div>
+              <button id="branch-create-btn" type="button" class="btn btn-primary">
+                Yeni Şube
+              </button>
+            </div>
+
+            <div id="branch-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Şube Adı</th>
+                      <th>Kod</th>
+                      <th>Kurum</th>
+                      <th>Müdür</th>
+                      <th class="numeric">Sınıf</th>
+                      <th class="numeric">Öğretmen</th>
+                      <th>Durum</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="branch-list-body">
+                    <tr>
+                      <td colspan="8" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="branch-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="branch-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="branch-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Şube form modalı -->
+            <div id="branch-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="branch-form-title">Yeni Şube</h3>
+                  <button
+                    id="branch-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="branch-form" novalidate>
+                  <div class="modal-body">
+                    <div id="branch-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>Kurum</span>
+                      <select id="branch-form-tenant" required>
+                        <option value="">Kurum seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Şube adı</span>
+                      <input
+                        id="branch-form-name"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. Merkez Şube"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Şube kodu</span>
+                      <input
+                        id="branch-form-code"
+                        type="text"
+                        maxlength="30"
+                        placeholder="Örn. MZ-01"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Adres</span>
+                      <input
+                        id="branch-form-address"
+                        type="text"
+                        maxlength="255"
+                        placeholder="Adres (isteğe bağlı)"
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Telefon</span>
+                      <input
+                        id="branch-form-phone"
+                        type="text"
+                        maxlength="30"
+                        placeholder="Telefon (isteğe bağlı)"
+                      />
+                    </label>
+                    <label class="field" id="branch-form-manager-field">
+                      <span>Şube Müdürü</span>
+                      <select id="branch-form-manager">
+                        <option value="">Yükleniyor…</option>
+                      </select>
+                      <span class="field-hint"
+                        >Kurum seçildiğinde uygun şube müdürleri yüklenir. İsteğe bağlıdır.</span
+                      >
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="branch-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="branch-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Şube detay modalı -->
+            <div id="branch-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="branch-detail-title">Şube detayı</h3>
+                  <button
+                    id="branch-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="branch-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="branch-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="branch-detail-delete" type="button" class="btn btn-danger">
+                    Şubeyi Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="page-contents" class="page-view hidden">
+            <div class="page-head">
+              <h2>İçerik Yönetimi</h2>
+              <p class="muted">
+                Global ve kurum içerik kataloğunu, sürümleri, beceri eşleşmelerini ve durumları
+                yönetin
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">İçerik ara</span>
+                  <input
+                    id="content-search"
+                    type="search"
+                    placeholder="Başlık ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kapsam filtresi</span>
+                  <select id="content-scope-filter">
+                    <option value="">Tüm kapsamlar</option>
+                    <option value="GLOBAL">Global</option>
+                    <option value="TENANT">Kurum</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kurum filtresi</span>
+                  <select id="content-tenant-filter">
+                    <option value="">Tüm kurumlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Tür filtresi</span>
+                  <select id="content-type-filter">
+                    <option value="">Tüm türler</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="content-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="DRAFT">Taslak</option>
+                    <option value="PUBLISHED">Yayında</option>
+                    <option value="ARCHIVED">Arşivlenmiş</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Beceri filtresi</span>
+                  <select id="content-skill-filter">
+                    <option value="">Tüm beceriler</option>
+                  </select>
+                </label>
+              </div>
+              <button id="content-create-btn" type="button" class="btn btn-primary">
+                Yeni İçerik
+              </button>
+            </div>
+
+            <div id="content-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Başlık</th>
+                      <th>Kapsam</th>
+                      <th>Tür</th>
+                      <th>Zorluk</th>
+                      <th class="numeric">Sürüm</th>
+                      <th>Durum</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="content-list-body">
+                    <tr>
+                      <td colspan="7" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="content-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="content-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="content-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Yeni / düzenle içerik formu -->
+            <div id="content-form-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="content-form-title">Yeni İçerik</h3>
+                  <button
+                    id="content-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="content-form" novalidate>
+                  <div class="modal-body">
+                    <div id="content-form-error" class="error-banner hidden" role="alert"></div>
+                    <fieldset id="content-form-scope-field" class="fieldset-group">
+                      <legend>Kapsam</legend>
+                      <label class="field">
+                        <span>Kapsam *</span>
+                        <select id="content-form-scope">
+                          <option value="GLOBAL">Global</option>
+                          <option value="TENANT">Kurum</option>
+                        </select>
+                      </label>
+                      <label class="field" id="content-form-tenant-field">
+                        <span>Kurum *</span>
+                        <select id="content-form-tenant">
+                          <option value="">Kurum seçin…</option>
+                        </select>
+                        <span class="field-hint"
+                          >Global içerik tüm kurumlara açıktır; kurum içeriği yalnızca o kurumda
+                          görünür.</span
+                        >
+                      </label>
+                    </fieldset>
+                    <label class="field" id="content-form-type-field">
+                      <span>Tür *</span>
+                      <select id="content-form-type">
+                        <option value="">Tür seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Başlık *</span>
+                      <input
+                        id="content-form-title-input"
+                        type="text"
+                        maxlength="200"
+                        placeholder="İçerik başlığı"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Zorluk (0–1) *</span>
+                      <input
+                        id="content-form-difficulty"
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        inputmode="decimal"
+                        placeholder="0.5"
+                        required
+                      />
+                    </label>
+                    <label class="field" id="content-form-status-field">
+                      <span>Durum</span>
+                      <select id="content-form-status">
+                        <option value="DRAFT">Taslak</option>
+                        <option value="PUBLISHED">Yayında</option>
+                        <option value="ARCHIVED">Arşivlenmiş</option>
+                      </select>
+                      <span class="field-hint"
+                        >"Yayında" seçilirse içeriğin yayınlanmış bir sürümü olmalıdır; önce sürüm
+                        oluşturup yayınlayın.</span
+                      >
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="content-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="content-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- İçerik detay modalı -->
+            <div id="content-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="content-detail-title">İçerik detayı</h3>
+                  <button
+                    id="content-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="content-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="content-detail-edit" type="button" class="btn btn-ghost">
+                    Düzenle
+                  </button>
+                  <button id="content-detail-delete" type="button" class="btn btn-danger">
+                    İçeriği Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Yeni sürüm / taslak düzenleme formu -->
+            <div id="version-form-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="version-form-title">Yeni Sürüm</h3>
+                  <button
+                    id="version-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="version-form" novalidate>
+                  <div class="modal-body">
+                    <div id="version-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>Başlık</span>
+                      <input
+                        id="version-form-title-input"
+                        type="text"
+                        maxlength="200"
+                        placeholder="İçeriğin başlığı kullanılır"
+                      />
+                      <span class="field-hint">Boş bırakılırsa içeriğin başlığı kullanılır.</span>
+                    </label>
+                    <label class="field">
+                      <span>Metin *</span>
+                      <textarea
+                        id="version-form-body"
+                        rows="12"
+                        maxlength="100000"
+                        placeholder="Okuma metnini buraya yazın…"
+                        required
+                      ></textarea>
+                      <span id="version-form-wordcount" class="field-hint muted">— kelime</span>
+                    </label>
+                    <label class="field">
+                      <span>Lisans</span>
+                      <input
+                        id="version-form-license"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. CC BY 4.0 (isteğe bağlı)"
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Değişiklik notu</span>
+                      <input
+                        id="version-form-changelog"
+                        type="text"
+                        maxlength="500"
+                        placeholder="Bu sürümde ne değişti? (isteğe bağlı)"
+                      />
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="version-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="version-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Sürüm detay modalı -->
+            <div id="version-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="version-detail-title">Sürüm detayı</h3>
+                  <button
+                    id="version-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="version-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button id="version-detail-close-action" type="button" class="btn btn-ghost">
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Soru Bankası -->
+          <section id="page-questions" class="page-view hidden">
+            <div class="page-head">
+              <h2>Soru Bankası</h2>
+              <p class="muted">
+                İçeriklere bağlı soruları, soru tiplerini, beceri eşleşmelerini ve durumları yönetin
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Soru ara</span>
+                  <input
+                    id="question-search"
+                    type="search"
+                    placeholder="Soru ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">İçerik filtresi</span>
+                  <select id="question-content-filter">
+                    <option value="">Tüm içerikler</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Soru tipi filtresi</span>
+                  <select id="question-type-filter">
+                    <option value="">Tüm tipler</option>
+                    <option value="MULTIPLE_CHOICE">Çoktan Seçmeli</option>
+                    <option value="TRUE_FALSE">Doğru / Yanlış</option>
+                    <option value="OPEN_ENDED">Açık Uçlu</option>
+                    <option value="MATCHING">Eşleştirme</option>
+                    <option value="FILL_BLANK">Boşluk Doldurma</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Beceri filtresi</span>
+                  <select id="question-skill-filter">
+                    <option value="">Tüm beceriler</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="question-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="DRAFT">Taslak</option>
+                    <option value="PUBLISHED">Yayında</option>
+                    <option value="ARCHIVED">Arşivlenmiş</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Sayfa boyutu</span>
+                  <select id="question-page-size">
+                    <option value="10">10 / sayfa</option>
+                    <option value="20">20 / sayfa</option>
+                    <option value="50">50 / sayfa</option>
+                  </select>
+                </label>
+              </div>
+              <button id="question-create-btn" type="button" class="btn btn-primary">
+                + Yeni Soru
+              </button>
+            </div>
+
+            <div id="question-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Soru</th>
+                      <th>İçerik</th>
+                      <th>Tür</th>
+                      <th>Beceri</th>
+                      <th>Zorluk</th>
+                      <th class="numeric">Sürüm</th>
+                      <th>Durum</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="question-list-body">
+                    <tr>
+                      <td colspan="8" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="question-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="question-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="question-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Soru detay modalı -->
+            <div id="question-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="question-detail-title">Soru detayı</h3>
+                  <button
+                    id="question-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="question-detail-body" class="modal-body"></div>
+                <div id="question-version-section" class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 12px 16px;
+                      border-bottom: 1px solid var(--border);
+                    "
+                  >
+                    <h4 style="margin: 0">Sürümler</h4>
+                    <button
+                      id="question-new-version-btn"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Yeni Sürüm
+                    </button>
+                  </div>
+                  <div id="question-version-list" class="stack" style="padding: 12px 16px">
+                    Yükleniyor…
+                  </div>
+                  <div
+                    id="question-version-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+
+                <!-- Medya bölümü -->
+                <div id="question-media-section" class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 12px 16px;
+                      border-bottom: 1px solid var(--border);
+                    "
+                  >
+                    <h4 style="margin: 0">Medya</h4>
+                    <button
+                      id="question-media-add-btn"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Medya Ekle
+                    </button>
+                  </div>
+                  <div style="display: flex; gap: 8px; padding: 8px 16px; align-items: center">
+                    <input
+                      type="text"
+                      id="question-media-select"
+                      placeholder="Medya ID"
+                      style="
+                        flex: 1;
+                        padding: 4px 8px;
+                        border: 1px solid var(--border);
+                        border-radius: 4px;
+                        font-size: 13px;
+                      "
+                    />
+                    <input
+                      type="number"
+                      id="question-media-position"
+                      value="0"
+                      min="0"
+                      style="
+                        width: 60px;
+                        padding: 4px 8px;
+                        border: 1px solid var(--border);
+                        border-radius: 4px;
+                        font-size: 13px;
+                      "
+                    />
+                  </div>
+                  <div id="question-media-list" class="stack" style="padding: 12px 16px">
+                    Yükleniyor…
+                  </div>
+                  <div
+                    id="question-media-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+
+                <div class="modal-actions">
+                  <button id="question-detail-close-action" type="button" class="btn btn-ghost">
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Soru medya detay modalı -->
+            <div id="question-media-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="question-media-detail-title">Medya detayı</h3>
+                  <button
+                    id="question-media-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="question-media-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button
+                    id="question-media-detail-close-action"
+                    type="button"
+                    class="btn btn-ghost"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Soru sürüm detay modalı -->
+            <div id="question-version-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="question-version-detail-title">Sürüm detayı</h3>
+                  <button
+                    id="question-version-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="question-version-detail-body" class="modal-body"></div>
+                <div id="question-version-media-section" class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 12px 16px;
+                      border-bottom: 1px solid var(--border);
+                    "
+                  >
+                    <h4 style="margin: 0">Medya</h4>
+                    <button
+                      id="question-version-media-add-btn"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Medya Ekle
+                    </button>
+                  </div>
+                  <div style="display: flex; gap: 8px; padding: 8px 16px; align-items: center">
+                    <input
+                      type="text"
+                      id="question-version-media-select"
+                      placeholder="Medya ID"
+                      style="
+                        flex: 1;
+                        padding: 4px 8px;
+                        border: 1px solid var(--border);
+                        border-radius: 4px;
+                        font-size: 13px;
+                      "
+                    />
+                    <input
+                      type="number"
+                      id="question-version-media-position"
+                      value="0"
+                      min="0"
+                      style="
+                        width: 60px;
+                        padding: 4px 8px;
+                        border: 1px solid var(--border);
+                        border-radius: 4px;
+                        font-size: 13px;
+                      "
+                    />
+                  </div>
+                  <div id="question-version-media-list" class="stack" style="padding: 12px 16px">
+                    Yükleniyor…
+                  </div>
+                  <div
+                    id="question-version-media-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+                <div class="modal-actions">
+                  <button
+                    id="question-version-detail-close-action"
+                    type="button"
+                    class="btn btn-ghost"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Soru sürüm medya detay modalı -->
+            <div id="question-version-media-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="question-version-media-detail-title">Sürüm medyası detayı</h3>
+                  <button
+                    id="question-version-media-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="question-version-media-detail-body" class="modal-body"></div>
+                <div class="modal-actions">
+                  <button
+                    id="question-version-media-detail-close-action"
+                    type="button"
+                    class="btn btn-ghost"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Soru oluşturma formu -->
+            <div id="question-form-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="question-form-title">Yeni Soru</h3>
+                  <button
+                    id="question-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="question-form" novalidate>
+                  <div class="modal-body">
+                    <div id="question-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>İçerik *</span>
+                      <select id="question-form-content" required>
+                        <option value="">İçerik seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Soru Tipi *</span>
+                      <select id="question-form-type" required>
+                        <option value="">Tip seçin…</option>
+                        <option value="MULTIPLE_CHOICE">Çoktan Seçmeli</option>
+                        <option value="TRUE_FALSE">Doğru / Yanlış</option>
+                        <option value="OPEN_ENDED">Açık Uçlu</option>
+                        <option value="MATCHING">Eşleştirme</option>
+                        <option value="FILL_BLANK">Boşluk Doldurma</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Soru Metni *</span>
+                      <textarea
+                        id="question-form-prompt"
+                        rows="3"
+                        maxlength="10000"
+                        placeholder="Soru metnini yazın…"
+                        required
+                      ></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Açıklama</span>
+                      <textarea
+                        id="question-form-explanation"
+                        rows="2"
+                        maxlength="5000"
+                        placeholder="Açıklama (isteğe bağlı)"
+                      ></textarea>
+                    </label>
+                    <label class="field">
+                      <span>İpucu</span>
+                      <input
+                        id="question-form-hint"
+                        type="text"
+                        maxlength="1000"
+                        placeholder="İpucu (isteğe bağlı)"
+                      />
+                    </label>
+                    <div class="form-grid">
+                      <label class="field">
+                        <span>Zorluk (0–1)</span>
+                        <input
+                          id="question-form-difficulty"
+                          type="number"
+                          min="0"
+                          max="1"
+                          step="0.05"
+                          placeholder="0.5"
+                        />
+                      </label>
+                      <label class="field">
+                        <span>Beceri</span>
+                        <select id="question-form-skill">
+                          <option value="">Beceri seçin…</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>Pozisyon *</span>
+                        <input
+                          id="question-form-position"
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          required
+                        />
+                      </label>
+                    </div>
+
+                    <!-- MULTIPLE_CHOICE -->
+                    <fieldset id="question-form-mc-field" class="fieldset-group hidden">
+                      <legend>Çoktan Seçmeli</legend>
+                      <div id="question-form-mc-options" class="stack"></div>
+                      <button type="button" id="question-form-mc-add" class="btn btn-ghost btn-sm">
+                        + Seçenek Ekle
+                      </button>
+                      <div class="form-grid" style="margin-top: 12px">
+                        <label class="field"
+                          ><span
+                            ><input id="question-form-mc-allow-multiple" type="checkbox" /> Çoklu
+                            doğru izni</span
+                          ></label
+                        >
+                        <label class="field"
+                          ><span
+                            ><input id="question-form-mc-partial" type="checkbox" checked /> Kısmi
+                            puan</span
+                          ></label
+                        >
+                      </div>
+                    </fieldset>
+
+                    <!-- TRUE_FALSE -->
+                    <fieldset id="question-form-tf-field" class="fieldset-group hidden">
+                      <legend>Doğru / Yanlış</legend>
+                      <label class="field">
+                        <span>Doğru cevap *</span>
+                        <select id="question-form-tf-answer">
+                          <option value="true">Doğru</option>
+                          <option value="false">Yanlış</option>
+                        </select>
+                      </label>
+                    </fieldset>
+
+                    <!-- OPEN_ENDED -->
+                    <fieldset id="question-form-oe-field" class="fieldset-group hidden">
+                      <legend>Açık Uçlu</legend>
+                      <label class="field">
+                        <span>Beklenen cevap *</span>
+                        <textarea
+                          id="question-form-oe-expected"
+                          rows="2"
+                          placeholder="Beklenen cevap"
+                        ></textarea>
+                      </label>
+                      <label class="field">
+                        <span>Kabul edilebilir alternatifler</span>
+                        <input
+                          id="question-form-oe-variants"
+                          type="text"
+                          placeholder="Virgülle ayırın (ör. cevap1, cevap2)"
+                        />
+                      </label>
+                      <label class="field"
+                        ><span
+                          ><input id="question-form-oe-case" type="checkbox" /> Büyük/küçük harf
+                          duyarlı</span
+                        ></label
+                      >
+                      <div class="fieldset-group">
+                        <span>Rubrik (kriter / puan)</span>
+                        <div id="question-form-oe-rubric-list" class="stack"></div>
+                        <button
+                          type="button"
+                          id="question-form-oe-rubric-add"
+                          class="btn btn-ghost btn-sm"
+                        >
+                          + Kriter Ekle
+                        </button>
+                      </div>
+                    </fieldset>
+
+                    <!-- MATCHING -->
+                    <fieldset id="question-form-matching-field" class="fieldset-group hidden">
+                      <legend>Eşleştirme</legend>
+                      <div id="question-form-matching-options" class="stack"></div>
+                      <button
+                        type="button"
+                        id="question-form-matching-add"
+                        class="btn btn-ghost btn-sm"
+                      >
+                        + Seçenek Ekle
+                      </button>
+                      <div class="stack" style="margin-top: 12px">
+                        <span>Doğru Eşleşmeler</span>
+                        <div id="question-form-matching-pairs" class="stack"></div>
+                        <button
+                          type="button"
+                          id="question-form-matching-pair-add"
+                          class="btn btn-ghost btn-sm"
+                        >
+                          + Eşleşme Ekle
+                        </button>
+                      </div>
+                      <label class="field" style="margin-top: 12px"
+                        ><span
+                          ><input id="question-form-matching-partial" type="checkbox" checked />
+                          Kısmi puan</span
+                        ></label
+                      >
+                    </fieldset>
+
+                    <!-- FILL_BLANK -->
+                    <fieldset id="question-form-blank-field" class="fieldset-group hidden">
+                      <legend>Boşluk Doldurma</legend>
+                      <div id="question-form-blank-list" class="stack"></div>
+                      <button
+                        type="button"
+                        id="question-form-blank-add"
+                        class="btn btn-ghost btn-sm"
+                      >
+                        + Boşluk Ekle
+                      </button>
+                      <label class="field" style="margin-top: 12px"
+                        ><span
+                          ><input id="question-form-blank-partial" type="checkbox" checked /> Kısmi
+                          puan</span
+                        ></label
+                      >
+                    </fieldset>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="question-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="question-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Oluştur</span
+                      ><span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <!-- Şablonlar -->
+          <section id="page-templates" class="page-view hidden">
+            <div class="page-head">
+              <h2>Şablonlar</h2>
+              <p class="muted">
+                Egzersiz şablonlarını, sürümlerini ve bağlı içerik/soru eşleşmelerini yönetin
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Şablon ara</span>
+                  <input
+                    id="template-search"
+                    type="search"
+                    placeholder="Şablon ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Tür filtresi</span>
+                  <select id="template-type-filter">
+                    <option value="">Tüm tipler</option>
+                    <option value="COMPREHENSION">Kavrama</option>
+                    <option value="FLUENCY">Akıcılık</option>
+                    <option value="INFERENCE">Çıkarım</option>
+                    <option value="VOCABULARY">Kelime</option>
+                    <option value="MIXED">Karışık</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Durum filtresi</span>
+                  <select id="template-status-filter">
+                    <option value="">Tüm durumlar</option>
+                    <option value="DRAFT">Taslak</option>
+                    <option value="PUBLISHED">Yayında</option>
+                    <option value="ARCHIVED">Arşivlenmiş</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Beceri filtresi</span>
+                  <select id="template-skill-filter">
+                    <option value="">Tüm beceriler</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Sayfa boyutu</span>
+                  <select id="template-page-size">
+                    <option value="10">10 / sayfa</option>
+                    <option value="20">20 / sayfa</option>
+                    <option value="50">50 / sayfa</option>
+                  </select>
+                </label>
+              </div>
+              <button id="template-create-btn" type="button" class="btn btn-primary">
+                + Yeni Şablon
+              </button>
+            </div>
+
+            <div id="template-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Başlık</th>
+                      <th>Tür</th>
+                      <th>Beceri</th>
+                      <th>Durum</th>
+                      <th class="numeric">Sürüm</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="template-list-body">
+                    <tr>
+                      <td colspan="6" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button id="template-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <span id="template-page-info" class="muted">Sayfa 1</span>
+                <button id="template-next-btn" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Şablon detay modalı -->
+            <div id="template-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="template-detail-title">Şablon detayı</h3>
+                  <button
+                    id="template-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="template-detail-body" class="modal-body"></div>
+                <div id="template-version-section" class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 12px 16px;
+                      border-bottom: 1px solid var(--border);
+                    "
+                  >
+                    <h4 style="margin: 0">Sürümler</h4>
+                    <button
+                      id="template-new-version-btn"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Yeni Sürüm
+                    </button>
+                  </div>
+                  <div id="template-version-list" class="stack" style="padding: 12px 16px">
+                    Yükleniyor…
+                  </div>
+                  <div
+                    id="template-version-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+                <div class="modal-actions">
+                  <button id="template-detail-close-action" type="button" class="btn btn-ghost">
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Şablon sürüm detay modalı -->
+            <div id="template-version-detail-modal" class="modal-backdrop hidden">
+              <div class="modal modal-wide">
+                <div class="modal-head">
+                  <h3 id="template-version-detail-title">Sürüm detayı</h3>
+                  <button
+                    id="template-version-detail-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div id="template-version-detail-body" class="modal-body"></div>
+                <div class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="padding: 12px 16px; border-bottom: 1px solid var(--border)"
+                  >
+                    <h4 style="margin: 0">Bağlı İçerikler</h4>
+                  </div>
+                  <div
+                    id="template-version-contents"
+                    class="stack"
+                    style="padding: 12px 16px"
+                  ></div>
+                  <div style="padding: 0 16px 12px; display: flex; gap: 8px; align-items: end">
+                    <label class="field" style="flex: 1">
+                      <span>PUBLISHED İçerik Sürümü</span>
+                      <select id="template-version-content-select">
+                        <option value="">Seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field" style="width: 100px">
+                      <span>Pozisyon</span>
+                      <input
+                        id="template-version-content-position"
+                        type="number"
+                        min="0"
+                        value="0"
+                      />
+                    </label>
+                    <button
+                      id="template-version-content-add"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Ekle
+                    </button>
+                  </div>
+                  <div
+                    id="template-version-content-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+                <div class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="padding: 12px 16px; border-bottom: 1px solid var(--border)"
+                  >
+                    <h4 style="margin: 0">Bağlı Sorular</h4>
+                  </div>
+                  <div
+                    id="template-version-questions"
+                    class="stack"
+                    style="padding: 12px 16px"
+                  ></div>
+                  <div style="padding: 0 16px 12px; display: flex; gap: 8px; align-items: end">
+                    <label class="field" style="flex: 1">
+                      <span>PUBLISHED Soru Sürümü</span>
+                      <select id="template-version-question-select">
+                        <option value="">Seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field" style="width: 100px">
+                      <span>Pozisyon</span>
+                      <input
+                        id="template-version-question-position"
+                        type="number"
+                        min="0"
+                        value="0"
+                      />
+                    </label>
+                    <button
+                      id="template-version-question-add"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Ekle
+                    </button>
+                  </div>
+                  <div
+                    id="template-version-question-error"
+                    class="error-banner hidden"
+                    style="margin: 0 16px 12px"
+                  ></div>
+                </div>
+                <div class="modal-actions">
+                  <button
+                    id="template-version-detail-close-action"
+                    type="button"
+                    class="btn btn-ghost"
+                  >
+                    Kapat
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Şablon oluşturma formu -->
+            <div id="template-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="template-form-title">Yeni Şablon</h3>
+                  <button
+                    id="template-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="template-form" novalidate>
+                  <input type="hidden" id="template-form-id" />
+                  <div class="modal-body">
+                    <div id="template-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>Başlık *</span>
+                      <input
+                        id="template-form-title-input"
+                        type="text"
+                        required
+                        maxlength="200"
+                        placeholder="Şablon başlığı"
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Tür *</span>
+                      <select id="template-form-type" required>
+                        <option value="">Tür seçin…</option>
+                        <option value="COMPREHENSION">Kavrama</option>
+                        <option value="FLUENCY">Akıcılık</option>
+                        <option value="INFERENCE">Çıkarım</option>
+                        <option value="VOCABULARY">Kelime</option>
+                        <option value="MIXED">Karışık</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Beceri</span>
+                      <select id="template-form-skill">
+                        <option value="">Beceri seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Yapılandırma (JSON)</span>
+                      <textarea
+                        id="template-form-config"
+                        rows="3"
+                        placeholder='{"key":"value"}'
+                      ></textarea>
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="template-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="template-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span
+                      ><span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <!-- Beceriler -->
+          <section id="page-skills" class="page-view hidden">
+            <div class="page-head">
+              <h2>Beceriler</h2>
+              <p class="muted">
+                Okuma becerisi kataloğunu yönetin; içeriklere bu katalogdan beceri bağlanır
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Beceri ara</span>
+                  <input
+                    id="skill-search"
+                    type="search"
+                    placeholder="Ad veya kod ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kategori filtresi</span>
+                  <select id="skill-category-filter">
+                    <option value="">Tüm kategoriler</option>
+                  </select>
+                </label>
+              </div>
+              <button id="skill-create-btn" type="button" class="btn btn-primary">
+                Yeni Beceri
+              </button>
+            </div>
+
+            <div id="skill-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Kod</th>
+                      <th>Ad</th>
+                      <th>Kategori</th>
+                      <th class="numeric">Sıra</th>
+                      <th class="numeric">Kullanım</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="skill-list-body">
+                    <tr>
+                      <td colspan="6" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="skill-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="skill-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="skill-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Beceri formu -->
+            <div id="skill-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="skill-form-title">Yeni Beceri</h3>
+                  <button
+                    id="skill-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="skill-form" novalidate>
+                  <div class="modal-body">
+                    <div id="skill-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>Kod *</span>
+                      <input
+                        id="skill-form-code"
+                        type="text"
+                        maxlength="50"
+                        placeholder="Örn. OKU-01"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Ad *</span>
+                      <input
+                        id="skill-form-name"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. Ana fikri bulma"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Kategori *</span>
+                      <select id="skill-form-category">
+                        <option value="">Kategori seçin…</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Açıklama</span>
+                      <textarea
+                        id="skill-form-description"
+                        rows="3"
+                        maxlength="500"
+                        placeholder="Açıklama (isteğe bağlı)"
+                      ></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Sıra</span>
+                      <input
+                        id="skill-form-display-order"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="0"
+                      />
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="skill-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="skill-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <!-- Seviyeler -->
+          <section id="page-levels" class="page-view hidden">
+            <div class="page-head">
+              <h2>Seviyeler</h2>
+              <p class="muted">
+                Okuma seviyesi katalogunu yönetin; öğrenci seviyeleri ve içerik zorluk eşleşmesi bu
+                aralıklara göre yapılır
+              </p>
+            </div>
+
+            <div class="tenant-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Seviye ara</span>
+                  <input
+                    id="level-search"
+                    type="search"
+                    placeholder="Ad veya kod ara…"
+                    autocomplete="off"
+                  />
+                </label>
+              </div>
+              <button id="level-create-btn" type="button" class="btn btn-primary">
+                Yeni Seviye
+              </button>
+            </div>
+
+            <div id="level-error" class="error-banner hidden" role="alert"></div>
+
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Kod</th>
+                      <th>Ad</th>
+                      <th>Puan Aralığı</th>
+                      <th>Sınıf Aralığı</th>
+                      <th>Zorluk Aralığı</th>
+                      <th class="numeric">Sıra</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="level-list-body">
+                    <tr>
+                      <td colspan="7" class="muted">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <button
+                  id="level-prev-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Önceki sayfa"
+                >
+                  Önceki
+                </button>
+                <span id="level-page-info" class="muted">Sayfa 1</span>
+                <button
+                  id="level-next-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Sonraki sayfa"
+                >
+                  Sonraki
+                </button>
+              </div>
+            </div>
+
+            <!-- Seviye formu -->
+            <div id="level-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="level-form-title">Yeni Seviye</h3>
+                  <button
+                    id="level-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="level-form" novalidate>
+                  <div class="modal-body">
+                    <div id="level-form-error" class="error-banner hidden" role="alert"></div>
+                    <label class="field">
+                      <span>Kod *</span>
+                      <input
+                        id="level-form-code"
+                        type="text"
+                        maxlength="50"
+                        placeholder="Örn. SEV-01"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Ad *</span>
+                      <input
+                        id="level-form-name"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. Başlangıç"
+                        required
+                      />
+                    </label>
+                    <div class="form-grid">
+                      <label class="field">
+                        <span>Minimum puan *</span>
+                        <input id="level-form-min-score" type="number" min="0" step="1" required />
+                      </label>
+                      <label class="field">
+                        <span>Maksimum puan *</span>
+                        <input id="level-form-max-score" type="number" min="0" step="1" required />
+                      </label>
+                    </div>
+                    <label class="field">
+                      <span>Sınıf aralığı</span>
+                      <input
+                        id="level-form-grade-band"
+                        type="text"
+                        maxlength="120"
+                        placeholder="Örn. 1-2. sınıf (isteğe bağlı)"
+                      />
+                    </label>
+                    <div class="form-grid">
+                      <label class="field">
+                        <span>Minimum zorluk *</span>
+                        <input
+                          id="level-form-difficulty-min"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          required
+                        />
+                      </label>
+                      <label class="field">
+                        <span>Maksimum zorluk *</span>
+                        <input
+                          id="level-form-difficulty-max"
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          required
+                        />
+                      </label>
+                    </div>
+                    <label class="field">
+                      <span>Sıra</span>
+                      <input
+                        id="level-form-display-order"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="0"
+                      />
+                    </label>
+                  </div>
+                  <div class="modal-actions">
+                    <button id="level-form-cancel" type="button" class="btn btn-ghost">
+                      İptal
+                    </button>
+                    <button id="level-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span>
+                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <section id="page-assignments" class="page-view hidden">
+            <div class="page-head">
+              <h2>Ödevler</h2>
+              <button id="assignment-create-btn" type="button" class="btn btn-primary" data-admin>
+                Yeni Ödev
+              </button>
+            </div>
+            <div id="assignment-error" class="error-banner hidden" role="alert"></div>
+            <div
+              id="student-assignment-view"
+              class="student-content-view hidden"
+              aria-live="polite"
+            >
+              <div class="student-section-intro">
+                <p class="insight-eyebrow">ÖĞRETMENİNİN ÇALIŞMASI</p>
+                <h3>Bugünkü ödevlerin</h3>
+                <p class="muted">
+                  Kurumunun veya öğretmeninin verdiği çalışmalara buradan devam et.
+                </p>
+              </div>
+              <div id="student-assignment-cards" class="learning-card-grid"></div>
+            </div>
+            <div class="card" style="padding: 16px; margin-bottom: 16px">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <input
+                  type="text"
+                  id="assignment-search"
+                  placeholder="Ödev ara…"
+                  style="
+                    flex: 1;
+                    min-width: 180px;
+                    padding: 6px 10px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                  "
+                />
+                <select
+                  id="assignment-status-filter"
+                  style="
+                    padding: 6px 10px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                  "
+                >
+                  <option value="">Tüm durumlar</option>
+                  <option value="DRAFT" data-admin>Taslak</option>
+                  <option value="SCHEDULED">Zamanlanmış</option>
+                  <option value="ACTIVE">Aktif</option>
+                  <option value="CLOSED">Kapalı</option>
+                </select>
+              </div>
+            </div>
+            <div class="card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Başlık</th>
+                      <th>Sınıf</th>
+                      <th>Şablon</th>
+                      <th>Öğretmen</th>
+                      <th>Durum</th>
+                      <th>Son Tarih</th>
+                      <th>Oturum</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="assignment-list-body">
+                    <tr>
+                      <td colspan="8" class="muted" style="text-align: center; padding: 24px">
+                        Yükleniyor…
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: 12px 16px;
+                  border-top: 1px solid var(--border);
+                "
+              >
+                <span id="assignment-page-info" class="muted"></span>
+                <div style="display: flex; gap: 6px">
+                  <button
+                    id="assignment-prev-btn"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    disabled
+                  >
+                    Önceki
+                  </button>
+                  <button
+                    id="assignment-next-btn"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    disabled
+                  >
+                    Sonraki
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Ödev form modalı -->
+          <div id="assignment-form-modal" class="modal-backdrop hidden">
+            <div class="modal">
+              <div class="modal-head">
+                <h3 id="assignment-form-title">Yeni Ödev</h3>
+                <button
+                  id="assignment-form-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <form id="assignment-form" novalidate>
+                <div class="modal-body">
+                  <div id="assignment-form-error" class="error-banner hidden" role="alert"></div>
+                  <label class="field">
+                    <span>Sınıf *</span>
+                    <select id="assignment-form-class">
+                      <option value="">Sınıf seçin…</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Şablon *</span>
+                    <select id="assignment-form-template">
+                      <option value="">Şablon seçin…</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Öğretmen *</span>
+                    <select id="assignment-form-teacher">
+                      <option value="">Öğretmen seçin…</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Başlık *</span>
+                    <input
+                      id="assignment-form-title-input"
+                      type="text"
+                      maxlength="200"
+                      placeholder="Ödev başlığı"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Son Tarih</span>
+                    <input id="assignment-form-due-date" type="datetime-local" />
+                  </label>
+                </div>
+                <div class="modal-actions">
+                  <button id="assignment-form-cancel" type="button" class="btn btn-ghost">
+                    İptal
+                  </button>
+                  <button id="assignment-form-submit" type="submit" class="btn btn-primary">
+                    <span class="btn-label">Kaydet</span>
+                    <span class="btn-spinner hidden" aria-hidden="true"></span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Ödev detay modalı -->
+          <div id="assignment-detail-modal" class="modal-backdrop hidden">
+            <div class="modal modal-wide">
+              <div class="modal-head">
+                <h3 id="assignment-detail-title">Ödev detayı</h3>
+                <button
+                  id="assignment-detail-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <div id="assignment-detail-body" class="modal-body"></div>
+              <div class="modal-actions">
+                <button
+                  id="assignment-detail-start"
+                  type="button"
+                  class="btn btn-primary"
+                  style="display: none"
+                >
+                  Başla
+                </button>
+                <button id="assignment-detail-edit" type="button" class="btn btn-ghost" data-admin>
+                  Düzenle
+                </button>
+                <button
+                  id="assignment-detail-delete"
+                  type="button"
+                  class="btn btn-danger"
+                  data-admin
+                >
+                  Ödevi Sil
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <section id="page-exercise" class="page-view hidden">
+            <div class="page-head">
+              <h2>Alıştırmalar</h2>
+              <p class="muted">
+                Yayınlanmış şablonlar üzerinden alıştırma oturumu başlatın ve soruları çözün
+              </p>
+            </div>
+            <div id="student-exercise-header" class="student-exercise-header hidden">
+              <div style="display: flex; align-items: center; gap: 12px">
+                <button
+                  id="exercise-back-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  aria-label="Geri"
+                >
+                  ←
+                </button>
+                <div style="flex: 1">
+                  <div style="display: flex; justify-content: space-between; font-size: 12px">
+                    <span id="exercise-progress-text" class="muted">Soru yükleniyor</span
+                    ><span id="exercise-xp" class="gamification-badge" style="font-size: 11px"
+                      >⭐ — XP</span
+                    >
+                  </div>
+                  <div
+                    class="progress-track"
+                    role="progressbar"
+                    aria-label="Soru ilerlemesi"
+                    aria-valuemin="0"
+                    aria-valuemax="0"
+                    aria-valuenow="0"
+                  >
+                    <div id="exercise-progress-bar" class="progress-fill"></div>
+                  </div>
+                </div>
+                <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
+              </div>
+            </div>
+
+            <p id="exercise-load-status" role="status" aria-live="polite"></p>
+            <button id="exercise-retry-load" type="button" class="btn btn-ghost hidden">
+              Tekrar dene
+            </button>
+            <section
+              id="student-reading-card"
+              class="card student-reading-card"
+              data-student
+              aria-labelledby="student-reading-heading"
+              style="display: none; padding: 20px; margin-bottom: 16px"
+            >
+              <div class="reading-card-kicker">OKUMA METNİ</div>
+              <h3 id="student-reading-heading" style="margin: 4px 0 8px">Metin</h3>
+              <div id="student-reading-body" class="student-reading-body"></div>
+            </section>
+            <div id="exercise-admin-card" class="card" style="padding: 16px; margin-bottom: 16px">
+              <h3 style="margin: 0 0 12px">Yeni Oturum Başlat</h3>
+              <div id="exercise-error" class="error-banner hidden" role="alert"></div>
+              <div class="form-grid" style="grid-template-columns: 1fr 1fr; gap: 12px">
+                <label class="field">
+                  <span>Öğrenci</span>
+                  <select id="exercise-student-select">
+                    <option value="">Öğrenci seçin…</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Şablon Sürümü</span>
+                  <select id="exercise-template-version-select">
+                    <option value="">Şablon sürümü seçin…</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>İstemci Oturum ID (opsiyonel)</span>
+                  <input
+                    id="exercise-client-session-id"
+                    type="text"
+                    placeholder="E2E-SESSION-..."
+                  />
+                </label>
+                <label class="field">
+                  <span>Oturum Tipi</span>
+                  <select id="exercise-session-type">
+                    <option value="PRACTICE">Alıştırma</option>
+                    <option value="ASSESSMENT">Değerlendirme</option>
+                  </select>
+                </label>
+              </div>
+              <div style="margin-top: 12px; display: flex; gap: 8px">
+                <button id="exercise-create-btn" type="button" class="btn btn-primary">
+                  Oturum Başlat
+                </button>
+                <button
+                  id="exercise-refresh-templates-btn"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                >
+                  Şablonları Yenile
+                </button>
+              </div>
+              <div
+                id="exercise-session-info"
+                class="card"
+                style="margin-top: 16px; padding: 12px; display: none"
+              >
+                <h4 style="margin: 0 0 8px">Aktif Oturum</h4>
+                <div id="exercise-session-detail" class="detail-grid"></div>
+                <div style="margin-top: 12px; display: flex; gap: 8px">
+                  <button id="exercise-complete-btn" type="button" class="btn btn-primary btn-sm">
+                    Oturumu Tamamla
+                  </button>
+                  <button
+                    id="exercise-load-questions-btn"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                  >
+                    Soruları Yenile
+                  </button>
+                </div>
+                <div
+                  id="exercise-complete-error"
+                  class="error-banner hidden"
+                  style="margin-top: 8px"
+                ></div>
+              </div>
+            </div>
+
+            <div id="exercise-questions-card" class="card" style="padding: 16px; display: none">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 12px;
+                "
+              >
+                <h3 style="margin: 0">
+                  Sorular <span id="exercise-question-counter" class="muted"></span>
+                </h3>
+                <div style="display: flex; gap: 8px">
+                  <button id="exercise-prev-question" type="button" class="btn btn-ghost btn-sm">
+                    Önceki
+                  </button>
+                  <button id="exercise-next-question" type="button" class="btn btn-ghost btn-sm">
+                    Sonraki
+                  </button>
+                </div>
+              </div>
+              <div id="exercise-current-question" class="stack"></div>
+              <div
+                id="exercise-attempt-feedback"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                class="card"
+                style="margin-top: 12px; padding: 12px; display: none"
+              ></div>
+              <div class="exercise-actions">
+                <button id="exercise-submit-attempt" type="button" class="btn btn-primary">
+                  Cevabı kontrol et
+                </button>
+                <span id="exercise-attempt-status" class="muted"></span>
+              </div>
+              <div
+                id="exercise-attempt-error"
+                role="alert"
+                class="error-banner hidden"
+                style="margin-top: 8px"
+              ></div>
+            </div>
+
+            <div
+              id="exercise-result-card"
+              class="card"
+              style="padding: 16px; margin-top: 16px; display: none"
+            >
+              <h3 style="margin: 0 0 12px">Sonuç</h3>
+              <div id="exercise-result-body" class="detail-grid"></div>
+            </div>
+          </section>
+
+          <section id="page-assessments" class="page-view hidden">
+            <div class="page-head">
+              <h2>Ölçme &amp; Değerlendirme</h2>
+              <button id="assessment-create-btn" type="button" class="btn btn-primary" data-admin>
+                Yeni Değerlendirme
+              </button>
+            </div>
+            <div id="assessment-error" class="error-banner hidden" role="alert"></div>
+            <div
+              id="student-assessment-view"
+              class="student-content-view hidden"
+              aria-live="polite"
+            >
+              <div class="student-section-intro assessment-intro">
+                <p class="insight-eyebrow">KENDİNİ ÖLÇ</p>
+                <h3>Seviyeni ve gelişimini keşfet</h3>
+                <p class="muted">
+                  Bu çalışmalar bir not değil; sana uygun sonraki adımı bulmana yardım eder.
+                </p>
+              </div>
+              <div id="student-assessment-cards" class="learning-card-grid"></div>
+            </div>
+            <div class="card" style="padding: 16px; margin-bottom: 16px">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <input
+                  type="text"
+                  id="assessment-search"
+                  placeholder="Değerlendirme ara…"
+                  style="
+                    flex: 1;
+                    min-width: 180px;
+                    padding: 6px 10px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                  "
+                />
+                <select
+                  id="assessment-type-filter"
+                  style="
+                    padding: 6px 10px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                  "
+                >
+                  <option value="">Tüm türler</option>
+                  <option value="PLACEMENT">Seviye Tespit</option>
+                  <option value="DIAGNOSTIC">Tanılama</option>
+                  <option value="BENCHMARK">Benchmark</option>
+                </select>
+                <select
+                  id="assessment-status-filter"
+                  style="
+                    padding: 6px 10px;
+                    border: 1px solid var(--border);
+                    border-radius: var(--radius-sm);
+                  "
+                >
+                  <option value="">Tüm durumlar</option>
+                  <option value="DRAFT" data-admin>Taslak</option>
+                  <option value="PUBLISHED">Yayınlanmış</option>
+                  <option value="ARCHIVED">Arşivlenmiş</option>
+                </select>
+              </div>
+            </div>
+            <div class="card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Başlık</th>
+                      <th>Tür</th>
+                      <th>Seviye</th>
+                      <th>Durum</th>
+                      <th>Oturum</th>
+                      <th>Sonuç</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="assessment-list-body">
+                    <tr>
+                      <td colspan="7" class="muted" style="text-align: center; padding: 24px">
+                        Yükleniyor…
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: 12px 16px;
+                  border-top: 1px solid var(--border);
+                "
+              >
+                <span id="assessment-page-info" class="muted"></span>
+                <div style="display: flex; gap: 6px">
+                  <button
+                    id="assessment-prev-btn"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    disabled
+                  >
+                    Önceki
+                  </button>
+                  <button
+                    id="assessment-next-btn"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    disabled
+                  >
+                    Sonraki
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div
+            id="assessment-detail-modal"
+            class="modal-backdrop hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="assessment-detail-title"
+          >
+            <div class="modal modal-wide">
+              <div class="modal-head">
+                <h3 id="assessment-detail-title">Değerlendirme detayı</h3>
+                <button
+                  id="assessment-detail-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  ✕
+                </button>
+              </div>
+              <div id="assessment-detail-body" class="modal-body"></div>
+              <div class="modal-actions">
+                <button id="assessment-detail-start" type="button" class="btn btn-primary">
+                  Başla
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Değerlendirme form modalı -->
+          <div id="assessment-form-modal" class="modal-backdrop hidden">
+            <div class="modal">
+              <div class="modal-head">
+                <h3 id="assessment-form-title">Yeni Değerlendirme</h3>
+                <button
+                  id="assessment-form-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <form id="assessment-form" novalidate>
+                <div class="modal-body">
+                  <div id="assessment-form-error" class="error-banner hidden" role="alert"></div>
+                  <label class="field">
+                    <span>Başlık *</span>
+                    <input
+                      type="text"
+                      id="assessment-form-title-input"
+                      placeholder="Değerlendirme başlığı"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span>Tür</span>
+                    <select id="assessment-form-type">
+                      <option value="PLACEMENT">Seviye Tespit</option>
+                      <option value="DIAGNOSTIC">Tanılama</option>
+                      <option value="BENCHMARK">Benchmark</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Şablon *</span>
+                    <select id="assessment-form-template">
+                      <option value="">Şablon seçin…</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="modal-foot">
+                  <button type="button" id="assessment-form-cancel" class="btn btn-ghost">
+                    İptal
+                  </button>
+                  <button type="submit" id="assessment-form-submit" class="btn btn-primary">
+                    <span class="btn-label">Kaydet</span>
+                    <span class="btn-spinner hidden" aria-hidden="true">⏳</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <section id="page-progress" class="page-view hidden insight-page">
+            <header class="insight-heading">
+              <div>
+                <p class="insight-eyebrow">KENDİ RİTMİNDE, ADIM ADIM</p>
+                <h2>İlerlemen</h2>
+                <p>Çalışmalarını keşfet, bir sonraki adımını seç.</p>
+              </div>
+              <button type="button" class="btn btn-secondary" id="progress-refresh">Yenile</button>
+            </header>
+            <p id="progress-status" role="status"></p>
+            <div id="progress-error" class="error hidden" role="alert"></div>
+            <section
+              aria-label="Genel ilerleme"
+              class="insight-metrics"
+              id="progress-summary"
+            ></section>
+            <section
+              class="insight-panel insight-path"
+              aria-label="Öğrenme yolu ilerlemesi"
+              id="progress-path"
+            ></section>
+            <div class="insight-columns">
+              <section aria-labelledby="progress-skills-title">
+                <h3 id="progress-skills-title">Beceri ilerlemesi</h3>
+                <p class="muted">
+                  Kartlardaki doğruluk, ilgili dönemin değerlendirilen cevaplarını gösterir.
+                </p>
+                <div id="progress-skills" class="insight-skills"></div>
+              </section>
+              <div>
+                <section class="insight-panel" aria-labelledby="progress-study-title">
+                  <h3 id="progress-study-title">Çalışma özeti</h3>
+                  <div id="progress-study"></div>
+                </section>
+                <section class="insight-panel" aria-labelledby="progress-history-title">
+                  <h3 id="progress-history-title">Son çalışmaların</h3>
+                  <div id="progress-history"></div>
+                  <div class="insight-pagination">
+                    <button type="button" class="btn btn-secondary" id="history-prev">Önceki</button
+                    ><span id="history-page" aria-live="polite"></span
+                    ><button type="button" class="btn btn-secondary" id="history-next">
+                      Sonraki
+                    </button>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </section>
+          <section id="page-badges" class="page-view hidden insight-page">
+            <header class="insight-heading">
+              <div>
+                <p class="insight-eyebrow">EMEĞİN GÖRÜNÜR OLSUN</p>
+                <h2>Rozetler &amp; Puanlar</h2>
+                <p>Her çalışma, yeni bir adım. Kendi ritminde devam et.</p>
+              </div>
+              <button type="button" class="btn btn-secondary" id="gamification-refresh">
+                Yenile
+              </button>
+            </header>
+            <p id="gamification-status" role="status"></p>
+            <div id="gamification-error" class="error hidden" role="alert"></div>
+            <div class="insight-metrics gamification-summary" aria-label="Gamification özeti">
+              <article class="insight-stat insight-gold">
+                <span aria-hidden="true">⭐</span><span>Toplam XP</span
+                ><strong id="gamification-total-points">—</strong>
+              </article>
+              <article class="insight-stat insight-orange">
+                <span aria-hidden="true">🔥</span><span>Mevcut seri</span
+                ><strong><span id="gamification-current-days">—</span> gün</strong>
+              </article>
+              <article class="insight-stat insight-purple">
+                <span aria-hidden="true">🏆</span><span>Kazanılan rozet</span
+                ><strong id="gamification-badge-count">—</strong>
+              </article>
+            </div>
+            <section class="insight-panel insight-streak" aria-label="Serin">
+              <span class="insight-flame" aria-hidden="true">🔥</span>
+              <div>
+                <h3>Serini koru!</h3>
+                <p>En uzun seri: <strong id="gamification-longest-days">—</strong> gün</p>
+                <p id="gamification-last-activity" class="muted"></p>
+              </div>
+            </section>
+            <section class="insight-panel" aria-labelledby="gamification-badges-title">
+              <h3 id="gamification-badges-title">Kazanılan rozetler</h3>
+              <p id="badge-celebration" role="status" class="insight-celebration"></p>
+              <div id="gamification-badges" class="gamification-badges"></div>
+            </section>
+            <section class="insight-panel" aria-labelledby="gamification-events-title">
+              <h3 id="gamification-events-title">Son XP hareketleri</h3>
+              <div id="gamification-events" class="insight-events"></div>
+            </section>
+            <dialog id="badge-detail" aria-labelledby="badge-detail-title">
+              <div class="badge-detail-content">
+                <span id="badge-detail-icon" aria-hidden="true"></span>
+                <h3 id="badge-detail-title"></h3>
+                <p id="badge-detail-description"></p>
+                <p id="badge-detail-date"></p>
+                <p id="badge-detail-source" class="muted"></p>
+                <button type="button" class="btn btn-primary" id="badge-detail-close">Kapat</button>
+              </div>
+            </dialog>
+          </section>
+
+          <section id="page-settings" class="page-view hidden">
+            <div class="page-head">
+              <h2>Ayarlar</h2>
+            </div>
+            <section
+              class="card premium-account-card"
+              data-student
+              aria-labelledby="premium-account-title"
+            >
+              <div>
+                <span class="eyebrow">HESAP VE PLAN</span>
+                <h3 id="premium-account-title">Planını ve kullanımını gör</h3>
+                <p class="muted">Ücretsiz günlük haklarını ve Premium bilgisini incele.</p>
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                data-premium-action="OPEN_PREMIUM_INFO"
+              >
+                Premium hakkında bilgi
+              </button>
+              <button
+                id="settings-billing-account"
+                type="button"
+                class="btn btn-ghost"
+                data-premium-action="OPEN_BILLING_ACCOUNT"
+              >
+                Aboneliği ve ödemeleri yönet
+              </button>
+            </section>
+            <div class="settings-card card">
+              <span class="coming-soon-icon" aria-hidden="true">⚙️</span>
+              <div>
+                <h3>Deneyimini kişiselleştir</h3>
+                <p class="muted">Küçük başarı anlarında ses efektlerini kullan.</p>
+                <label class="settings-toggle">
+                  <input type="checkbox" id="sound-effects-toggle" />
+                  <span>Ses efektleri</span>
+                </label>
+              </div>
+            </div>
+          </section>
+        </main>
+        <nav id="student-bottom-nav" class="student-bottom-nav hidden" aria-label="Öğrenci menüsü">
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="dashboard"
+            aria-label="Ana Sayfa"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">⌂</span
+            ><span class="bottom-nav-label">Ana Sayfa</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="exercise"
+            aria-label="Alıştırma"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">✏️</span
+            ><span class="bottom-nav-label">Alıştırma</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="assignments"
+            aria-label="Ödevler"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">📝</span
+            ><span class="bottom-nav-label">Ödevler</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="assessments"
+            aria-label="Değerlendirmeler"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">📊</span
+            ><span class="bottom-nav-label">Ölçme</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="progress"
+            aria-label="İlerleme"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">📈</span
+            ><span class="bottom-nav-label">İlerleme</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="badges"
+            aria-label="Rozetler"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">🏅</span
+            ><span class="bottom-nav-label">Rozetler</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="settings"
+            aria-label="Profil"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">👤</span
+            ><span class="bottom-nav-label">Profil</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+    <dialog
+      id="premium-paywall-dialog"
+      class="premium-dialog"
+      aria-labelledby="premium-paywall-title"
+    >
+      <div class="premium-dialog-head">
+        <div>
+          <p class="eyebrow">GÜNLÜK KULLANIM</p>
+          <h2 id="premium-paywall-title">Günlük ücretsiz hakkın doldu</h2>
+        </div>
+        <button id="premium-paywall-close" type="button" class="btn btn-icon" aria-label="Kapat">
+          ×
+        </button>
+      </div>
+      <p id="premium-paywall-reason" role="alert"></p>
+      <div class="premium-paywall-details">
+        <p id="premium-paywall-usage"></p>
+        <p id="premium-paywall-reset" class="muted"></p>
+      </div>
+      <p id="premium-paywall-benefit" class="premium-paywall-benefit"></p>
+      <div class="premium-dialog-actions">
+        <button type="button" class="btn btn-primary" data-premium-action="OPEN_PREMIUM_INFO">
+          Premium hakkında bilgi
+        </button>
+        <button id="premium-paywall-close-secondary" type="button" class="btn btn-ghost">
+          Kapat
+        </button>
+      </div>
+    </dialog>
+    <dialog
+      id="billing-cancel-dialog"
+      class="premium-dialog billing-cancel-dialog"
+      aria-labelledby="billing-cancel-title"
+    >
+      <div class="premium-dialog-head">
+        <div>
+          <p class="eyebrow">ABONELİK YÖNETİMİ</p>
+          <h2 id="billing-cancel-title">Aboneliği iptal et</h2>
+        </div>
+        <button
+          id="billing-cancel-close"
+          type="button"
+          class="btn btn-icon"
+          aria-label="İptal penceresini kapat"
+        >
+          ×
+        </button>
+      </div>
+      <p id="billing-cancel-warning" role="alert">
+        Bu işlem Premium aboneliğini sonlandırma isteği gönderir. İptalden sonra Premium hakları
+        devam etmeyebilir.
+      </p>
+      <div class="premium-paywall-details">
+        <p id="billing-cancel-impact"></p>
+        <p id="billing-cancel-period" class="muted"></p>
+      </div>
+      <p id="billing-cancel-result" class="muted" role="status"></p>
+      <div class="premium-dialog-actions">
+        <button id="billing-cancel-confirm" type="button" class="btn btn-danger">
+          İptali onayla
+        </button>
+        <button id="billing-cancel-secondary" type="button" class="btn btn-ghost">Vazgeç</button>
+      </div>
+    </dialog>
+    <div
+      id="celebration-layer"
+      class="celebration-layer hidden"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div id="celebration-particles" class="celebration-particles" aria-hidden="true"></div>
+      <div class="celebration-toast" role="status">
+        <button id="celebration-close" type="button" class="celebration-close" aria-label="Kapat">
+          ×
+        </button>
+        <div id="celebration-icon" class="celebration-icon" aria-hidden="true">✓</div>
+        <p id="celebration-eyebrow" class="celebration-eyebrow"></p>
+        <h2 id="celebration-title"></h2>
+        <p id="celebration-detail" class="celebration-detail"></p>
+        <div id="celebration-reward" class="celebration-reward"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

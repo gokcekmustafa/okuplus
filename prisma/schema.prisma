@@ -1,0 +1,1519 @@
+// Oku+ — Nihai Prisma Schema (data model v1)
+//
+// NOTLAR:
+// - Tüm PK'lar UUID v7'dir. `uuidv7()` fonksiyonu Postgres 18+ (built-in) veya
+//   pg_uuidv7 extension'ı tarafından sağlanmalıdır (prisma/manual/001_uuidv7.sql).
+// - Partial unique index'ler, RLS policy'leri ve trigger'lar Prisma'da ifade
+//   edilemez; prisma/manual/*.sql içinde tutulur ve migration.sql'e gömülür.
+// - RLS: uygulama her istekte `SET LOCAL app.tenant_id = '<uuid>'` ve
+//   platform personeli için `SET LOCAL app.platform_role = '...'` ayarlar.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum TenantType {
+  INDIVIDUAL
+  ORGANIZATION
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+  CLOSED
+}
+
+enum AuthIdentityProvider {
+  GOOGLE
+  APPLE
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  CONTENT_EDITOR
+  SUPPORT
+  ANALYST
+}
+
+enum MembershipRole {
+  OWNER
+  ORG_ADMIN
+  BRANCH_MANAGER
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  REMOVED
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+  CLOSED
+}
+
+enum AcademicYearStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+enum ClassStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  LEFT
+  COMPLETED
+}
+
+enum GuardianRelation {
+  MOTHER
+  FATHER
+  LEGAL_GUARDIAN
+  OTHER
+}
+
+enum GuardianStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum SkillCategory {
+  MAIN_IDEA
+  DETAIL
+  INFERENCE
+  VOCABULARY
+  FACTUAL
+  COMPREHENSION
+}
+
+enum ContentType {
+  PASSAGE
+  STORY
+  POEM
+  ARTICLE
+  DIALOGUE
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum VersionStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  OPEN_ENDED
+  MATCHING
+  FILL_BLANK
+}
+
+enum QuestionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ExerciseTemplateType {
+  COMPREHENSION
+  FLUENCY
+  INFERENCE
+  VOCABULARY
+  MIXED
+}
+
+enum ExerciseTemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AssignmentStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  CLOSED
+}
+
+enum SessionContext {
+  INDIVIDUAL
+  ASSIGNMENT
+  ASSESSMENT
+}
+
+enum SessionType {
+  PRACTICE
+  ASSESSMENT
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  EXPIRED
+}
+
+enum AssessmentType {
+  PLACEMENT
+  DIAGNOSTIC
+  BENCHMARK
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BadgeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PointEventType {
+  EXERCISE_COMPLETED
+  CORRECT_ANSWER
+  STREAK_MILESTONE
+  BADGE_EARNED
+  DAILY_LOGIN
+}
+
+enum ConsentType {
+  TERMS_OF_SERVICE
+  PARENTAL_CONSENT
+  DATA_PROCESSING
+  DATA_TRANSFER
+}
+
+enum ConsentStatus {
+  GRANTED
+  REVOKED
+  EXPIRED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  PUBLISH
+  ROLE_CHANGED
+  ENROLLMENT_CHANGED
+  CONSENT_GRANTED
+  CONSENT_REVOKED
+  EXPORT_REQUESTED
+  ERASURE_REQUESTED
+}
+
+enum MediaType {
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+}
+
+enum MediaRole {
+  MAIN
+  OPTION
+  EXPLANATION
+  HINT
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PilotEventType {
+  SIGNUP_COMPLETED
+  ONBOARDING_STARTED
+  ONBOARDING_COMPLETED
+  LEARNING_PATH_OPENED
+  TODAY_OPENED
+  EXERCISE_STARTED
+  QUESTION_VIEWED
+  QUESTION_ATTEMPTED
+  QUESTION_ANSWERED
+  EXERCISE_COMPLETED
+  EXERCISE_ABANDONED
+  EXERCISE_RESUMED
+  ASSESSMENT_STARTED
+  ASSESSMENT_COMPLETED
+  REVIEW_STARTED
+  REVIEW_COMPLETED
+  STREAK_STARTED
+  STREAK_CONTINUED
+  TECHNICAL_ERROR
+  PREMIUM_INFO_VIEWED
+  PREMIUM_CTA_CLICKED
+  LIMIT_REACHED
+  PAYWALL_VIEWED
+  PREMIUM_CHECKOUT_STARTED
+  PREMIUM_CHECKOUT_COMPLETED
+  PREMIUM_CHECKOUT_FAILED
+  SUBSCRIPTION_CANCELED
+}
+
+enum PilotFeedbackCategory {
+  CONTENT_CLARITY
+  QUESTION_CLARITY
+  DIFFICULTY
+  GENERAL_SATISFACTION
+}
+
+enum PilotBugCategory {
+  BUG
+  CONTENT_ISSUE
+  WRONG_ANSWER
+  UNCLEAR_QUESTION
+  TECHNICAL_ERROR
+}
+
+enum PilotReportStatus {
+  OPEN
+  TRIAGED
+  RESOLVED
+}
+
+enum EntitlementPlan {
+  PLAN_FREE
+  PLAN_PREMIUM
+}
+
+enum EntitlementScope {
+  PERSONAL
+  ORGANIZATION
+}
+
+enum BillingSubscriptionStatus {
+  PENDING
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  UNKNOWN
+}
+
+enum BillingPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  UNKNOWN
+}
+
+enum BillingCheckoutStatus {
+  OPEN
+  COMPLETED
+  FAILED
+  EXPIRED
+  CANCELED
+}
+
+enum BillingWebhookStatus {
+  RECEIVED
+  PROCESSED
+  IGNORED
+  CONFLICT
+  REJECTED
+  FAILED
+}
+
+// ============ IDENTITY / TENANT ============
+
+/// Global kimlik. Rol bilgisi Membership üzerinden gelir.
+model User {
+  id              String        @id @default(dbgenerated("uuidv7()"))
+  email           String?       @unique
+  phone           String?
+  passwordHash    String?
+  displayName     String
+  avatarUrl       String?
+  birthYear       Int?
+  platformRole    PlatformRole?
+  status          UserStatus    @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  memberships              Membership[]
+  invitedMemberships       Membership[]              @relation("InvitedMemberships")
+  consents                 Consent[]
+  auditLogs                AuditLog[]
+  studentProfiles          StudentProfile[]
+  enrollments              Enrollment[]
+  teacherBranchMemberships TeacherBranchMembership[]
+  teacherClassAssignments  TeacherClassAssignment[]
+  managedBranches          Branch[]
+  guardianshipsAsGuardian  Guardianship[]            @relation("Guardian")
+  guardianshipsAsStudent   Guardianship[]            @relation("Student")
+  exerciseSessions         ExerciseSession[]
+  assignments              Assignment[]
+  studentBadges            StudentBadge[]
+  pointEvents              PointEvent[]
+  studentStreaks           StudentStreak[]
+  assessmentResults        AssessmentResult[]
+  createdContents          Content[]                 @relation("ContentCreatedBy")
+  createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
+  createdQuestions         Question[]                @relation("QuestionCreatedBy")
+  createdQuestionVersions  QuestionVersion[]         @relation("QuestionVersionCreatedBy")
+  createdTemplates         ExerciseTemplate[]        @relation("TemplateCreatedBy")
+  createdTemplateVersions  ExerciseTemplateVersion[] @relation("TemplateVersionCreatedBy")
+  createdAssessments       Assessment[]              @relation("AssessmentCreatedBy")
+  studentProgresses        StudentProgress[]
+  gradedAttempts           Attempt[]                 @relation("AttemptGradedBy")
+  createdMedia             QuestionMedia[]           @relation("MediaCreatedBy")
+  createdGenerationJobs    QuestionGenerationJob[]   @relation("GenerationJobCreatedBy")
+  pilotEvents              PilotEvent[]
+  pilotFeedback            PilotFeedback[]
+  pilotBugReports          PilotBugReport[]
+  entitlements             Entitlement[]
+  entitlementUsages        EntitlementUsage[]
+  billingCustomers         BillingCustomer[]
+  billingCheckouts         BillingCheckout[]
+  billingSubscriptions     BillingSubscription[]
+  billingPayments          BillingPayment[]
+  billingWebhookEvents     BillingWebhookEvent[]
+  authIdentities           AuthIdentity[]
+  authSessions             AuthSession[]
+
+  @@index([status])
+}
+
+/// Harici sağlayıcı kimliği. E-posta yalnız metadata'dır; kalıcı anahtar provider + subject'tir.
+model AuthIdentity {
+  id             String               @id @default(dbgenerated("uuidv7()"))
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       AuthIdentityProvider
+  subject        String
+  providerEmail  String?
+  emailVerified  Boolean              @default(false)
+  isPrivateEmail Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  lastUsedAt     DateTime             @default(now())
+
+  @@unique([provider, subject])
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+/// Bir refresh token neslini temsil eden kalıcı oturum kaydı.
+/// Token'ın kendisi değil yalnızca SHA-256 hash'i saklanır.
+model AuthSession {
+  id               String    @id @default(dbgenerated("uuidv7()"))
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  tokenFamilyId    String
+  deviceName       String?
+  platform         String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([tokenFamilyId])
+  @@index([expiresAt])
+}
+
+model Tenant {
+  id        String       @id @default(dbgenerated("uuidv7()"))
+  type      TenantType
+  name      String
+  slug      String? // org slug; partial unique -> prisma/manual/002 (yalnızca ORGANIZATION)
+  logoUrl   String?
+  settings  Json?
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  branches                 Branch[]
+  academicYears            AcademicYear[]
+  classes                  Class[]
+  memberships              Membership[]
+  enrollments              Enrollment[]
+  guardianships            Guardianship[]
+  teacherBranchMemberships TeacherBranchMembership[]
+  teacherClassAssignments  TeacherClassAssignment[]
+  contents                 Content[]
+  templates                ExerciseTemplate[]
+  assessments              Assessment[]
+  assignments              Assignment[]
+  sessions                 ExerciseSession[]
+  studentProfiles          StudentProfile[]
+  studentProgress          StudentProgress[]
+  pointEvents              PointEvent[]
+  studentBadges            StudentBadge[]
+  studentStreaks           StudentStreak[]
+  assessmentResults        AssessmentResult[]
+  consents                 Consent[]
+  auditLogs                AuditLog[]
+  attempts                 Attempt[]
+  questionMedia            QuestionMedia[]
+  pilotEvents              PilotEvent[]
+  pilotFeedback            PilotFeedback[]
+  pilotBugReports          PilotBugReport[]
+  entitlements             Entitlement[]
+  entitlementUsages        EntitlementUsage[]
+  billingCustomers         BillingCustomer[]
+  billingCheckouts         BillingCheckout[]
+  billingSubscriptions     BillingSubscription[]
+  billingPayments          BillingPayment[]
+  billingWebhookEvents     BillingWebhookEvent[]
+
+  @@index([type, status])
+}
+
+// ============ KURUM YAPISI ============
+
+model Branch {
+  id            String       @id @default(dbgenerated("uuidv7()"))
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name          String
+  code          String
+  address       String?
+  phone         String?
+  status        BranchStatus @default(ACTIVE)
+  managerUserId String?
+  manager       User?        @relation(fields: [managerUserId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+
+  classes            Class[]
+  teacherMemberships TeacherBranchMembership[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([managerUserId])
+}
+
+model AcademicYear {
+  id        String             @id @default(dbgenerated("uuidv7()"))
+  tenantId  String
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  status    AcademicYearStatus @default(UPCOMING)
+  createdAt DateTime           @default(now())
+
+  classes     Class[]
+  enrollments Enrollment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+}
+
+model Class {
+  id             String       @id @default(dbgenerated("uuidv7()"))
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  name           String
+  gradeLevel     Int
+  status         ClassStatus  @default(ACTIVE)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  enrollments        Enrollment[]
+  teacherAssignments TeacherClassAssignment[]
+  assignments        Assignment[]
+
+  @@unique([branchId, academicYearId, name])
+  @@index([tenantId, branchId, academicYearId])
+  @@index([tenantId, status])
+}
+
+/// Aktif/pending duplicate koruması partial unique index'tir -> prisma/manual/002.
+model Membership {
+  id              String           @id @default(dbgenerated("uuidv7()"))
+  tenantId        String
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role            MembershipRole
+  status          MembershipStatus @default(PENDING)
+  invitedByUserId String?
+  invitedBy       User?            @relation("InvitedMemberships", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+
+  @@index([userId, status])
+  @@index([tenantId, role, status])
+  @@index([tenantId, status])
+}
+
+/// Aktif duplicate koruması partial unique index'tir -> prisma/manual/002.
+model TeacherBranchMembership {
+  id        String           @id @default(dbgenerated("uuidv7()"))
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId  String
+  branch    Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  teacherId String
+  teacher   User             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  deletedAt DateTime?
+
+  @@index([teacherId, status])
+  @@index([tenantId, branchId, status])
+}
+
+/// Yetki kapsamının temeli: öğretmen yalnızca atandığı sınıfların verisine erişir.
+/// Aktif duplicate koruması partial unique index'tir -> prisma/manual/002.
+model TeacherClassAssignment {
+  id        String           @id @default(dbgenerated("uuidv7()"))
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  classId   String
+  class     Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  teacherId String
+  teacher   User             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  subject   String?
+  status    MembershipStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  deletedAt DateTime?
+
+  @@index([teacherId, status])
+  @@index([tenantId, classId, status])
+}
+
+model Enrollment {
+  id             String           @id @default(dbgenerated("uuidv7()"))
+  tenantId       String
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId      String
+  student        User             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId        String
+  class          Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  academicYearId String
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  status         EnrollmentStatus @default(ACTIVE)
+  enrolledAt     DateTime         @default(now())
+  leftAt         DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([studentId, academicYearId, classId])
+  @@index([classId, academicYearId, status])
+  @@index([studentId, academicYearId])
+}
+
+/// Unique: tenantId + studentId + guardianId bağlamında (aktif partial -> prisma/manual/002).
+model Guardianship {
+  id                    String           @id @default(dbgenerated("uuidv7()"))
+  tenantId              String
+  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  guardianId            String
+  guardian              User             @relation("Guardian", fields: [guardianId], references: [id], onDelete: Restrict)
+  studentId             String
+  student               User             @relation("Student", fields: [studentId], references: [id], onDelete: Restrict)
+  relation              GuardianRelation
+  canViewProgress       Boolean          @default(true)
+  canManageSubscription Boolean          @default(false)
+  status                GuardianStatus   @default(ACTIVE)
+  verifiedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+
+  @@index([tenantId, studentId, guardianId, status])
+  @@index([guardianId, status])
+}
+
+// ============ PEDAGOJİK KATALOG (GLOBAL) ============
+
+model Skill {
+  id           String        @id @default(dbgenerated("uuidv7()"))
+  code         String        @unique
+  name         String
+  category     SkillCategory
+  description  String?
+  displayOrder Int           @default(0)
+  createdAt    DateTime      @default(now())
+
+  questions       Question[]
+  contentSkills   ContentSkill[]
+  studentProgress StudentProgress[]
+  templates       ExerciseTemplate[]
+}
+
+model Level {
+  id            String   @id @default(dbgenerated("uuidv7()"))
+  code          String   @unique
+  name          String
+  minScore      Float
+  maxScore      Float
+  gradeBand     String?
+  difficultyMin Float
+  difficultyMax Float
+  displayOrder  Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  currentLevelProfiles StudentProfile[]   @relation("CurrentLevel")
+  targetLevelProfiles  StudentProfile[]   @relation("TargetLevel")
+  assessments          Assessment[]
+  results              AssessmentResult[]
+}
+
+// ============ İÇERİK ============
+// tenantId NULL = GLOBAL katalog: tüm tenant'lar okur, oluşturma/değiştirme
+// yalnızca platform rolü (app guard + RLS).
+
+model Content {
+  id               String          @id @default(dbgenerated("uuidv7()"))
+  tenantId         String? // NULL = global
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  type             ContentType
+  title            String
+  difficulty       Float
+  status           ContentStatus   @default(DRAFT)
+  currentVersionId String?         @unique
+  currentVersion   ContentVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  createdById      String?
+  createdBy        User?           @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  versions      ContentVersion[]   @relation("ContentVersions")
+  questions     Question[]
+  contentSkills ContentSkill[]
+  templates     ExerciseTemplate[]
+
+  @@index([tenantId, status])
+  @@index([status])
+}
+
+/// PUBLISHED sürüm immutable'dır (DB trigger + app kuralı) -> prisma/manual/004.
+model ContentVersion {
+  id               String        @id @default(dbgenerated("uuidv7()"))
+  contentId        String
+  content          Content       @relation("ContentVersions", fields: [contentId], references: [id], onDelete: Restrict)
+  version          Int
+  title            String
+  body             String
+  wordCount        Int
+  readabilityScore Float?
+  license          String?
+  changelog        String?
+  status           VersionStatus @default(DRAFT)
+  publishedAt      DateTime?
+  createdById      String?
+  createdBy        User?         @relation("ContentVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+
+  publishedContentPointer Content?                         @relation("CurrentVersion")
+  templateContents        ExerciseTemplateVersionContent[]
+  sessionContents         SessionContentVersion[]
+
+  @@unique([contentId, version])
+  @@index([contentId, status])
+}
+
+model ContentSkill {
+  contentId String
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  skillId   String
+  skill     Skill   @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@id([contentId, skillId])
+  @@index([skillId])
+}
+
+/// Question tenant_id taşımaz; tenant kapsamı Content üzerinden türetilir (RLS subquery).
+model Question {
+  id          String         @id @default(dbgenerated("uuidv7()"))
+  contentId   String
+  content     Content        @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  position    Int
+  type        QuestionType
+  skillId     String?
+  skill       Skill?         @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  status      QuestionStatus @default(DRAFT)
+  createdById String?
+  createdBy   User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+
+  versions          QuestionVersion[]
+  templateQuestions ExerciseTemplateVersionQuestion[]
+  attempts          Attempt[]
+
+  @@index([contentId, position])
+  @@index([skillId])
+  @@index([status])
+}
+
+/// PUBLISHED sürüm immutable'dır (DB trigger + app kuralı) -> prisma/manual/004.
+model QuestionVersion {
+  id                   String        @id @default(dbgenerated("uuidv7()"))
+  questionId           String
+  question             Question      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  version              Int
+  prompt               String
+  options              Json?
+  correctAnswer        Json?
+  explanation          String?
+  hint                 String?
+  difficulty           Float?
+  status               VersionStatus @default(DRAFT)
+  publishedAt          DateTime?
+  createdById          String?
+  createdBy            User?         @relation("QuestionVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt            DateTime      @default(now())
+  partialCreditEnabled Boolean       @default(true)
+  generationMetadata   Json?
+
+  templateQuestions ExerciseTemplateVersionQuestion[]
+  attempts          Attempt[]
+  media             QuestionVersionMedia[]
+
+  @@unique([questionId, version])
+  @@index([questionId, status])
+}
+
+// ============ EGZERSİZ ============
+
+model ExerciseTemplate {
+  id          String                 @id @default(dbgenerated("uuidv7()"))
+  tenantId    String? // NULL = global
+  tenant      Tenant?                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  title       String
+  type        ExerciseTemplateType
+  skillId     String?
+  skill       Skill?                 @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  config      Json?
+  status      ExerciseTemplateStatus @default(DRAFT)
+  createdById String?
+  createdBy   User?                  @relation("TemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  deletedAt   DateTime?
+
+  versions    ExerciseTemplateVersion[]
+  assignments Assignment[]
+  content     Content?                  @relation(fields: [contentId], references: [id])
+  contentId   String?
+
+  @@index([tenantId, status])
+  @@index([status])
+}
+
+/// PUBLISHED sürüm immutable'dır (DB trigger + app kuralı) -> prisma/manual/004.
+model ExerciseTemplateVersion {
+  id          String           @id @default(dbgenerated("uuidv7()"))
+  templateId  String
+  template    ExerciseTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  version     Int
+  status      VersionStatus    @default(DRAFT)
+  publishedAt DateTime?
+  createdById String?
+  createdBy   User?            @relation("TemplateVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+
+  contents  ExerciseTemplateVersionContent[]
+  questions ExerciseTemplateVersionQuestion[]
+  sessions  ExerciseSession[]
+
+  @@unique([templateId, version])
+  @@index([templateId, status])
+}
+
+/// Org şablonu başka tenant'ın içeriğini kullanamaz (tenant compatibility -> prisma/manual/005).
+model ExerciseTemplateVersionContent {
+  templateVersionId String
+  templateVersion   ExerciseTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
+  contentVersionId  String
+  contentVersion    ContentVersion          @relation(fields: [contentVersionId], references: [id], onDelete: Restrict)
+  position          Int
+
+  @@id([templateVersionId, contentVersionId])
+  @@index([contentVersionId])
+}
+
+model ExerciseTemplateVersionQuestion {
+  templateVersionId String
+  templateVersion   ExerciseTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
+  questionVersionId String
+  questionVersion   QuestionVersion         @relation(fields: [questionVersionId], references: [id], onDelete: Restrict)
+  position          Int
+  question          Question?               @relation(fields: [questionId], references: [id])
+  questionId        String?
+
+  @@id([templateVersionId, questionVersionId])
+  @@index([questionVersionId])
+}
+
+model Assignment {
+  id         String           @id @default(dbgenerated("uuidv7()"))
+  tenantId   String
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  classId    String
+  class      Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  templateId String
+  template   ExerciseTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  teacherId  String
+  teacher    User             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  title      String
+  dueDate    DateTime?
+  status     AssignmentStatus @default(DRAFT)
+  assignedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  deletedAt  DateTime?
+
+  sessions ExerciseSession[]
+
+  @@index([classId, status])
+  @@index([teacherId, status])
+  @@index([templateId])
+}
+
+// ============ OTURUM / İLERLEME ============
+// ExerciseSession geçmişi silinemez (immutable). clientSessionId offline idempotency içindir.
+
+model ExerciseSession {
+  id                String                  @id @default(dbgenerated("uuidv7()"))
+  tenantId          String
+  tenant            Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId         String
+  student           User                    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  templateVersionId String
+  templateVersion   ExerciseTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  assignmentId      String?
+  assignment        Assignment?             @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  assessmentId      String?
+  assessment        Assessment?             @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  context           SessionContext          @default(INDIVIDUAL)
+  sessionType       SessionType             @default(PRACTICE)
+  status            SessionStatus           @default(IN_PROGRESS)
+  clientSessionId   String? // offline idempotency
+  startedAt         DateTime                @default(now())
+  completedAt       DateTime?
+  timeSpentMs       Int?
+  scoreSummary      Json?
+  deviceInfo        Json?
+  createdAt         DateTime                @default(now())
+
+  attempts        Attempt[]
+  contentVersions SessionContentVersion[]
+
+  @@unique([studentId, clientSessionId])
+  @@index([studentId, tenantId, startedAt])
+  @@index([assignmentId])
+  @@index([templateVersionId])
+  @@index([tenantId, status])
+}
+
+model SessionContentVersion {
+  sessionId        String
+  session          ExerciseSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  contentVersionId String
+  contentVersion   ContentVersion  @relation(fields: [contentVersionId], references: [id], onDelete: Restrict)
+  order            Int
+
+  @@id([sessionId, contentVersionId])
+  @@index([contentVersionId])
+}
+
+/// Attempt geçmişi silinemez (immutable). (session_id, client_attempt_id) UNIQUE.
+model Attempt {
+  id                 String          @id @default(dbgenerated("uuidv7()"))
+  tenantId           String
+  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sessionId          String
+  session            ExerciseSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  questionVersionId  String
+  questionVersion    QuestionVersion @relation(fields: [questionVersionId], references: [id], onDelete: Restrict)
+  clientAttemptId    String // offline idempotency
+  answer             Json?
+  isCorrect          Boolean?
+  timeSpentMs        Int?
+  rawScore           Float?
+  responseOrder      Int
+  feedback           Json?
+  answeredAt         DateTime        @default(now())
+  createdAt          DateTime        @default(now())
+  question           Question?       @relation(fields: [questionId], references: [id])
+  questionId         String?
+  // Değerlendirme alanları (OPEN_ENDED için)
+  aiScore            Float?
+  aiFeedback         String?
+  aiModelVersion     String?
+  aiEvaluatedAt      DateTime?
+  manualScore        Float?
+  gradedById         String?
+  gradedBy           User?           @relation("AttemptGradedBy", fields: [gradedById], references: [id], onDelete: SetNull)
+  gradedAt           DateTime?
+  // Kalibrasyon alanları (nightly job tarafından doldurulur)
+  itemDifficulty     Float?
+  itemDiscrimination Float?
+  itemGuessing       Float?
+  calibratedAt       DateTime?
+  calibrationVersion Int             @default(1)
+
+  @@unique([sessionId, clientAttemptId])
+  @@index([sessionId])
+  @@index([questionVersionId])
+  @@index([tenantId, answeredAt])
+  @@index([gradedById])
+}
+
+/// Soru medyaları (görsel, ses, video, belge) — merkezi katalog, yeniden kullanılabilir.
+model QuestionMedia {
+  id          String    @id @default(dbgenerated("uuidv7()"))
+  tenantId    String? // NULL = global katalog
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  type        MediaType
+  url         String // S3/CDN signed URL veya relative path
+  mimeType    String
+  width       Int?
+  height      Int?
+  durationMs  Int? // Ses/video için
+  altText     String? // Erişilebilirlik
+  caption     String? // Altyazı/metin alternatifi
+  hash        String // SHA-256 (deduplication)
+  sizeBytes   Int
+  createdById String?
+  createdBy   User?     @relation("MediaCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  questionVersions QuestionVersionMedia[]
+
+  @@index([tenantId, type])
+  @@index([hash])
+}
+
+/// QuestionVersion ↔ QuestionMedia çok-çok ilişki (rol + pozisyon).
+model QuestionVersionMedia {
+  questionVersionId String
+  questionVersion   QuestionVersion @relation(fields: [questionVersionId], references: [id], onDelete: Cascade)
+  mediaId           String
+  media             QuestionMedia   @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  role              MediaRole       @default(MAIN)
+  position          Int             @default(0)
+
+  @@id([questionVersionId, mediaId])
+}
+
+/// AI soru üretim kuyruğu (async job).
+model QuestionGenerationJob {
+  id               String    @id @default(dbgenerated("uuidv7()"))
+  tenantId         String?
+  templateId       String?
+  contentVersionId String?
+  prompt           String
+  parameters       Json // { count, typeDistribution, difficultyRange, skills[], language, ... }
+  status           JobStatus @default(PENDING)
+  result           Json? // { questions: [...], errors: [...] }
+  createdById      String?
+  createdBy        User?     @relation("GenerationJobCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([tenantId, status])
+}
+
+model StudentProfile {
+  id                    String    @id @default(dbgenerated("uuidv7()"))
+  tenantId              String
+  tenant                Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId             String
+  student               User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  currentLevelId        String?
+  currentLevel          Level?    @relation("CurrentLevel", fields: [currentLevelId], references: [id], onDelete: SetNull)
+  targetLevelId         String?
+  targetLevel           Level?    @relation("TargetLevel", fields: [targetLevelId], references: [id], onDelete: SetNull)
+  learningGoal          String?
+  onboardingCompletedAt DateTime?
+  startedAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([tenantId, studentId])
+  @@index([tenantId, currentLevelId])
+}
+
+/// Hesaplanmış read model. Ham gerçekler attempts / exercise_sessions'ta korunur.
+model StudentProgress {
+  id               String    @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student          User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  skillId          String
+  skill            Skill     @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  periodStart      DateTime
+  periodEnd        DateTime
+  algorithmVersion Int       @default(1)
+  sessionCount     Int       @default(0)
+  attemptCount     Int       @default(0)
+  correctCount     Int       @default(0)
+  accuracy         Float?
+  avgTimeMs        Int?
+  fluencyWcpm      Float?
+  consistency      Float?
+  masteryScore     Float?
+  lastAttemptAt    DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, studentId, skillId, periodStart, periodEnd])
+  @@index([studentId, skillId, periodStart])
+  @@index([tenantId, periodStart])
+}
+
+model Assessment {
+  id          String           @id @default(dbgenerated("uuidv7()"))
+  tenantId    String? // NULL = global
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  title       String
+  type        AssessmentType   @default(PLACEMENT)
+  levelId     String?
+  level       Level?           @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  config      Json?
+  status      AssessmentStatus @default(DRAFT)
+  createdById String?
+  createdBy   User?            @relation("AssessmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+
+  sessions ExerciseSession[]
+  results  AssessmentResult[]
+
+  @@index([tenantId, status])
+}
+
+model AssessmentResult {
+  id            String     @id @default(dbgenerated("uuidv7()"))
+  tenantId      String
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId     String
+  student       User       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  assessmentId  String
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  resultLevelId String?
+  resultLevel   Level?     @relation(fields: [resultLevelId], references: [id], onDelete: SetNull)
+  score         Float?
+  metrics       Json?
+  completedAt   DateTime   @default(now())
+
+  @@index([studentId, tenantId, completedAt])
+  @@index([assessmentId])
+}
+
+// ============ GAMIFICATION ============
+
+model Badge {
+  id           String      @id @default(dbgenerated("uuidv7()"))
+  code         String      @unique
+  name         String
+  description  String?
+  icon         String?
+  criteria     Json?
+  displayOrder Int         @default(0)
+  status       BadgeStatus @default(ACTIVE)
+  createdAt    DateTime    @default(now())
+
+  awards StudentBadge[]
+}
+
+model StudentBadge {
+  id         String   @id @default(dbgenerated("uuidv7()"))
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId  String
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  badgeId    String
+  badge      Badge    @relation(fields: [badgeId], references: [id], onDelete: Restrict)
+  sourceType String?
+  sourceId   String?
+  awardedAt  DateTime @default(now())
+
+  @@unique([tenantId, studentId, badgeId])
+  @@index([studentId, tenantId])
+}
+
+/// Append-only ledger. dedupeKey NULL'lar Postgres'te distinct -> duplicate event yok.
+model PointEvent {
+  id         String         @id @default(dbgenerated("uuidv7()"))
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId  String
+  student    User           @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  eventType  PointEventType
+  points     Int
+  sourceType String?
+  sourceId   String?
+  dedupeKey  String? // client-generated idempotency anahtarı
+  createdAt  DateTime       @default(now())
+
+  @@unique([tenantId, dedupeKey])
+  @@index([studentId, tenantId, createdAt])
+}
+
+model StudentStreak {
+  id               String    @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student          User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  currentDays      Int       @default(0)
+  longestDays      Int       @default(0)
+  lastActivityDate DateTime?
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, studentId])
+  @@index([tenantId, lastActivityDate])
+}
+
+// ============ KVKK / AUDIT ============
+
+model Consent {
+  id        String        @id @default(dbgenerated("uuidv7()"))
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId  String? // NULL = platform seviyesi
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  type      ConsentType
+  version   String
+  status    ConsentStatus @default(GRANTED)
+  grantedAt DateTime      @default(now())
+  revokedAt DateTime?
+  source    String?
+  ip        String?
+
+  @@index([userId, type, status])
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id          String      @id @default(dbgenerated("uuidv7()"))
+  tenantId    String? // NULL = platform seviyesi
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actorUserId String?
+  actor       User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  action      AuditAction
+  entityType  String
+  entityId    String
+  before      Json?
+  after       Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}
+
+// ============ PILOT READINESS ============
+
+/// Pilot telemetry is append-only, minimized and scoped to a student tenant.
+/// clientEventId is the caller-owned idempotency key; raw answers are never stored.
+model PilotEvent {
+  id                String         @id @default(dbgenerated("uuidv7()"))
+  tenantId          String
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId         String
+  student           User           @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  eventType         PilotEventType
+  clientEventId     String
+  sessionId         String?
+  questionVersionId String?
+  occurredAt        DateTime       @default(now())
+  createdAt         DateTime       @default(now())
+
+  @@unique([tenantId, studentId, clientEventId])
+  @@index([tenantId, eventType, occurredAt])
+  @@index([studentId, occurredAt])
+}
+
+/// Short pilot feedback; message is optional bounded free text, not an answer payload.
+model PilotFeedback {
+  id                String                @id @default(dbgenerated("uuidv7()"))
+  tenantId          String
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId         String
+  student           User                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  clientFeedbackId  String
+  category          PilotFeedbackCategory
+  rating            Int?
+  message           String?
+  sessionId         String?
+  questionVersionId String?
+  createdAt         DateTime              @default(now())
+
+  @@unique([tenantId, studentId, clientFeedbackId])
+  @@index([tenantId, category, createdAt])
+  @@index([studentId, createdAt])
+}
+
+/// Student/tester bug report with a bounded description and no raw answer storage.
+model PilotBugReport {
+  id                String            @id @default(dbgenerated("uuidv7()"))
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId         String
+  student           User              @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  clientBugId       String
+  category          PilotBugCategory
+  description       String
+  status            PilotReportStatus @default(OPEN)
+  sessionId         String?
+  questionVersionId String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([tenantId, studentId, clientBugId])
+  @@index([tenantId, status, createdAt])
+  @@index([studentId, createdAt])
+}
+
+/// B2C/B2B entitlement grant. Billing transactionı değildir; planın mevcut
+/// durumunu ve kaynağını temsil eder. PERSONAL için userId, ORGANIZATION için
+/// userId NULL olmalıdır; scope/tenant uyumu manual migration CHECK ile korunur.
+model Entitlement {
+  id          String           @id @default(dbgenerated("uuidv7()"))
+  userId      String?
+  user        User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scope       EntitlementScope
+  plan        EntitlementPlan
+  active      Boolean          @default(true)
+  source      String
+  effectiveAt DateTime         @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([userId, tenantId, scope, active])
+  @@index([tenantId, scope, active, effectiveAt])
+}
+
+/// Limited feature usage. Bir satır bir idempotent kullanım hakkını temsil
+/// eder; aynı gün/feature/client key tekrar yazılamaz.
+model EntitlementUsage {
+  id             String   @id @default(dbgenerated("uuidv7()"))
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  feature        String
+  usageDate      String
+  timezone       String   @default("UTC")
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+
+  @@unique([tenantId, userId, feature, usageDate, idempotencyKey])
+  @@index([tenantId, userId, feature, usageDate])
+}
+
+/// Personal iyzico subscriber reference. iyzico materializes the provider
+/// customer during subscription initialization; providerCustomerId is null
+/// until a verified provider response supplies it.
+model BillingCustomer {
+  id                 String           @id @default(dbgenerated("uuidv7()"))
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId           String
+  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  scope              EntitlementScope
+  providerCode       String
+  providerCustomerId String?
+  status             String           @default("PENDING")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  checkouts     BillingCheckout[]
+  subscriptions BillingSubscription[]
+  payments      BillingPayment[]
+  webhookEvents BillingWebhookEvent[]
+
+  @@unique([providerCode, userId, tenantId])
+  @@unique([providerCode, providerCustomerId])
+  @@index([userId, tenantId, scope])
+}
+
+/// Server-created checkout intent. The client cannot choose price, amount,
+/// provider customer, tenant or entitlement state.
+model BillingCheckout {
+  id                   String                @id @default(dbgenerated("uuidv7()"))
+  customerId           String
+  customer             BillingCustomer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  userId               String
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId             String
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  providerCode         String
+  providerCheckoutId   String?
+  idempotencyKey       String
+  billingPeriod        String
+  pricingPlanReference String
+  status               BillingCheckoutStatus @default(OPEN)
+  expiresAt            DateTime?
+  completedAt          DateTime?
+  failureCode          String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  subscription BillingSubscription?
+
+  @@unique([providerCode, userId, tenantId, idempotencyKey])
+  @@unique([providerCode, providerCheckoutId])
+  @@index([userId, tenantId, status, createdAt])
+}
+
+/// Normalized provider subscription state. This is not itself an entitlement.
+model BillingSubscription {
+  id                      String                    @id @default(dbgenerated("uuidv7()"))
+  customerId              String
+  customer                BillingCustomer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  checkoutId              String?                   @unique
+  checkout                BillingCheckout?          @relation(fields: [checkoutId], references: [id], onDelete: SetNull)
+  userId                  String
+  user                    User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId                String
+  tenant                  Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  providerCode            String
+  providerSubscriptionId  String?
+  providerParentReference String?
+  pricingPlanReference    String
+  billingPeriod           String
+  status                  BillingSubscriptionStatus @default(PENDING)
+  currentPeriodStart      DateTime?
+  currentPeriodEnd        DateTime?
+  trialEndsAt             DateTime?
+  cancelRequestedAt       DateTime?
+  canceledAt              DateTime?
+  lastEventAt             DateTime?
+  lastEventId             String?
+  lastProviderVersion     BigInt?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  payments      BillingPayment[]
+  webhookEvents BillingWebhookEvent[]
+
+  @@unique([providerCode, providerSubscriptionId])
+  @@index([userId, tenantId, status, createdAt])
+}
+
+/// Payment attempt snapshot. Raw card number/CVV and full provider payload
+/// are never stored.
+model BillingPayment {
+  id                     String               @id @default(dbgenerated("uuidv7()"))
+  customerId             String
+  customer               BillingCustomer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscriptionId         String?
+  subscription           BillingSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  userId                 String
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId               String
+  tenant                 Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  providerCode           String
+  providerPaymentId      String?
+  providerOrderReference String
+  providerTransactionId  String?
+  providerRefundId       String?
+  refundIdempotencyKey   String?
+  status                 BillingPaymentStatus @default(PENDING)
+  amountMinor            Int?
+  currency               String?
+  occurredAt             DateTime?
+  refundedAt             DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+
+  @@unique([providerCode, providerOrderReference])
+  @@index([userId, tenantId, status, createdAt])
+}
+
+/// Webhook inbox/audit record. payloadHash is a canonical, redacted audit
+/// fingerprint; raw provider payload and secrets are intentionally not stored.
+model BillingWebhookEvent {
+  id                        String               @id @default(dbgenerated("uuidv7()"))
+  providerCode              String
+  providerEventId           String
+  eventType                 String
+  status                    BillingWebhookStatus @default(RECEIVED)
+  signatureVerified         Boolean              @default(false)
+  payloadHash               String
+  previousState             BillingSubscriptionStatus?
+  newState                  BillingSubscriptionStatus?
+  merchantId                String?
+  customerReferenceCode     String?
+  subscriptionReferenceCode String?
+  orderReferenceCode        String?
+  occurredAt                DateTime?
+  receivedAt                DateTime             @default(now())
+  processedAt               DateTime?
+  errorCode                 String?
+  customerId                String?
+  customer                  BillingCustomer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  subscriptionId            String?
+  subscription              BillingSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user                      User?                @relation(fields: [userId], references: [id])
+  userId                    String?
+  tenant                    Tenant?              @relation(fields: [tenantId], references: [id])
+  tenantId                  String?
+
+  @@unique([providerCode, providerEventId])
+  @@index([providerCode, eventType, receivedAt])
+  @@index([subscriptionReferenceCode, occurredAt])
+  @@index([subscriptionId, occurredAt])
+}

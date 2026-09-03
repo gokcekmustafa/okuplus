@@ -1,0 +1,77 @@
+projects:
+  - name: oku-plus
+    environments:
+      - name: staging
+        networking:
+          isolation: enabled
+        permissions:
+          protection: enabled
+        services:
+          - type: web
+            name: oku-plus-staging-api
+            runtime: node
+            plan: starter
+            region: frankfurt
+            buildCommand: npm ci && npm run build
+            preDeployCommand: npx prisma migrate deploy
+            startCommand: npm start
+            healthCheckPath: /ready
+            maxShutdownDelaySeconds: 30
+            autoDeployTrigger: "off"
+            envVars:
+              - key: NODE_ENV
+                value: production
+              - key: NODE_VERSION
+                value: 24.14.1
+              - key: HOST
+                value: 0.0.0.0
+              - key: PORT
+                value: "10000"
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: oku-plus-staging-db
+                  property: connectionString
+              - key: JWT_SECRET
+                sync: false
+              - key: CORS_ORIGIN
+                sync: false
+              - key: PILOT_MODE
+                value: "off"
+              - key: RATE_LIMIT_WINDOW_MS
+                value: "60000"
+              - key: RATE_LIMIT_MAX
+                value: "120"
+              - key: RATE_LIMIT_AUTH_MAX
+                value: "10"
+              - key: RATE_LIMIT_AUTH_WINDOW_MS
+                value: "60000"
+              - key: BODY_LIMIT_BYTES
+                value: "1000000"
+              - key: REQUEST_TIMEOUT_MS
+                value: "30000"
+              - key: CONNECTION_TIMEOUT_MS
+                value: "10000"
+              - key: KEEP_ALIVE_TIMEOUT_MS
+                value: "5000"
+              - key: IYZICO_BASE_URL
+                value: https://sandbox-api.iyzipay.com
+              - key: IYZICO_API_KEY
+                sync: false
+              - key: IYZICO_SECRET_KEY
+                sync: false
+              - key: IYZICO_MERCHANT_ID
+                sync: false
+              - key: IYZICO_SUBSCRIPTION_PLAN_MONTHLY
+                sync: false
+              - key: IYZICO_SUBSCRIPTION_PLAN_YEARLY
+                sync: false
+              - key: IYZICO_CHECKOUT_CALLBACK_URL
+                sync: false
+              - key: IYZICO_WEBHOOK_MAX_AGE_SECONDS
+                value: "86400"
+        databases:
+          - name: oku-plus-staging-db
+            plan: basic-256mb
+            region: frankfurt
+            postgresMajorVersion: "18"
+            ipAllowList: []
