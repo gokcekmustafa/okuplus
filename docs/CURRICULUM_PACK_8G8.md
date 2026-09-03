@@ -9,7 +9,7 @@ Bu çalışma alanında Prisma'nın `DATABASE_URL` hedefi `oku_plus_test`tir. 8G
 Kalıcı promotion yalnızca ayrı, doğrulanmış bir hedef URL ile çalışır. Script `DATABASE_URL` fallback'i kullanmaz; environment ve bağlantı kimliği ayrıca doğrulanır:
 
 ```powershell
-$env:CURRICULUM_PACK_DATABASE_URL = "postgresql://.../oku_plus_staging?schema=public"
+$env:CURRICULUM_PACK_DATABASE_URL = "<verified-staging-or-test-url>"
 $env:CURRICULUM_PACK_ENVIRONMENT = "STAGING" # veya PRODUCTION
 $env:CURRICULUM_PACK_ALLOW_WRITE = "I_HAVE_VERIFIED_8G8_TARGET"
 $env:CURRICULUM_PACK_EDITORIAL_APPROVAL = "I_HAVE_REVIEWED_8G8"
