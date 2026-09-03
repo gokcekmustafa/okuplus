@@ -23,6 +23,7 @@ function isExplicitOriginAllowlist(value: string): boolean {
 }
 
 const envSchema = z.object({
+  APP_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default("0.0.0.0"),
