@@ -29,6 +29,7 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/oku_plus_test?schema=public
+      PSQL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/oku_plus_test
       RLS_TEST_DATABASE_URL: postgresql://oku_app:oku_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
       JWT_SECRET: ci-only-jwt-secret-not-for-deployment
     steps:
@@ -49,7 +50,7 @@ jobs:
 
       - name: Prepare non-superuser RLS test role
         run: |
-          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           DO $$
           BEGIN
             CREATE ROLE oku_app LOGIN PASSWORD 'oku_app_pass';
