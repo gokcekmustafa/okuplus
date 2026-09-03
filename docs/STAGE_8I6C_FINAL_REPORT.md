@@ -2,35 +2,49 @@
 
 **Tarih:** 2026-09-03  
 **STATUS:** **BLOCKED**  
-**Reason:** Authorized Vercel/Neon account access is unavailable; hosted project, staging DB and HTTPS URL could not be created or verified.
+**Reason:** The supplied Vercel URL is reachable but returns Vercel’s `Login – Vercel` HTML for the application routes; authorized account access is unavailable, so the Oku+ deployment and Neon binding cannot be verified.
 
 ## Final decision
 
 8I-6B-R architecture decision remains **DIRECTLY COMPATIBLE**. 8I-6C hosted POC, however, is **BLOCKED**, not PASS. Windows browser automation helper failed twice, Vercel CLI/Neon CLI are not installed, and no credential/token was guessed or generated.
 
+## Recovery evidence
+
+The supplied URL was checked over HTTPS at:
+
+```text
+https://okuplus-jutu0q3ho-gokcekmustafas-projects.vercel.app
+```
+
+`/`, `/health`, `/health/db`, `/ready`, `/auth/me` and `/billing/catalog` all returned HTTP 200 with `Content-Type: text/html` and page title `Login – Vercel`. The body was Vercel login HTML, not Oku+ JSON. Therefore those HTTP 200 responses do **not** count as application health, DB health, readiness, auth or billing evidence. The URL is either access-protected or not the public application alias; this cannot be distinguished without authorized Vercel access.
+
+The endpoint is served by Vercel over HTTPS/TLS, but application-level HTTPS, CORS, CSP, runtime environment and database binding remain unverified. The `Access-Control-Allow-Origin: *` observed on the Vercel login page is not evidence of Oku+ CORS configuration.
+
+GitHub `master` and `staging` both currently point to `bfa95dbcaf34e70e7e992aa7c0334e87c8e13839`. This verifies the repository branch heads only; the Vercel URL’s actual source commit was not independently visible.
+
 ## Acceptance matrix
 
 |   # | Acceptance                     | Result                                                                                                                                                    |
 | --: | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|   1 | GitHub remote current          | **PASS** — `origin/master` = `6590e7d7b78cc9fb0392d20b24dfaa25cec2816f`                                                                                   |
-|   2 | GitHub CI PASS                 | **PASS** — [run `33791604619`](https://github.com/gokcekmustafa/okuplus/actions/runs/33791604619) for SHA `6590e7d`; `quality` job completed successfully |
+|   1 | GitHub remote current          | **PASS** — `origin/master` and `origin/staging` = `bfa95dbcaf34e70e7e992aa7c0334e87c8e13839`                                                              |
+|   2 | GitHub CI PASS                 | **PASS** — [run `33792423879`](https://github.com/gokcekmustafa/okuplus/actions/runs/33792423879) for SHA `bfa95db`; `quality` job completed successfully |
 |   3 | Vercel account verified        | **BLOCKED**                                                                                                                                               |
-|   4 | Vercel project exists          | **NOT CREATED**                                                                                                                                           |
+|   4 | Vercel project exists          | **NOT VERIFIED** — supplied URL returns Vercel login HTML, not the application                                                                            |
 |   5 | Correct GitHub repo connected  | **NOT VERIFIED** — remote repo correct, Vercel connection unavailable                                                                                     |
 |   6 | Neon staging DB exists         | **NOT CREATED**                                                                                                                                           |
 |   7 | TEST/staging DB separate       | **NOT VERIFIED** — staging resource absent                                                                                                                |
 |   8 | migrations applied remotely    | **NOT RUN**                                                                                                                                               |
 |   9 | DB fingerprint differs         | **NOT AVAILABLE**                                                                                                                                         |
-|  10 | `/health` hosted               | **NOT RUN**                                                                                                                                               |
-|  11 | `/health/db` hosted            | **NOT RUN**                                                                                                                                               |
-|  12 | `/ready` hosted                | **NOT RUN**                                                                                                                                               |
-|  13 | HTTPS/TLS                      | **NOT RUN**                                                                                                                                               |
+|  10 | `/health` hosted               | **NOT PASS** — HTTP 200 Vercel login HTML, no Oku+ JSON                                                                                                   |
+|  11 | `/health/db` hosted            | **NOT PASS** — HTTP 200 Vercel login HTML, no DB health JSON                                                                                              |
+|  12 | `/ready` hosted                | **NOT PASS** — HTTP 200 Vercel login HTML, no readiness JSON                                                                                              |
+|  13 | HTTPS/TLS                      | **PARTIAL** — Vercel HTTPS/TLS endpoint reachable; Oku+ application HTTPS acceptance unavailable                                                          |
 |  14 | hosted auth                    | **NOT RUN**                                                                                                                                               |
 |  15 | hosted student flow            | **NOT RUN**                                                                                                                                               |
 |  16 | hosted tenant isolation        | **NOT RUN**                                                                                                                                               |
 |  17 | billing UI                     | **NOT RUN HOSTED**; local baseline only                                                                                                                   |
-|  18 | safe logs                      | **NOT VERIFIED HOSTED**; logger redaction inspected locally                                                                                               |
-|  19 | CORS/security                  | **NOT VERIFIED HOSTED**; static contract inspected locally                                                                                                |
+|  18 | safe logs                      | **NOT VERIFIED HOSTED**; Vercel dashboard inaccessible                                                                                                    |
+|  19 | CORS/security                  | **NOT VERIFIED HOSTED**; observed headers belong to Vercel login page                                                                                     |
 |  20 | mobile browser smoke           | **NOT RUN**                                                                                                                                               |
 |  21 | rollback known/tested          | **NOT VERIFIED**                                                                                                                                          |
 |  22 | backup capability known/tested | **NOT VERIFIED**                                                                                                                                          |
@@ -43,8 +57,9 @@ GitHub source is correct and was pushed with no force operation:
 ```text
 repository: https://github.com/gokcekmustafa/okuplus
 branch: master
-remote SHA: 6590e7d7b78cc9fb0392d20b24dfaa25cec2816f
-push: 2f7d598..6590e7d master -> master
+remote SHA: bfa95dbcaf34e70e7e992aa7c0334e87c8e13839
+master/staging: bfa95dbcaf34e70e7e992aa7c0334e87c8e13839
+push: 6590e7d..bfa95db master -> master
 ```
 
 Tracked secret scan found no private key/full credential pattern; `.env.example` is the only allowed environment filename candidate. No secret value was recorded in this report.
@@ -109,14 +124,14 @@ render.yaml: preserved
 
 ## Remaining work
 
-1. Authorized Vercel account/project and correct GitHub connection.
+1. Authorized Vercel account/project access and correct GitHub connection verification; supplied URL currently exposes Vercel login HTML.
 2. Separate Neon staging project/branch and pooled/direct URL wiring.
 3. Controlled migration and distinct staging fingerprint.
 4. Hosted health/HTTPS/auth/learning/tenant/billing/browser/mobile smoke.
 5. Hosted safe-log, CORS/CSP, rollback and backup evidence.
 6. Distributed rate limit and auth cookie hardening.
 7. Webhook raw-body/provider timeout/idempotency acceptance.
-8. CI evidence link is available at run `33791604619`; hosted Vercel/Neon evidence remains open.
+8. CI evidence link is available at run `33792423879`; hosted Vercel/Neon evidence remains open.
 9. Open 8G-8, 8G-9B and iyzico decisions.
 
 ## Final recommendation
