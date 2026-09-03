@@ -1,5 +1,6 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import Fastify from "fastify";
-import type { Env } from "./config/env.js";
+import { loadEnv, type Env } from "./config/env.js";
 import { loggerOptions } from "./lib/logger.js";
 import { tenantContextMiddleware } from "./middleware/tenant-context.js";
 import {
@@ -97,4 +98,23 @@ export async function buildApp(
   await app.register(studentLearningRoutes, { authProvider });
   await app.register(staticPlugin);
   return app;
+}
+
+// Vercel discovers src/app.ts as a Node Function entrypoint. Keep the
+// application factory named-exported for the local server and tests, while
+// exposing a lazy default handler for Vercel so the process never calls
+// listen() during a function invocation.
+let vercelAppPromise: ReturnType<typeof buildApp> | undefined;
+
+export default async function vercelHandler(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  const appPromise = (vercelAppPromise ??= (async () => {
+    const app = await buildApp(loadEnv());
+    await app.ready();
+    return app;
+  })());
+  const app = await appPromise;
+  app.routing(request, response);
 }
