@@ -116,5 +116,5 @@ export default async function vercelHandler(
     return app;
   })());
   const app = await appPromise;
-  app.routing(request, response);
+  app.server.emit("request", request, response);
 }
