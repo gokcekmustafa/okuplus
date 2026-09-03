@@ -7,6 +7,8 @@ Scope: local Git/GitHub readiness, repository hygiene, release documentation, an
 
 The local release baseline is ready for review and local commit. The active branch is `master`, no Git remote is configured, and no push was performed. A remote URL, GitHub account, credentials, or alternate branch was not inferred.
 
+Baseline commit: `2ce14ec0fe41e18974a951b585cb9c3a2c28d366`
+
 The initial audit found an uncommitted repository with no prior commits. The final baseline is intended to leave the worktree clean while preserving the application, migrations, scripts, CI, Render staging foundation, tests, and existing evidence documents.
 
 ## Change classification

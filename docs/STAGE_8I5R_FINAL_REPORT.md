@@ -45,8 +45,8 @@ PASS. All in-scope source, migrations, scripts, tests, CI, Render staging founda
 
 ## COMMIT
 
-Baseline commit: `PENDING_LOCAL_COMMIT_HASH`  
-Evidence commit: `PENDING_EVIDENCE_COMMIT_HASH`  
+Baseline commit: `2ce14ec0fe41e18974a951b585cb9c3a2c28d366`  
+Evidence commit: this report is recorded in the follow-up documentation commit after the baseline.  
 Commit message for the baseline: `chore: establish release baseline`  
 No remote push.
 
