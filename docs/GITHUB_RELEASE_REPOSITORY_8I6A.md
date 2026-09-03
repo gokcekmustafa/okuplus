@@ -1,68 +1,69 @@
 # OKU+ 8I-6A — GitHub Release Repository Readiness
 
 Date: 2026-09-03
-Scope: local Git repository audit and safe GitHub remote readiness. GitHub account/repository creation, push, staging, production, payment, and database operations were not in scope without explicit remote access.
+Scope: verified GitHub remote, safe release push, and GitHub Actions CI verification. Render, staging, production, production DB, payment, and production catalog remain out of scope.
 
 ## Result
 
-**BLOCKED — GitHub repository is not determinable from the current environment.**
+**PASS — the verified GitHub repository is connected and the release history was pushed without force.**
 
-The local repository is ready to be connected to a canonical `origin` when the user supplies or verifies the intended GitHub repository URL and access. No repository name, account, URL, credential, or alternate branch was guessed.
+Repository: https://github.com/gokcekmustafa/okuplus
+Visibility: Public
+Default branch: `master`
 
-## Local Git audit
+## Local and remote audit
 
 - Branch: `master`
 - Worktree: CLEAN
-- Tracked files: 328
-- Remote: NONE (`git remote -v` returned no entries)
+- Origin: `https://github.com/gokcekmustafa/okuplus.git`
+- Local HEAD: `4d0d97161abc5439dd8b581ff2a0c28f90502ecb`
+- Remote `origin/master` HEAD: `4d0d97161abc5439dd8b581ff2a0c28f90502ecb`
+- `git ls-remote origin refs/heads/master`: matched local HEAD
+- Force push: NO
 - Tags: none
-- GitHub CLI: unavailable
-- Render CLI: unavailable
 
-Commit history is valid and linear:
+The local history remains linear and includes the canonical baseline:
 
 1. `2ce14ec0fe41e18974a951b585cb9c3a2c28d366` — `chore: establish release baseline`
 2. `6d983069ede16c142c68900129136db506046eb9` — `docs: record release baseline evidence`
+3. `30f86c8c3d68d865209acace8687e97e59e324d2` — `docs: record GitHub release repository status`
+4. `13c210dbe3922af83e9949c8b5915f60076023d8` — `docs: redact curriculum database URL example`
+5. `2c1e8abfd23fd413f9ba24d549f0d5184efa90dd` — `fix: make billing webhook migration idempotent`
+6. `4d0d97161abc5439dd8b581ff2a0c28f90502ecb` — `ci: use libpq-safe URL for RLS role setup`
 
-The evidence commit is a separate commit whose parent is the release baseline. The baseline is an ancestor of the evidence commit; history was not rewritten.
+The evidence commit is a separate child of the release baseline. No history rewrite occurred.
 
-## Remote strategy
+## Push and CI evidence
 
-When the canonical repository is verified, configure exactly one `origin` remote using the user’s approved HTTPS or SSH URL. Verify the resolved URL before any push. The first push must preserve `master` history and use no force option.
+The initial push of the clean local history succeeded as a normal fast-forward. A fresh GitHub Actions run then exposed two CI issues, both fixed in follow-up commits:
 
-Expected post-push relationship:
+- Run `33766241115`: migration failed because the billing webhook owner migration repeated columns already created by 8H-5.
+- Run `33767455718`: migrations passed, but the RLS role step passed a Prisma `schema` query parameter to `psql`.
+- Run `33784897464`: PASS on `4d0d971`; quality job and every step passed.
 
-```text
-origin/master HEAD == 2ce14ec0fe41e18974a951b585cb9c3a2c28d366
-```
+The verified [CI run](https://github.com/gokcekmustafa/okuplus/actions/runs/33784897464) passed install, migrations, non-superuser RLS role setup, lint, format check, typecheck, build, and test. The workflow has no deployment job.
 
-If the remote already has unrelated history, stop for an explicit reconciliation decision. Do not force-push or rewrite `master`.
+## Repository security
 
-## Push safety checklist
+The high-confidence local scan found no tracked `.env`, private key, credential, database file, GitHub/AWS token, live payment key, or non-local database URL. A literal PostgreSQL URL example found in an older documentation file was replaced with a placeholder before the successful push.
 
-Before a future push, re-run:
+`.gitignore` keeps `.env` ignored while allowing only `.env.example`; build/test/runtime artifacts, logs, local database files, private-key extensions, `.secrets/`, and `.tmp/` are ignored. No secret values are reproduced here.
 
-- `git status`
-- `git diff`
-- `git log --oneline --decorate -n 10`
-- high-confidence secret scan
-- tracked-file check for `.env`, private keys, credentials, database files, and runtime artifacts
+The CI workflow uses synthetic local CI credentials only, does not echo secrets, does not access production, and does not deploy.
 
-The current audit found no tracked sensitive paths. `.env` is ignored, `.env.example` is the only intentionally trackable environment template, and generated/runtime artifacts are ignored. No force push was performed or prepared.
+## Branch protection
 
-## Tag decision
+Branch protection was not readable from the unauthenticated API (`401`), so its live state is **NOT VERIFIED / DOCUMENTED GAP**. Configure protection for `master` when repository settings access is available:
 
-No tag was created. The package version alone is not sufficient evidence that a semantic release tag is an established repository convention. Revisit an annotated tag only after repository ownership and release-version policy are confirmed.
+- pull request required
+- required passing CI checks
+- force-push and branch deletion disabled
 
-## CI and repository metadata
+Do not weaken the local no-force-push policy if the current GitHub plan or permissions cannot support these controls.
 
-The existing [CI workflow](../.github/workflows/ci.yml) covers install, migration validation, lint, format, typecheck, build, and test. It contains no production deployment job. Hosted CI cannot be verified until a GitHub remote exists.
+## Release tag
 
-The [README](../README.md) describes local setup, TEST database boundaries, staging preparation, branch policy, and production NO-GO status. It does not present staging or production as live.
-
-## Branch protection recommendation
-
-After access is available, protect `master` with pull-request review, required passing CI checks, and force-push/delete restrictions. If the GitHub plan or repository permissions do not support one of these controls, record that limitation as a documented gap rather than weakening the local policy.
+No tag was created. The project’s semantic release-tag convention is not established, so an annotated version tag was not invented.
 
 ## Explicit safety boundary
 
@@ -70,7 +71,6 @@ After access is available, protect `master` with pull-request review, required p
 - Production: NO
 - Production database write: NO
 - Payment/provider call: NO
-- Migration against remote infrastructure: NO
-- Push: NO
-
-The next authorized action is limited to verifying the intended GitHub repository and configuring `origin`; it is not an authorization to push or deploy.
+- Production catalog use: NO
+- Remote migration: NO
+- Force push: NO

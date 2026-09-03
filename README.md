@@ -102,13 +102,13 @@ Real provider credentials, private keys, passwords, tokens, full connection stri
 
 The selected primary platform is Render. [`render.yaml`](render.yaml) defines only a protected `staging` environment with one web service and one private managed PostgreSQL service. It uses `npm ci && npm run build`, `npx prisma migrate deploy`, `npm start`, and `/ready`.
 
-The staging foundation is configuration-only until an authorized GitHub remote and Render account/project are supplied. Do not create staging or production resources from an unverified repository. Follow [`docs/STAGING_SETUP_8I4.md`](docs/STAGING_SETUP_8I4.md) and [`docs/STAGING_OPERATIONS_8I4.md`](docs/STAGING_OPERATIONS_8I4.md) after the account is verified.
+The staging foundation is configuration-only until an authorized Render account/project and staging resources are verified. Do not create staging or production resources from this repository without the separate readiness gates. Follow [`docs/STAGING_SETUP_8I4.md`](docs/STAGING_SETUP_8I4.md) and [`docs/STAGING_OPERATIONS_8I4.md`](docs/STAGING_OPERATIONS_8I4.md) after the provider account is verified.
 
 ## Release baseline and branch policy
 
 `master` is the current release-baseline branch. Feature work may use short-lived `feature/*` branches and merge into `master` after the CI quality gates pass. A separate staging branch is not required until an authorized remote/team workflow demonstrates a need for it.
 
-The repository currently has no configured Git remote. Do not invent an origin URL or push to an unverified repository. The local baseline status and blockers are recorded in [`docs/RELEASE_BASELINE_8I5R.md`](docs/RELEASE_BASELINE_8I5R.md).
+The verified Git remote is `origin` → `https://github.com/gokcekmustafa/okuplus.git`; `master` is protected by local no-force-push policy and pushes must follow the pre-push safety checklist. Remote and CI evidence is recorded in [`docs/GITHUB_REMOTE_CI_EVIDENCE_8I6A.md`](docs/GITHUB_REMOTE_CI_EVIDENCE_8I6A.md) and [`docs/STAGE_8I6A_FINAL_REPORT.md`](docs/STAGE_8I6A_FINAL_REPORT.md).
 
 ## Security and production status
 
