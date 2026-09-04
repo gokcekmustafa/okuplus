@@ -895,8 +895,8 @@ async function main(): Promise<void> {
       });
     }
     if (useCanonicalCatalog) {
-    try {
-      assertCanonicalRuntimeMetadata(CANONICAL_CATALOG_MANIFEST, level, skills);
+      try {
+        assertCanonicalRuntimeMetadata(CANONICAL_CATALOG_MANIFEST, level, skills);
       } catch (error) {
         fail(
           `canonical catalog metadata conflict: ${error instanceof Error ? error.message : String(error)}`,

@@ -191,9 +191,9 @@ describe("canonical catalog target verification", () => {
       }),
     ).toThrow(/user/u);
     const identity = { database: "neondb", db_user: "neondb_owner" };
-    expect(() =>
-      assertApprovedTargetFingerprint(target, identity, "0".repeat(64)),
-    ).toThrow(/fingerprint/u);
+    expect(() => assertApprovedTargetFingerprint(target, identity, "0".repeat(64))).toThrow(
+      /fingerprint/u,
+    );
     const productionMarked = parseCatalogTargetUrl(
       "postgresql://owner@prod.example.test/neondb",
       "STAGING",

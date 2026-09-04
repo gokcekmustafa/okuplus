@@ -63,14 +63,14 @@ without that log evidence.
 
 ## EXPECTED RESULT CLASSIFICATION
 
-| Result | Determination | Evidence status |
-|---|---|---|
-| A) unfinished migrations = 0 | Not established | **UNKNOWN** |
-| B) unfinished migrations > 0 | Not established | **UNKNOWN** |
-| C) migration query exception | Not established | **UNKNOWN** |
-| D) database table missing | Not established | **UNKNOWN**; would require the exception |
-| E) permissions issue | Not established | **UNKNOWN**; would require the exception |
-| F) unknown | Selected | **YES** |
+| Result                       | Determination   | Evidence status                          |
+| ---------------------------- | --------------- | ---------------------------------------- |
+| A) unfinished migrations = 0 | Not established | **UNKNOWN**                              |
+| B) unfinished migrations > 0 | Not established | **UNKNOWN**                              |
+| C) migration query exception | Not established | **UNKNOWN**                              |
+| D) database table missing    | Not established | **UNKNOWN**; would require the exception |
+| E) permissions issue         | Not established | **UNKNOWN**; would require the exception |
+| F) unknown                   | Selected        | **YES**                                  |
 
 The report intentionally selects F rather than inferring B, C, D, or E from an identical 503
 response. The hosted `_prisma_migrations` rows and error details requested by the diagnostic
@@ -131,16 +131,16 @@ This is not evidence of an application initialization flag or a server process f
 
 ## CONDITION MATRIX
 
-| Candidate | Evidence | Result |
-|---|---|---|
-| DB `SELECT 1` | `/health/db = 200` | **PASS** |
-| `_prisma_migrations` count is zero | `/ready = 503` alone cannot prove | **UNKNOWN** |
-| `_prisma_migrations` query succeeds | `/ready = 503` alone cannot prove | **UNKNOWN** |
-| Application initialized flag | No such flag in route/service | **NOT A CONDITION** |
-| `APP_ENV` check | Not read by readiness route | **NOT A CONDITION** |
-| `NODE_ENV` check | Not read by readiness route | **NOT A CONDITION** |
-| `listen()`/server startup state | Not read by readiness route | **NOT A CONDITION** |
-| External provider/payment dependency | Not used by readiness route | **NOT A CONDITION** |
+| Candidate                            | Evidence                          | Result              |
+| ------------------------------------ | --------------------------------- | ------------------- |
+| DB `SELECT 1`                        | `/health/db = 200`                | **PASS**            |
+| `_prisma_migrations` count is zero   | `/ready = 503` alone cannot prove | **UNKNOWN**         |
+| `_prisma_migrations` query succeeds  | `/ready = 503` alone cannot prove | **UNKNOWN**         |
+| Application initialized flag         | No such flag in route/service     | **NOT A CONDITION** |
+| `APP_ENV` check                      | Not read by readiness route       | **NOT A CONDITION** |
+| `NODE_ENV` check                     | Not read by readiness route       | **NOT A CONDITION** |
+| `listen()`/server startup state      | Not read by readiness route       | **NOT A CONDITION** |
+| External provider/payment dependency | Not used by readiness route       | **NOT A CONDITION** |
 
 ## VERCEL-SPECIFIC
 

@@ -45,13 +45,13 @@ References: [Vercel Fastify entrypoint documentation](https://vercel.com/docs/fr
 
 The built default handler was invoked through a local Node HTTP wrapper. Final adapter results:
 
-| Path | Result |
-|---|---|
-| `/` | 200 application HTML |
-| `/health` | 200 `{"status":"ok"}` |
-| `/health/db` | 200 `{"status":"ok","database":"up"}` |
-| `/ready` | 200 `{"status":"ok","ready":true}` |
-| `/auth/me` | 401 expected unauthenticated response |
+| Path               | Result                                |
+| ------------------ | ------------------------------------- |
+| `/`                | 200 application HTML                  |
+| `/health`          | 200 `{"status":"ok"}`                 |
+| `/health/db`       | 200 `{"status":"ok","database":"up"}` |
+| `/ready`           | 200 `{"status":"ok","ready":true}`    |
+| `/auth/me`         | 401 expected unauthenticated response |
 | `/billing/catalog` | 401 expected unauthenticated response |
 
 ## CI

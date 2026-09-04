@@ -93,9 +93,7 @@ function ids(): {
     item.questions.map((_, index) => stableId("question", item.slug, String(index + 1))),
   );
   const questionVersionIds = FIRST_REAL_CURRICULUM_PACK.contents.flatMap((item) =>
-    item.questions.map((_, index) =>
-      stableId("question-version", item.slug, `${index + 1}-v1`),
-    ),
+    item.questions.map((_, index) => stableId("question-version", item.slug, `${index + 1}-v1`)),
   );
   const templateIds = FIRST_REAL_CURRICULUM_PACK.contents.map((item) =>
     stableId("template", item.slug),
@@ -103,7 +101,14 @@ function ids(): {
   const templateVersionIds = FIRST_REAL_CURRICULUM_PACK.contents.map((item) =>
     stableId("template-version", item.slug, "v1"),
   );
-  return { contentIds, contentVersionIds, questionIds, questionVersionIds, templateIds, templateVersionIds };
+  return {
+    contentIds,
+    contentVersionIds,
+    questionIds,
+    questionVersionIds,
+    templateIds,
+    templateVersionIds,
+  };
 }
 
 function parseLastJson(output: string): SeedPayload | null {
@@ -140,7 +145,12 @@ async function runSeed(databaseUrl: string, args: string[]): Promise<SeedRun> {
   const startedAt = performance.now();
   const child = spawn(
     command,
-    [resolve(REPO_ROOT, "node_modules/tsx/dist/cli.mjs"), "scripts/seed-curriculum-pack.ts", "--isolated-test", ...args],
+    [
+      resolve(REPO_ROOT, "node_modules/tsx/dist/cli.mjs"),
+      "scripts/seed-curriculum-pack.ts",
+      "--isolated-test",
+      ...args,
+    ],
     { cwd: REPO_ROOT, env: seedEnvironment(databaseUrl), stdio: ["ignore", "pipe", "pipe"] },
   );
   let stdout = "";
@@ -155,7 +165,12 @@ async function runSeed(databaseUrl: string, args: string[]): Promise<SeedRun> {
     child.once("error", reject);
     child.once("close", (code) => resolveExit(code ?? 1));
   });
-  return { exitCode, stdout, stderr, elapsedMs: Number((performance.now() - startedAt).toFixed(2)) };
+  return {
+    exitCode,
+    stdout,
+    stderr,
+    elapsedMs: Number((performance.now() - startedAt).toFixed(2)),
+  };
 }
 
 function seedError(run: SeedRun): string {
@@ -181,7 +196,9 @@ async function readIdentity(prisma: PrismaClient): Promise<Identity> {
   return identity;
 }
 
-async function readMigrationState(prisma: PrismaClient): Promise<{ tableExists: boolean; total: number; unfinished: number }> {
+async function readMigrationState(
+  prisma: PrismaClient,
+): Promise<{ tableExists: boolean; total: number; unfinished: number }> {
   const tableRows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
     "select to_regclass('public._prisma_migrations') is not null as exists",
   );
@@ -258,8 +275,17 @@ async function assertCatalogState(
 
 async function readPackCounts(prisma: PrismaClient): Promise<PackCounts> {
   const pack = ids();
-  const [content, contentVersion, question, questionVersion, exerciseTemplate, exerciseTemplateVersion,
-    contentSkill, templateContentRelation, templateQuestionRelation] = await Promise.all([
+  const [
+    content,
+    contentVersion,
+    question,
+    questionVersion,
+    exerciseTemplate,
+    exerciseTemplateVersion,
+    contentSkill,
+    templateContentRelation,
+    templateQuestionRelation,
+  ] = await Promise.all([
     prisma.content.count({ where: { id: { in: pack.contentIds } } }),
     prisma.contentVersion.count({ where: { id: { in: pack.contentVersionIds } } }),
     prisma.question.count({ where: { id: { in: pack.questionIds } } }),
@@ -267,11 +293,24 @@ async function readPackCounts(prisma: PrismaClient): Promise<PackCounts> {
     prisma.exerciseTemplate.count({ where: { id: { in: pack.templateIds } } }),
     prisma.exerciseTemplateVersion.count({ where: { id: { in: pack.templateVersionIds } } }),
     prisma.contentSkill.count({ where: { contentId: { in: pack.contentIds } } }),
-    prisma.exerciseTemplateVersionContent.count({ where: { templateVersionId: { in: pack.templateVersionIds } } }),
-    prisma.exerciseTemplateVersionQuestion.count({ where: { templateVersionId: { in: pack.templateVersionIds } } }),
+    prisma.exerciseTemplateVersionContent.count({
+      where: { templateVersionId: { in: pack.templateVersionIds } },
+    }),
+    prisma.exerciseTemplateVersionQuestion.count({
+      where: { templateVersionId: { in: pack.templateVersionIds } },
+    }),
   ]);
-  return { content, contentVersion, question, questionVersion, exerciseTemplate, exerciseTemplateVersion,
-    contentSkill, templateContentRelation, templateQuestionRelation };
+  return {
+    content,
+    contentVersion,
+    question,
+    questionVersion,
+    exerciseTemplate,
+    exerciseTemplateVersion,
+    contentSkill,
+    templateContentRelation,
+    templateQuestionRelation,
+  };
 }
 
 function assertCounts(actual: PackCounts, expected: PackCounts, label: string): void {
@@ -282,28 +321,72 @@ function assertCounts(actual: PackCounts, expected: PackCounts, label: string): 
 
 async function assertPackEmpty(prisma: PrismaClient, label: string): Promise<PackCounts> {
   const counts = await readPackCounts(prisma);
-  assert(Object.values(counts).every((value) => value === 0), `${label}: pack boş değil veya kısmi`);
+  assert(
+    Object.values(counts).every((value) => value === 0),
+    `${label}: pack boş değil veya kısmi`,
+  );
   return counts;
 }
 
-async function assertPackQuality(prisma: PrismaClient): Promise<{ sourceCount: number; warningCount: number }> {
+async function assertPackQuality(
+  prisma: PrismaClient,
+): Promise<{ sourceCount: number; warningCount: number }> {
   const manifestQa = runFirstRealPackQa();
   assert(manifestQa.errors.length === 0, `manifest QA: ${manifestQa.errors.join("; ")}`);
   const pack = ids();
   const [levels, skills, contents, templates] = await Promise.all([
     prisma.level.findMany({ select: { id: true, code: true, name: true } }),
-    prisma.skill.findMany({ select: { id: true, code: true, name: true, category: true, description: true, displayOrder: true } }),
+    prisma.skill.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        category: true,
+        description: true,
+        displayOrder: true,
+      },
+    }),
     prisma.content.findMany({
       where: { id: { in: pack.contentIds } },
       select: {
-        id: true, tenantId: true, title: true, status: true, currentVersionId: true,
-        versions: { select: { id: true, version: true, title: true, body: true, wordCount: true, status: true } },
+        id: true,
+        tenantId: true,
+        title: true,
+        status: true,
+        currentVersionId: true,
+        versions: {
+          select: {
+            id: true,
+            version: true,
+            title: true,
+            body: true,
+            wordCount: true,
+            status: true,
+          },
+        },
         contentSkills: { select: { skillId: true, skill: { select: { code: true } } } },
         questions: {
           orderBy: { position: "asc" },
           select: {
-            id: true, contentId: true, position: true, type: true, skillId: true, status: true,
-            versions: { select: { id: true, questionId: true, version: true, prompt: true, options: true, correctAnswer: true, status: true, publishedAt: true, generationMetadata: true } },
+            id: true,
+            contentId: true,
+            position: true,
+            type: true,
+            skillId: true,
+            status: true,
+            versions: {
+              select: {
+                id: true,
+                questionId: true,
+                version: true,
+                prompt: true,
+                options: true,
+                correctAnswer: true,
+                status: true,
+                publishedAt: true,
+                generationMetadata: true,
+              },
+            },
           },
         },
       },
@@ -311,12 +394,23 @@ async function assertPackQuality(prisma: PrismaClient): Promise<{ sourceCount: n
     prisma.exerciseTemplate.findMany({
       where: { id: { in: pack.templateIds } },
       select: {
-        id: true, tenantId: true, skillId: true, contentId: true, config: true, status: true,
+        id: true,
+        tenantId: true,
+        skillId: true,
+        contentId: true,
+        config: true,
+        status: true,
         versions: {
           select: {
-            id: true, version: true, status: true, publishedAt: true,
+            id: true,
+            version: true,
+            status: true,
+            publishedAt: true,
             contents: { select: { contentVersionId: true, position: true } },
-            questions: { orderBy: { position: "asc" }, select: { questionVersionId: true, questionId: true, position: true } },
+            questions: {
+              orderBy: { position: "asc" },
+              select: { questionVersionId: true, questionId: true, position: true },
+            },
           },
         },
       },
@@ -335,45 +429,121 @@ async function assertPackQuality(prisma: PrismaClient): Promise<{ sourceCount: n
     const content = contentById.get(pack.contentIds[contentIndex]!);
     const template = templateById.get(pack.templateIds[contentIndex]!);
     assert(content && template, `stable kayıt eksik: ${item.slug}`);
-    const trackIndex = FIRST_REAL_CURRICULUM_PACK.tracks.findIndex((track) => track.id === item.trackId);
+    const trackIndex = FIRST_REAL_CURRICULUM_PACK.tracks.findIndex(
+      (track) => track.id === item.trackId,
+    );
     const skillCode = SKILL_CODES[trackIndex]!;
     const skill = skillByCode.get(skillCode);
     assert(skill, `skill eksik: ${skillCode}`);
-    assert(content.tenantId === null && content.status === "PUBLISHED", `content publish: ${item.slug}`);
-    assert(content.currentVersionId === pack.contentVersionIds[contentIndex], `content pointer: ${item.slug}`);
-    const contentVersion = content.versions.find((version) => version.id === content.currentVersionId);
-    assert(contentVersion?.version === 1 && contentVersion.status === "PUBLISHED", `content version: ${item.slug}`);
-    assert(contentVersion.title === item.title && contentVersion.body === item.body, `content editorial: ${item.slug}`);
-    assert(content.contentSkills.length === 1 && content.contentSkills[0]?.skillId === skill.id, `ContentSkill: ${item.slug}`);
+    assert(
+      content.tenantId === null && content.status === "PUBLISHED",
+      `content publish: ${item.slug}`,
+    );
+    assert(
+      content.currentVersionId === pack.contentVersionIds[contentIndex],
+      `content pointer: ${item.slug}`,
+    );
+    const contentVersion = content.versions.find(
+      (version) => version.id === content.currentVersionId,
+    );
+    assert(
+      contentVersion?.version === 1 && contentVersion.status === "PUBLISHED",
+      `content version: ${item.slug}`,
+    );
+    assert(
+      contentVersion.title === item.title && contentVersion.body === item.body,
+      `content editorial: ${item.slug}`,
+    );
+    assert(
+      content.contentSkills.length === 1 && content.contentSkills[0]?.skillId === skill.id,
+      `ContentSkill: ${item.slug}`,
+    );
     assert(content.questions.length === 4, `question count: ${item.slug}`);
     for (const [questionIndex, manifestQuestion] of item.questions.entries()) {
       const question = content.questions[questionIndex]!;
       const questionId = pack.questionIds[contentIndex * 4 + questionIndex]!;
       const questionVersionId = pack.questionVersionIds[contentIndex * 4 + questionIndex]!;
-      assert(question.id === questionId && question.position === questionIndex, `question identity: ${item.slug}/${questionIndex + 1}`);
-      assert(question.contentId === content.id && question.skillId === skill.id && question.status === "PUBLISHED", `question binding: ${item.slug}/${questionIndex + 1}`);
+      assert(
+        question.id === questionId && question.position === questionIndex,
+        `question identity: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        question.contentId === content.id &&
+          question.skillId === skill.id &&
+          question.status === "PUBLISHED",
+        `question binding: ${item.slug}/${questionIndex + 1}`,
+      );
       const questionVersion = question.versions.find((version) => version.id === questionVersionId);
-      assert(questionVersion?.version === 1 && questionVersion.status === "PUBLISHED", `question version: ${item.slug}/${questionIndex + 1}`);
-      assert(questionVersion.questionId === question.id && questionVersion.prompt === manifestQuestion.prompt, `question editorial: ${item.slug}/${questionIndex + 1}`);
-      assert(isDeepStrictEqual(questionVersion.options, manifestQuestion.options), `question options: ${item.slug}/${questionIndex + 1}`);
-      assert(isDeepStrictEqual(questionVersion.correctAnswer, manifestQuestion.correctAnswer), `question answer: ${item.slug}/${questionIndex + 1}`);
-      const metadata = record(questionVersion.generationMetadata, `question metadata: ${item.slug}/${questionIndex + 1}`);
-      assert(metadata.packId === PACK_ID && metadata.primarySkillRole === item.trackId, `question metadata binding: ${item.slug}/${questionIndex + 1}`);
-      assert(isDeepStrictEqual(metadata.sourceRefs, item.sourceIds), `question sources: ${item.slug}/${questionIndex + 1}`);
+      assert(
+        questionVersion?.version === 1 && questionVersion.status === "PUBLISHED",
+        `question version: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        questionVersion.questionId === question.id &&
+          questionVersion.prompt === manifestQuestion.prompt,
+        `question editorial: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        isDeepStrictEqual(questionVersion.options, manifestQuestion.options),
+        `question options: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        isDeepStrictEqual(questionVersion.correctAnswer, manifestQuestion.correctAnswer),
+        `question answer: ${item.slug}/${questionIndex + 1}`,
+      );
+      const metadata = record(
+        questionVersion.generationMetadata,
+        `question metadata: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        metadata.packId === PACK_ID && metadata.primarySkillRole === item.trackId,
+        `question metadata binding: ${item.slug}/${questionIndex + 1}`,
+      );
+      assert(
+        isDeepStrictEqual(metadata.sourceRefs, item.sourceIds),
+        `question sources: ${item.slug}/${questionIndex + 1}`,
+      );
     }
-    assert(template.tenantId === null && template.status === "PUBLISHED", `template publish: ${item.slug}`);
-    assert(template.contentId === content.id && template.skillId === skill.id, `template binding: ${item.slug}`);
+    assert(
+      template.tenantId === null && template.status === "PUBLISHED",
+      `template publish: ${item.slug}`,
+    );
+    assert(
+      template.contentId === content.id && template.skillId === skill.id,
+      `template binding: ${item.slug}`,
+    );
     const config = record(template.config, `template config: ${item.slug}`);
-    assert(config.packId === PACK_ID && config.levelCode === LEVEL_CODE, `level binding: ${item.slug}`);
+    assert(
+      config.packId === PACK_ID && config.levelCode === LEVEL_CODE,
+      `level binding: ${item.slug}`,
+    );
     const primarySkill = record(config.primarySkill, `primary skill: ${item.slug}`);
-    assert(primarySkill.role === item.trackId && primarySkill.skillCode === skillCode, `skill mapping: ${item.slug}`);
+    assert(
+      primarySkill.role === item.trackId && primarySkill.skillCode === skillCode,
+      `skill mapping: ${item.slug}`,
+    );
     assert(isDeepStrictEqual(config.sourceRefs, item.sourceIds), `template sources: ${item.slug}`);
-    const templateVersion = template.versions.find((version) => version.id === pack.templateVersionIds[contentIndex]);
-    assert(templateVersion?.version === 1 && templateVersion.status === "PUBLISHED", `template version: ${item.slug}`);
-    assert(templateVersion.contents.length === 1 && templateVersion.contents[0]?.contentVersionId === pack.contentVersionIds[contentIndex], `template content relation: ${item.slug}`);
+    const templateVersion = template.versions.find(
+      (version) => version.id === pack.templateVersionIds[contentIndex],
+    );
+    assert(
+      templateVersion?.version === 1 && templateVersion.status === "PUBLISHED",
+      `template version: ${item.slug}`,
+    );
+    assert(
+      templateVersion.contents.length === 1 &&
+        templateVersion.contents[0]?.contentVersionId === pack.contentVersionIds[contentIndex],
+      `template content relation: ${item.slug}`,
+    );
     assert(templateVersion.questions.length === 4, `template question relation: ${item.slug}`);
     for (const [questionIndex, relation] of templateVersion.questions.entries()) {
-      assert(relation.questionId === pack.questionIds[contentIndex * 4 + questionIndex] && relation.questionVersionId === pack.questionVersionIds[contentIndex * 4 + questionIndex] && relation.position === questionIndex, `template question relation: ${item.slug}/${questionIndex + 1}`);
+      assert(
+        relation.questionId === pack.questionIds[contentIndex * 4 + questionIndex] &&
+          relation.questionVersionId ===
+            pack.questionVersionIds[contentIndex * 4 + questionIndex] &&
+          relation.position === questionIndex,
+        `template question relation: ${item.slug}/${questionIndex + 1}`,
+      );
     }
   }
   return { sourceCount: manifestQa.metrics.sourceCount, warningCount: manifestQa.warnings.length };
@@ -389,7 +559,10 @@ async function main(): Promise<void> {
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
-  assert(target.database === ISOLATED_FIRST_REAL_PACK_TEST_DATABASE, "isolated database adı eşleşmiyor");
+  assert(
+    target.database === ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+    "isolated database adı eşleşmiyor",
+  );
   const prisma = new PrismaClient({
     datasources: { db: { url: target.url } },
     transactionOptions: { maxWait: 2_000, timeout: 15_000 },
@@ -402,22 +575,35 @@ async function main(): Promise<void> {
     assert(["127.0.0.1", "::1"].includes(serverAddress), "server local değil");
     assert(identity.server_port === 5432, "server port 5432 değil");
     const migrations = await readMigrationState(prisma);
-    assert(migrations.tableExists && migrations.total === 14 && migrations.unfinished === 0, "migration state 14/14 ve unfinished=0 değil");
+    assert(
+      migrations.tableExists && migrations.total === 14 && migrations.unfinished === 0,
+      "migration state 14/14 ve unfinished=0 değil",
+    );
     const manifest = CANONICAL_CATALOG_MANIFEST;
     const initialCatalog = await readCatalog(prisma);
     const catalogPlan = planCanonicalCatalogBootstrap(manifest, initialCatalog);
-    assert(catalogPlan.action !== "CONFLICT", `catalog conflict: ${catalogPlan.conflicts.join("; ")}`);
-    if (catalogPlan.action === "CREATE") await applyCanonicalCatalogBootstrap(prisma, manifest, initialCatalog);
+    assert(
+      catalogPlan.action !== "CONFLICT",
+      `catalog conflict: ${catalogPlan.conflicts.join("; ")}`,
+    );
+    if (catalogPlan.action === "CREATE")
+      await applyCanonicalCatalogBootstrap(prisma, manifest, initialCatalog);
     await assertCatalogState(prisma, manifest);
     const emptyBefore = await assertPackEmpty(prisma, "başlangıç");
 
     const dryRun = expectSeedPass(await runSeed(rawUrl, ["--dry-run"]), "DRY_RUN");
     const dryExpected = record(dryRun.expectedNewRecords, "dry-run expectedNewRecords");
-    assert(dryExpected.content === 9 && dryExpected.question === 36, "dry-run 9 content/36 question planı değil");
+    assert(
+      dryExpected.content === 9 && dryExpected.question === 36,
+      "dry-run 9 content/36 question planı değil",
+    );
 
     const rollbackRun = await runSeed(rawUrl, ["--simulate-failure"]);
     assert(rollbackRun.exitCode !== 0, "rollback probe hata üretmedi");
-    assert(`${rollbackRun.stderr}\n${rollbackRun.stdout}`.includes("simulated failure"), "rollback probe beklenen hata değil");
+    assert(
+      `${rollbackRun.stderr}\n${rollbackRun.stdout}`.includes("simulated failure"),
+      "rollback probe beklenen hata değil",
+    );
     const afterRollback = await assertPackEmpty(prisma, "rollback sonrası");
     const dryAfterRollback = expectSeedPass(await runSeed(rawUrl, ["--dry-run"]), "DRY_RUN");
 
@@ -436,30 +622,51 @@ async function main(): Promise<void> {
       await tx.$queryRaw`SELECT 'slept'::text AS status FROM pg_sleep(5.5)`;
     });
     const timeoutProbeMs = Number((performance.now() - timeoutStartedAt).toFixed(2));
-    const seedSource = await readFile(resolve(REPO_ROOT, "scripts/seed-curriculum-pack.ts"), "utf8");
-    assert(seedSource.includes("maxWait: 2_000") && seedSource.includes("timeout: 15_000"), "seed timeout config source doğrulanamadı");
+    const seedSource = await readFile(
+      resolve(REPO_ROOT, "scripts/seed-curriculum-pack.ts"),
+      "utf8",
+    );
+    assert(
+      seedSource.includes("maxWait: 2_000") && seedSource.includes("timeout: 15_000"),
+      "seed timeout config source doğrulanamadı",
+    );
     const fingerprint = targetFingerprint(target, identity);
-    console.log(JSON.stringify({
-      status: "PASS",
-      harness: "ISOLATED_TEST_FIRST_REAL_PACK",
-      isolatedDatabase: ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
-      fingerprint,
-      migrations,
-      canonicalCatalog: { action: catalogPlan.action, level: LEVEL_CODE, skills: SKILL_CODES },
-      dryRun: { mode: dryRun.mode, expectedNewRecords: dryExpected },
-      rollback: { status: "PASS", elapsedMs: rollbackRun.elapsedMs, after: afterRollback },
-      firstApply: { mode: firstApply.mode, elapsedMs: firstRun.elapsedMs, transactionDurationMs: firstApply.transactionDurationMs, counts: firstCounts },
-      secondApply: { mode: secondApply.mode, counts: secondCounts },
-      noop: isDeepStrictEqual(firstCounts, secondCounts),
-      idStability: "PASS",
-      qa: { status: "PASS", sourceCount: quality.sourceCount, warningCount: quality.warningCount },
-      timeout: { maxWaitMs: 2_000, timeoutMs: 15_000, readOnlyProbeMs: timeoutProbeMs },
-      initialPackCounts: emptyBefore,
-      dryRunAfterRollback: dryAfterRollback.mode,
-      dbChanged: true,
-      stagingDbChanged: false,
-      productionDbChanged: false,
-    }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          status: "PASS",
+          harness: "ISOLATED_TEST_FIRST_REAL_PACK",
+          isolatedDatabase: ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+          fingerprint,
+          migrations,
+          canonicalCatalog: { action: catalogPlan.action, level: LEVEL_CODE, skills: SKILL_CODES },
+          dryRun: { mode: dryRun.mode, expectedNewRecords: dryExpected },
+          rollback: { status: "PASS", elapsedMs: rollbackRun.elapsedMs, after: afterRollback },
+          firstApply: {
+            mode: firstApply.mode,
+            elapsedMs: firstRun.elapsedMs,
+            transactionDurationMs: firstApply.transactionDurationMs,
+            counts: firstCounts,
+          },
+          secondApply: { mode: secondApply.mode, counts: secondCounts },
+          noop: isDeepStrictEqual(firstCounts, secondCounts),
+          idStability: "PASS",
+          qa: {
+            status: "PASS",
+            sourceCount: quality.sourceCount,
+            warningCount: quality.warningCount,
+          },
+          timeout: { maxWaitMs: 2_000, timeoutMs: 15_000, readOnlyProbeMs: timeoutProbeMs },
+          initialPackCounts: emptyBefore,
+          dryRunAfterRollback: dryAfterRollback.mode,
+          dbChanged: true,
+          stagingDbChanged: false,
+          productionDbChanged: false,
+        },
+        null,
+        2,
+      ),
+    );
   } finally {
     await prisma.$disconnect();
   }
