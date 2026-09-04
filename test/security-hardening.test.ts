@@ -22,6 +22,8 @@ describe("8I-2 security hardening", () => {
         "*.secret",
         "*.secretKey",
         "*.apiKey",
+        "req.headers.authorization",
+        "req.headers.cookie",
       ]),
     );
   });
@@ -135,6 +137,41 @@ describe("8I-2 security hardening", () => {
         headers: { origin: "https://evil.example.test" },
       });
       expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("cookie auth Origin guard kontrollü feature flag ile web transport'u sınırlar", async () => {
+    const app = await buildApp(
+      parseEnv({
+        NODE_ENV: "test",
+        DATABASE_URL: databaseUrl,
+        CORS_ORIGIN: "https://app.example.test",
+        AUTH_COOKIE_TRANSPORT: "on",
+        AUTH_ORIGIN_ENFORCEMENT: "on",
+      }),
+    );
+
+    try {
+      const denied = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        headers: {
+          origin: "https://evil.example.test",
+          "x-auth-transport": "cookie",
+        },
+        payload: { email: "student@example.com", password: "wrong-password" },
+      });
+      expect(denied.statusCode).toBe(403);
+
+      const legacy = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        headers: { origin: "https://evil.example.test" },
+        payload: { email: "nobody@example.com", password: "wrong-password" },
+      });
+      expect(legacy.statusCode).toBe(401);
     } finally {
       await app.close();
     }

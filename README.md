@@ -83,18 +83,20 @@ Curriculum QA scripts require explicit environment and database variables; they 
 
 The application reads the following primary variables. Values belong in a local ignored `.env` or an authorized platform secret store, never in source or logs.
 
-| Variable                                          | Purpose                                                                                                   |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`                                    | PostgreSQL/Prisma connection for the current environment.                                                 |
-| `RLS_TEST_DATABASE_URL`                           | Separate non-superuser TEST connection for RLS verification.                                              |
-| `NODE_ENV`                                        | `development`, `test`, or `production`; production requires explicit secure values.                       |
-| `JWT_SECRET`                                      | JWT signing secret, at least 32 characters and unique per environment.                                    |
-| `CORS_ORIGIN`                                     | Comma-separated exact HTTP(S) origins; wildcard is rejected.                                              |
-| `PILOT_MODE`, `PILOT_STUDENT_ACCESS`              | Local/TEST pilot controls; production pilot launch is disabled.                                           |
-| `GOOGLE_OIDC_CLIENT_IDS`, `APPLE_OIDC_CLIENT_IDS` | Optional OIDC audience/client ID lists.                                                                   |
-| `IYZICO_*`                                        | Sandbox-only billing configuration; credentials, plans, and HTTPS callback are required for provider E2E. |
-| `RATE_LIMIT_*` and `*_TIMEOUT_MS`                 | Request protection and finite timeout controls.                                                           |
-| `CURRICULUM_*`                                    | Explicit curriculum QA/seed targets and approvals; never use an implicit database target.                 |
+| Variable                                          | Purpose                                                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                    | PostgreSQL/Prisma connection for the current environment.                                                               |
+| `RLS_TEST_DATABASE_URL`                           | Separate non-superuser TEST connection for RLS verification.                                                            |
+| `NODE_ENV`                                        | `development`, `test`, or `production`; production requires explicit secure values.                                     |
+| `JWT_SECRET`                                      | JWT signing secret, at least 32 characters and unique per environment.                                                  |
+| `AUTH_COOKIE_TRANSPORT`                           | Phase 1 web cookie transport activation: `off` by default; `on` enables cookies with mandatory CSRF on unsafe requests. |
+| `AUTH_ORIGIN_ENFORCEMENT`                         | Phase 1 cookie-auth Origin guard: `off` by default, `on` for controlled rollout.                                        |
+| `CORS_ORIGIN`                                     | Comma-separated exact HTTP(S) origins; wildcard is rejected.                                                            |
+| `PILOT_MODE`, `PILOT_STUDENT_ACCESS`              | Local/TEST pilot controls; production pilot launch is disabled.                                                         |
+| `GOOGLE_OIDC_CLIENT_IDS`, `APPLE_OIDC_CLIENT_IDS` | Optional OIDC audience/client ID lists.                                                                                 |
+| `IYZICO_*`                                        | Sandbox-only billing configuration; credentials, plans, and HTTPS callback are required for provider E2E.               |
+| `RATE_LIMIT_*` and `*_TIMEOUT_MS`                 | Request protection and finite timeout controls.                                                                         |
+| `CURRICULUM_*`                                    | Explicit curriculum QA/seed targets and approvals; never use an implicit database target.                               |
 
 Real provider credentials, private keys, passwords, tokens, full connection strings, and production values must not appear in the repository, CI output, browser artifacts, or reports.
 

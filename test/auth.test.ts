@@ -4,6 +4,12 @@ import { withTenantContext } from "../src/modules/tenant/index.js";
 import { ScryptPasswordHasher } from "../src/modules/auth/index.js";
 import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
+import {
+  ACCESS_COOKIE_NAME,
+  CSRF_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+} from "../src/modules/auth/cookies.js";
+import { createCsrfToken, verifyCsrfToken } from "../src/modules/auth/csrf.js";
 
 /**
  * Auth modülü — JWT tabanlı kimlik doğrulama testleri.
@@ -25,6 +31,23 @@ const SUSPENDED_USER_ID = "aaaaaaaa-0000-7000-8000-000000000002";
 const PLATFORM_USER_ID = "aaaaaaaa-0000-7000-8000-000000000003";
 
 const PASSWORD = "test-pass-123!";
+
+function setCookieHeaders(response: {
+  headers: Record<string, string | string[] | undefined>;
+}): string[] {
+  const header = response.headers["set-cookie"];
+  return Array.isArray(header) ? header : header ? [header] : [];
+}
+
+function cookieValue(headers: string[], name: string): string {
+  const header = headers.find((value) => value.startsWith(`${name}=`));
+  if (!header) throw new Error(`${name} cookie bulunamadı`);
+  return header.slice(name.length + 1).split(";", 1)[0] ?? "";
+}
+
+function cookieHeader(values: Array<[string, string]>): string {
+  return values.map(([name, value]) => `${name}=${value}`).join("; ");
+}
 
 describe("auth", () => {
   beforeAll(async () => {
@@ -104,6 +127,11 @@ describe("auth", () => {
   });
 
   const env = loadEnv();
+  const cookieEnv = {
+    ...env,
+    AUTH_COOKIE_TRANSPORT: "on" as const,
+    CORS_ORIGIN: "https://app.example.test",
+  };
 
   it("login: başarılı giriş token çifti + tenant context üretir", async () => {
     const app = await buildApp(env);
@@ -211,6 +239,295 @@ describe("auth", () => {
     const res = await app.inject({ method: "GET", url: "/auth/me" });
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe("UNAUTHORIZED");
+
+    await app.close();
+  });
+
+  it("cookie transport: login cookie flags, no-store ve /auth/me desteği sağlar", async () => {
+    const app = await buildApp(cookieEnv);
+    await app.ready();
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.headers["cache-control"]).toBe("no-store");
+
+    const cookies = setCookieHeaders(login);
+    expect(cookies).toHaveLength(3);
+    const accessCookie = cookies.find((value) => value.startsWith(`${ACCESS_COOKIE_NAME}=`));
+    const refreshCookie = cookies.find((value) => value.startsWith(`${REFRESH_COOKIE_NAME}=`));
+    const csrfCookie = cookies.find((value) => value.startsWith(`${CSRF_COOKIE_NAME}=`));
+    expect(accessCookie).toContain("HttpOnly");
+    expect(accessCookie).toContain("Secure");
+    expect(accessCookie).toContain("SameSite=Lax");
+    expect(accessCookie).toContain("Path=/");
+    expect(accessCookie).not.toContain("Domain=");
+    expect(refreshCookie).toContain("HttpOnly");
+    expect(refreshCookie).toContain("Secure");
+    expect(refreshCookie).toContain("SameSite=Lax");
+    expect(refreshCookie).toContain("Path=/auth");
+    expect(refreshCookie).not.toContain("Domain=");
+    expect(csrfCookie).not.toContain("HttpOnly");
+    expect(csrfCookie).toContain("Secure");
+    expect(csrfCookie).toContain("SameSite=Lax");
+    expect(csrfCookie).toContain("Path=/");
+    expect(csrfCookie).not.toContain("Domain=");
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: {
+        cookie: cookieHeader([[ACCESS_COOKIE_NAME, cookieValue(cookies, ACCESS_COOKIE_NAME)]]),
+      },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().data.user.id).toBe(USER_ID);
+
+    await app.close();
+  });
+
+  it("refresh: cookie-only rotation ve legacy body contract birlikte çalışır", async () => {
+    const app = await buildApp(cookieEnv);
+    await app.ready();
+
+    const cookieLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const cookieLoginHeaders = setCookieHeaders(cookieLogin);
+    const refreshValue = cookieValue(cookieLoginHeaders, REFRESH_COOKIE_NAME);
+    const csrfValue = cookieValue(cookieLoginHeaders, CSRF_COOKIE_NAME);
+    const cookieRefresh = await app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      headers: {
+        cookie: cookieHeader([
+          [REFRESH_COOKIE_NAME, refreshValue],
+          [CSRF_COOKIE_NAME, csrfValue],
+        ]),
+        "x-auth-transport": "cookie",
+        "x-csrf-token": csrfValue,
+        origin: "https://app.example.test",
+      },
+    });
+    expect(cookieRefresh.statusCode).toBe(200);
+    expect(cookieRefresh.headers["cache-control"]).toBe("no-store");
+    expect(setCookieHeaders(cookieRefresh)).toHaveLength(3);
+
+    const legacyLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const legacyRefresh = await app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      payload: { refreshToken: legacyLogin.json().data.tokens.refreshToken },
+    });
+    expect(legacyRefresh.statusCode).toBe(200);
+    expect(legacyRefresh.headers["cache-control"]).toBe("no-store");
+    expect(legacyRefresh.headers["set-cookie"]).toBeUndefined();
+
+    await app.close();
+  });
+
+  it("transport precedence: Bearer wins; mismatched refresh transports block", async () => {
+    const app = await buildApp(cookieEnv);
+    await app.ready();
+
+    const cookieLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const cookieCookies = setCookieHeaders(cookieLogin);
+    const cookieAccess = cookieValue(cookieCookies, ACCESS_COOKIE_NAME);
+    const cookieRefresh = cookieValue(cookieCookies, REFRESH_COOKIE_NAME);
+    const cookieCsrf = cookieValue(cookieCookies, CSRF_COOKIE_NAME);
+    const platformLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "platform@example.com", password: PASSWORD },
+    });
+    const platformTokens = platformLogin.json().data.tokens;
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: {
+        cookie: cookieHeader([[ACCESS_COOKIE_NAME, cookieAccess]]),
+        authorization: `Bearer ${platformTokens.accessToken}`,
+      },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().data.user.id).toBe(PLATFORM_USER_ID);
+
+    const mismatched = await app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      headers: {
+        cookie: cookieHeader([
+          [REFRESH_COOKIE_NAME, cookieRefresh],
+          [CSRF_COOKIE_NAME, cookieCsrf],
+        ]),
+        "x-csrf-token": cookieCsrf,
+        origin: "https://app.example.test",
+      },
+      payload: { refreshToken: platformTokens.refreshToken },
+    });
+    expect(mismatched.statusCode).toBe(400);
+    expect(mismatched.json().error.code).toBe("VALIDATION_ERROR");
+
+    await app.close();
+  });
+
+  it("logout: cookie ve legacy body ile revoke eder, cookie'leri her durumda temizler", async () => {
+    const app = await buildApp(cookieEnv);
+    await app.ready();
+
+    const cookieLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const cookieCookies = setCookieHeaders(cookieLogin);
+    const cookieRefresh = cookieValue(cookieCookies, REFRESH_COOKIE_NAME);
+    const cookieCsrf = cookieValue(cookieCookies, CSRF_COOKIE_NAME);
+    const cookieLogout = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: {
+        cookie: cookieHeader([
+          [REFRESH_COOKIE_NAME, cookieRefresh],
+          [CSRF_COOKIE_NAME, cookieCsrf],
+        ]),
+        "x-csrf-token": cookieCsrf,
+        origin: "https://app.example.test",
+      },
+    });
+    expect(cookieLogout.statusCode).toBe(200);
+    const cleared = setCookieHeaders(cookieLogout);
+    expect(cleared).toHaveLength(3);
+    expect(cleared.every((value) => value.includes("Max-Age=0"))).toBe(true);
+    expect(cookieLogout.headers["cache-control"]).toBe("no-store");
+
+    const legacyLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const legacyLogout = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      payload: { refreshToken: legacyLogin.json().data.tokens.refreshToken },
+    });
+    expect(legacyLogout.statusCode).toBe(200);
+    expect(setCookieHeaders(legacyLogout)).toHaveLength(3);
+
+    await app.close();
+  });
+
+  it("CSRF foundation: signed token doğrulama ve Origin kontrolü hazırdır", () => {
+    const token = createCsrfToken("test-csrf-secret");
+    expect(verifyCsrfToken(token, "test-csrf-secret")).toBe(true);
+    expect(verifyCsrfToken(token, "wrong-secret")).toBe(false);
+  });
+
+  it("cookie transport kapalıyken cookie issuance ve cookie-auth bloklanır", async () => {
+    const app = await buildApp(env);
+    await app.ready();
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.headers["set-cookie"]).toBeUndefined();
+
+    const cookieOnlyGet = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { cookie: `${ACCESS_COOKIE_NAME}=synthetic-cookie-token` },
+    });
+    expect(cookieOnlyGet.statusCode).toBe(403);
+
+    await app.close();
+  });
+
+  it("cookie-auth unsafe request CSRF olmadan ve cross-site bloklanır", async () => {
+    const app = await buildApp(cookieEnv);
+    await app.ready();
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      headers: { "x-auth-transport": "cookie" },
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const cookies = setCookieHeaders(login);
+    const refreshValue = cookieValue(cookies, REFRESH_COOKIE_NAME);
+    const csrfValue = cookieValue(cookies, CSRF_COOKIE_NAME);
+    const cookieHeaderValue = cookieHeader([
+      [ACCESS_COOKIE_NAME, cookieValue(cookies, ACCESS_COOKIE_NAME)],
+      [REFRESH_COOKIE_NAME, refreshValue],
+      [CSRF_COOKIE_NAME, csrfValue],
+    ]);
+
+    for (const request of [
+      { method: "POST", url: "/auth/logout" },
+      { method: "PUT", url: "/admin/assessments/not-a-real-id" },
+      { method: "PATCH", url: "/student/profile" },
+      { method: "DELETE", url: "/admin/users/not-a-real-id" },
+    ] as const) {
+      const blocked = await app.inject({
+        method: request.method,
+        url: request.url,
+        headers: { cookie: cookieHeaderValue },
+      });
+      expect(blocked.statusCode).toBe(403);
+    }
+
+    const crossSite = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: {
+        cookie: cookieHeaderValue,
+        "x-csrf-token": csrfValue,
+        origin: "https://evil.example.test",
+      },
+    });
+    expect(crossSite.statusCode).toBe(403);
+
+    const unrelatedBearer = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: {
+        cookie: cookieHeaderValue,
+        authorization: "Bearer unrelated-access-token",
+      },
+    });
+    expect(unrelatedBearer.statusCode).toBe(403);
+
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: {
+        cookie: cookieHeaderValue,
+        "x-csrf-token": csrfValue,
+        origin: "https://app.example.test",
+      },
+    });
+    expect(allowed.statusCode).toBe(200);
 
     await app.close();
   });

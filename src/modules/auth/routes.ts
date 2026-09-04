@@ -1,6 +1,5 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { ok } from "../../lib/response.js";
-import { validationError } from "../../lib/errors.js";
 import type {
   AuthProvider,
   LoginCredentials,
@@ -12,6 +11,16 @@ import { signupPersonalAccount, signupSchema } from "./index.js";
 import type { SocialAuthService } from "./social-service.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import { recordDailyLogin } from "../gamification/service.js";
+import {
+  clearAuthCookies,
+  getCookie,
+  isCookieTransportRequested,
+  REFRESH_COOKIE_NAME,
+  resolveRefreshToken,
+  setAuthCookies,
+  setNoStore,
+} from "./cookies.js";
+import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
 
 const loginSchema = {
   type: "object",
@@ -60,12 +69,15 @@ function sessionMetadata(body: SessionMetadata): SessionMetadata {
 
 const refreshSchema = {
   type: "object",
-  required: ["refreshToken"],
   additionalProperties: false,
   properties: {
     refreshToken: { type: "string", minLength: 1, maxLength: 4096 },
   },
 } as const;
+
+const allowEmptyRefreshBody = async (request: FastifyRequest): Promise<void> => {
+  if (request.body === undefined) request.body = {};
+};
 
 /**
  * Auth uçları.
@@ -77,44 +89,84 @@ const refreshSchema = {
  */
 export async function authRoutes(
   app: FastifyInstance,
-  opts: { authProvider: AuthProvider; socialAuthService: SocialAuthService },
+  opts: {
+    authProvider: AuthProvider;
+    socialAuthService: SocialAuthService;
+    csrfSecret: string;
+    allowedOrigins: readonly string[];
+    enforceAuthOrigin: boolean;
+    cookieAuthEnabled: boolean;
+  },
 ): Promise<void> {
-  const { authProvider, socialAuthService } = opts;
+  const {
+    authProvider,
+    socialAuthService,
+    csrfSecret,
+    allowedOrigins,
+    enforceAuthOrigin,
+    cookieAuthEnabled,
+  } = opts;
+  const cookieOriginGuard = createCookieOriginGuard(allowedOrigins);
+  const authOriginPreHandler = cookieAuthEnabled && enforceAuthOrigin ? [cookieOriginGuard] : [];
+
+  function sendSession(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    session: Awaited<ReturnType<AuthProvider["login"]>>,
+    statusCode = 200,
+  ) {
+    setNoStore(reply);
+    if (cookieAuthEnabled && isCookieTransportRequested(request)) {
+      setAuthCookies(reply, session.tokens, createCsrfToken(csrfSecret));
+    }
+    return reply.code(statusCode).send(ok(session));
+  }
 
   app.post<{ Body: SignupInput & SessionMetadata }>(
     "/auth/signup",
-    { schema: { body: signupBodySchema } },
+    { schema: { body: signupBodySchema }, preHandler: authOriginPreHandler },
     async (request, reply) => {
       const input = signupSchema.parse(request.body);
       await signupPersonalAccount(input);
       const session = await authProvider.login(input, null, sessionMetadata(request.body));
       await recordDailyLogin(session.user.id, session.tenantContext.tenantId).catch(() => null);
-      return reply.code(201).send(ok(session));
+      return sendSession(request, reply, session, 201);
     },
   );
 
   app.post<{ Body: LoginCredentials & SessionBody }>(
     "/auth/login",
-    { schema: { body: loginSchema } },
-    async (request) => {
+    { schema: { body: loginSchema }, preHandler: authOriginPreHandler },
+    async (request, reply) => {
       const session = await authProvider.login(
         request.body,
         request.body.tenantId ?? null,
         sessionMetadata(request.body),
       );
       await recordDailyLogin(session.user.id, session.tenantContext.tenantId).catch(() => null);
-      return ok(session);
+      return sendSession(request, reply, session);
     },
   );
 
-  app.post<{ Body: { refreshToken: string } }>(
+  app.post<{ Body: { refreshToken?: string } }>(
     "/auth/refresh",
-    { schema: { body: refreshSchema } },
-    async (request) => {
-      if (!request.body.refreshToken) {
-        throw validationError("refreshToken gerekli");
+    {
+      schema: { body: refreshSchema },
+      preValidation: allowEmptyRefreshBody,
+      preHandler: authOriginPreHandler,
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const refreshToken = resolveRefreshToken(request, request.body?.refreshToken);
+      const tokens = await authProvider.refreshSession(refreshToken);
+      if (
+        cookieAuthEnabled &&
+        (isCookieTransportRequested(request) ||
+          getCookie(request, REFRESH_COOKIE_NAME) !== undefined)
+      ) {
+        setAuthCookies(reply, tokens, createCsrfToken(csrfSecret));
       }
-      return ok(await authProvider.refreshSession(request.body.refreshToken));
+      return reply.send(ok(tokens));
     },
   );
 
@@ -141,14 +193,15 @@ export async function authRoutes(
 
   app.post<{ Body: SocialCredentialInput & SessionMetadata }>(
     "/auth/social/google",
-    { schema: { body: socialBodySchema } },
-    async (request) => ok(await socialLogin("GOOGLE", request.body)),
+    { schema: { body: socialBodySchema }, preHandler: authOriginPreHandler },
+    async (request, reply) =>
+      sendSession(request, reply, await socialLogin("GOOGLE", request.body)),
   );
 
   app.post<{ Body: SocialCredentialInput & SessionMetadata }>(
     "/auth/social/apple",
-    { schema: { body: socialBodySchema } },
-    async (request) => ok(await socialLogin("APPLE", request.body)),
+    { schema: { body: socialBodySchema }, preHandler: authOriginPreHandler },
+    async (request, reply) => sendSession(request, reply, await socialLogin("APPLE", request.body)),
   );
 
   app.post<{ Body: SocialCredentialInput }>(
@@ -179,15 +232,22 @@ export async function authRoutes(
     return ok({ unlinked: true });
   });
 
-  app.post<{ Body: { refreshToken: string } }>(
+  app.post<{ Body: { refreshToken?: string } }>(
     "/auth/logout",
-    { schema: { body: refreshSchema } },
-    async (request) => {
-      if (!request.body.refreshToken) {
-        throw validationError("refreshToken gerekli");
+    {
+      schema: { body: refreshSchema },
+      preValidation: allowEmptyRefreshBody,
+      preHandler: authOriginPreHandler,
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const refreshToken = resolveRefreshToken(request, request.body?.refreshToken);
+      try {
+        await authProvider.revokeSession(refreshToken);
+      } finally {
+        clearAuthCookies(reply);
       }
-      await authProvider.revokeSession(request.body.refreshToken);
-      return ok({ revoked: true });
+      return reply.send(ok({ revoked: true }));
     },
   );
 

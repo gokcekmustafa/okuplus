@@ -18,6 +18,13 @@ export async function corsPlugin(app: FastifyInstance, env: Env): Promise<void> 
   await app.register(cors, {
     origin,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "content-type",
+      "authorization",
+      "x-tenant-id",
+      "x-auth-transport",
+      "x-csrf-token",
+    ],
     credentials: true,
   });
 }

@@ -189,6 +189,19 @@ function authHeaders(accessToken, tenantId) {
   return headers;
 }
 
+function csrfHeaders() {
+  const cookie = document.cookie
+    .split(";")
+    .find((part) => part.trim().startsWith("__Host-oku_csrf="));
+  if (!cookie) return {};
+  const value = cookie.trim().slice("__Host-oku_csrf=".length);
+  try {
+    return { "x-csrf-token": decodeURIComponent(value) };
+  } catch {
+    return { "x-csrf-token": value };
+  }
+}
+
 async function parseResponse(res) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -207,7 +220,8 @@ async function parseResponse(res) {
 async function login(email, password) {
   const res = await fetch("/auth/login", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    credentials: "include",
+    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
     body: JSON.stringify({ email, password }),
   });
   return parseResponse(res);
@@ -216,7 +230,8 @@ async function login(email, password) {
 async function signup(displayName, email, password) {
   const res = await fetch("/auth/signup", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    credentials: "include",
+    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
     body: JSON.stringify({ displayName, email, password }),
   });
   return parseResponse(res);
@@ -225,7 +240,8 @@ async function signup(displayName, email, password) {
 async function socialLogin(provider, idToken, nonce, displayName) {
   const res = await fetch(`/auth/social/${provider}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    credentials: "include",
+    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
     body: JSON.stringify({
       idToken,
       nonce,
@@ -287,7 +303,12 @@ async function fetchMe(accessToken, tenantId) {
 async function refreshTokens(refreshToken, tenantId) {
   const res = await fetch("/auth/refresh", {
     method: "POST",
-    headers: authHeaders(null, tenantId),
+    credentials: "include",
+    headers: {
+      ...authHeaders(null, tenantId),
+      ...csrfHeaders(),
+      "x-auth-transport": "cookie",
+    },
     body: JSON.stringify({ refreshToken }),
   });
   return parseResponse(res);
@@ -296,7 +317,12 @@ async function refreshTokens(refreshToken, tenantId) {
 async function logout(refreshToken, tenantId) {
   const res = await fetch("/auth/logout", {
     method: "POST",
-    headers: authHeaders(null, tenantId),
+    credentials: "include",
+    headers: {
+      ...authHeaders(null, tenantId),
+      ...csrfHeaders(),
+      "x-auth-transport": "cookie",
+    },
     body: JSON.stringify({ refreshToken }),
   });
   return parseResponse(res);
