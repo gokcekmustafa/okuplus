@@ -62,6 +62,8 @@ const envSchema = z.object({
     .default("oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef"),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(300).default(604800),
+  AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
+  AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),

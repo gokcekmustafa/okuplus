@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { unauthorizedError } from "../lib/errors.js";
 import type { AuthProvider } from "../modules/auth/index.js";
+import { resolveAccessToken } from "../modules/auth/cookies.js";
 
 /**
  * Bearer token'ı doğrular ve request.tenantContext + request.authUser'ı
@@ -11,12 +12,7 @@ import type { AuthProvider } from "../modules/auth/index.js";
  */
 export function requireAuth(provider: AuthProvider) {
   return async function authenticate(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
-    const header = request.headers.authorization;
-    if (!header || !header.startsWith("Bearer ")) {
-      throw unauthorizedError("Kimlik doğrulaması gerekli");
-    }
-
-    const token = header.slice("Bearer ".length).trim();
+    const token = resolveAccessToken(request);
     if (!token) {
       throw unauthorizedError("Kimlik doğrulaması gerekli");
     }

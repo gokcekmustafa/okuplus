@@ -11,6 +11,7 @@ import {
   type SocialTokenVerifier,
 } from "./modules/auth/index.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { createCookieCsrfGuard } from "./modules/auth/csrf.js";
 import { assessmentAdminRoutes, assessmentStudentRoutes } from "./modules/assessments/index.js";
 import { assignmentAdminRoutes, assignmentStudentRoutes } from "./modules/assignments/index.js";
 import { branchAdminRoutes } from "./modules/branches/index.js";
@@ -69,9 +70,25 @@ export async function buildApp(
   // Call the wrapper in the root context so its CORS hook covers every route.
   // (Registering this non-fastify-plugin wrapper would encapsulate the hook.)
   await corsPlugin(app, env);
+  const allowedOrigins = env.CORS_ORIGIN.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.addHook(
+    "preHandler",
+    createCookieCsrfGuard(env.JWT_SECRET, allowedOrigins, {
+      cookieAuthEnabled: env.AUTH_COOKIE_TRANSPORT === "on",
+    }),
+  );
   await app.register(tenantContextMiddleware);
   await app.register(healthRoutes);
-  await app.register(authRoutes, { authProvider, socialAuthService });
+  await app.register(authRoutes, {
+    authProvider,
+    socialAuthService,
+    csrfSecret: env.JWT_SECRET,
+    allowedOrigins,
+    enforceAuthOrigin: env.AUTH_ORIGIN_ENFORCEMENT === "on",
+    cookieAuthEnabled: env.AUTH_COOKIE_TRANSPORT === "on",
+  });
   await app.register(tenantAdminRoutes, { authProvider });
   await app.register(userAdminRoutes, { authProvider });
   await app.register(studentAdminRoutes, { authProvider });
