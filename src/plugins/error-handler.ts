@@ -1,7 +1,45 @@
 import type { FastifyInstance } from "fastify";
 import { isApiError } from "../lib/errors.js";
 import { fail } from "../lib/response.js";
+import { setNoStore } from "../modules/auth/cookies.js";
 import { ZodError } from "zod";
+
+function requestPath(url: string): string {
+  return url.split("?", 1)[0] ?? url;
+}
+
+function isAuthPath(url: string): boolean {
+  const path = requestPath(url);
+  return path === "/auth" || path.startsWith("/auth/");
+}
+
+function errorStatusCode(error: unknown): number {
+  if (isApiError(error)) return error.statusCode;
+  if (error instanceof ZodError) return 400;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "validation" in error &&
+    Array.isArray((error as { validation: unknown }).validation)
+  ) {
+    return 400;
+  }
+  if (typeof error === "object" && error !== null && "statusCode" in error) {
+    return Number((error as { statusCode?: unknown }).statusCode);
+  }
+  return 0;
+}
+
+function markSecurityResponse(
+  requestUrl: string,
+  error: unknown,
+  reply: Parameters<typeof setNoStore>[0],
+): void {
+  const statusCode = errorStatusCode(error);
+  if (isAuthPath(requestUrl) || statusCode === 401 || statusCode === 403) {
+    setNoStore(reply);
+  }
+}
 
 /**
  * Merkezi hata yakalayıcı. ApiError/ZodError için standart format, bilinmeyen
@@ -9,6 +47,8 @@ import { ZodError } from "zod";
  */
 export async function errorHandlerPlugin(app: FastifyInstance): Promise<void> {
   app.setErrorHandler((error, request, reply) => {
+    markSecurityResponse(request.url, error, reply);
+
     if (isApiError(error)) {
       return reply.status(error.statusCode).send(fail(error.code, error.message, error.details));
     }
@@ -36,10 +76,7 @@ export async function errorHandlerPlugin(app: FastifyInstance): Promise<void> {
         );
     }
 
-    const statusCode =
-      typeof error === "object" && error !== null && "statusCode" in error
-        ? Number((error as { statusCode?: unknown }).statusCode)
-        : 0;
+    const statusCode = errorStatusCode(error);
     if (statusCode >= 400 && statusCode < 500) {
       const isTooLarge =
         typeof error === "object" &&
@@ -61,7 +98,7 @@ export async function errorHandlerPlugin(app: FastifyInstance): Promise<void> {
   });
 
   app.setNotFoundHandler((request, reply) => {
-    void request;
+    if (isAuthPath(request.url)) setNoStore(reply);
     return reply.status(404).send(fail("NOT_FOUND", "Rota bulunamadı"));
   });
 }
