@@ -13,10 +13,11 @@ $env:CURRICULUM_PACK_DATABASE_URL = "<verified-staging-or-test-url>"
 $env:CURRICULUM_PACK_ENVIRONMENT = "STAGING" # veya PRODUCTION
 $env:CURRICULUM_PACK_ALLOW_WRITE = "I_HAVE_VERIFIED_8G8_TARGET"
 $env:CURRICULUM_PACK_EDITORIAL_APPROVAL = "I_HAVE_REVIEWED_8G8"
-$env:CURRICULUM_PACK_LEVEL_CODE = "<mevcut-production-level-code>"
-$env:CURRICULUM_PACK_SKILL_CODES = "<skill-1>,<skill-2>,<skill-3>"
-npx tsx scripts/seed-curriculum-pack.ts --dry-run
-npx tsx scripts/seed-curriculum-pack.ts
+$env:CURRICULUM_PACK_APPROVED_TARGET_FINGERPRINT = "<independently-approved-sha256>"
+$env:CURRICULUM_PACK_LEVEL_CODE = "G8_12"
+$env:CURRICULUM_PACK_SKILL_CODES = "RC_MAIN_IDEA,RC_DETAIL,RC_INFERENCE"
+npx tsx scripts/seed-curriculum-pack.ts --canonical-catalog --dry-run
+npx tsx scripts/seed-curriculum-pack.ts --canonical-catalog
 ```
 
 Local TEST doğrulaması için aynı explicit hedef/onaylar gerekir; 8G-9A itibarıyla production-candidate seed script'i E2E/LEARN/EXUX fixture kataloglarını TEST'te dahi reddeder. Mevcut 8G-8 TEST kaydı korunmuş, MC sırası `scripts/rebalance-curriculum-pack.ts` ile yalnızca immutable v2 kayıtları eklenerek dengelenmiştir. Rebalance ikinci çalışmada NOOP olur; conflict durumunda overwrite/delete yapılmaz.

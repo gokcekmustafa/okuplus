@@ -11,6 +11,7 @@ const BASE_URL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
 const CHROME = process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const PACK_PREFIX = "OKU+ 8G8 · ";
 const PASSWORD = "8G8-pack-e2e-pass-123";
+const E2E_TIMEOUT_MS = 15000;
 const prisma = new PrismaClient();
 let browser: Browser | undefined;
 let userId = "";
@@ -181,20 +182,37 @@ async function createStudent(): Promise<{ email: string; token: string }> {
 }
 
 async function completeOnboarding(page: Page): Promise<void> {
-  await page.waitForSelector("#page-onboarding:not(.hidden)", { timeout: 15000 });
+  await page.waitForSelector("#page-onboarding:not(.hidden)", { timeout: E2E_TIMEOUT_MS });
   await page.fill("#onboard-displayName", "8G8 Pack Öğrencisi");
   await page.fill("#onboard-birthYear", "2010");
   await page.click("#onboarding-next");
-  await page.waitForSelector("#onboarding-step-2:not(.hidden)", { timeout: 5000 });
+  await page.waitForSelector("#onboarding-step-2:not(.hidden)", { timeout: E2E_TIMEOUT_MS });
   await page.selectOption("#onboard-level", { index: 1 });
   await page.click('[data-goal="COMPREHENSION"]');
   await page.click("#onboarding-next");
-  await page.waitForSelector("#onboarding-step-3:not(.hidden)", { timeout: 5000 });
+  await page.waitForSelector("#onboarding-step-3:not(.hidden)", { timeout: E2E_TIMEOUT_MS });
   await page.check("#onboard-consent-terms");
   await page.check("#onboard-consent-data");
   await page.check("#onboard-consent-parental");
+  const completeResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/student/onboarding/complete") &&
+      response.request().method() === "POST",
+    { timeout: E2E_TIMEOUT_MS },
+  );
   await page.click("#onboarding-complete");
-  await page.waitForSelector("#onboarding-ready:not(.hidden)", { timeout: 10000 });
+  const completeResponse = await completeResponsePromise;
+  assert.ok(
+    completeResponse.status() >= 200 && completeResponse.status() < 300,
+    `Onboarding complete başarısız: status=${completeResponse.status()}`,
+  );
+  const completeBody = (await completeResponse.json().catch(() => ({}))) as {
+    success?: boolean;
+    data?: { completed?: boolean };
+  };
+  assert.equal(completeBody.success, true, "Onboarding complete success=true dönmedi");
+  assert.equal(completeBody.data?.completed, true, "Onboarding complete completed=true dönmedi");
+  await page.waitForSelector("#onboarding-ready:not(.hidden)", { timeout: E2E_TIMEOUT_MS });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector("#page-dashboard:not(.hidden)", { timeout: 10000 });
 }
