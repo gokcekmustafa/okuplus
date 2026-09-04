@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { parseEnv } from "../src/config/env.js";
 import { loggerOptions } from "../src/lib/logger.js";
+import { ACCESS_COOKIE_NAME, CSRF_COOKIE_NAME } from "../src/modules/auth/cookies.js";
+import { createCsrfToken } from "../src/modules/auth/csrf.js";
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
 
@@ -172,6 +174,85 @@ describe("8I-2 security hardening", () => {
         payload: { email: "nobody@example.com", password: "wrong-password" },
       });
       expect(legacy.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("auth ve security hataları cache'lenmez; public ve static cevaplar korunur", async () => {
+    const jwtSecret = "security-error-cache-test-secret-that-is-at-least-32-characters";
+    const app = await buildApp(
+      parseEnv({
+        NODE_ENV: "test",
+        DATABASE_URL: databaseUrl,
+        JWT_SECRET: jwtSecret,
+        CORS_ORIGIN: "https://app.example.test",
+        AUTH_COOKIE_TRANSPORT: "on",
+        AUTH_ORIGIN_ENFORCEMENT: "on",
+      }),
+    );
+
+    try {
+      const anonymous = await app.inject({ method: "GET", url: "/auth/me" });
+      expect(anonymous.statusCode).toBe(401);
+      expect(anonymous.headers["cache-control"]).toBe("no-store");
+
+      const invalidBearer = await app.inject({
+        method: "GET",
+        url: "/auth/me",
+        headers: { authorization: "Bearer invalid-token" },
+      });
+      expect(invalidBearer.statusCode).toBe(401);
+      expect(invalidBearer.headers["cache-control"]).toBe("no-store");
+
+      const missingCsrf = await app.inject({
+        method: "POST",
+        url: "/auth/logout",
+        headers: { cookie: `${ACCESS_COOKIE_NAME}=synthetic-access` },
+      });
+      expect(missingCsrf.statusCode).toBe(403);
+      expect(missingCsrf.headers["cache-control"]).toBe("no-store");
+
+      const invalidCsrf = await app.inject({
+        method: "POST",
+        url: "/auth/logout",
+        headers: {
+          cookie: `${ACCESS_COOKIE_NAME}=synthetic-access; ${CSRF_COOKIE_NAME}=invalid-csrf`,
+          "x-csrf-token": "invalid-csrf",
+          origin: "https://app.example.test",
+        },
+      });
+      expect(invalidCsrf.statusCode).toBe(403);
+      expect(invalidCsrf.headers["cache-control"]).toBe("no-store");
+
+      const csrfToken = createCsrfToken(jwtSecret);
+      const wrongOrigin = await app.inject({
+        method: "POST",
+        url: "/auth/logout",
+        headers: {
+          cookie: `${ACCESS_COOKIE_NAME}=synthetic-access; ${CSRF_COOKIE_NAME}=${csrfToken}`,
+          "x-csrf-token": csrfToken,
+          origin: "https://evil.example.test",
+        },
+      });
+      expect(wrongOrigin.statusCode).toBe(403);
+      expect(wrongOrigin.headers["cache-control"]).toBe("no-store");
+
+      const authValidation = await app.inject({
+        method: "POST",
+        url: "/auth/refresh",
+        payload: { unexpected: true },
+      });
+      expect(authValidation.statusCode).toBe(400);
+      expect(authValidation.headers["cache-control"]).toBe("no-store");
+
+      const publicHealth = await app.inject({ method: "GET", url: "/health" });
+      expect(publicHealth.statusCode).toBe(200);
+      expect(publicHealth.headers["cache-control"]).not.toBe("no-store");
+
+      const staticAsset = await app.inject({ method: "GET", url: "/app.js" });
+      expect(staticAsset.statusCode).toBe(200);
+      expect(staticAsset.headers["cache-control"]).not.toBe("no-store");
     } finally {
       await app.close();
     }
