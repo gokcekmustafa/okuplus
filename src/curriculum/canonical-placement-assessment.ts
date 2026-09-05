@@ -32,7 +32,7 @@ export const canonicalPlacementAssessmentManifestSchema = z
     calibrationStatus: z.literal("NOT_CALIBRATED"),
     assessment: z
       .object({
-        stableAssessmentId: z.literal("canonical-assessment-oku-reading-placement-v1"),
+        stableAssessmentId: z.literal("canonical-assessment-oku-reading-placement-v1-1-0"),
         assessmentKey: z.literal("OKU-READING-PLACEMENT-V1"),
         title: z.string().trim().min(1).max(200),
         type: z.literal("PLACEMENT"),
@@ -45,8 +45,8 @@ export const canonicalPlacementAssessmentManifestSchema = z
             deletedAt: z.null(),
           })
           .strict(),
-        templateId: z.literal("canonical-template-oku-reading-placement-v1"),
-        templateVersionId: z.literal("canonical-template-version-oku-reading-placement-v1-v1"),
+        templateId: z.literal("canonical-template-oku-reading-placement-v1-1-0"),
+        templateVersionId: z.literal("canonical-template-version-oku-reading-placement-v1-1-0-v1"),
         levelMappingPolicy: z
           .object({
             declaredGradeIndependent: z.literal(true),
@@ -63,9 +63,9 @@ export const canonicalPlacementAssessmentManifestSchema = z
     template: z
       .object({
         templateKey: z.literal("OKU-READING-PLACEMENT-V1-TEMPLATE"),
-        stableTemplateId: z.literal("canonical-template-oku-reading-placement-v1"),
+        stableTemplateId: z.literal("canonical-template-oku-reading-placement-v1-1-0"),
         stableTemplateVersionId: z.literal(
-          "canonical-template-version-oku-reading-placement-v1-v1",
+          "canonical-template-version-oku-reading-placement-v1-1-0-v1",
         ),
         templateVersion: z.literal(1),
         type: z.literal("MIXED"),
@@ -96,6 +96,13 @@ export const canonicalPlacementAssessmentManifestSchema = z
             HARD: z.number().int().positive(),
           })
           .strict(),
+        questionTypeDistribution: z
+          .object({
+            MULTIPLE_CHOICE: z.literal(24),
+            TRUE_FALSE: z.literal(6),
+            MATCHING: z.literal(6),
+          })
+          .strict(),
         questionOrder: z.array(z.string().regex(/^PLV1-Q\d{3}$/u)).length(36),
       })
       .strict(),
@@ -111,20 +118,20 @@ export const canonicalPlacementAssessmentManifestSchema = z
       .strict(),
     graph: z
       .object({
-        assessmentId: z.literal("canonical-assessment-oku-reading-placement-v1"),
-        templateId: z.literal("canonical-template-oku-reading-placement-v1"),
-        templateVersionId: z.literal("canonical-template-version-oku-reading-placement-v1-v1"),
+        assessmentId: z.literal("canonical-assessment-oku-reading-placement-v1-1-0"),
+        templateId: z.literal("canonical-template-oku-reading-placement-v1-1-0"),
+        templateVersionId: z.literal("canonical-template-version-oku-reading-placement-v1-1-0-v1"),
         contentIds: z
-          .array(z.string().regex(/^canonical-placement-content-PLV1-C\d{3}$/u))
+          .array(z.string().regex(/^canonical-placement-content-v1-1-0-PLV1-C\d{3}$/u))
           .length(12),
         contentVersionIds: z
-          .array(z.string().regex(/^canonical-placement-content-version-PLV1-C\d{3}-v1$/u))
+          .array(z.string().regex(/^canonical-placement-content-version-v1-1-0-PLV1-C\d{3}-v1$/u))
           .length(12),
         questionIds: z
-          .array(z.string().regex(/^canonical-placement-question-PLV1-Q\d{3}$/u))
+          .array(z.string().regex(/^canonical-placement-question-v1-1-0-PLV1-Q\d{3}$/u))
           .length(36),
         questionVersionIds: z
-          .array(z.string().regex(/^canonical-placement-question-version-PLV1-Q\d{3}-v1$/u))
+          .array(z.string().regex(/^canonical-placement-question-version-v1-1-0-PLV1-Q\d{3}-v1$/u))
           .length(36),
       })
       .strict(),
@@ -143,22 +150,23 @@ export const canonicalPlacementAssessmentManifestSchema = z
       (passage) => passage.contentId,
     );
     const expectedContentGraphIds = expectedContentIds.map(
-      (contentId) => `canonical-placement-content-${contentId}`,
+      (contentId) => `canonical-placement-content-v1-1-0-${contentId}`,
     );
     const expectedContentVersionGraphIds = expectedContentIds.map(
-      (contentId) => `canonical-placement-content-version-${contentId}-v1`,
+      (contentId) => `canonical-placement-content-version-v1-1-0-${contentId}-v1`,
     );
     const expectedQuestionGraphIds = expectedQuestionIds.map(
-      (questionId) => `canonical-placement-question-${questionId}`,
+      (questionId) => `canonical-placement-question-v1-1-0-${questionId}`,
     );
     const expectedQuestionVersionGraphIds = expectedQuestionIds.map(
-      (questionId) => `canonical-placement-question-version-${questionId}-v1`,
+      (questionId) => `canonical-placement-question-version-v1-1-0-${questionId}-v1`,
     );
     const expectedSkillDistribution = PROFICIENCY_SKILL_CODES.map((skillCode) => ({
       skillCode,
       questionCount: 12,
     }));
     const expectedDifficultyDistribution = { EASY: 12, MEDIUM: 12, HARD: 12 };
+    const expectedQuestionTypeDistribution = { MULTIPLE_CHOICE: 24, TRUE_FALSE: 6, MATCHING: 6 };
 
     if (new Set(skillCodes).size !== skillCodes.length) {
       ctx.addIssue({
@@ -202,6 +210,16 @@ export const canonicalPlacementAssessmentManifestSchema = z
       });
     }
     if (
+      JSON.stringify(manifest.questionPlan.questionTypeDistribution) !==
+      JSON.stringify(expectedQuestionTypeDistribution)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["questionPlan", "questionTypeDistribution"],
+        message: "canonical placement question type dağılımı 24/6/6 olmalı",
+      });
+    }
+    if (
       manifest.itemBank.manifestVersion !== CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.manifestVersion
     ) {
       ctx.addIssue({
@@ -235,7 +253,9 @@ export const canonicalPlacementAssessmentManifestSchema = z
     }
     if (
       JSON.stringify(
-        manifest.graph.contentIds.map((id) => id.replace("canonical-placement-content-", "")),
+        manifest.graph.contentIds.map((id) =>
+          id.replace("canonical-placement-content-v1-1-0-", ""),
+        ),
       ) !== JSON.stringify(expectedContentIds)
     ) {
       ctx.addIssue({
@@ -317,19 +337,19 @@ export type CanonicalPlacementAssessmentManifest = z.infer<
 
 const CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST_DRAFT = {
   manifestId: "OKU-READING-PLACEMENT-V1",
-  manifestVersion: "1.0.0",
+  manifestVersion: "1.1.0",
   lifecycle: "DESIGN_ONLY",
   calibrationStatus: "NOT_CALIBRATED",
   assessment: {
-    stableAssessmentId: "canonical-assessment-oku-reading-placement-v1",
+    stableAssessmentId: "canonical-assessment-oku-reading-placement-v1-1-0",
     assessmentKey: "OKU-READING-PLACEMENT-V1",
     title: "Okuma Seviye Belirleme v1",
     type: "PLACEMENT",
     tenantScope: "GLOBAL",
     status: "PUBLISHED",
     visibility: { scope: "GLOBAL", tenantId: null, deletedAt: null },
-    templateId: "canonical-template-oku-reading-placement-v1",
-    templateVersionId: "canonical-template-version-oku-reading-placement-v1-v1",
+    templateId: "canonical-template-oku-reading-placement-v1-1-0",
+    templateVersionId: "canonical-template-version-oku-reading-placement-v1-1-0-v1",
     levelMappingPolicy: {
       declaredGradeIndependent: true,
       birthDateUsed: false,
@@ -340,8 +360,8 @@ const CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST_DRAFT = {
   },
   template: {
     templateKey: "OKU-READING-PLACEMENT-V1-TEMPLATE",
-    stableTemplateId: "canonical-template-oku-reading-placement-v1",
-    stableTemplateVersionId: "canonical-template-version-oku-reading-placement-v1-v1",
+    stableTemplateId: "canonical-template-oku-reading-placement-v1-1-0",
+    stableTemplateVersionId: "canonical-template-version-oku-reading-placement-v1-1-0-v1",
     templateVersion: 1,
     type: "MIXED",
     status: "PUBLISHED",
@@ -361,6 +381,7 @@ const CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST_DRAFT = {
       questionCount: 12,
     })),
     difficultyDistribution: { EASY: 12, MEDIUM: 12, HARD: 12 },
+    questionTypeDistribution: { MULTIPLE_CHOICE: 24, TRUE_FALSE: 6, MATCHING: 6 },
     questionOrder: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.map(
       (question) => question.stableQuestionId,
     ),
@@ -374,20 +395,20 @@ const CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST_DRAFT = {
     productionAssignmentEnabled: PLACEMENT_SCORING_CONTRACT_V1.productionAssignmentEnabled,
   },
   graph: {
-    assessmentId: "canonical-assessment-oku-reading-placement-v1",
-    templateId: "canonical-template-oku-reading-placement-v1",
-    templateVersionId: "canonical-template-version-oku-reading-placement-v1-v1",
+    assessmentId: "canonical-assessment-oku-reading-placement-v1-1-0",
+    templateId: "canonical-template-oku-reading-placement-v1-1-0",
+    templateVersionId: "canonical-template-version-oku-reading-placement-v1-1-0-v1",
     contentIds: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.passages.map(
-      (passage) => `canonical-placement-content-${passage.contentId}`,
+      (passage) => `canonical-placement-content-v1-1-0-${passage.contentId}`,
     ),
     contentVersionIds: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.passages.map(
-      (passage) => `canonical-placement-content-version-${passage.contentId}-v1`,
+      (passage) => `canonical-placement-content-version-v1-1-0-${passage.contentId}-v1`,
     ),
     questionIds: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.map(
-      (question) => `canonical-placement-question-${question.stableQuestionId}`,
+      (question) => `canonical-placement-question-v1-1-0-${question.stableQuestionId}`,
     ),
     questionVersionIds: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.map(
-      (question) => `canonical-placement-question-version-${question.stableQuestionId}-v1`,
+      (question) => `canonical-placement-question-version-v1-1-0-${question.stableQuestionId}-v1`,
     ),
   },
   scoringContractVersion: PLACEMENT_SCORING_CONTRACT_V1.version,
@@ -415,6 +436,7 @@ export const CANONICAL_PLACEMENT_APPLY_POLICY = Object.freeze({
 export type CanonicalPlacementAssessmentConfig = {
   canonicalManifestId: string;
   canonicalManifestVersion: string;
+  canonicalActive: boolean;
   assessmentKey: string;
   stableAssessmentId: string;
   templateKey: string;
@@ -442,6 +464,7 @@ export function canonicalPlacementAssessmentConfig(
   return {
     canonicalManifestId: manifest.manifestId,
     canonicalManifestVersion: manifest.manifestVersion,
+    canonicalActive: false,
     assessmentKey: manifest.assessment.assessmentKey,
     stableAssessmentId: manifest.assessment.stableAssessmentId,
     templateKey: manifest.template.templateKey,
@@ -491,6 +514,7 @@ function configMatches(actual: unknown, expected: CanonicalPlacementAssessmentCo
   const keys: Array<keyof CanonicalPlacementAssessmentConfig> = [
     "canonicalManifestId",
     "canonicalManifestVersion",
+    "canonicalActive",
     "assessmentKey",
     "stableAssessmentId",
     "templateKey",
