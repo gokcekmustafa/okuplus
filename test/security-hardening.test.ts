@@ -29,9 +29,13 @@ describe("8I-2 security hardening", () => {
   it("security headers and production HSTS are emitted", async () => {
     const app = await buildApp(
       parseEnv({
+        APP_ENV: "production",
         NODE_ENV: "production",
         DATABASE_URL: databaseUrl,
-        JWT_SECRET: "production-test-secret-that-is-at-least-32-characters",
+        CORS_ORIGIN: "https://app.example.test",
+        AUTH_COOKIE_TRANSPORT: "on",
+        AUTH_ORIGIN_ENFORCEMENT: "on",
+        JWT_SECRET: "Q7!mZ2_rT8xL4pN6vC9kH3aW5eJ1sB0dF4yK8uP",
       }),
     );
 

@@ -17,10 +17,13 @@ describe("config/env", () => {
   it("açıkça verilen değerleri korur", () => {
     const env = parseEnv({
       ...base,
+      APP_ENV: "production",
       NODE_ENV: "production",
       PORT: "8080",
       CORS_ORIGIN: "https://app.example.com",
-      JWT_SECRET: "production-test-secret-that-is-at-least-32-characters",
+      AUTH_COOKIE_TRANSPORT: "on",
+      AUTH_ORIGIN_ENFORCEMENT: "on",
+      JWT_SECRET: "Q7!mZ2_rT8xL4pN6vC9kH3aW5eJ1sB0dF4yK8uP",
     });
     expect(env.NODE_ENV).toBe("production");
     expect(env.PORT).toBe(8080);
@@ -46,7 +49,9 @@ describe("config/env", () => {
   });
 
   it("production varsayılan JWT_SECRET ile başlamaz", () => {
-    expect(() => parseEnv({ ...base, NODE_ENV: "production" })).toThrow("JWT_SECRET");
+    expect(() => parseEnv({ ...base, APP_ENV: "production", NODE_ENV: "production" })).toThrow(
+      "JWT_SECRET",
+    );
   });
 
   it("CORS wildcard reddeder", () => {
