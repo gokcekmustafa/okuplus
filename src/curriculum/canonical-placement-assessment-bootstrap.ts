@@ -12,9 +12,9 @@ import {
 import { PROFICIENCY_SKILL_CODES, type ProficiencySkillCode } from "./proficiency-levels.js";
 
 export const CANONICAL_PLACEMENT_GRAPH_IDS = Object.freeze({
-  assessmentId: "canonical-assessment-oku-reading-placement-v1",
-  templateId: "canonical-template-oku-reading-placement-v1",
-  templateVersionId: "canonical-template-version-oku-reading-placement-v1-v1",
+  assessmentId: CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.graph.assessmentId,
+  templateId: CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.graph.templateId,
+  templateVersionId: CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.graph.templateVersionId,
 });
 
 export type CanonicalPlacementSkillRef = {
@@ -224,22 +224,6 @@ function wordCount(body: string): number {
   return body.trim().split(/\s+/u).filter(Boolean).length;
 }
 
-function stableContentId(contentId: string): string {
-  return `canonical-placement-content-${contentId}`;
-}
-
-function stableContentVersionId(contentId: string): string {
-  return `canonical-placement-content-version-${contentId}-v1`;
-}
-
-function stableQuestionId(questionId: string): string {
-  return `canonical-placement-question-${questionId}`;
-}
-
-function stableQuestionVersionId(questionId: string): string {
-  return `canonical-placement-question-version-${questionId}-v1`;
-}
-
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
@@ -248,13 +232,25 @@ function questionOptions(question: CanonicalPlacementQuestion): unknown[] {
   return question.options;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function canonicalConfigMatches(actual: unknown, expected: Record<string, unknown>): boolean {
+  if (!isRecord(actual)) return false;
+  if (actual.canonicalActive !== true && actual.canonicalActive !== false) return false;
+  const actualWithoutActive = { ...actual, canonicalActive: false };
+  const expectedWithoutActive = { ...expected, canonicalActive: false };
+  return isDeepStrictEqual(actualWithoutActive, expectedWithoutActive);
+}
+
 function expectedTemplateConfig(
   manifest: CanonicalPlacementAssessmentManifest,
 ): Record<string, unknown> {
   return {
     canonicalManifestId: manifest.manifestId,
     canonicalManifestVersion: manifest.manifestVersion,
-    stableIdentity: CANONICAL_PLACEMENT_GRAPH_IDS,
+    stableIdentity: manifest.graph,
     assessmentKey: manifest.assessment.assessmentKey,
     itemBank: manifest.itemBank,
     sourceStrategy: manifest.template.sourceStrategy,
@@ -263,6 +259,7 @@ function expectedTemplateConfig(
     questionOrder: manifest.questionPlan.questionOrder,
     skillDistribution: manifest.questionPlan.skillDistribution,
     difficultyDistribution: manifest.questionPlan.difficultyDistribution,
+    questionTypeDistribution: manifest.questionPlan.questionTypeDistribution,
     scoring: manifest.scoring,
     levelMappingPolicy: manifest.assessment.levelMappingPolicy,
   };
@@ -311,10 +308,12 @@ export function buildCanonicalPlacementAssessmentGraph(
     const difficulty =
       passageQuestions.reduce((sum, question) => sum + question.difficulty, 0) /
       passageQuestions.length;
+    const contentId = manifest.graph.contentIds[position]!;
+    const contentVersionId = manifest.graph.contentVersionIds[position]!;
     return {
       itemBankContentId: passage.contentId,
-      contentId: stableContentId(passage.contentId),
-      contentVersionId: stableContentVersionId(passage.contentId),
+      contentId,
+      contentVersionId,
       position,
       title: passage.title,
       domain: passage.domain,
@@ -323,7 +322,7 @@ export function buildCanonicalPlacementAssessmentGraph(
       wordCount: wordCount(passage.body),
       skillCodes: [...new Set(passageQuestions.map((question) => question.skillCode))],
       license: "INTERNAL_ORIGINAL",
-      changelog: `${manifest.manifestId}@${manifest.manifestVersion}; itemBank=${manifest.itemBank.manifestId}@${manifest.itemBank.manifestVersion}; stableContentId=${stableContentId(passage.contentId)}; domain=${passage.domain}.`,
+      changelog: `${manifest.manifestId}@${manifest.manifestVersion}; itemBank=${manifest.itemBank.manifestId}@${manifest.itemBank.manifestVersion}; stableContentId=${contentId}; domain=${passage.domain}.`,
     } satisfies CanonicalPlacementContentPlan;
   });
 
@@ -342,8 +341,8 @@ export function buildCanonicalPlacementAssessmentGraph(
         stableQuestionId: question.stableQuestionId,
         itemBankContentId: question.contentId,
         contentId: content.contentId,
-        questionId: stableQuestionId(question.stableQuestionId),
-        questionVersionId: stableQuestionVersionId(question.stableQuestionId),
+        questionId: manifest.graph.questionIds[templatePosition]!,
+        questionVersionId: manifest.graph.questionVersionIds[templatePosition]!,
         contentPosition: contentQuestions.findIndex(
           (candidate) => candidate.stableQuestionId === question.stableQuestionId,
         ),
@@ -409,9 +408,10 @@ async function readMarkerIds(
   client: PrismaClient | Prisma.TransactionClient,
   table: "Assessment" | "ExerciseTemplate",
   manifestId: string,
+  manifestVersion: string,
 ): Promise<string[]> {
   const rows = await client.$queryRaw<Array<{ id: string }>>(
-    Prisma.sql`SELECT "id" FROM ${Prisma.raw(`"${table}"`)} WHERE "config"->>'canonicalManifestId' = ${manifestId}`,
+    Prisma.sql`SELECT "id" FROM ${Prisma.raw(`"${table}"`)} WHERE "config"->>'canonicalManifestId' = ${manifestId} AND "config"->>'canonicalManifestVersion' = ${manifestVersion}`,
   );
   return rows.map((row) => row.id);
 }
@@ -456,8 +456,13 @@ export async function readCanonicalPlacementSnapshot(
     client.exerciseTemplateVersionQuestion.findMany({
       where: { templateVersionId: graph.templateVersion.id },
     }),
-    readMarkerIds(client, "Assessment", graph.manifest.manifestId),
-    readMarkerIds(client, "ExerciseTemplate", graph.manifest.manifestId),
+    readMarkerIds(client, "Assessment", graph.manifest.manifestId, graph.manifest.manifestVersion),
+    readMarkerIds(
+      client,
+      "ExerciseTemplate",
+      graph.manifest.manifestId,
+      graph.manifest.manifestVersion,
+    ),
   ]);
 
   return {
@@ -579,7 +584,7 @@ export function planCanonicalPlacementPromotion(
       snapshot.assessment.levelId === null &&
       snapshot.assessment.status === graph.assessment.status &&
       snapshot.assessment.deletedAt === null &&
-      isDeepStrictEqual(snapshot.assessment.config, graph.assessment.config)
+      canonicalConfigMatches(snapshot.assessment.config, graph.assessment.config)
     )
   ) {
     addConflict(conflicts, "canonical placement Assessment identity/metadata mismatch");

@@ -29,6 +29,9 @@ describe("canonical placement assessment manifest and plan", () => {
     expect(
       validateCanonicalPlacementAssessmentManifest(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST),
     ).toEqual(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST);
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.manifestVersion).toBe("1.1.0");
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.itemBank.manifestVersion).toBe("1.1.0");
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.graph.assessmentId).toContain("v1-1-0");
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.assessment.targetLevelCodes).toHaveLength(4);
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.totalQuestionCount).toBe(36);
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.skillDistribution).toEqual([
@@ -39,6 +42,11 @@ describe("canonical placement assessment manifest and plan", () => {
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.template.firstRealPackReuse).toBe(
       "EXPLICIT_REVIEW_ONLY",
     );
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.questionTypeDistribution).toEqual({
+      MULTIPLE_CHOICE: 24,
+      TRUE_FALSE: 6,
+      MATCHING: 6,
+    });
   });
 
   it("plans CREATE for an empty target and NOOP for an exact rerun", () => {
@@ -177,6 +185,7 @@ describe("canonical placement assessment graph and promotion plan", () => {
       deletedAt: null,
     });
     expect(graph.assessment.config).toMatchObject({
+      canonicalActive: false,
       resultLevelId: null,
       reviewRequired: true,
       calibrationStatus: "NOT_CALIBRATED",
@@ -240,6 +249,29 @@ describe("canonical placement assessment graph and promotion plan", () => {
     const partial = emptyPromotionSnapshot();
     partial.template = exactPromotionSnapshot().template;
     expect(planCanonicalPlacementPromotion(graph, partial).action).toBe("CONFLICT");
+  });
+
+  it("does not overwrite a prior manifest-version graph", () => {
+    const graph = buildCanonicalPlacementAssessmentGraph();
+    const prior = exactPromotionSnapshot();
+    prior.assessment!.config = {
+      ...prior.assessment!.config,
+      canonicalManifestVersion: "1.0.0",
+      itemBankManifestVersion: "1.0.1",
+    };
+    prior.template!.config = {
+      ...prior.template!.config,
+      canonicalManifestVersion: "1.0.0",
+      itemBank: {
+        manifestId: "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1",
+        manifestVersion: "1.0.1",
+      },
+    };
+
+    const plan = planCanonicalPlacementPromotion(graph, prior);
+    expect(plan.action).toBe("CONFLICT");
+    expect(plan.idempotent).toBe(false);
+    expect(plan.conflicts).toContain("canonical placement Assessment identity/metadata mismatch");
   });
 
   it("does not mutate the read-only snapshot while planning", () => {
