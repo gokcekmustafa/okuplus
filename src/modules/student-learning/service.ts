@@ -630,6 +630,7 @@ export async function getStudentSession(
               contentVersion: {
                 select: {
                   id: true,
+                  contentId: true,
                   version: true,
                   title: true,
                   body: true,
