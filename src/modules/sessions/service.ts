@@ -389,7 +389,6 @@ export async function listQuestionsForSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
-
   if (
     session.assessmentId === null &&
     session.context !== "ASSESSMENT" &&
