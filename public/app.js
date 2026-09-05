@@ -1634,7 +1634,11 @@ function setupOnboardingEvents() {
         if (!data.assessmentId) throw new Error("Uygun değerlendirme bulunamadı");
         var startRes = await fetch("/student/assessments/" + data.assessmentId + "/start", {
           method: "POST",
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
+          headers: {
+            ...authHeaders(tokens.accessToken, tokens.tenantId),
+            ...csrfHeaders(),
+          },
+          body: JSON.stringify({}),
         });
         await parseResponse(startRes);
         navigate("assessments");
