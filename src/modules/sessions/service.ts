@@ -318,6 +318,8 @@ export async function listQuestionsForSession(
   questions: Array<{
     questionVersionId: string;
     position: number;
+    contentId: string;
+    contentVersionId: string | null;
     prompt: string;
     type: string;
     options: Prisma.JsonValue;
@@ -335,6 +337,12 @@ export async function listQuestionsForSession(
       templateVersionId: true,
       templateVersion: {
         select: {
+          contents: {
+            select: {
+              contentVersionId: true,
+              contentVersion: { select: { contentId: true } },
+            },
+          },
           questions: {
             select: {
               position: true,
@@ -346,7 +354,7 @@ export async function listQuestionsForSession(
                   explanation: true,
                   hint: true,
                   correctAnswer: true,
-                  question: { select: { type: true } },
+                  question: { select: { type: true, contentId: true } },
                 },
               },
             },
@@ -366,6 +374,12 @@ export async function listQuestionsForSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
+  const contentVersionByContentId = new Map(
+    session.templateVersion.contents.map((content) => [
+      content.contentVersion.contentId,
+      content.contentVersionId,
+    ]),
+  );
   const questions = session.templateVersion.questions.map((q) => {
     const correctAnswer = q.questionVersion.correctAnswer as {
       blanks?: Array<{ blankId?: string }>;
@@ -373,6 +387,8 @@ export async function listQuestionsForSession(
     return {
       questionVersionId: q.questionVersion.id,
       position: q.position,
+      contentId: q.questionVersion.question.contentId,
+      contentVersionId: contentVersionByContentId.get(q.questionVersion.question.contentId) ?? null,
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
       options: q.questionVersion.options,

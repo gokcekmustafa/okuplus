@@ -8019,21 +8019,29 @@ function renderExerciseSession() {
   }
 }
 
-function renderStudentReading(session) {
+function renderStudentReading(session, question = exerciseQuestions[currentExerciseQuestionIndex]) {
   const card = $("student-reading-card");
   const heading = $("student-reading-heading");
   const bodyEl = $("student-reading-body");
   if (!card || !heading || !bodyEl) return;
   const contents = session?.templateVersion?.contents ?? [];
-  const first = contents[0]?.contentVersion;
-  if (!first?.body) {
+  const current =
+    contents.find((item) => {
+      const contentVersion = item?.contentVersion;
+      return (
+        (question?.contentVersionId && contentVersion?.id === question.contentVersionId) ||
+        (question?.contentId && contentVersion?.contentId === question.contentId)
+      );
+    })?.contentVersion ??
+    (question?.contentId || question?.contentVersionId ? null : contents[0]?.contentVersion);
+  if (!current?.body) {
     card.style.display = "none";
     heading.textContent = "Metin";
     bodyEl.innerHTML = "";
     return;
   }
-  heading.textContent = first.title || "Metin";
-  bodyEl.innerHTML = String(first.body)
+  heading.textContent = current.title || "Metin";
+  bodyEl.innerHTML = String(current.body)
     .split(/\n\s*\n/)
     .filter((paragraph) => paragraph.trim())
     .map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`)
@@ -8152,6 +8160,7 @@ function renderExerciseQuestion() {
   }
   const q = exerciseQuestions[currentExerciseQuestionIndex];
   if (!q) return;
+  renderStudentReading(exerciseSession, q);
   if (counter)
     counter.textContent = `Soru ${currentExerciseQuestionIndex + 1} / ${exerciseQuestions.length}`;
   if (feedbackEl) feedbackEl.style.display = "none";
