@@ -4,6 +4,15 @@ import { prisma } from "../../lib/prisma.js";
 import { conflictError, forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { recordExerciseCompleted } from "../gamification/service.js";
 import { aggregateSessionProgress } from "../progress/aggregation.js";
+import {
+  PROFICIENCY_LEVEL_CODES,
+  type ProficiencyLevelCode,
+} from "../../curriculum/proficiency-levels.js";
+import {
+  PLACEMENT_SCORING_CONTRACT_V1,
+  scorePlacementSession,
+  type PlacementSessionQuestion,
+} from "../assessments/placement-scoring.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -399,12 +408,17 @@ export async function completeExerciseSession(
           questions: {
             select: {
               questionVersionId: true,
-              questionVersion: { select: { question: { select: { type: true } } } },
+              questionVersion: {
+                select: {
+                  question: { select: { type: true, skill: { select: { code: true } } } },
+                },
+              },
             },
           },
         },
       },
       attempts: { select: { id: true, rawScore: true, questionVersionId: true } },
+      assessment: { select: { type: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -436,6 +450,30 @@ export async function completeExerciseSession(
     return q?.questionVersion.question.type === "OPEN_ENDED";
   }).length;
 
+  const placementScoring =
+    session.assessment?.type === "PLACEMENT"
+      ? scorePlacementSession(
+          session.templateVersion.questions.map((question): PlacementSessionQuestion => ({
+            questionVersionId: question.questionVersionId,
+            questionType: question.questionVersion.question.type,
+            skillCode: question.questionVersion.question.skill?.code ?? null,
+          })),
+          attempts,
+          await prisma.level
+            .findMany({
+              where: { code: { in: [...PROFICIENCY_LEVEL_CODES] } },
+              select: { id: true, code: true },
+            })
+            .then((levels) =>
+              levels.map((level) => ({
+                id: level.id,
+                code: level.code as ProficiencyLevelCode,
+              })),
+            ),
+          PLACEMENT_SCORING_CONTRACT_V1,
+        )
+      : null;
+
   const scoreSummary = {
     totalQuestions,
     attempted: attempts.length,
@@ -445,6 +483,24 @@ export async function completeExerciseSession(
     openEndedTotal: openEndedPending,
     openEndedAnswered,
     pendingEvaluation: openEndedPending > openEndedAnswered,
+    ...(placementScoring
+      ? {
+          placementScoring: {
+            contractVersion: PLACEMENT_SCORING_CONTRACT_V1.version,
+            calibrationStatus: PLACEMENT_SCORING_CONTRACT_V1.calibrationStatus,
+            score: placementScoring.aggregate.score,
+            scoredCount: placementScoring.aggregate.scoredCount,
+            eligibleQuestionCount: placementScoring.aggregate.eligibleQuestionCount,
+            pendingEvaluationCount: placementScoring.aggregate.pendingEvaluationCount,
+            skillSubscores: placementScoring.aggregate.skillSubscores,
+            recommendedLevelCode: placementScoring.resolution.recommendedLevelCode,
+            resultLevelId: placementScoring.resolution.resultLevelId,
+            reviewRequired: placementScoring.resolution.reviewRequired,
+            resolutionReason: placementScoring.resolution.reason,
+            invalidSkillQuestionCount: placementScoring.invalidSkillQuestionCount,
+          },
+        }
+      : {}),
   };
 
   const updated = await prisma.exerciseSession.update({
@@ -463,6 +519,7 @@ export async function completeExerciseSession(
         tenantId: session.tenantId,
         studentId: session.studentId,
         assessmentId: session.assessmentId,
+        resultLevelId: placementScoring?.resolution.resultLevelId ?? null,
         score: averageScore,
         metrics: scoreSummary as Prisma.InputJsonValue,
       },
