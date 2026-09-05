@@ -51,6 +51,10 @@ export async function buildApp(
     requestTimeout: env.REQUEST_TIMEOUT_MS,
     keepAliveTimeout: env.KEEP_ALIVE_TIMEOUT_MS,
     return503OnClosing: true,
+    // Do not trust client-supplied forwarding headers. A deployment that
+    // needs real client-IP attribution must configure a verified proxy layer
+    // explicitly before enabling a trusted-proxy policy.
+    trustProxy: false,
   });
   const authProvider = new JwtAuthProvider({
     jwtSecret: env.JWT_SECRET,

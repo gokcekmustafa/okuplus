@@ -12,10 +12,10 @@ function accessEntries(value: string): Set<string> {
 }
 
 export function isPilotAccessAllowed(
-  env: Pick<Env, "NODE_ENV" | "PILOT_MODE" | "PILOT_STUDENT_ACCESS">,
+  env: Pick<Env, "APP_ENV" | "PILOT_MODE" | "PILOT_STUDENT_ACCESS">,
   user: { id: string; email?: string | null },
 ): boolean {
-  if (env.NODE_ENV === "production" || env.PILOT_MODE !== "on") return false;
+  if (env.APP_ENV === "production" || env.PILOT_MODE !== "on") return false;
   const allowlist = accessEntries(env.PILOT_STUDENT_ACCESS);
   if (allowlist.size === 0) return true;
   return (
@@ -25,7 +25,7 @@ export function isPilotAccessAllowed(
 }
 
 export function requirePilotAccess(
-  env: Pick<Env, "NODE_ENV" | "PILOT_MODE" | "PILOT_STUDENT_ACCESS">,
+  env: Pick<Env, "APP_ENV" | "PILOT_MODE" | "PILOT_STUDENT_ACCESS">,
 ) {
   return async function pilotAccessGuard(
     request: FastifyRequest,
@@ -33,7 +33,7 @@ export function requirePilotAccess(
   ): Promise<void> {
     const user = request.authUser;
     if (!user) throw forbiddenError("Pilot erişimi için öğrenci oturumu gerekli");
-    if (env.NODE_ENV === "production") {
+    if (env.APP_ENV === "production") {
       throw forbiddenError("Pilot modu production ortamında kapalıdır");
     }
     if (env.PILOT_MODE !== "on") throw forbiddenError("Pilot modu açık değil");
