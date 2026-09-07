@@ -1366,12 +1366,16 @@ window.startTodayAssessment = async function (id) {
 window.startTodayExercise = async function () {
   var tokens = getStoredTokens();
   try {
-    var r = await fetch("/student/exercises/start", {
+    var r = await fetch("/student/training/main-idea/start", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
+      headers: {
+        ...authHeaders(tokens.accessToken, tokens.tenantId),
+        ...csrfHeaders(),
+      },
       body: JSON.stringify({}),
     });
-    await parseResponse(r);
+    var data = await parseResponse(r);
+    exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (e) {
     if (!isPremiumLimitError(e)) alert(e.message);
@@ -7777,7 +7781,11 @@ async function openTemplateEditForVersion(versionId) {
 // ========== Exercise / Öğrenci Oturumu ==========
 function exerciseApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...csrfHeaders(),
+    ...(options.headers ?? {}),
+  };
   let route = `/admin${path}`;
   if (isPlatformUser === false) {
     route = path
@@ -7992,6 +8000,12 @@ function renderExerciseSession() {
     return;
   }
   renderStudentReading(exerciseSession);
+  const instructionsEl = $("exercise-training-instructions");
+  const trainingInstructions = exerciseSession.templateVersion?.training?.instructions;
+  if (instructionsEl) {
+    instructionsEl.textContent = trainingInstructions || "";
+    instructionsEl.style.display = trainingInstructions ? "block" : "none";
+  }
   if (info) info.style.display = "block";
   if (detail) {
     const s = exerciseSession;

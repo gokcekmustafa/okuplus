@@ -7,6 +7,11 @@ import {
   recordUsageInTransaction,
 } from "../entitlements/index.js";
 import { getStudentReview, type StudentReviewResponse } from "./review-service.js";
+import {
+  isTrainingConfigCandidate,
+  resolveTrainingRuntimeConfig,
+  toMainIdeaRuntimeConfig,
+} from "../training/runtime.js";
 
 function todayBounds(date: Date): { start: Date; end: Date } {
   const start = new Date(date);
@@ -623,6 +628,7 @@ export async function getStudentSession(
       templateVersion: {
         select: {
           id: true,
+          config: true,
           template: { select: { id: true, title: true } },
           contents: {
             select: {
@@ -655,5 +661,17 @@ export async function getStudentSession(
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
-  return session;
+  const resolvedTrainingConfig =
+    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+      ? resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config)
+      : null;
+  const trainingConfig =
+    resolvedTrainingConfig?.status === "READY"
+      ? toMainIdeaRuntimeConfig(resolvedTrainingConfig.config)
+      : null;
+  const { config: _versionConfig, ...templateVersion } = session.templateVersion;
+  return {
+    ...session,
+    templateVersion: { ...templateVersion, training: trainingConfig },
+  };
 }

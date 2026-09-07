@@ -34,6 +34,7 @@ import { studentAdminRoutes } from "./modules/students/index.js";
 import { teacherAdminRoutes } from "./modules/teachers/index.js";
 import { templateAdminRoutes } from "./modules/templates/index.js";
 import { tenantAdminRoutes } from "./modules/tenant/index.js";
+import { trainingStudentRoutes } from "./modules/training/index.js";
 import { userAdminRoutes } from "./modules/users/index.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
@@ -113,6 +114,7 @@ export async function buildApp(
   await app.register(gamificationStudentRoutes, { authProvider });
   await app.register(onboardingRoutes, { authProvider });
   await app.register(studentLearningRoutes, { authProvider });
+  await app.register(trainingStudentRoutes, { authProvider });
   await app.register(staticPlugin);
   return app;
 }
