@@ -13,6 +13,11 @@ import {
   scorePlacementSession,
   type PlacementSessionQuestion,
 } from "../assessments/placement-scoring.js";
+import {
+  isTrainingConfigCandidate,
+  isTrainingVersionConfig,
+  loadMainIdeaRuntimeGraph,
+} from "../training/runtime.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -335,8 +340,11 @@ export async function listQuestionsForSession(
       tenantId: true,
       studentId: true,
       templateVersionId: true,
+      assessmentId: true,
+      context: true,
       templateVersion: {
         select: {
+          config: true,
           contents: {
             select: {
               contentVersionId: true,
@@ -374,6 +382,29 @@ export async function listQuestionsForSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
+
+  if (
+    session.assessmentId === null &&
+    session.context !== "ASSESSMENT" &&
+    isTrainingConfigCandidate(session.templateVersion.config)
+  ) {
+    const graph = await loadMainIdeaRuntimeGraph(session.templateVersionId, actor);
+    return {
+      questions: graph.questions.map((question) => ({
+        questionVersionId: question.questionVersionId,
+        position: question.position,
+        contentId: question.contentId,
+        contentVersionId: question.contentVersionId,
+        prompt: question.prompt,
+        type: question.type,
+        options: question.options,
+        explanation: question.explanation,
+        hint: question.hint,
+        blankIds: [],
+      })),
+    };
+  }
+
   const contentVersionByContentId = new Map(
     session.templateVersion.contents.map((content) => [
       content.contentVersion.contentId,
@@ -421,6 +452,7 @@ export async function completeExerciseSession(
       templateVersionId: true,
       templateVersion: {
         select: {
+          config: true,
           questions: {
             select: {
               questionVersionId: true,
@@ -451,8 +483,31 @@ export async function completeExerciseSession(
   if (session.status !== "IN_PROGRESS")
     throw validationError("Yalnızca devam eden oturum tamamlanabilir");
 
+  const trainingConfig =
+    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+      ? isTrainingVersionConfig(session.templateVersion.config)
+        ? session.templateVersion.config
+        : null
+      : null;
+  if (
+    session.assessmentId === null &&
+    isTrainingConfigCandidate(session.templateVersion.config) &&
+    !trainingConfig
+  ) {
+    throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+  }
+
   const totalQuestions = session.templateVersion.questions.length;
   const attempts = session.attempts;
+  if (trainingConfig) {
+    const attemptedQuestionIds = new Set(attempts.map((attempt) => attempt.questionVersionId));
+    const missingQuestion = session.templateVersion.questions.find(
+      (question) => !attemptedQuestionIds.has(question.questionVersionId),
+    );
+    if (missingQuestion) {
+      throw validationError("Devam etmeden önce tüm egzersiz sorularını yanıtla");
+    }
+  }
   const scoredAttempts = attempts.filter((a) => a.rawScore !== null);
   const totalRawScore = scoredAttempts.reduce((sum, a) => sum + (a.rawScore ?? 0), 0);
   const averageScore = scoredAttempts.length > 0 ? totalRawScore / scoredAttempts.length : null;

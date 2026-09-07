@@ -9,6 +9,11 @@ import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError, validationError, forbiddenError } from "../../lib/errors.js";
 import { recordCorrectAnswer } from "../gamification/service.js";
 import {
+  buildTrainingFeedback,
+  isTrainingConfigCandidate,
+  isTrainingVersionConfig,
+} from "../training/runtime.js";
+import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
   recordUsageInTransaction,
@@ -710,9 +715,19 @@ export async function createAttempt(
       context: true,
       sessionType: true,
       status: true,
+      assessmentId: true,
+      templateVersion: { select: { config: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
+
+  if (
+    session.assessmentId === null &&
+    isTrainingConfigCandidate(session.templateVersion.config) &&
+    session.status !== "IN_PROGRESS"
+  ) {
+    throw validationError("Bu eğitim oturumu artık cevap kabul etmiyor");
+  }
 
   // Tenant kontrolü - session tenant
   const isSuperAdmin = actor.platformRole === "SUPER_ADMIN";
@@ -741,7 +756,15 @@ export async function createAttempt(
   }
 
   // 3) scoreAttempt ile puanla (deterministik, yan etkisiz)
-  const { isCorrect, rawScore, feedback } = await scoreAttempt(questionVersionId, answer);
+  const {
+    isCorrect,
+    rawScore,
+    feedback: scorerFeedback,
+  } = await scoreAttempt(questionVersionId, answer);
+  const feedback =
+    (session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+      ? buildTrainingFeedback(session.templateVersion.config, isCorrect)
+      : null) ?? scorerFeedback;
 
   // 4) Attempt kaydı - transaction güvenliği
   try {
@@ -826,7 +849,46 @@ export async function createAttempt(
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === "P2002") {
-        // @@unique([sessionId, clientAttemptId])
+        // Training retries are idempotent: return the durable result instead
+        // of making the client reconcile a harmless duplicate as an error.
+        if (
+          session.assessmentId === null &&
+          isTrainingConfigCandidate(session.templateVersion.config) &&
+          isTrainingVersionConfig(session.templateVersion.config)
+        ) {
+          const existing = await prisma.attempt.findUnique({
+            where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
+            select: {
+              id: true,
+              questionVersionId: true,
+              questionId: true,
+              answer: true,
+              isCorrect: true,
+              rawScore: true,
+              timeSpentMs: true,
+              responseOrder: true,
+              feedback: true,
+              answeredAt: true,
+              createdAt: true,
+            },
+          });
+          if (existing) {
+            return {
+              id: existing.id,
+              questionVersionId: existing.questionVersionId,
+              questionId: existing.questionId ?? version.questionId,
+              answer: existing.answer,
+              isCorrect: existing.isCorrect,
+              rawScore: existing.rawScore,
+              timeSpentMs: existing.timeSpentMs,
+              responseOrder: existing.responseOrder,
+              feedback: existing.feedback,
+              answeredAt: existing.answeredAt.toISOString(),
+              createdAt: existing.createdAt.toISOString(),
+            };
+          }
+        }
+        // Legacy and non-training callers keep the established 409 contract.
         throw conflictError("Bu deneme kimliği zaten kullanılmış");
       }
       if (err.code === "P2003") {
