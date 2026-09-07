@@ -10,7 +10,7 @@ import { getStudentReview, type StudentReviewResponse } from "./review-service.j
 import {
   isTrainingConfigCandidate,
   resolveTrainingRuntimeConfig,
-  toMainIdeaRuntimeConfig,
+  toTrainingRuntimeConfig,
 } from "../training/runtime.js";
 
 function todayBounds(date: Date): { start: Date; end: Date } {
@@ -27,6 +27,19 @@ export interface TodayResponse {
   currentStreak: number;
   longestStreak: number;
   totalPoints: number;
+  pointsToday: number;
+  isFirstTrainingDay: boolean;
+  placementHandoff: boolean;
+  dailyTraining: {
+    id: string;
+    status: string;
+    totalItems: number;
+    completedItems: number;
+    totalGP: number;
+    currentItemPosition: number | null;
+    firstDay: boolean;
+    placementHandoff: boolean;
+  } | null;
   activeSession: {
     id: string;
     assignmentId: string | null;
@@ -54,6 +67,10 @@ export async function getToday(actor: {
     activeSession,
     streak,
     pointsAgg,
+    pointsTodayAgg,
+    dailyTrainingSession,
+    previousTrainingSession,
+    placementResult,
     recentSessions,
     assignments,
     assessments,
@@ -86,6 +103,56 @@ export async function getToday(actor: {
       where: { studentId: actor.userId, tenantId: tenantId ?? undefined },
       _sum: { points: true },
     }),
+    prisma.pointEvent.aggregate({
+      where: {
+        studentId: actor.userId,
+        tenantId: tenantId ?? undefined,
+        createdAt: { gte: start, lt: end },
+      },
+      _sum: { points: true },
+    }),
+    tenantId
+      ? prisma.trainingSession.findUnique({
+          where: {
+            tenantId_studentId_sessionDate: {
+              tenantId,
+              studentId: actor.userId,
+              sessionDate: start,
+            },
+          },
+          select: {
+            id: true,
+            composition: true,
+            status: true,
+            totalItems: true,
+            completedItems: true,
+            totalGP: true,
+            items: {
+              where: { status: { not: "COMPLETED" } },
+              orderBy: { position: "asc" },
+              take: 1,
+              select: { position: true },
+            },
+          },
+        })
+      : Promise.resolve(null),
+    tenantId
+      ? prisma.trainingSession.findFirst({
+          where: { tenantId, studentId: actor.userId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    tenantId
+      ? prisma.assessmentResult.findFirst({
+          where: {
+            tenantId,
+            studentId: actor.userId,
+            assessment: { type: "PLACEMENT", deletedAt: null },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
     prisma.exerciseSession.findMany({
       where: { studentId: actor.userId, tenantId: tenantId ?? undefined, status: "COMPLETED" },
       orderBy: { completedAt: "desc" },
@@ -197,6 +264,29 @@ export async function getToday(actor: {
     currentStreak: (streak as { currentDays: number } | null)?.currentDays ?? 0,
     longestStreak: (streak as { longestDays: number } | null)?.longestDays ?? 0,
     totalPoints: pointsAgg._sum.points ?? 0,
+    pointsToday: pointsTodayAgg._sum.points ?? 0,
+    isFirstTrainingDay: tenantId ? !previousTrainingSession : false,
+    placementHandoff: Boolean(placementResult),
+    dailyTraining: dailyTrainingSession
+      ? {
+          id: dailyTrainingSession.id,
+          status: dailyTrainingSession.status,
+          totalItems: dailyTrainingSession.totalItems,
+          completedItems: dailyTrainingSession.completedItems,
+          totalGP: dailyTrainingSession.totalGP,
+          currentItemPosition: dailyTrainingSession.items[0]?.position ?? null,
+          firstDay:
+            typeof dailyTrainingSession.composition === "object" &&
+            dailyTrainingSession.composition !== null &&
+            "firstDay" in dailyTrainingSession.composition &&
+            dailyTrainingSession.composition.firstDay === true,
+          placementHandoff:
+            typeof dailyTrainingSession.composition === "object" &&
+            dailyTrainingSession.composition !== null &&
+            "placementHandoff" in dailyTrainingSession.composition &&
+            dailyTrainingSession.composition.placementHandoff === true,
+        }
+      : null,
     activeSession: activeSession ?? null,
     nextAction,
     recentActivity,
@@ -667,7 +757,7 @@ export async function getStudentSession(
       : null;
   const trainingConfig =
     resolvedTrainingConfig?.status === "READY"
-      ? toMainIdeaRuntimeConfig(resolvedTrainingConfig.config)
+      ? toTrainingRuntimeConfig(resolvedTrainingConfig.config)
       : null;
   const { config: _versionConfig, ...templateVersion } = session.templateVersion;
   return {

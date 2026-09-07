@@ -14,10 +14,17 @@ import {
   type PlacementSessionQuestion,
 } from "../assessments/placement-scoring.js";
 import {
+  loadAttentionBurstRuntimeGraph,
   isTrainingConfigCandidate,
   isTrainingVersionConfig,
+  loadDetailEvidenceRuntimeGraph,
+  loadInferenceRuntimeGraph,
   loadMainIdeaRuntimeGraph,
+  loadPhraseChunkingRuntimeGraph,
+  loadRapidRecognitionRuntimeGraph,
+  resolveTrainingRuntimeConfig,
 } from "../training/runtime.js";
+import { syncTrainingSessionItem } from "../training/daily-session.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -388,7 +395,22 @@ export async function listQuestionsForSession(
     session.context !== "ASSESSMENT" &&
     isTrainingConfigCandidate(session.templateVersion.config)
   ) {
-    const graph = await loadMainIdeaRuntimeGraph(session.templateVersionId, actor);
+    const resolved = resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config);
+    if (resolved.status !== "READY") {
+      throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+    }
+    const graph =
+      resolved.config.family === "DETAIL_EVIDENCE"
+        ? await loadDetailEvidenceRuntimeGraph(session.templateVersionId, actor)
+        : resolved.config.family === "INFERENCE"
+          ? await loadInferenceRuntimeGraph(session.templateVersionId, actor)
+          : resolved.config.family === "ATTENTION_BURST"
+            ? await loadAttentionBurstRuntimeGraph(session.templateVersionId, actor)
+            : resolved.config.family === "RAPID_RECOGNITION"
+              ? await loadRapidRecognitionRuntimeGraph(session.templateVersionId, actor)
+              : resolved.config.family === "PHRASE_CHUNKING"
+                ? await loadPhraseChunkingRuntimeGraph(session.templateVersionId, actor)
+                : await loadMainIdeaRuntimeGraph(session.templateVersionId, actor);
     return {
       questions: graph.questions.map((question) => ({
         questionVersionId: question.questionVersionId,
@@ -467,6 +489,7 @@ export async function completeExerciseSession(
       },
       attempts: { select: { id: true, rawScore: true, questionVersionId: true } },
       assessment: { select: { type: true } },
+      trainingSessionItem: { select: { id: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -479,7 +502,13 @@ export async function completeExerciseSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
-  if (session.status === "COMPLETED") throw validationError("Oturum zaten tamamlanmış");
+  if (session.status === "COMPLETED") {
+    if (session.trainingSessionItem) {
+      await syncTrainingSessionItem(id);
+      return getExerciseSession(id, actor);
+    }
+    throw validationError("Oturum zaten tamamlanmış");
+  }
   if (session.status !== "IN_PROGRESS")
     throw validationError("Yalnızca devam eden oturum tamamlanabilir");
 
@@ -597,12 +626,20 @@ export async function completeExerciseSession(
     });
   }
 
-  await recordExerciseCompleted({
-    tenantId: session.tenantId,
-    studentId: session.studentId,
-    sessionId: session.id,
-    completedAt: updated.completedAt ?? undefined,
-  }).catch(() => null);
+  // Placement is an assessment, not a training activity: it must not award
+  // GP, unlock achievements, or contribute to the daily training streak.
+  if (!session.assessmentId) {
+    await recordExerciseCompleted({
+      tenantId: session.tenantId,
+      studentId: session.studentId,
+      sessionId: session.id,
+      completedAt: updated.completedAt ?? undefined,
+    }).catch(() => null);
+  }
+
+  if (session.trainingSessionItem) {
+    await syncTrainingSessionItem(id);
+  }
 
   // Progress aggregation — transaction dışında, session completion'ı bozmaz
   void aggregateSessionProgress(id).catch(() => {});
