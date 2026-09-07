@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { validationError } from "../../lib/errors.js";
 
 export const ADAPTIVE_TRAINING_COMPOSITION = [
   { position: 1, family: "ATTENTION_BURST", competency: "FAST_ATTENTION" },
@@ -344,7 +343,7 @@ export function planAdaptiveTraining(
     );
     const selected = selectAdaptiveCandidate(familyCandidates, signal, band, used);
     if (!selected) {
-      throw validationError(`${compositionItem.family} için yayınlanmış egzersiz gerekli`);
+      throw new Error(`${compositionItem.family} için uygun adaptive egzersiz bulunamadı`);
     }
     used.add(selected.templateVersionId);
     usedByFamily.set(compositionItem.family, used);
