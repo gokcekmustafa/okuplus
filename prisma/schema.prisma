@@ -858,6 +858,9 @@ model ExerciseTemplateVersion {
   templateId  String
   template    ExerciseTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   version     Int
+  /// Version-specific immutable behavior snapshot. Legacy rows are backfilled
+  /// from ExerciseTemplate.config by the config migration.
+  config      Json?
   status      VersionStatus    @default(DRAFT)
   publishedAt DateTime?
   createdById String?
