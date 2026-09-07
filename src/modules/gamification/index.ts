@@ -7,6 +7,7 @@ export {
   recordCorrectAnswer,
   recordDailyLogin,
   recordExerciseCompleted,
+  recordTrainingSessionCompleted,
   updateStreak,
 } from "./service.js";
 export type {

@@ -252,6 +252,23 @@ export async function recordExerciseCompleted(input: {
   });
 }
 
+export async function recordTrainingSessionCompleted(input: {
+  tenantId: string;
+  studentId: string;
+  trainingSessionId: string;
+  completedAt?: Date;
+}): Promise<AwardPointsResult> {
+  return awardPoints({
+    tenantId: input.tenantId,
+    studentId: input.studentId,
+    eventType: "EXERCISE_COMPLETED",
+    dedupeKey: `${input.tenantId}:${input.studentId}:training-session-completed:${input.trainingSessionId}`,
+    sourceType: "TRAINING_SESSION",
+    sourceId: input.trainingSessionId,
+    activityAt: input.completedAt,
+  });
+}
+
 export async function getStudentGamification(
   actor: GamificationActor,
 ): Promise<StudentGamificationData> {

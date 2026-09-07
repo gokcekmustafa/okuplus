@@ -39,6 +39,24 @@ export const TRAINING_COMPETENCIES = [
   "RC_INFERENCE",
 ] as const;
 
+/**
+ * Fast-reading V1 deliberately reuses the published Content/Question graph
+ * and deterministic MULTIPLE_CHOICE scoring path.  The renderer key keeps the
+ * family-specific mobile presentation explicit without changing the answer
+ * storage contract.
+ */
+export const FAST_READING_RENDERERS = {
+  ATTENTION_BURST: "QUESTION_ATTENTION_BURST",
+  RAPID_RECOGNITION: "QUESTION_RAPID_RECOGNITION",
+  PHRASE_CHUNKING: "QUESTION_PHRASE_CHUNKING",
+} as const;
+
+export const FAST_READING_FAMILIES = [
+  "ATTENTION_BURST",
+  "RAPID_RECOGNITION",
+  "PHRASE_CHUNKING",
+] as const;
+
 export const TRAINING_INTERACTION_TYPES = ["MULTIPLE_CHOICE", "TRUE_FALSE", "CONFIGURED"] as const;
 
 const stableKeySchema = z
@@ -164,6 +182,31 @@ const trainingExerciseContractSchema = z
       });
     }
     if (
+      value.family === "DETAIL_EVIDENCE" ||
+      value.family === "INFERENCE" ||
+      FAST_READING_FAMILIES.includes(value.family as (typeof FAST_READING_FAMILIES)[number])
+    ) {
+      const expectedRenderer = FAST_READING_FAMILIES.includes(
+        value.family as (typeof FAST_READING_FAMILIES)[number],
+      )
+        ? FAST_READING_RENDERERS[value.family as keyof typeof FAST_READING_RENDERERS]
+        : "QUESTION_MULTIPLE_CHOICE";
+      if (value.versionConfig.rendererKey !== expectedRenderer) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["versionConfig", "rendererKey"],
+          message: `${value.family} renderer sözleşmesi geçersiz`,
+        });
+      }
+      if (value.versionConfig.settings.optionCount !== 4) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["versionConfig", "settings", "optionCount"],
+          message: `${value.family} tam dört seçenek gerektirir`,
+        });
+      }
+    }
+    if (
       DIFFICULTY_ORDER[value.eligibility.minimumDifficulty] >
       DIFFICULTY_ORDER[value.eligibility.maximumDifficulty]
     ) {
@@ -185,21 +228,21 @@ type FamilyRule = {
 const FAMILY_RULES: Record<(typeof TRAINING_EXERCISE_FAMILIES)[number], FamilyRule> = {
   ATTENTION_BURST: {
     competency: "FAST_ATTENTION",
-    interactionType: "CONFIGURED",
-    contentRequirement: "NONE",
-    questionRequirement: "NONE",
+    interactionType: "MULTIPLE_CHOICE",
+    contentRequirement: "REQUIRED",
+    questionRequirement: "REQUIRED",
   },
   RAPID_RECOGNITION: {
     competency: "FAST_RECOGNITION",
-    interactionType: "CONFIGURED",
-    contentRequirement: "NONE",
-    questionRequirement: "NONE",
+    interactionType: "MULTIPLE_CHOICE",
+    contentRequirement: "REQUIRED",
+    questionRequirement: "REQUIRED",
   },
   PHRASE_CHUNKING: {
     competency: "FAST_CHUNKING",
-    interactionType: "CONFIGURED",
-    contentRequirement: "NONE",
-    questionRequirement: "NONE",
+    interactionType: "MULTIPLE_CHOICE",
+    contentRequirement: "REQUIRED",
+    questionRequirement: "REQUIRED",
   },
   MAIN_IDEA: {
     competency: "RC_MAIN_IDEA",
@@ -259,7 +302,53 @@ const trainingExerciseVersionConfigSchema = z
     rendererKey: z.string().trim().min(1).max(120),
     settings: z.record(z.unknown()),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const expected = FAMILY_RULES[value.family];
+    if (expected.interactionType !== value.interactionType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["interactionType"],
+        message: `${value.family} için interactionType ${expected.interactionType} olmalı`,
+      });
+    }
+    if (expected.contentRequirement !== value.contentRequirement) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["contentRequirement"],
+        message: `${value.family} için contentRequirement ${expected.contentRequirement} olmalı`,
+      });
+    }
+    if (expected.questionRequirement !== value.questionRequirement) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["questionRequirement"],
+        message: `${value.family} için questionRequirement ${expected.questionRequirement} olmalı`,
+      });
+    }
+    const isFastReading = FAST_READING_FAMILIES.includes(
+      value.family as (typeof FAST_READING_FAMILIES)[number],
+    );
+    const isComprehension = value.family === "DETAIL_EVIDENCE" || value.family === "INFERENCE";
+    if (!isFastReading && !isComprehension) return;
+    const expectedRenderer = isFastReading
+      ? FAST_READING_RENDERERS[value.family as keyof typeof FAST_READING_RENDERERS]
+      : "QUESTION_MULTIPLE_CHOICE";
+    if (value.rendererKey !== expectedRenderer) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rendererKey"],
+        message: `${value.family} renderer sözleşmesi geçersiz`,
+      });
+    }
+    if (value.settings.optionCount !== 4) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["settings", "optionCount"],
+        message: `${value.family} tam dört seçenek gerektirir`,
+      });
+    }
+  });
 
 export type TrainingExerciseVersionConfig = z.infer<typeof trainingExerciseVersionConfigSchema>;
 

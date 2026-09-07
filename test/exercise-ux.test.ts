@@ -44,12 +44,12 @@ function harness() {
 }
 
 describe("exercise UX state from production frontend", () => {
-  it("does not label a null score as wrong or award invented XP", () => {
+  it("does not label a null score as wrong or award invented GP", () => {
     const h = harness();
     h.run('showExerciseFeedback({ id: "a", isCorrect: null, rawScore: null })');
     expect(h.get("exercise-attempt-feedback").className).toContain("pending");
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Değerlendirme bekleniyor");
-    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("XP");
+    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("GP");
     expect(h.context.exerciseAwaitingNext).toBe(true);
   });
 
@@ -62,9 +62,9 @@ describe("exercise UX state from production frontend", () => {
       ],
     };
     h.run('showExerciseFeedback({ id: "a", isCorrect: true, rawScore: 1 })');
-    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("+7 XP");
-    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("+10 XP");
-    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("100 XP");
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("+7 GP");
+    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("+10 GP");
+    expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("100 GP");
   });
 
   it("keeps answered but unscored items pending even when summary flag is false", () => {

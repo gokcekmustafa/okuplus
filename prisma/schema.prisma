@@ -183,6 +183,20 @@ enum SessionStatus {
   EXPIRED
 }
 
+enum TrainingSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  EXPIRED
+}
+
+enum TrainingSessionItemStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
 enum AssessmentType {
   PLACEMENT
   DIAGNOSTIC
@@ -382,6 +396,7 @@ model User {
   guardianshipsAsGuardian  Guardianship[]            @relation("Guardian")
   guardianshipsAsStudent   Guardianship[]            @relation("Student")
   exerciseSessions         ExerciseSession[]
+  trainingSessions         TrainingSession[]
   assignments              Assignment[]
   studentBadges            StudentBadge[]
   pointEvents              PointEvent[]
@@ -478,6 +493,7 @@ model Tenant {
   assessments              Assessment[]
   assignments              Assignment[]
   sessions                 ExerciseSession[]
+  trainingSessions         TrainingSession[]
   studentProfiles          StudentProfile[]
   studentProgress          StudentProgress[]
   pointEvents              PointEvent[]
@@ -870,6 +886,7 @@ model ExerciseTemplateVersion {
   contents  ExerciseTemplateVersionContent[]
   questions ExerciseTemplateVersionQuestion[]
   sessions  ExerciseSession[]
+  trainingSessionItems TrainingSessionItem[]
 
   @@unique([templateId, version])
   @@index([templateId, status])
@@ -953,12 +970,64 @@ model ExerciseSession {
 
   attempts        Attempt[]
   contentVersions SessionContentVersion[]
+  trainingSessionItem TrainingSessionItem?
 
   @@unique([studentId, clientSessionId])
   @@index([studentId, tenantId, startedAt])
   @@index([assignmentId])
   @@index([templateVersionId])
   @@index([tenantId, status])
+}
+
+/// Günlük Training composition'ının kalıcı parent oturumu.
+/// Günlük kimlik tenant + öğrenci + UTC-normalize edilmiş sessionDate ile korunur.
+model TrainingSession {
+  id             String               @id @default(dbgenerated("uuidv7()"))
+  tenantId       String
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId      String
+  student        User                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sessionDate    DateTime             @db.Date
+  status         TrainingSessionStatus @default(IN_PROGRESS)
+  composition    Json
+  completedAt    DateTime?
+  totalItems     Int
+  completedItems Int                  @default(0)
+  totalGP        Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  items TrainingSessionItem[]
+
+  @@unique([tenantId, studentId, sessionDate])
+  @@index([studentId, sessionDate])
+  @@index([studentId, tenantId, status])
+  @@index([tenantId, status])
+}
+
+/// Günlük Training içindeki sıralı exercise item'ı.
+/// exerciseSessionId unique olduğundan aynı child session iki parent item'a bağlanamaz.
+model TrainingSessionItem {
+  id                String                   @id @default(dbgenerated("uuidv7()"))
+  trainingSessionId String
+  trainingSession   TrainingSession          @relation(fields: [trainingSessionId], references: [id], onDelete: Restrict)
+  position          Int
+  family            String
+  competency        String
+  difficulty        String
+  templateVersionId String
+  templateVersion   ExerciseTemplateVersion  @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  exerciseSessionId String?                  @unique
+  exerciseSession   ExerciseSession?         @relation(fields: [exerciseSessionId], references: [id], onDelete: Restrict)
+  status            TrainingSessionItemStatus @default(PENDING)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@unique([trainingSessionId, position])
+  @@index([trainingSessionId, status])
+  @@index([templateVersionId])
 }
 
 model SessionContentVersion {
