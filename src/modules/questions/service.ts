@@ -837,7 +837,7 @@ export async function createAttempt(
       answeredAt: attempt.answeredAt.toISOString(),
       createdAt: attempt.createdAt.toISOString(),
     };
-    if (attempt.isCorrect === true) {
+    if (attempt.isCorrect === true && session.assessmentId === null) {
       await recordCorrectAnswer({
         tenantId: session.tenantId,
         studentId: session.studentId,
