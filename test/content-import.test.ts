@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildContentImportPlan,
   detectImportDuplicates,
+  buildImportMarker,
+  buildImportMetadata,
+  importMetadataMarker,
   parseContentImportManifestJson,
   validateContentImportManifest,
   validateImportSemantics,
@@ -45,6 +48,29 @@ function validManifest(): ContentImportManifest {
 }
 
 describe("content import manifest v1", () => {
+  it("writes and reads the canonical namespaced marker symmetrically", () => {
+    const marker = buildImportMarker({
+      manifestId: "OKU-CONTENT-IMPORT-V1",
+      externalKey: "reading-main-001",
+      stableIdentity: "OKU-CONTENT-IMPORT-V1:CONTENT:reading-main-001",
+      fingerprint: "a".repeat(64),
+    });
+
+    expect(importMetadataMarker(buildImportMetadata({}, marker))).toEqual(marker);
+  });
+
+  it("reads the legacy root-level version marker without creating a second format", () => {
+    const marker = buildImportMarker({
+      manifestId: "OKU-CONTENT-IMPORT-V1",
+      externalKey: "reading-main-001",
+      stableIdentity: "OKU-CONTENT-IMPORT-V1:CONTENT:reading-main-001:VERSION:v1",
+      fingerprint: "b".repeat(64),
+      targetVersion: 1,
+    });
+
+    expect(importMetadataMarker(marker)).toEqual(marker);
+  });
+
   it("validates a canonical manifest and produces a draft plan", () => {
     const result = validateContentImportManifest(validManifest());
     expect(result.ok).toBe(true);

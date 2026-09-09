@@ -53,7 +53,10 @@ export function buildImportMetadata(
 export function importMetadataMarker(value: unknown): ContentImportMetadataMarker | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const marker = record[CONTENT_IMPORT_METADATA_KEY];
+  // Version rows written by the first staging import stored the marker at the
+  // metadata root. Keep reading that legacy shape, while all new writes use
+  // the canonical namespace below.
+  const marker = record[CONTENT_IMPORT_METADATA_KEY] ?? record;
   if (!marker || typeof marker !== "object" || Array.isArray(marker)) return null;
   const markerRecord = marker as Record<string, unknown>;
   if (

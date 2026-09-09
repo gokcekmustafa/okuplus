@@ -301,6 +301,23 @@ describe("content import runner", () => {
     expect(repository.tx.audits).toEqual([]);
   });
 
+  it("returns NOOP on the second run of the same manifest", async () => {
+    const input = manifest();
+    const first = await runContentImport(input, actor, { repository: new MockRepository() });
+    expect(first.status).toBe("IMPORTED");
+
+    const firstPlan = buildContentImportPlan(input);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const repository = new MockRepository();
+      repository.tx.existing = existingForPlan(input, firstPlan);
+      const repeated = await runContentImport(input, actor, { repository });
+
+      expect(repeated.status).toBe("NOOP");
+      expect(repeated.reusedCount).toBe(6);
+      expect(repository.tx.created).toEqual([]);
+    }
+  });
+
   it("creates new draft versions instead of overwriting published versions", async () => {
     const input = manifest();
     const firstPlan = buildContentImportPlan(input);

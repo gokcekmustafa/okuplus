@@ -188,7 +188,7 @@ function contentScopeWhere(target: ContentImportTarget): { tenantId: string | nu
 function markerWithBase(
   marker: Omit<ContentImportMetadataMarker, "manifestVersion">,
 ): Prisma.InputJsonValue {
-  return inputJson(buildImportMarker(marker));
+  return inputJson(buildImportMetadata({}, buildImportMarker(marker)));
 }
 
 class PrismaContentImportTransaction implements ContentImportTransaction {
