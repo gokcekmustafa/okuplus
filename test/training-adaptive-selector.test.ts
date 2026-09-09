@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isApiError } from "../src/lib/errors.js";
 import {
   adaptiveBandFor,
   deriveAdaptivePerformance,
@@ -288,5 +289,18 @@ describe("adaptive training selector v1", () => {
       "INFERENCE",
     ]);
     expect(first.items.every((item) => item.difficulty === "FOUNDATION")).toBe(true);
+  });
+
+  it("fails closed with a validation error when a required family is unavailable", () => {
+    let thrown: unknown;
+    try {
+      planFirstDayTraining([candidates()[3]], "student-1:2026-09-07");
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(isApiError(thrown)).toBe(true);
+    expect(thrown).toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    expect((thrown as Error).message).toContain("ATTENTION_BURST");
   });
 });
