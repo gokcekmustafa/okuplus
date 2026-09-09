@@ -739,6 +739,7 @@ model Content {
   currentVersion   ContentVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   createdById      String?
   createdBy        User?           @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata         Json?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
@@ -768,9 +769,11 @@ model ContentVersion {
   publishedAt      DateTime?
   createdById      String?
   createdBy        User?         @relation("ContentVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata         Json?
   createdAt        DateTime      @default(now())
 
   publishedContentPointer Content?                         @relation("CurrentVersion")
+  questionVersions         QuestionVersion[]                 @relation("QuestionVersionContentVersion")
   templateContents        ExerciseTemplateVersionContent[]
   sessionContents         SessionContentVersion[]
 
@@ -800,6 +803,7 @@ model Question {
   status      QuestionStatus @default(DRAFT)
   createdById String?
   createdBy   User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata    Json?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   deletedAt   DateTime?
@@ -818,6 +822,8 @@ model QuestionVersion {
   id                   String        @id @default(dbgenerated("uuidv7()"))
   questionId           String
   question             Question      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  contentVersionId     String?
+  contentVersion       ContentVersion? @relation("QuestionVersionContentVersion", fields: [contentVersionId], references: [id], onDelete: Restrict)
   version              Int
   prompt               String
   options              Json?
@@ -829,6 +835,7 @@ model QuestionVersion {
   publishedAt          DateTime?
   createdById          String?
   createdBy            User?         @relation("QuestionVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata             Json?
   createdAt            DateTime      @default(now())
   partialCreditEnabled Boolean       @default(true)
   generationMetadata   Json?
