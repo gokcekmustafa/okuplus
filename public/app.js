@@ -8176,6 +8176,10 @@ async function loadExercisePage() {
     $("exercise-retry-load").classList.remove("hidden");
   } finally {
     exerciseLoading = false;
+    if (exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
+      const button = $("exercise-submit-attempt");
+      if (button) button.disabled = false;
+    }
   }
 }
 function returnToExercisePath() {
@@ -8624,7 +8628,9 @@ function renderExerciseQuestion() {
       exerciseAwaitingNext = false;
       $("exercise-attempt-error").classList.add("hidden");
       const button = $("exercise-submit-attempt");
-      button.disabled = false;
+      // The question can render before optional page state finishes loading.
+      // Keep the CTA aligned with the submit guard until that load completes.
+      button.disabled = exerciseLoading;
       button.textContent = "Cevabı kontrol et";
       const previous = exerciseAttempts.get(q.questionVersionId);
       if (previous) showExerciseFeedback(previous);
