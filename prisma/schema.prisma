@@ -45,6 +45,7 @@ enum AuthIdentityProvider {
 enum PlatformRole {
   SUPER_ADMIN
   CONTENT_EDITOR
+  CONTENT_REVIEWER
   SUPPORT
   ANALYST
 }
