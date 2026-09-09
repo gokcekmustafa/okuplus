@@ -78,8 +78,7 @@ export type ContentImportPlan = {
 export type ContentImportActor = {
   userId: string;
   tenantId: string | null;
-  platformRole:
-    "SUPER_ADMIN" | "CONTENT_EDITOR" | "CONTENT_REVIEWER" | "SUPPORT" | "ANALYST" | null;
+  platformRole: "SUPER_ADMIN" | "CONTENT_EDITOR" | "SUPPORT" | "ANALYST" | null;
   allowGlobal: boolean;
 };
 
