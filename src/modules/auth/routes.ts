@@ -10,7 +10,6 @@ import type {
 import { signupPersonalAccount, signupSchema } from "./index.js";
 import type { SocialAuthService } from "./social-service.js";
 import { requireAuth } from "../../middleware/authenticate.js";
-import { recordDailyLogin } from "../gamification/service.js";
 import {
   clearAuthCookies,
   getCookie,
@@ -129,7 +128,6 @@ export async function authRoutes(
       const input = signupSchema.parse(request.body);
       await signupPersonalAccount(input);
       const session = await authProvider.login(input, null, sessionMetadata(request.body));
-      await recordDailyLogin(session.user.id, session.tenantContext.tenantId).catch(() => null);
       return sendSession(request, reply, session, 201);
     },
   );
@@ -143,7 +141,6 @@ export async function authRoutes(
         request.body.tenantId ?? null,
         sessionMetadata(request.body),
       );
-      await recordDailyLogin(session.user.id, session.tenantContext.tenantId).catch(() => null);
       return sendSession(request, reply, session);
     },
   );
@@ -180,7 +177,6 @@ export async function authRoutes(
     body: SocialCredentialInput & SessionMetadata,
   ) => {
     const session = await socialAuthService.login(provider, body, sessionMetadata(body));
-    await recordDailyLogin(session.user.id, session.tenantContext.tenantId).catch(() => null);
     return session;
   };
 
