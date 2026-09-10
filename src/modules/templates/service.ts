@@ -7,9 +7,11 @@ import type {
   CreateTemplateVersionInput,
   ListTemplatesQuery,
   UpdateTemplateInput,
+  UpdateTemplateVersionInput,
   UpdateTemplateVersionContentsInput,
   UpdateTemplateVersionQuestionsInput,
 } from "./schemas.js";
+import { safeParseTrainingExerciseVersionConfig } from "../training/exercise-contract.js";
 
 const TEMPLATE_LIST_SELECT = {
   id: true,
@@ -53,6 +55,7 @@ const VERSION_SUMMARY_SELECT = {
 
 const VERSION_DETAIL_SELECT = {
   ...VERSION_SUMMARY_SELECT,
+  config: true,
   contents: {
     select: {
       position: true,
@@ -84,6 +87,23 @@ const VERSION_DETAIL_SELECT = {
     orderBy: { position: "asc" as const },
   },
 } satisfies Prisma.ExerciseTemplateVersionSelect;
+
+export function parseTemplateVersionConfig(input: unknown): Prisma.InputJsonValue {
+  const parsed = safeParseTrainingExerciseVersionConfig(input);
+  if (!parsed.success) {
+    throw validationError("ExerciseTemplateVersion.config geçersiz");
+  }
+  return parsed.data as unknown as Prisma.InputJsonValue;
+}
+
+export function assertTemplateVersionConfigMutable(
+  status: VersionStatus,
+  configProvided: boolean,
+): void {
+  if (status === "PUBLISHED" && configProvided) {
+    throw validationError("Yayınlanmış şablon sürümünün config alanı değiştirilemez");
+  }
+}
 
 export interface TemplateListItem {
   id: string;
@@ -285,6 +305,7 @@ export async function getTemplateVersion(id: string) {
     id: row.id,
     templateId: row.templateId,
     version: row.version,
+    config: row.config,
     status: row.status,
     publishedAt: row.publishedAt,
     createdAt: row.createdAt,
@@ -313,7 +334,7 @@ export async function getTemplateVersion(id: string) {
 
 export async function createTemplateVersion(
   templateId: string,
-  _input: CreateTemplateVersionInput,
+  input: CreateTemplateVersionInput,
   actorId?: string,
 ) {
   const template = await prisma.exerciseTemplate.findFirst({
@@ -327,11 +348,13 @@ export async function createTemplateVersion(
     select: { version: true },
   });
   const nextVersion = (last?.version ?? 0) + 1;
+  const config = input.config === undefined ? undefined : parseTemplateVersionConfig(input.config);
   const created = await prisma.exerciseTemplateVersion.create({
     data: {
       templateId,
       version: nextVersion,
       status: "DRAFT",
+      ...(config !== undefined ? { config } : {}),
       ...(actorId ? { createdById: actorId } : {}),
     },
     select: { id: true },
@@ -339,14 +362,20 @@ export async function createTemplateVersion(
   return getTemplateVersion(created.id);
 }
 
-export async function updateTemplateVersion(id: string, _input: any) {
+export async function updateTemplateVersion(id: string, input: UpdateTemplateVersionInput) {
   const existing = await prisma.exerciseTemplateVersion.findUnique({
     where: { id },
     select: { status: true },
   });
   if (!existing) throw notFoundError("Şablon sürümü bulunamadı");
+  assertTemplateVersionConfigMutable(existing.status, input.config !== undefined);
   if (existing.status !== "DRAFT") throw validationError("Yalnızca taslak sürüm düzenlenebilir");
-  // Şablon sürümünde düzenlenebilir alan yok (config template'de), sadece varlık kontrolü
+  if (input.config !== undefined) {
+    await prisma.exerciseTemplateVersion.update({
+      where: { id },
+      data: { config: parseTemplateVersionConfig(input.config) },
+    });
+  }
   return getTemplateVersion(id);
 }
 
@@ -365,11 +394,16 @@ export async function reviewTemplateVersion(id: string) {
 export async function publishTemplateVersion(id: string) {
   const existing = await prisma.exerciseTemplateVersion.findUnique({
     where: { id },
-    select: { id: true, templateId: true, status: true },
+    select: { id: true, templateId: true, status: true, config: true },
   });
   if (!existing) throw notFoundError("Şablon sürümü bulunamadı");
   if (existing.status === "PUBLISHED") throw validationError("Sürüm zaten yayınlanmış");
   if (existing.status === "ARCHIVED") throw validationError("Arşivlenmiş sürüm yayınlanamaz");
+  try {
+    parseTemplateVersionConfig(existing.config);
+  } catch {
+    throw validationError("Yayınlanacak şablon sürümünün geçerli config alanı olmalı");
+  }
   // İçerik ve soru versiyonlarının PUBLISHED kontrolü
   const version = await prisma.exerciseTemplateVersion.findUnique({
     where: { id },
