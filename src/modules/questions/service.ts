@@ -7,6 +7,23 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError, validationError, forbiddenError } from "../../lib/errors.js";
+import { withTenantContext } from "../tenant/index.js";
+import { writeLifecycleAudit } from "../contents/audit.js";
+import {
+  assertCanApprove,
+  assertCanArchive,
+  assertCanCreateDraft,
+  assertCanEditDraft,
+  assertCanPublish,
+  assertCanRetire,
+  assertCanSubmitForReview,
+  assertLifecycleTransition,
+  buildCreatedAuditEntry,
+  buildDeletedAuditEntry,
+  buildLifecycleAuditEntry,
+  buildVersionCreatedAuditEntry,
+  type ContentMutationActor,
+} from "../contents/lifecycle.js";
 import { recordCorrectAnswer } from "../gamification/service.js";
 import {
   buildTrainingFeedback,
@@ -33,6 +50,29 @@ import {
   type Option,
 } from "./schemas.js";
 
+const VERSION_SUMMARY_SELECT = {
+  id: true,
+  questionId: true,
+  contentVersionId: true,
+  version: true,
+  prompt: true,
+  difficulty: true,
+  status: true,
+  publishedAt: true,
+  retiredAt: true,
+  createdAt: true,
+  updatedAt: true,
+  createdById: true,
+  createdBy: { select: { displayName: true } },
+  reviewedBy: { select: { displayName: true } },
+  reviewedAt: true,
+  approvedBy: { select: { displayName: true } },
+  approvedAt: true,
+  contentVersion: {
+    select: { id: true, version: true, title: true, status: true, publishedAt: true },
+  },
+} satisfies Prisma.QuestionVersionSelect;
+
 const QUESTION_LIST_SELECT = {
   id: true,
   contentId: true,
@@ -44,23 +84,15 @@ const QUESTION_LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
+  createdBy: { select: { displayName: true } },
   content: {
     select: { id: true, tenantId: true, title: true, type: true, difficulty: true, status: true },
   },
   skill: { select: { id: true, code: true, name: true, category: true } },
+  versions: { select: VERSION_SUMMARY_SELECT, orderBy: { version: "desc" }, take: 1 },
   _count: { select: { versions: true, attempts: true } },
 } satisfies Prisma.QuestionSelect;
 
-const VERSION_SUMMARY_SELECT = {
-  id: true,
-  questionId: true,
-  version: true,
-  prompt: true,
-  status: true,
-  publishedAt: true,
-  createdAt: true,
-  createdBy: { select: { displayName: true } },
-} satisfies Prisma.QuestionVersionSelect;
 const VERSION_DETAIL_SELECT = {
   ...VERSION_SUMMARY_SELECT,
   options: true,
@@ -70,6 +102,7 @@ const VERSION_DETAIL_SELECT = {
   difficulty: true,
   partialCreditEnabled: true,
   generationMetadata: true,
+  metadata: true,
 } satisfies Prisma.QuestionVersionSelect;
 const QUESTION_DETAIL_SELECT = {
   ...QUESTION_LIST_SELECT,
@@ -95,12 +128,15 @@ export interface QuestionListItem {
   contentDifficulty: number;
   contentStatus: string;
   createdById: string | null;
+  createdByName: string | null;
   createdAt: Date;
   updatedAt: Date;
   tenantId: string | null;
   versionCount: number;
   attemptCount: number;
   skill?: { id: string; code: string; name: string; category: string } | null;
+  currentVersion: CurrentVersionSummary | null;
+  publishedAt: Date | null;
 }
 export interface QuestionListResult {
   items: QuestionListItem[];
@@ -110,12 +146,28 @@ export interface QuestionListResult {
 }
 export interface CurrentVersionSummary {
   id: string;
+  contentVersionId: string | null;
   version: number;
   prompt: string;
+  difficulty: number | null;
   status: VersionStatus;
   publishedAt: Date | null;
+  retiredAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
+  createdById: string | null;
   createdByName: string | null;
+  reviewedByName: string | null;
+  reviewedAt: Date | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
+  contentVersion: {
+    id: string;
+    version: number;
+    title: string;
+    status: VersionStatus;
+    publishedAt: Date | null;
+  } | null;
 }
 export interface QuestionDetail extends QuestionListItem {
   currentVersion: CurrentVersionSummary | null;
@@ -132,6 +184,18 @@ export interface QuestionVersionDetail extends QuestionVersionSummary {
   difficulty: number | null;
   partialCreditEnabled: boolean;
   generationMetadata: Prisma.JsonValue | null;
+  metadata: Prisma.JsonValue | null;
+}
+
+export interface QuestionAuditEntry {
+  action: string;
+  entityType: string;
+  entityId: string;
+  version: number | null;
+  fromStatus: string | null;
+  toStatus: string | null;
+  actorName: string | null;
+  createdAt: Date;
 }
 
 export async function listQuestionByContent(contentId: string): Promise<QuestionListItem[]> {
@@ -149,26 +213,145 @@ export async function listQuestionByContent(contentId: string): Promise<Question
 }
 
 export async function listQuestions(query: ListQuestionsQuery): Promise<QuestionListResult> {
-  const { contentId, type, status, skillId, search, page, pageSize } = query;
+  const {
+    contentId,
+    contentVersionId,
+    type,
+    status,
+    skillId,
+    authorId,
+    difficultyMin,
+    difficultyMax,
+    search,
+    sort,
+    sortDirection,
+    page,
+    pageSize,
+  } = query;
+  const versionFilters: Prisma.QuestionVersionWhereInput[] = [];
+  if (contentVersionId) versionFilters.push({ contentVersionId });
+  if (difficultyMin !== undefined || difficultyMax !== undefined) {
+    versionFilters.push({
+      difficulty: {
+        ...(difficultyMin !== undefined ? { gte: difficultyMin } : {}),
+        ...(difficultyMax !== undefined ? { lte: difficultyMax } : {}),
+      },
+    });
+  }
   const where: Prisma.QuestionWhereInput = {
     deletedAt: null,
     ...(contentId ? { contentId } : {}),
     ...(type ? { type } : {}),
     ...(status ? { status } : {}),
     ...(skillId ? { skillId } : {}),
-    ...(search ? { OR: [{ content: { title: { contains: search, mode: "insensitive" } } }] } : {}),
+    ...(authorId ? { createdById: authorId } : {}),
+    ...(versionFilters.length ? { versions: { some: { AND: versionFilters } } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { id: { contains: search, mode: "insensitive" } },
+            { versions: { some: { prompt: { contains: search, mode: "insensitive" } } } },
+            {
+              content: {
+                OR: [
+                  { id: { contains: search, mode: "insensitive" } },
+                  { title: { contains: search, mode: "insensitive" } },
+                ],
+              },
+            },
+            {
+              skill: {
+                OR: [
+                  { code: { contains: search, mode: "insensitive" } },
+                  { name: { contains: search, mode: "insensitive" } },
+                ],
+              },
+            },
+          ],
+        }
+      : {}),
   };
   const [rows, total] = await Promise.all([
     prisma.question.findMany({
       where,
       select: QUESTION_LIST_SELECT,
-      orderBy: { position: "asc" },
+      orderBy: { [sort]: sortDirection },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
     prisma.question.count({ where }),
   ]);
-  return { items: rows.map(toQuestionListItem), total, page, pageSize };
+  const publishedVersions = rows.length
+    ? await prisma.questionVersion.findMany({
+        where: { questionId: { in: rows.map((row) => row.id) }, status: "PUBLISHED" },
+        select: { questionId: true, publishedAt: true, version: true },
+        orderBy: { version: "desc" },
+      })
+    : [];
+  const publishedAtByQuestion = new Map<string, Date | null>();
+  for (const version of publishedVersions) {
+    if (!publishedAtByQuestion.has(version.questionId)) {
+      publishedAtByQuestion.set(version.questionId, version.publishedAt);
+    }
+  }
+  const items = rows.map((row) => {
+    const item = toQuestionListItem(row);
+    return publishedAtByQuestion.has(item.id)
+      ? { ...item, publishedAt: publishedAtByQuestion.get(item.id) ?? null }
+      : item;
+  });
+  return { items, total, page, pageSize };
+}
+
+export async function listQuestionAuthors(): Promise<Array<{ id: string; displayName: string }>> {
+  return prisma.user.findMany({
+    where: { deletedAt: null, createdQuestions: { some: { deletedAt: null } } },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: "asc" },
+  });
+}
+
+export async function listQuestionAudit(questionId: string): Promise<QuestionAuditEntry[]> {
+  if (!(await findQuestion(questionId))) throw notFoundError("Soru bulunamadı");
+  const versions = await prisma.questionVersion.findMany({
+    where: { questionId },
+    select: { id: true, version: true },
+  });
+  const versionNumbers = new Map(versions.map((version) => [version.id, version.version]));
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      OR: [
+        { entityType: "QUESTION", entityId: questionId },
+        { entityType: "QUESTION_VERSION", entityId: { in: versions.map((version) => version.id) } },
+      ],
+    },
+    select: {
+      action: true,
+      entityType: true,
+      entityId: true,
+      before: true,
+      after: true,
+      createdAt: true,
+      actor: { select: { displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map((row) => {
+    const before = jsonObject(row.before);
+    const after = jsonObject(row.after);
+    return {
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      version:
+        versionNumbers.get(row.entityId) ??
+        (typeof after?.version === "number" ? after.version : null),
+      fromStatus: typeof before?.status === "string" ? before.status : null,
+      toStatus: typeof after?.status === "string" ? after.status : null,
+      actorName: row.actor?.displayName ?? null,
+      createdAt: row.createdAt,
+    };
+  });
 }
 
 export async function getQuestion(id: string): Promise<QuestionDetail> {
@@ -180,14 +363,28 @@ export async function getQuestion(id: string): Promise<QuestionDetail> {
 /** Bir Question ve zorunlu ilk DRAFT QuestionVersion'ını tek transaction'da oluşturur. */
 export async function createQuestion(
   input: CreateQuestionInput,
-  actorId?: string,
+  actor: ContentMutationActor,
 ): Promise<QuestionDetail> {
-  const created = await prisma.$transaction(async (tx) => {
+  assertCanCreateDraft(actor);
+  const created = await withTenantContext(actor, async (tx) => {
     const content = await tx.content.findFirst({
       where: { id: input.contentId, deletedAt: null },
-      select: { id: true },
+      select: {
+        id: true,
+        currentVersionId: true,
+        tenantId: true,
+        status: true,
+        createdById: true,
+      },
     });
     if (!content) throw notFoundError("İçerik bulunamadı");
+    if (content.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak içeriğe yeni soru eklenebilir");
+    }
+    assertCanEditDraft(actor, content.createdById);
+    const contentVersionId =
+      input.contentVersionId !== undefined ? input.contentVersionId : content.currentVersionId;
+    await assertQuestionContentVersion(tx, content.id, contentVersionId);
     const positionConflict = await tx.question.findFirst({
       where: { contentId: input.contentId, position: input.position, deletedAt: null },
       select: { id: true },
@@ -202,23 +399,45 @@ export async function createQuestion(
         position: input.position,
         type: input.type,
         skillId: input.skillId ?? null,
-        ...(actorId ? { createdById: actorId } : {}),
+        createdById: actor.userId,
       },
       select: { id: true },
     });
-    await tx.questionVersion.create({
+    const questionVersion = await tx.questionVersion.create({
       data: {
         questionId: question.id,
         version: 1,
+        ...(contentVersionId ? { contentVersionId } : {}),
         prompt: input.prompt,
         options: input.options as Prisma.InputJsonValue,
         correctAnswer: input.correctAnswer as Prisma.InputJsonValue,
         explanation: input.explanation ?? null,
         hint: input.hint ?? null,
         difficulty: input.difficulty ?? null,
-        ...(actorId ? { createdById: actorId } : {}),
+        createdById: actor.userId,
       },
+      select: { id: true },
     });
+    await writeLifecycleAudit(
+      tx,
+      buildCreatedAuditEntry({
+        tenantId: content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION",
+        entityId: question.id,
+        status: "DRAFT",
+      }),
+    );
+    await writeLifecycleAudit(
+      tx,
+      buildVersionCreatedAuditEntry({
+        tenantId: content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: questionVersion.id,
+        version: 1,
+      }),
+    );
     return question;
   });
   return getQuestion(created.id);
@@ -227,64 +446,177 @@ export async function createQuestion(
 export async function updateQuestion(
   id: string,
   input: UpdateQuestionInput,
+  actor: ContentMutationActor,
 ): Promise<QuestionDetail> {
-  const question = await findQuestion(id);
-  if (!question) throw notFoundError("Soru bulunamadı");
-  if (input.position !== undefined) {
-    const conflict = await prisma.question.findFirst({
-      where: {
-        contentId: question.contentId,
-        position: input.position,
-        deletedAt: null,
-        NOT: { id },
+  await withTenantContext(actor, async (tx) => {
+    const question = await tx.question.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        contentId: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
       },
-      select: { id: true },
     });
-    if (conflict) throw conflictError(`İçerik için pozisyon ${input.position} zaten kullanılıyor`);
-  }
-  const data: Prisma.QuestionUncheckedUpdateInput = {};
-  if (input.position !== undefined) data.position = input.position;
-  if (input.skillId !== undefined) data.skillId = input.skillId;
-  if (Object.keys(data).length) await prisma.question.update({ where: { id }, data });
+    if (!question) throw notFoundError("Soru bulunamadı");
+    if (question.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak soru düzenlenebilir; yeni sürüm oluşturulmalı");
+    }
+    assertCanEditDraft(actor, question.createdById);
+    if (input.position !== undefined) {
+      const conflict = await tx.question.findFirst({
+        where: {
+          contentId: question.contentId,
+          position: input.position,
+          deletedAt: null,
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (conflict)
+        throw conflictError(`İçerik için pozisyon ${input.position} zaten kullanılıyor`);
+    }
+    const data: Prisma.QuestionUncheckedUpdateInput = {};
+    if (input.position !== undefined) data.position = input.position;
+    if (input.skillId !== undefined) data.skillId = input.skillId;
+    if (Object.keys(data).length === 0) return;
+    await tx.question.update({ where: { id }, data });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION",
+        entityId: id,
+        from: question.status,
+        to: question.status,
+      }),
+    );
+  });
   return getQuestion(id);
 }
 
 export async function updateQuestionStatus(
   id: string,
   input: UpdateQuestionStatusInput,
+  actor: ContentMutationActor,
 ): Promise<QuestionDetail> {
-  const row = await prisma.question.findFirst({
-    where: { id, deletedAt: null },
-    select: { id: true, status: true },
-  });
-  if (!row) throw notFoundError("Soru bulunamadı");
-  if (input.status === row.status) return getQuestion(id);
-  if (input.status === "PUBLISHED") {
-    const published = await prisma.questionVersion.findFirst({
-      where: { questionId: id, status: "PUBLISHED" },
-      select: { id: true },
+  await withTenantContext(actor, async (tx) => {
+    const row = await tx.question.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
     });
-    if (!published) throw validationError("Yayınlanmış bir soru sürümü olmayan soru yayınlanamaz");
-  } else if (input.status === "ARCHIVED" && row.status !== "DRAFT" && row.status !== "PUBLISHED")
-    throw validationError("Bu durumdan arşivlenmiş duruma geçilemez");
-  else if (input.status === "DRAFT" && row.status !== "ARCHIVED")
-    throw validationError("Yalnızca arşivlenmiş soru taslağa alınabilir");
-  await prisma.question.update({ where: { id }, data: { status: input.status } });
+    if (!row) throw notFoundError("Soru bulunamadı");
+    if (input.status === row.status) return;
+    assertLifecycleTransition("QUESTION", row.status, input.status);
+    switch (input.status) {
+      case "REVIEW":
+        assertCanSubmitForReview(actor);
+        assertCanEditDraft(actor, row.createdById);
+        break;
+      case "APPROVED":
+        assertCanApprove({
+          actorRole: actor.platformRole,
+          actorUserId: actor.userId,
+          createdById: row.createdById,
+        });
+        break;
+      case "PUBLISHED":
+        assertCanPublish({ actorRole: actor.platformRole, status: row.status });
+        if (
+          !(await tx.questionVersion.findFirst({
+            where: { questionId: id, status: "PUBLISHED" },
+            select: { id: true },
+          }))
+        ) {
+          throw validationError("Yayınlanmış bir soru sürümü olmayan soru yayınlanamaz");
+        }
+        break;
+      case "RETIRED":
+        assertCanRetire({ actorRole: actor.platformRole, status: row.status });
+        break;
+      case "ARCHIVED":
+        if (row.status === "DRAFT") assertCanEditDraft(actor, row.createdById);
+        else assertCanRetire({ actorRole: actor.platformRole, status: row.status });
+        break;
+      case "DRAFT":
+        assertCanEditDraft(actor, row.createdById);
+        break;
+    }
+    await tx.question.update({ where: { id }, data: { status: input.status } });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: row.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION",
+        entityId: id,
+        from: row.status,
+        to: input.status,
+      }),
+    );
+  });
   return getQuestion(id);
 }
 
 /** Tarihçeyi koruyan silme; yayınlanmış QuestionVersion'lara dokunmaz. */
-export async function deleteQuestion(id: string): Promise<{ id: string; deletedAt: Date }> {
-  const question = await prisma.question.findFirst({
-    where: { id, deletedAt: null },
-    select: { id: true },
+export async function deleteQuestion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<{ id: string; deletedAt: Date }> {
+  return withTenantContext(actor, async (tx) => {
+    const question = await tx.question.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
+    });
+    if (!question) throw notFoundError("Soru bulunamadı");
+    if (question.status === "DRAFT") assertCanEditDraft(actor, question.createdById);
+    else assertCanArchive({ actorRole: actor.platformRole, status: question.status });
+    const deletedAt = new Date();
+    await tx.question.update({ where: { id }, data: { deletedAt, status: "ARCHIVED" } });
+    await writeLifecycleAudit(
+      tx,
+      buildDeletedAuditEntry({
+        tenantId: question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION",
+        entityId: id,
+      }),
+    );
+    return { id, deletedAt };
   });
-  if (!question) throw notFoundError("Soru bulunamadı");
-  const deletedAt = new Date();
-  await prisma.question.update({ where: { id }, data: { deletedAt } });
-  return { id, deletedAt };
 }
 export const softDeleteQuestion = deleteQuestion;
+
+/**
+ * A question version may pin a content snapshot, but never a different
+ * Content identity. Legacy rows may remain unpinned until they are revised.
+ */
+async function assertQuestionContentVersion(
+  tx: Prisma.TransactionClient | typeof prisma,
+  contentId: string,
+  contentVersionId: string | null,
+): Promise<void> {
+  if (contentVersionId === null) return;
+  const contentVersion = await tx.contentVersion.findFirst({
+    where: { id: contentVersionId, contentId },
+    select: { id: true },
+  });
+  if (!contentVersion) {
+    throw validationError("Soru sürümü aynı içeriğe ait bir içerik sürümüne bağlanmalı");
+  }
+}
 
 export async function listQuestionVersions(questionId: string): Promise<QuestionVersionSummary[]> {
   if (!(await findQuestion(questionId))) throw notFoundError("Soru bulunamadı");
@@ -307,14 +639,21 @@ export async function getQuestionVersion(id: string): Promise<QuestionVersionDet
 export async function createQuestionVersion(
   questionId: string,
   input: CreateQuestionVersionInput,
-  actorId?: string,
+  actor: ContentMutationActor,
 ): Promise<QuestionVersionDetail> {
-  const created = await prisma.$transaction(async (tx) => {
+  const created = await withTenantContext(actor, async (tx) => {
     const question = await tx.question.findFirst({
       where: { id: questionId, deletedAt: null },
-      select: { id: true, type: true },
+      select: {
+        id: true,
+        contentId: true,
+        type: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
     });
     if (!question) throw notFoundError("Soru bulunamadı");
+    assertCanEditDraft(actor, question.createdById);
     const previous = await tx.questionVersion.findFirst({
       where: { questionId },
       orderBy: { version: "desc" },
@@ -322,6 +661,8 @@ export async function createQuestionVersion(
     });
     if (!previous) throw validationError("İlk sürüm Question oluşturulurken yaratılır");
     const payload = {
+      contentVersionId:
+        input.contentVersionId !== undefined ? input.contentVersionId : previous.contentVersionId,
       prompt: input.prompt ?? previous.prompt,
       options: input.options ?? previous.options,
       correctAnswer: input.correctAnswer ?? previous.correctAnswer,
@@ -329,10 +670,12 @@ export async function createQuestionVersion(
       hint: input.hint !== undefined ? input.hint : previous.hint,
       difficulty: input.difficulty !== undefined ? input.difficulty : previous.difficulty,
     };
+    await assertQuestionContentVersion(tx, question.contentId, payload.contentVersionId);
     validateQuestionVersionPayload(question.type, payload);
-    return tx.questionVersion.create({
+    const created = await tx.questionVersion.create({
       data: {
         questionId,
+        ...(payload.contentVersionId ? { contentVersionId: payload.contentVersionId } : {}),
         version: previous.version + 1,
         prompt: payload.prompt,
         options: toNullableJsonInput(payload.options),
@@ -340,10 +683,21 @@ export async function createQuestionVersion(
         explanation: payload.explanation,
         hint: payload.hint,
         difficulty: payload.difficulty,
-        ...(actorId ? { createdById: actorId } : {}),
+        createdById: actor.userId,
       },
       select: { id: true },
     });
+    await writeLifecycleAudit(
+      tx,
+      buildVersionCreatedAuditEntry({
+        tenantId: question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: created.id,
+        version: previous.version + 1,
+      }),
+    );
+    return created;
   });
   return getQuestionVersion(created.id);
 }
@@ -351,17 +705,27 @@ export async function createQuestionVersion(
 export async function updateQuestionVersion(
   id: string,
   input: UpdateQuestionVersionInput,
+  actor: ContentMutationActor,
 ): Promise<QuestionVersionDetail> {
   const existing = await prisma.questionVersion.findUnique({
     where: { id },
-    select: { ...VERSION_DETAIL_SELECT, question: { select: { type: true } } },
+    select: {
+      ...VERSION_DETAIL_SELECT,
+      createdById: true,
+      question: {
+        select: { type: true, contentId: true, content: { select: { tenantId: true } } },
+      },
+    },
   });
   if (!existing) throw notFoundError("Soru sürümü bulunamadı");
   if (existing.status !== "DRAFT")
     throw validationError(
       "Yalnızca taslak soru sürümü düzenlenebilir. İncelemedeki veya yayınlanmış sürüm için yeni sürüm oluşturulmalı.",
     );
+  assertCanEditDraft(actor, existing.createdById);
   const payload = {
+    contentVersionId:
+      input.contentVersionId !== undefined ? input.contentVersionId : existing.contentVersionId,
     prompt: input.prompt ?? existing.prompt,
     options: input.options ?? existing.options,
     correctAnswer: input.correctAnswer ?? existing.correctAnswer,
@@ -370,47 +734,194 @@ export async function updateQuestionVersion(
     difficulty: input.difficulty !== undefined ? input.difficulty : existing.difficulty,
   };
   validateQuestionVersionPayload(existing.question.type, payload);
-  await prisma.questionVersion.update({
-    where: { id },
-    data: {
-      prompt: payload.prompt,
-      options: toNullableJsonInput(payload.options),
-      correctAnswer: toNullableJsonInput(payload.correctAnswer),
-      explanation: payload.explanation,
-      hint: payload.hint,
-      difficulty: payload.difficulty,
-    },
+  await withTenantContext(actor, async (tx) => {
+    await assertQuestionContentVersion(tx, existing.question.contentId, payload.contentVersionId);
+    await tx.questionVersion.update({
+      where: { id },
+      data: {
+        ...(payload.contentVersionId
+          ? { contentVersionId: payload.contentVersionId }
+          : { contentVersionId: null }),
+        prompt: payload.prompt,
+        options: toNullableJsonInput(payload.options),
+        correctAnswer: toNullableJsonInput(payload.correctAnswer),
+        explanation: payload.explanation,
+        hint: payload.hint,
+        difficulty: payload.difficulty,
+      },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: existing.status,
+      }),
+    );
   });
   return getQuestionVersion(id);
 }
 
-export async function reviewQuestionVersion(id: string): Promise<QuestionVersionDetail> {
-  const existing = await prisma.questionVersion.findUnique({
-    where: { id },
-    select: { status: true },
+export async function reviewQuestionVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<QuestionVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        createdById: true,
+        question: { select: { content: { select: { tenantId: true } } } },
+      },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    if (existing.status !== "DRAFT")
+      throw validationError("Yalnızca taslak sürüm incelemeye alınabilir");
+    assertCanSubmitForReview(actor);
+    assertCanEditDraft(actor, existing.createdById);
+    await tx.questionVersion.update({
+      where: { id },
+      data: { status: "REVIEW", reviewedById: actor.userId, reviewedAt: new Date() },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "REVIEW",
+      }),
+    );
   });
-  if (!existing) throw notFoundError("Soru sürümü bulunamadı");
-  if (existing.status !== "DRAFT")
-    throw validationError("Yalnızca taslak sürüm incelemeye alınabilir");
-  await prisma.questionVersion.update({ where: { id }, data: { status: "REVIEW" } });
+  return getQuestionVersion(id);
+}
+
+export async function approveQuestionVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<QuestionVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        createdById: true,
+        question: { select: { content: { select: { tenantId: true } } } },
+      },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    if (existing.status !== "REVIEW")
+      throw validationError("Yalnızca incelemedeki soru sürümü onaylanabilir");
+    assertCanApprove({
+      actorRole: actor.platformRole,
+      actorUserId: actor.userId,
+      createdById: existing.createdById,
+    });
+    await tx.questionVersion.update({
+      where: { id },
+      data: { status: "APPROVED", approvedById: actor.userId, approvedAt: new Date() },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "APPROVED",
+      }),
+    );
+  });
   return getQuestionVersion(id);
 }
 
 /** Yayınlanan sürüm immutable kalır; Question'ın yayın durumu aynı transaction'da güncellenir. */
-export async function publishQuestionVersion(id: string): Promise<QuestionVersionDetail> {
-  const existing = await prisma.questionVersion.findUnique({
-    where: { id },
-    select: { id: true, questionId: true, status: true },
-  });
-  if (!existing) throw notFoundError("Soru sürümü bulunamadı");
-  if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
-  if (existing.status === "ARCHIVED") throw validationError("Arşivlenmiş soru sürümü yayınlanamaz");
-  await prisma.$transaction(async (tx) => {
+export async function publishQuestionVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<QuestionVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        questionId: true,
+        status: true,
+        question: {
+          select: { status: true, content: { select: { tenantId: true } } },
+        },
+      },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
+    assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
     await tx.questionVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
     });
     await tx.question.update({ where: { id: existing.questionId }, data: { status: "PUBLISHED" } });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "PUBLISHED",
+      }),
+    );
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION",
+        entityId: existing.questionId,
+        from: existing.question.status,
+        to: "PUBLISHED",
+      }),
+    );
+  });
+  return getQuestionVersion(id);
+}
+
+export async function retireQuestionVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<QuestionVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        question: { select: { content: { select: { tenantId: true } } } },
+      },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    assertCanRetire({ actorRole: actor.platformRole, status: existing.status });
+    await tx.questionVersion.update({
+      where: { id },
+      data: { status: "RETIRED", retiredAt: new Date() },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.question.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "QUESTION_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "RETIRED",
+      }),
+    );
   });
   return getQuestionVersion(id);
 }
@@ -419,13 +930,18 @@ export async function publishQuestionVersion(id: string): Promise<QuestionVersio
 export async function updateContentQuestions(
   contentId: string,
   input: UpdateContentQuestionsInput,
+  actor: ContentMutationActor,
 ): Promise<{ updated: number }> {
-  return prisma.$transaction(async (tx) => {
+  return withTenantContext(actor, async (tx) => {
     const target = await tx.content.findFirst({
       where: { id: contentId, deletedAt: null },
-      select: { id: true, tenantId: true },
+      select: { id: true, tenantId: true, status: true, createdById: true },
     });
     if (!target) throw notFoundError("İçerik bulunamadı");
+    if (target.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak içeriğin soru bağlantıları düzenlenebilir");
+    }
+    assertCanEditDraft(actor, target.createdById);
     const questionIds = input.questions.map(({ questionId }) => questionId);
     const questions = await tx.question.findMany({
       where: { id: { in: questionIds }, deletedAt: null },
@@ -433,6 +949,8 @@ export async function updateContentQuestions(
         id: true,
         contentId: true,
         position: true,
+        status: true,
+        createdById: true,
         content: { select: { tenantId: true } },
       },
     });
@@ -440,6 +958,12 @@ export async function updateContentQuestions(
       throw validationError("Bağlanmak istenen soru bulunamadı veya silinmiş");
     if (questions.some((question) => question.content.tenantId !== target.tenantId))
       throw validationError("Soru ve hedef içerik aynı tenant kapsamına ait olmalı");
+    for (const question of questions) {
+      if (question.status !== "DRAFT") {
+        throw validationError("Yayınlanmış veya incelemedeki soru bağlantısı değiştirilemez");
+      }
+      assertCanEditDraft(actor, question.createdById);
+    }
     const submittedIds = new Set(questionIds);
     const submittedPositions = new Set(input.questions.map(({ position }) => position));
     const conflicts = await tx.question.findMany({
@@ -461,6 +985,17 @@ export async function updateContentQuestions(
           where: { id: entry.questionId },
           data: { contentId, position: entry.position },
         });
+        await writeLifecycleAudit(
+          tx,
+          buildLifecycleAuditEntry({
+            tenantId: target.tenantId,
+            actorUserId: actor.userId,
+            entityType: "QUESTION",
+            entityId: entry.questionId,
+            from: question.status,
+            to: question.status,
+          }),
+        );
         updated++;
       }
     }
@@ -837,6 +1372,8 @@ export async function createAttempt(
       answeredAt: attempt.answeredAt.toISOString(),
       createdAt: attempt.createdAt.toISOString(),
     };
+    // Placement is diagnostic only; it must not create GP or achievement
+    // progress. Training/practice scoring keeps the existing deduped event.
     if (attempt.isCorrect === true && session.assessmentId === null) {
       await recordCorrectAnswer({
         tenantId: session.tenantId,
@@ -911,7 +1448,12 @@ function toNullableJsonInput(
 ): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
   return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
 }
+function jsonObject(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, Prisma.JsonValue>;
+}
 function toQuestionListItem(row: QuestionListRow): QuestionListItem {
+  const currentVersion = row.versions[0] ? toVersionSummary(row.versions[0]) : null;
   return {
     id: row.id,
     contentId: row.contentId,
@@ -924,23 +1466,36 @@ function toQuestionListItem(row: QuestionListRow): QuestionListItem {
     contentDifficulty: row.content.difficulty,
     contentStatus: row.content.status,
     createdById: row.createdById,
+    createdByName: row.createdBy?.displayName ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     tenantId: row.content.tenantId,
     versionCount: row._count.versions,
     attemptCount: row._count.attempts,
     skill: row.skill,
+    currentVersion,
+    publishedAt: currentVersion?.publishedAt ?? null,
   };
 }
 function toVersionSummary(row: VersionSummaryRow): CurrentVersionSummary {
   return {
     id: row.id,
+    contentVersionId: row.contentVersionId,
     version: row.version,
     prompt: row.prompt,
+    difficulty: row.difficulty,
     status: row.status,
     publishedAt: row.publishedAt,
+    retiredAt: row.retiredAt,
     createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    createdById: row.createdById,
     createdByName: row.createdBy?.displayName ?? null,
+    reviewedByName: row.reviewedBy?.displayName ?? null,
+    reviewedAt: row.reviewedAt,
+    approvedByName: row.approvedBy?.displayName ?? null,
+    approvedAt: row.approvedAt,
+    contentVersion: row.contentVersion,
   };
 }
 function toQuestionDetail(row: QuestionDetailRow): QuestionDetail {
@@ -965,5 +1520,6 @@ function toQuestionVersionDetail(row: VersionDetailRow): QuestionVersionDetail {
     difficulty: row.difficulty,
     partialCreditEnabled: row.partialCreditEnabled,
     generationMetadata: row.generationMetadata,
+    metadata: row.metadata,
   };
 }

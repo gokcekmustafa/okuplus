@@ -23,7 +23,14 @@ import { z } from "zod";
 
 const contentTypeSchema = z.enum(["PASSAGE", "STORY", "POEM", "ARTICLE", "DIALOGUE"]);
 
-const contentStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
+const contentStatusSchema = z.enum([
+  "DRAFT",
+  "REVIEW",
+  "APPROVED",
+  "PUBLISHED",
+  "RETIRED",
+  "ARCHIVED",
+]);
 
 const skillCategorySchema = z.enum([
   "MAIN_IDEA",
@@ -65,6 +72,8 @@ const changelogSchema = z
   .nullable()
   .optional();
 
+const metadataSchema = z.record(z.string(), z.unknown()).nullable().optional();
+
 const codeSchema = z
   .string()
   .trim()
@@ -86,12 +95,14 @@ export const createContentSchema = z.object({
   title: titleSchema,
   difficulty: difficultySchema,
   status: contentStatusSchema.optional(),
+  metadata: metadataSchema,
 });
 
 /** İçerik güncelleme gövdesi (kısmi; type/tenantId değiştirilemez). */
 export const updateContentSchema = z.object({
   title: titleSchema.optional(),
   difficulty: difficultySchema.optional(),
+  metadata: metadataSchema,
 });
 
 /** İçerik durumu değiştirme gövdesi. */
@@ -107,6 +118,9 @@ export const listContentsQuerySchema = z.object({
   type: contentTypeSchema.optional(),
   status: contentStatusSchema.optional(),
   skillId: z.string().trim().min(1).optional(),
+  authorId: z.string().trim().min(1).optional(),
+  sort: z.enum(["updatedAt", "createdAt", "status"]).default("updatedAt"),
+  sortDirection: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

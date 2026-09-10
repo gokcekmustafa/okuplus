@@ -1,6 +1,23 @@
 import { Prisma, type ContentStatus, type VersionStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
+import { withTenantContext } from "../tenant/index.js";
+import { writeLifecycleAudit } from "./audit.js";
+import {
+  assertCanApprove,
+  assertCanArchive,
+  assertCanCreateDraft,
+  assertCanEditDraft,
+  assertCanPublish,
+  assertCanRetire,
+  assertCanSubmitForReview,
+  assertLifecycleTransition,
+  buildCreatedAuditEntry,
+  buildDeletedAuditEntry,
+  buildLifecycleAuditEntry,
+  buildVersionCreatedAuditEntry,
+  type ContentMutationActor,
+} from "./lifecycle.js";
 import type {
   CreateContentInput,
   CreateContentVersionInput,
@@ -56,8 +73,15 @@ const CONTENT_LIST_SELECT = {
   currentVersionId: true,
   createdAt: true,
   updatedAt: true,
+  retiredAt: true,
+  metadata: true,
+  createdBy: { select: { displayName: true } },
   tenant: { select: { id: true, name: true, deletedAt: true } },
-  currentVersion: { select: { version: true, status: true } },
+  currentVersion: { select: { version: true, status: true, publishedAt: true } },
+  contentSkills: {
+    select: { skill: { select: { code: true, name: true } } },
+    orderBy: { skill: { displayOrder: "asc" } },
+  },
   _count: { select: { versions: true, questions: true, contentSkills: true } },
 } satisfies Prisma.ContentSelect;
 
@@ -70,9 +94,14 @@ const CONTENT_DETAIL_SELECT = {
       title: true,
       status: true,
       publishedAt: true,
+      retiredAt: true,
       wordCount: true,
       createdAt: true,
       createdBy: { select: { displayName: true } },
+      reviewedBy: { select: { displayName: true } },
+      reviewedAt: true,
+      approvedBy: { select: { displayName: true } },
+      approvedAt: true,
     },
   },
   contentSkills: {
@@ -88,9 +117,14 @@ const VERSION_SUMMARY_SELECT = {
   title: true,
   status: true,
   publishedAt: true,
+  retiredAt: true,
   wordCount: true,
   createdAt: true,
   createdBy: { select: { displayName: true } },
+  reviewedBy: { select: { displayName: true } },
+  reviewedAt: true,
+  approvedBy: { select: { displayName: true } },
+  approvedAt: true,
 } satisfies Prisma.ContentVersionSelect;
 
 const VERSION_DETAIL_SELECT = {
@@ -116,6 +150,12 @@ export interface ContentListItem {
   skillCount: number;
   createdAt: Date;
   updatedAt: Date;
+  retiredAt: Date | null;
+  metadataKeys: string[];
+  skillNames: string[];
+  createdByName: string | null;
+  publishedAt: Date | null;
+  lastAction: ContentAuditEntry | null;
 }
 
 export interface ContentListResult {
@@ -123,6 +163,11 @@ export interface ContentListResult {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface ContentAuthorItem {
+  id: string;
+  displayName: string;
 }
 
 export interface ContentSkillSummary {
@@ -138,9 +183,14 @@ export interface CurrentVersionSummary {
   title: string;
   status: VersionStatus;
   publishedAt: Date | null;
+  retiredAt: Date | null;
   wordCount: number;
   createdAt: Date;
   createdByName: string | null;
+  reviewedByName: string | null;
+  reviewedAt: Date | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
 }
 
 export interface ContentDetail extends ContentListItem {
@@ -155,9 +205,14 @@ export interface ContentVersionSummary {
   title: string;
   status: VersionStatus;
   publishedAt: Date | null;
+  retiredAt: Date | null;
   wordCount: number;
   createdAt: Date;
   createdByName: string | null;
+  reviewedByName: string | null;
+  reviewedAt: Date | null;
+  approvedByName: string | null;
+  approvedAt: Date | null;
 }
 
 export interface ContentVersionDetail extends ContentVersionSummary {
@@ -165,6 +220,17 @@ export interface ContentVersionDetail extends ContentVersionSummary {
   license: string | null;
   changelog: string | null;
   readabilityScore: number | null;
+}
+
+export interface ContentAuditEntry {
+  action: string;
+  entityType: string;
+  entityId: string;
+  version: number | null;
+  fromStatus: string | null;
+  toStatus: string | null;
+  actorName: string | null;
+  createdAt: Date;
 }
 
 export interface SkillItem {
@@ -208,37 +274,88 @@ export interface LevelListResult {
 // ---------- İçerik ----------
 
 export async function listContents(query: ListContentsQuery): Promise<ContentListResult> {
-  const { search, scope, tenantId, type, status, skillId, page, pageSize } = query;
+  const {
+    search,
+    scope,
+    tenantId,
+    type,
+    status,
+    skillId,
+    authorId,
+    sort,
+    sortDirection,
+    page,
+    pageSize,
+  } = query;
 
   const where: Prisma.ContentWhereInput = {
     deletedAt: null,
-    OR: [{ tenantId: null }, { tenant: { deletedAt: null } }],
+    AND: [
+      { OR: [{ tenantId: null }, { tenant: { deletedAt: null } }] },
+      ...(search
+        ? [
+            {
+              OR: [
+                { title: { contains: search, mode: Prisma.QueryMode.insensitive } },
+                { id: { contains: search, mode: Prisma.QueryMode.insensitive } },
+                {
+                  contentSkills: {
+                    some: {
+                      skill: {
+                        OR: [
+                          { code: { contains: search, mode: Prisma.QueryMode.insensitive } },
+                          { name: { contains: search, mode: Prisma.QueryMode.insensitive } },
+                        ],
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          ]
+        : []),
+    ],
     ...(scope === "GLOBAL" ? { tenantId: null } : {}),
     ...(scope === "TENANT" ? { tenantId: { not: null } } : {}),
     ...(tenantId ? { tenantId } : {}),
     ...(type ? { type } : {}),
     ...(status ? { status } : {}),
     ...(skillId ? { contentSkills: { some: { skillId } } } : {}),
-    ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
+    ...(authorId ? { createdById: authorId } : {}),
   };
 
   const [rows, total] = await Promise.all([
     prisma.content.findMany({
       where,
       select: CONTENT_LIST_SELECT,
-      orderBy: { updatedAt: "desc" },
+      orderBy: { [sort]: sortDirection },
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
     prisma.content.count({ where }),
   ]);
 
+  const items = rows.map(toContentListItem);
+  await attachLastActions(items);
+
   return {
-    items: rows.map(toContentListItem),
+    items,
     total,
     page,
     pageSize,
   };
+}
+
+export async function listContentAuthors(): Promise<ContentAuthorItem[]> {
+  return prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      platformRole: { not: null },
+      createdContents: { some: { deletedAt: null } },
+    },
+    select: { id: true, displayName: true },
+    orderBy: { displayName: "asc" },
+  });
 }
 
 export async function getContent(id: string): Promise<ContentDetail> {
@@ -249,46 +366,123 @@ export async function getContent(id: string): Promise<ContentDetail> {
   return toContentDetail(row);
 }
 
-export async function createContent(
-  input: CreateContentInput,
-  actorId?: string,
-): Promise<ContentDetail> {
-  const tenantId = input.tenantId ?? null;
-  if (tenantId !== null) {
-    const tenant = await prisma.tenant.findFirst({
-      where: { id: tenantId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!tenant) {
-      throw notFoundError("Kurum bulunamadı");
-    }
+/**
+ * Returns lifecycle metadata only. Bodies, stems, options and answers are
+ * intentionally never included in the admin audit response.
+ */
+export async function listContentAudit(contentId: string): Promise<ContentAuditEntry[]> {
+  if (!(await findContent(contentId))) {
+    throw notFoundError("İçerik bulunamadı");
   }
 
-  const created = await prisma.content.create({
-    data: {
-      tenantId,
-      type: input.type,
-      title: input.title,
-      difficulty: input.difficulty,
-      ...(input.status ? { status: input.status } : {}),
-      ...(actorId ? { createdById: actorId } : {}),
+  const versions = await prisma.contentVersion.findMany({
+    where: { contentId },
+    select: { id: true, version: true },
+  });
+  const versionNumbers = new Map(versions.map((version) => [version.id, version.version]));
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      OR: [
+        { entityType: "CONTENT", entityId: contentId },
+        { entityType: "CONTENT_VERSION", entityId: { in: [...versionNumbers.keys()] } },
+      ],
     },
-    select: { id: true },
+    select: {
+      action: true,
+      entityType: true,
+      entityId: true,
+      before: true,
+      after: true,
+      createdAt: true,
+      actor: { select: { displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return rows.map((row) => toContentAuditEntry(row, versionNumbers));
+}
+
+export async function createContent(
+  input: CreateContentInput,
+  actor: ContentMutationActor,
+): Promise<ContentDetail> {
+  assertCanCreateDraft(actor);
+  const tenantId = input.tenantId ?? null;
+  if (input.status !== undefined && input.status !== "DRAFT") {
+    throw validationError("Yeni içerik yalnızca DRAFT durumunda oluşturulabilir");
+  }
+
+  const created = await withTenantContext(actor, async (tx) => {
+    if (tenantId !== null) {
+      const tenant = await tx.tenant.findFirst({
+        where: { id: tenantId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!tenant) {
+        throw notFoundError("Kurum bulunamadı");
+      }
+    }
+
+    const row = await tx.content.create({
+      data: {
+        tenantId,
+        type: input.type,
+        title: input.title,
+        difficulty: input.difficulty,
+        status: "DRAFT",
+        createdById: actor.userId,
+        metadata: toMetadataInput(input.metadata),
+      },
+      select: { id: true },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildCreatedAuditEntry({
+        tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: row.id,
+        status: "DRAFT",
+      }),
+    );
+    return row;
   });
   return getContent(created.id);
 }
 
-export async function updateContent(id: string, input: UpdateContentInput): Promise<ContentDetail> {
-  if (!(await findContent(id))) {
-    throw notFoundError("İçerik bulunamadı");
-  }
+export async function updateContent(
+  id: string,
+  input: UpdateContentInput,
+  actor: ContentMutationActor,
+): Promise<ContentDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.content.findFirst({
+      where: { id, deletedAt: null, OR: [{ tenantId: null }, { tenant: { deletedAt: null } }] },
+      select: { id: true, tenantId: true, status: true, createdById: true },
+    });
+    if (!existing) throw notFoundError("İçerik bulunamadı");
+    if (existing.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak içerik düzenlenebilir; yeni sürüm oluşturulmalı");
+    }
+    assertCanEditDraft(actor, existing.createdById);
 
-  await prisma.content.update({
-    where: { id },
-    data: {
-      ...(input.title !== undefined ? { title: input.title } : {}),
-      ...(input.difficulty !== undefined ? { difficulty: input.difficulty } : {}),
-    },
+    const data: Prisma.ContentUncheckedUpdateInput = {};
+    if (input.title !== undefined) data.title = input.title;
+    if (input.difficulty !== undefined) data.difficulty = input.difficulty;
+    if (input.metadata !== undefined) data.metadata = toMetadataInput(input.metadata);
+    if (Object.keys(data).length === 0) return;
+    await tx.content.update({ where: { id }, data });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: id,
+        from: existing.status,
+        to: existing.status,
+      }),
+    );
   });
   return getContent(id);
 }
@@ -296,62 +490,105 @@ export async function updateContent(id: string, input: UpdateContentInput): Prom
 export async function updateContentStatus(
   id: string,
   input: UpdateContentStatusInput,
+  actor: ContentMutationActor,
 ): Promise<ContentDetail> {
-  const row = await prisma.content.findFirst({
-    where: { id, deletedAt: null, OR: [{ tenantId: null }, { tenant: { deletedAt: null } }] },
-    select: { id: true, status: true },
-  });
-  if (!row) {
-    throw notFoundError("İçerik bulunamadı");
-  }
+  await withTenantContext(actor, async (tx) => {
+    const row = await tx.content.findFirst({
+      where: { id, deletedAt: null, OR: [{ tenantId: null }, { tenant: { deletedAt: null } }] },
+      select: { id: true, tenantId: true, status: true, createdById: true },
+    });
+    if (!row) throw notFoundError("İçerik bulunamadı");
+    if (input.status === row.status) return;
 
-  if (input.status !== row.status) {
+    assertLifecycleTransition("CONTENT", row.status, input.status);
     switch (input.status) {
-      case "PUBLISHED": {
-        const published = await prisma.contentVersion.findFirst({
-          where: { contentId: id, status: "PUBLISHED" },
-          select: { id: true },
+      case "REVIEW":
+        assertCanSubmitForReview(actor);
+        assertCanEditDraft(actor, row.createdById);
+        break;
+      case "APPROVED":
+        assertCanApprove({
+          actorRole: actor.platformRole,
+          actorUserId: actor.userId,
+          createdById: row.createdById,
         });
-        if (!published) {
+        break;
+      case "PUBLISHED":
+        assertCanPublish({ actorRole: actor.platformRole, status: row.status });
+        if (
+          !(await tx.contentVersion.findFirst({
+            where: { contentId: id, status: "PUBLISHED" },
+            select: { id: true },
+          }))
+        ) {
           throw validationError("Yayınlanmış bir sürümü olmayan içerik yayınlanamaz");
         }
         break;
-      }
-      case "ARCHIVED": {
-        if (row.status !== "DRAFT" && row.status !== "PUBLISHED") {
-          throw validationError("Bu durumdan arşivlenmiş duruma geçilemez");
-        }
+      case "RETIRED":
+        assertCanRetire({ actorRole: actor.platformRole, status: row.status });
         break;
-      }
-      case "DRAFT": {
-        if (row.status !== "ARCHIVED") {
-          throw validationError("Yalnızca arşivlenmiş içerik taslağa alınabilir");
-        }
+      case "ARCHIVED":
+        if (row.status === "DRAFT") assertCanEditDraft(actor, row.createdById);
+        else assertCanRetire({ actorRole: actor.platformRole, status: row.status });
         break;
-      }
+      case "DRAFT":
+        assertCanEditDraft(actor, row.createdById);
+        break;
     }
 
-    await prisma.content.update({ where: { id }, data: { status: input.status } });
-  }
-
+    await tx.content.update({
+      where: { id },
+      data: {
+        status: input.status,
+        ...(input.status === "RETIRED" ? { retiredAt: new Date() } : {}),
+      },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: row.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: id,
+        from: row.status,
+        to: input.status,
+      }),
+    );
+  });
   return getContent(id);
 }
 
-export async function softDeleteContent(id: string): Promise<{ id: string; deletedAt: Date }> {
-  const content = await prisma.content.findFirst({ where: { id, deletedAt: null } });
-  if (!content) {
-    throw notFoundError("İçerik bulunamadı");
-  }
+export async function softDeleteContent(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<{ id: string; deletedAt: Date }> {
+  return withTenantContext(actor, async (tx) => {
+    const content = await tx.content.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, tenantId: true, status: true, createdById: true },
+    });
+    if (!content) throw notFoundError("İçerik bulunamadı");
+    if (content.status === "DRAFT") assertCanEditDraft(actor, content.createdById);
+    else assertCanArchive({ actorRole: actor.platformRole, status: content.status });
 
-  const updated = await prisma.content.update({
-    where: { id },
-    data: { deletedAt: new Date() },
-    select: { id: true, deletedAt: true },
+    const deletedAt = new Date();
+    const updated = await tx.content.update({
+      where: { id },
+      data: { deletedAt, status: "ARCHIVED" },
+      select: { id: true, deletedAt: true },
+    });
+    if (updated.deletedAt === null) throw new Error("softDeleteContent: deletedAt set edilemedi");
+    await writeLifecycleAudit(
+      tx,
+      buildDeletedAuditEntry({
+        tenantId: content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: id,
+      }),
+    );
+    return { id: updated.id, deletedAt: updated.deletedAt };
   });
-  if (updated.deletedAt === null) {
-    throw new Error("softDeleteContent: deletedAt set edilemedi");
-  }
-  return { id: updated.id, deletedAt: updated.deletedAt };
 }
 
 // ---------- İçerik sürümleri ----------
@@ -383,35 +620,50 @@ export async function getContentVersion(id: string): Promise<ContentVersionDetai
 export async function createContentVersion(
   contentId: string,
   input: CreateContentVersionInput,
-  actorId?: string,
+  actor: ContentMutationActor,
 ): Promise<ContentVersionDetail> {
-  const content = await prisma.content.findFirst({
-    where: { id: contentId, deletedAt: null },
-    select: { id: true, title: true },
-  });
-  if (!content) {
-    throw notFoundError("İçerik bulunamadı");
-  }
+  const created = await withTenantContext(actor, async (tx) => {
+    const content = await tx.content.findFirst({
+      where: { id: contentId, deletedAt: null },
+      select: { id: true, title: true, tenantId: true, status: true, createdById: true },
+    });
+    if (!content) throw notFoundError("İçerik bulunamadı");
+    if (content.status === "RETIRED" || content.status === "ARCHIVED") {
+      throw validationError("Emekli/arşivlenmiş içerik için yeni sürüm oluşturulamaz");
+    }
+    assertCanEditDraft(actor, content.createdById);
 
-  const last = await prisma.contentVersion.findFirst({
-    where: { contentId },
-    orderBy: { version: "desc" },
-    select: { version: true },
-  });
-  const nextVersion = (last?.version ?? 0) + 1;
-
-  const created = await prisma.contentVersion.create({
-    data: {
-      contentId,
-      version: nextVersion,
-      title: input.title ?? content.title,
-      body: input.body,
-      wordCount: computeWordCount(input.body),
-      license: input.license ?? null,
-      changelog: input.changelog ?? null,
-      ...(actorId ? { createdById: actorId } : {}),
-    },
-    select: { id: true },
+    const last = await tx.contentVersion.findFirst({
+      where: { contentId },
+      orderBy: { version: "desc" },
+      select: { version: true },
+    });
+    const nextVersion = (last?.version ?? 0) + 1;
+    const row = await tx.contentVersion.create({
+      data: {
+        contentId,
+        version: nextVersion,
+        title: input.title ?? content.title,
+        body: input.body,
+        wordCount: computeWordCount(input.body),
+        license: input.license ?? null,
+        changelog: input.changelog ?? null,
+        status: "DRAFT",
+        createdById: actor.userId,
+      },
+      select: { id: true },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildVersionCreatedAuditEntry({
+        tenantId: content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: row.id,
+        version: nextVersion,
+      }),
+    );
+    return row;
   });
   return getContentVersion(created.id);
 }
@@ -419,77 +671,148 @@ export async function createContentVersion(
 export async function updateContentVersion(
   id: string,
   input: UpdateContentVersionInput,
+  actor: ContentMutationActor,
 ): Promise<ContentVersionDetail> {
-  const existing = await prisma.contentVersion.findUnique({
-    where: { id },
-    select: { id: true, status: true },
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        contentId: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    if (existing.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak sürüm düzenlenebilir. Yeni sürüm oluşturulmalı.");
+    }
+    assertCanEditDraft(actor, existing.createdById);
+
+    const data: Prisma.ContentVersionUncheckedUpdateInput = {};
+    if (input.title !== undefined) data.title = input.title;
+    if (input.body !== undefined) {
+      data.body = input.body;
+      data.wordCount = computeWordCount(input.body);
+    }
+    if (input.license !== undefined) data.license = input.license;
+    if (input.changelog !== undefined) data.changelog = input.changelog;
+    if (Object.keys(data).length === 0) return;
+    await tx.contentVersion.update({ where: { id }, data });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: existing.status,
+      }),
+    );
   });
-  if (!existing) {
-    throw notFoundError("İçerik sürümü bulunamadı");
-  }
-  if (existing.status === "PUBLISHED") {
-    throw validationError("Yayınlanmış sürüm düzenlenemez. Yeni bir sürüm oluşturulmalı.");
-  }
-
-  const data: Prisma.ContentVersionUncheckedUpdateInput = {};
-  if (input.title !== undefined) {
-    data.title = input.title;
-  }
-  if (input.body !== undefined) {
-    data.body = input.body;
-    data.wordCount = computeWordCount(input.body);
-  }
-  if (input.license !== undefined) {
-    data.license = input.license;
-  }
-  if (input.changelog !== undefined) {
-    data.changelog = input.changelog;
-  }
-
-  await prisma.contentVersion.update({ where: { id }, data });
   return getContentVersion(id);
 }
 
-export async function reviewContentVersion(id: string): Promise<ContentVersionDetail> {
-  const existing = await prisma.contentVersion.findUnique({
-    where: { id },
-    select: { id: true, status: true },
+export async function reviewContentVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<ContentVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    if (existing.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak sürüm incelemeye alınabilir");
+    }
+    assertCanSubmitForReview(actor);
+    assertCanEditDraft(actor, existing.createdById);
+    await tx.contentVersion.update({
+      where: { id },
+      data: { status: "REVIEW", reviewedById: actor.userId, reviewedAt: new Date() },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "REVIEW",
+      }),
+    );
   });
-  if (!existing) {
-    throw notFoundError("İçerik sürümü bulunamadı");
-  }
-  if (existing.status !== "DRAFT") {
-    throw validationError("Yalnızca taslak sürüm incelemeye alınabilir");
-  }
-
-  await prisma.contentVersion.update({ where: { id }, data: { status: "REVIEW" } });
   return getContentVersion(id);
 }
 
-export async function publishContentVersion(id: string): Promise<ContentVersionDetail> {
-  const existing = await prisma.contentVersion.findUnique({
-    where: { id },
-    select: { id: true, contentId: true, status: true },
+export async function approveContentVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<ContentVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        createdById: true,
+        content: { select: { tenantId: true } },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    if (existing.status !== "REVIEW") {
+      throw validationError("Yalnızca incelemedeki sürüm onaylanabilir");
+    }
+    assertCanApprove({
+      actorRole: actor.platformRole,
+      actorUserId: actor.userId,
+      createdById: existing.createdById,
+    });
+    await tx.contentVersion.update({
+      where: { id },
+      data: { status: "APPROVED", approvedById: actor.userId, approvedAt: new Date() },
+    });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "APPROVED",
+      }),
+    );
   });
-  if (!existing) {
-    throw notFoundError("İçerik sürümü bulunamadı");
-  }
-  if (existing.status === "PUBLISHED") {
-    throw validationError("Sürüm zaten yayınlanmış");
-  }
-  if (existing.status === "ARCHIVED") {
-    throw validationError("Arşivlenmiş sürüm yayınlanamaz");
-  }
+  return getContentVersion(id);
+}
 
-  const content = await prisma.content.findFirst({
-    where: { id: existing.contentId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!content) {
-    throw notFoundError("İçerik bulunamadı");
-  }
-
-  await prisma.$transaction(async (tx) => {
+export async function publishContentVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<ContentVersionDetail> {
+  const result = await withTenantContext(actor, async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        contentId: true,
+        status: true,
+        content: { select: { id: true, tenantId: true, status: true } },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    if (existing.status === "PUBLISHED") throw validationError("Sürüm zaten yayınlanmış");
+    assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
     await tx.contentVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
@@ -498,8 +821,71 @@ export async function publishContentVersion(id: string): Promise<ContentVersionD
       where: { id: existing.contentId },
       data: { currentVersionId: id, status: "PUBLISHED" },
     });
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "PUBLISHED",
+      }),
+    );
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: existing.contentId,
+        from: existing.content.status,
+        to: "PUBLISHED",
+      }),
+    );
+    return { id };
   });
+  return result ? getContentVersion(result.id) : getContentVersion(id);
+}
 
+export async function retireContentVersion(
+  id: string,
+  actor: ContentMutationActor,
+): Promise<ContentVersionDetail> {
+  await withTenantContext(actor, async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        contentId: true,
+        status: true,
+        content: { select: { tenantId: true, status: true, currentVersionId: true } },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    assertCanRetire({ actorRole: actor.platformRole, status: existing.status });
+    await tx.contentVersion.update({
+      where: { id },
+      data: { status: "RETIRED", retiredAt: new Date() },
+    });
+    if (existing.content.currentVersionId === id) {
+      await tx.content.update({
+        where: { id: existing.contentId },
+        data: { status: "RETIRED", retiredAt: new Date() },
+      });
+    }
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: existing.content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT_VERSION",
+        entityId: id,
+        from: existing.status,
+        to: "RETIRED",
+      }),
+    );
+  });
   return getContentVersion(id);
 }
 
@@ -508,29 +894,46 @@ export async function publishContentVersion(id: string): Promise<ContentVersionD
 export async function updateContentSkills(
   contentId: string,
   input: UpdateContentSkillsInput,
+  actor: ContentMutationActor,
 ): Promise<ContentDetail> {
-  if (!(await findContent(contentId))) {
-    throw notFoundError("İçerik bulunamadı");
-  }
-
   const skillIds = [...new Set(input.skillIds)];
-  if (skillIds.length > 0) {
-    const found = await prisma.skill.findMany({
-      where: { id: { in: skillIds } },
-      select: { id: true },
+  await withTenantContext(actor, async (tx) => {
+    const content = await tx.content.findFirst({
+      where: { id: contentId, deletedAt: null },
+      select: { id: true, tenantId: true, status: true, createdById: true },
     });
-    if (found.length !== skillIds.length) {
-      throw validationError("Beceri kataloğunda bulunamayan beceri kimliği var");
+    if (!content) throw notFoundError("İçerik bulunamadı");
+    if (content.status !== "DRAFT") {
+      throw validationError("Yalnızca taslak içeriğin becerileri düzenlenebilir");
     }
-  }
+    assertCanEditDraft(actor, content.createdById);
+    if (skillIds.length > 0) {
+      const found = await tx.skill.findMany({
+        where: { id: { in: skillIds } },
+        select: { id: true },
+      });
+      if (found.length !== skillIds.length) {
+        throw validationError("Beceri kataloğunda bulunamayan beceri kimliği var");
+      }
+    }
 
-  await prisma.$transaction(async (tx) => {
     await tx.contentSkill.deleteMany({ where: { contentId } });
     if (skillIds.length > 0) {
       await tx.contentSkill.createMany({
         data: skillIds.map((skillId) => ({ contentId, skillId })),
       });
     }
+    await writeLifecycleAudit(
+      tx,
+      buildLifecycleAuditEntry({
+        tenantId: content.tenantId,
+        actorUserId: actor.userId,
+        entityType: "CONTENT",
+        entityId: contentId,
+        from: content.status,
+        to: content.status,
+      }),
+    );
   });
 
   return getContent(contentId);
@@ -770,6 +1173,88 @@ async function findContent(id: string) {
   });
 }
 
+async function attachLastActions(items: ContentListItem[]): Promise<void> {
+  if (items.length === 0) return;
+  const contentIds = items.map((item) => item.id);
+  const versionRows = await prisma.contentVersion.findMany({
+    where: { contentId: { in: contentIds } },
+    select: { id: true, contentId: true },
+  });
+  const entityToContent = new Map<string, string>(contentIds.map((id) => [id, id]));
+  for (const version of versionRows) entityToContent.set(version.id, version.contentId);
+
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      OR: [
+        { entityType: "CONTENT", entityId: { in: contentIds } },
+        { entityType: "CONTENT_VERSION", entityId: { in: versionRows.map((row) => row.id) } },
+      ],
+    },
+    select: {
+      action: true,
+      entityType: true,
+      entityId: true,
+      before: true,
+      after: true,
+      createdAt: true,
+      actor: { select: { displayName: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const lastByContent = new Map<string, ContentAuditEntry>();
+  for (const row of rows) {
+    const contentId = entityToContent.get(row.entityId);
+    if (contentId && !lastByContent.has(contentId)) {
+      lastByContent.set(contentId, toContentAuditEntry(row, new Map()));
+    }
+  }
+  for (const item of items) item.lastAction = lastByContent.get(item.id) ?? null;
+}
+
+function jsonObject(value: Prisma.JsonValue | null): Record<string, Prisma.JsonValue> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, Prisma.JsonValue>;
+}
+
+function toMetadataInput(
+  value: Record<string, unknown> | null | undefined,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined {
+  if (value === undefined) return undefined;
+  return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
+}
+
+function jsonStatus(value: Prisma.JsonValue | null): string | null {
+  const object = jsonObject(value);
+  return typeof object?.status === "string" ? object.status : null;
+}
+
+function toContentAuditEntry(
+  row: {
+    action: string;
+    entityType: string;
+    entityId: string;
+    before: Prisma.JsonValue | null;
+    after: Prisma.JsonValue | null;
+    createdAt: Date;
+    actor: { displayName: string } | null;
+  },
+  versionNumbers: Map<string, number>,
+): ContentAuditEntry {
+  const after = jsonObject(row.after);
+  return {
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    version:
+      versionNumbers.get(row.entityId) ??
+      (typeof after?.version === "number" ? after.version : null),
+    fromStatus: jsonStatus(row.before),
+    toStatus: jsonStatus(row.after),
+    actorName: row.actor?.displayName ?? null,
+    createdAt: row.createdAt,
+  };
+}
+
 function toContentListItem(row: {
   id: string;
   tenantId: string | null;
@@ -780,8 +1265,12 @@ function toContentListItem(row: {
   currentVersionId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  retiredAt: Date | null;
+  metadata: Prisma.JsonValue | null;
+  createdBy: { displayName: string } | null;
   tenant: { id: string; name: string; deletedAt: Date | null } | null;
-  currentVersion: { version: number; status: string } | null;
+  currentVersion: { version: number; status: string; publishedAt: Date | null } | null;
+  contentSkills: Array<{ skill: { code: string; name: string } }>;
   _count: { versions: number; questions: number; contentSkills: number };
 }): ContentListItem {
   return {
@@ -803,6 +1292,12 @@ function toContentListItem(row: {
     skillCount: row._count.contentSkills,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    retiredAt: row.retiredAt,
+    metadataKeys: Object.keys(jsonObject(row.metadata) ?? {}).sort(),
+    skillNames: row.contentSkills.map(({ skill }) => `${skill.name} (${skill.code})`),
+    createdByName: row.createdBy?.displayName ?? null,
+    publishedAt: row.currentVersion?.publishedAt ?? null,
+    lastAction: null,
   };
 }
 
@@ -816,6 +1311,9 @@ function toContentDetail(row: {
   currentVersionId: string | null;
   createdAt: Date;
   updatedAt: Date;
+  retiredAt: Date | null;
+  metadata: Prisma.JsonValue | null;
+  createdBy: { displayName: string } | null;
   tenant: { id: string; name: string; deletedAt: Date | null } | null;
   currentVersion: {
     id: string;
@@ -823,9 +1321,14 @@ function toContentDetail(row: {
     title: string;
     status: VersionStatus;
     publishedAt: Date | null;
+    retiredAt: Date | null;
     wordCount: number;
     createdAt: Date;
     createdBy: { displayName: string } | null;
+    reviewedBy: { displayName: string } | null;
+    reviewedAt: Date | null;
+    approvedBy: { displayName: string } | null;
+    approvedAt: Date | null;
   } | null;
   _count: { versions: number; questions: number; contentSkills: number };
   contentSkills: Array<{ skill: { id: string; code: string; name: string; category: string } }>;
@@ -833,6 +1336,7 @@ function toContentDetail(row: {
   const item = toContentListItem(row);
   return {
     ...item,
+    publishedAt: row.currentVersion?.publishedAt ?? null,
     currentVersion: row.currentVersion
       ? {
           id: row.currentVersion.id,
@@ -840,9 +1344,14 @@ function toContentDetail(row: {
           title: row.currentVersion.title,
           status: row.currentVersion.status,
           publishedAt: row.currentVersion.publishedAt,
+          retiredAt: row.currentVersion.retiredAt,
           wordCount: row.currentVersion.wordCount,
           createdAt: row.currentVersion.createdAt,
           createdByName: row.currentVersion.createdBy?.displayName ?? null,
+          reviewedByName: row.currentVersion.reviewedBy?.displayName ?? null,
+          reviewedAt: row.currentVersion.reviewedAt,
+          approvedByName: row.currentVersion.approvedBy?.displayName ?? null,
+          approvedAt: row.currentVersion.approvedAt,
         }
       : null,
     skills: row.contentSkills.map(({ skill }) => skill),
@@ -856,9 +1365,14 @@ function toContentVersionSummary(row: {
   title: string;
   status: VersionStatus;
   publishedAt: Date | null;
+  retiredAt: Date | null;
   wordCount: number;
   createdAt: Date;
   createdBy: { displayName: string } | null;
+  reviewedBy: { displayName: string } | null;
+  reviewedAt: Date | null;
+  approvedBy: { displayName: string } | null;
+  approvedAt: Date | null;
 }): ContentVersionSummary {
   return {
     id: row.id,
@@ -867,9 +1381,14 @@ function toContentVersionSummary(row: {
     title: row.title,
     status: row.status,
     publishedAt: row.publishedAt,
+    retiredAt: row.retiredAt,
     wordCount: row.wordCount,
     createdAt: row.createdAt,
     createdByName: row.createdBy?.displayName ?? null,
+    reviewedByName: row.reviewedBy?.displayName ?? null,
+    reviewedAt: row.reviewedAt,
+    approvedByName: row.approvedBy?.displayName ?? null,
+    approvedAt: row.approvedAt,
   };
 }
 
@@ -880,9 +1399,14 @@ function toContentVersionDetail(row: {
   title: string;
   status: VersionStatus;
   publishedAt: Date | null;
+  retiredAt: Date | null;
   wordCount: number;
   createdAt: Date;
   createdBy: { displayName: string } | null;
+  reviewedBy: { displayName: string } | null;
+  reviewedAt: Date | null;
+  approvedBy: { displayName: string } | null;
+  approvedAt: Date | null;
   body: string;
   license: string | null;
   changelog: string | null;

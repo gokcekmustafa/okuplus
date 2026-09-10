@@ -35,9 +35,23 @@ const questionTypeSchema = z.enum([
   "FILL_BLANK",
 ]);
 
-const questionStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
+const questionStatusSchema = z.enum([
+  "DRAFT",
+  "REVIEW",
+  "APPROVED",
+  "PUBLISHED",
+  "RETIRED",
+  "ARCHIVED",
+]);
 
-const _versionStatusSchema = z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]);
+const _versionStatusSchema = z.enum([
+  "DRAFT",
+  "REVIEW",
+  "APPROVED",
+  "PUBLISHED",
+  "RETIRED",
+  "ARCHIVED",
+]);
 
 const promptSchema = z
   .string()
@@ -259,6 +273,12 @@ export function validateQuestionVersionPayload(type: QuestionType, payload: unkn
 export const createQuestionSchema = z
   .object({
     contentId: z.string().trim().min(1, "İçerik kimliği gerekli"),
+    contentVersionId: z
+      .string()
+      .trim()
+      .min(1, "İçerik sürümü kimliği gerekli")
+      .nullable()
+      .optional(),
     position: positionSchema,
     type: questionTypeSchema,
     skillId: z.string().trim().min(1).nullable().optional(),
@@ -290,16 +310,23 @@ export const updateQuestionStatusSchema = z.object({
 /** Soru listeleme sorgu parametreleri. */
 export const listQuestionsQuerySchema = z.object({
   contentId: z.string().trim().min(1).optional(),
+  contentVersionId: z.string().trim().min(1).optional(),
   type: questionTypeSchema.optional(),
   status: questionStatusSchema.optional(),
   skillId: z.string().trim().min(1).optional(),
+  authorId: z.string().trim().min(1).optional(),
+  difficultyMin: z.coerce.number().min(0).max(1).optional(),
+  difficultyMax: z.coerce.number().min(0).max(1).optional(),
   search: z.string().trim().max(200).optional(),
+  sort: z.enum(["updatedAt", "createdAt", "status"]).default("updatedAt"),
+  sortDirection: z.enum(["asc", "desc"]).default("desc"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 /** Yeni soru sürümü oluşturma gövdesi. */
 export const createQuestionVersionSchema = z.object({
+  contentVersionId: z.string().trim().min(1, "İçerik sürümü kimliği gerekli").nullable().optional(),
   prompt: promptSchema.optional(),
   options: optionsArraySchema.optional(),
   correctAnswer: correctAnswerSchema.optional(),
@@ -310,6 +337,7 @@ export const createQuestionVersionSchema = z.object({
 
 /** Soru sürümü güncelleme gövdesi (yalnızca DRAFT/REVIEW; PUBLISHED immutable). */
 export const updateQuestionVersionSchema = z.object({
+  contentVersionId: z.string().trim().min(1, "İçerik sürümü kimliği gerekli").nullable().optional(),
   prompt: promptSchema.optional(),
   options: optionsArraySchema.optional(),
   correctAnswer: correctAnswerSchema.optional(),
