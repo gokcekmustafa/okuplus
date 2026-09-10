@@ -32,7 +32,7 @@ const EXPECTED_COUNTS = {
   mapping: 36,
 } as const;
 
-type FamilySpec = {
+export type FamilySpec = {
   family: TrainingExerciseFamily;
   competency: TrainingExerciseVersionConfig["competency"];
   rendererKey: string;
@@ -115,7 +115,7 @@ type TemplateVersionSummary = {
   status: string;
 };
 
-type TemplateDetail = {
+export type TemplateDetail = {
   id: string;
   tenantId: string | null;
   title: string;
@@ -126,7 +126,7 @@ type TemplateDetail = {
   versions: TemplateVersionSummary[];
 };
 
-type TemplateVersionDetail = {
+export type TemplateVersionDetail = {
   id: string;
   templateId: string;
   version: number;
@@ -500,7 +500,7 @@ function selectFamilyPack(state: PackState, spec: FamilySpec) {
   };
 }
 
-function versionConfig(spec: FamilySpec): TrainingExerciseVersionConfig {
+export function versionConfig(spec: FamilySpec): TrainingExerciseVersionConfig {
   return parseTrainingExerciseVersionConfig({
     schemaVersion: 1,
     family: spec.family,
@@ -572,7 +572,32 @@ function exactIds(
     .map((row) => row.contentVersionId ?? row.questionVersionId ?? "");
 }
 
-function graphIsExact(
+function configMatchesSpec(value: unknown, spec: FamilySpec): boolean {
+  try {
+    const parsed = parseTrainingExerciseVersionConfig(value);
+    return (
+      parsed.family === spec.family &&
+      parsed.competency === spec.competency &&
+      parsed.rendererKey === spec.rendererKey
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function runtimeCandidateIsEligible(
+  template: TemplateDetail,
+  version: TemplateVersionDetail,
+  spec: FamilySpec,
+): boolean {
+  return (
+    template.status === "PUBLISHED" &&
+    version.status === "PUBLISHED" &&
+    configMatchesSpec(version.config, spec)
+  );
+}
+
+export function graphIsExact(
   template: TemplateDetail,
   detail: TemplateVersionDetail,
   spec: FamilySpec,
@@ -580,26 +605,66 @@ function graphIsExact(
   questionVersionIds: string[],
 ): boolean {
   const config = record(detail.config);
-  let configValid = false;
-  try {
-    const parsed = parseTrainingExerciseVersionConfig(detail.config);
-    configValid =
-      parsed.family === spec.family &&
-      parsed.competency === spec.competency &&
-      parsed.rendererKey === spec.rendererKey;
-  } catch {
-    configValid = false;
-  }
   return (
     template.status === "PUBLISHED" &&
     detail.status === "PUBLISHED" &&
     config !== null &&
-    configValid &&
+    configMatchesSpec(detail.config, spec) &&
     [...new Set(exactIds(detail.contents))].length === contentVersionIds.length &&
     exactIds(detail.contents).every((id, index) => id === contentVersionIds[index]) &&
     [...new Set(exactIds(detail.questions))].length === questionVersionIds.length &&
     exactIds(detail.questions).every((id, index) => id === questionVersionIds[index])
   );
+}
+
+export type VersionRecoveryPlan =
+  | { kind: "NOOP"; version: TemplateVersionDetail }
+  | { kind: "RESUME"; version: TemplateVersionDetail }
+  | { kind: "CREATE"; nextVersion: number };
+
+function isKnownImmutablePartial(version: TemplateVersionDetail): boolean {
+  return version.version === 1 && version.status === "PUBLISHED" && version.config === null;
+}
+
+export function planVersionRecovery(
+  template: TemplateDetail,
+  versions: TemplateVersionDetail[],
+  spec: FamilySpec,
+  contentVersionIds: string[],
+  questionVersionIds: string[],
+): VersionRecoveryPlan {
+  const exactPublished = versions.filter(
+    (version) =>
+      version.status === "PUBLISHED" &&
+      graphIsExact(template, version, spec, contentVersionIds, questionVersionIds),
+  );
+  if (exactPublished.length > 1) {
+    fail(`${spec.family} için birden fazla exact published version bulundu`);
+  }
+
+  const draftVersions = versions.filter((version) => version.status === "DRAFT");
+  if (draftVersions.length > 1) {
+    fail(`${spec.family} için birden fazla DRAFT version bulundu`);
+  }
+
+  const unsupportedVersions = versions.filter(
+    (version) =>
+      !isKnownImmutablePartial(version) &&
+      version.status !== "DRAFT" &&
+      !exactPublished.includes(version),
+  );
+  if (unsupportedVersions.length > 0) {
+    fail(`${spec.family} için exact olmayan non-DRAFT version bulundu`);
+  }
+
+  const exact = exactPublished[0];
+  if (exact) return { kind: "NOOP", version: exact };
+
+  const draft = draftVersions[0];
+  if (draft) return { kind: "RESUME", version: draft };
+
+  const maxVersion = versions.reduce((maximum, version) => Math.max(maximum, version.version), 0);
+  return { kind: "CREATE", nextVersion: maxVersion + 1 };
 }
 
 async function loadSkills(origin: string, jar: Map<string, string>): Promise<Map<string, string>> {
@@ -696,6 +761,7 @@ async function provisionFamily(
   let template: TemplateDetail;
   let version: TemplateVersionDetail;
   let action: "CREATED" | "UPDATED" = "CREATED";
+  const config = versionConfig(spec);
   if (!existing) {
     if (!apply) return "CREATED";
     template = await api<TemplateDetail>(origin, jar, "/admin/templates", {
@@ -725,34 +791,57 @@ async function provisionFamily(
     ) {
       fail(`${spec.family} mevcut template kapsamı beklenen değil`);
     }
-    if (existing.versions.length !== 1 || existing.versions[0]?.version !== 1) {
-      fail(`${spec.family} template version yapısı beklenen değil`);
-    }
     template = existing;
-    version = await api<TemplateVersionDetail>(
-      origin,
-      jar,
-      `/admin/templates/versions/${encodeURIComponent(existing.versions[0].id)}`,
+    const versions = await Promise.all(
+      existing.versions.map((candidate) =>
+        api<TemplateVersionDetail>(
+          origin,
+          jar,
+          `/admin/templates/versions/${encodeURIComponent(candidate.id)}`,
+        ),
+      ),
     );
-    action = "UPDATED";
-    if (
-      graphIsExact(template, version, spec, source.contentVersionIds, source.questionVersionIds)
-    ) {
-      return "NOOP";
-    }
-    if (version.status !== "DRAFT") {
-      fail(`${spec.family} partial graph DRAFT değil; güvenli devam edilemiyor`);
+    const recovery = planVersionRecovery(
+      template,
+      versions,
+      spec,
+      source.contentVersionIds,
+      source.questionVersionIds,
+    );
+    if (recovery.kind === "NOOP") return "NOOP";
+    if (!apply) return recovery.kind === "CREATE" ? "CREATED" : "UPDATED";
+
+    if (recovery.kind === "CREATE") {
+      version = await api<TemplateVersionDetail>(
+        origin,
+        jar,
+        `/admin/templates/${encodeURIComponent(template.id)}/versions`,
+        {
+          method: "POST",
+          body: { config },
+        },
+      );
+      if (version.version !== recovery.nextVersion || version.status !== "DRAFT") {
+        fail(`${spec.family} için beklenen yeni DRAFT version oluşturulamadı`);
+      }
+      if (!configMatchesSpec(version.config, spec)) {
+        fail(`${spec.family} yeni version config'i persist edilmedi`);
+      }
+    } else {
+      version = recovery.version;
+      action = "UPDATED";
     }
   }
 
   if (!apply) return action;
   if (version.status !== "DRAFT") fail(`${spec.family} version DRAFT değil`);
 
-  const config = versionConfig(spec);
-  await api(origin, jar, `/admin/templates/versions/${encodeURIComponent(version.id)}`, {
-    method: "PATCH",
-    body: { config },
-  });
+  if (!(version.config && configMatchesSpec(version.config, spec))) {
+    await api(origin, jar, `/admin/templates/versions/${encodeURIComponent(version.id)}`, {
+      method: "PATCH",
+      body: { config },
+    });
+  }
   await api(origin, jar, `/admin/templates/versions/${encodeURIComponent(version.id)}/contents`, {
     method: "PUT",
     body: {
@@ -788,15 +877,15 @@ async function provisionFamily(
     jar,
     `/admin/templates/${encodeURIComponent(template.id)}`,
   );
-  if (
-    !graphIsExact(
-      finalTemplate,
-      finalVersion,
-      spec,
-      source.contentVersionIds,
-      source.questionVersionIds,
-    )
-  ) {
+  const graphExact = graphIsExact(
+    finalTemplate,
+    finalVersion,
+    spec,
+    source.contentVersionIds,
+    source.questionVersionIds,
+  );
+  const runtimeEligible = runtimeCandidateIsEligible(finalTemplate, finalVersion, spec);
+  if (!graphExact || !runtimeEligible) {
     fail(`${spec.family} publish sonrası graph doğrulanamadı`);
   }
   return action;
@@ -892,17 +981,19 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(
-    JSON.stringify(
-      {
-        status: "FAIL",
-        message: safeErrorMessage(error),
-        productionTouched: "NO",
-      },
-      null,
-      2,
-    ),
-  );
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    console.error(
+      JSON.stringify(
+        {
+          status: "FAIL",
+          message: safeErrorMessage(error),
+          productionTouched: "NO",
+        },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 1;
+  });
+}
