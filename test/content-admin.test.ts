@@ -8,7 +8,8 @@ import { loadEnv } from "../src/config/env.js";
 /**
  * İçerik Yönetimi (admin) testleri.
  *
- * Güvenlik: yalnızca platform yetkilileri (SUPER_ADMIN, CONTENT_EDITOR) erişir;
+ * Güvenlik: platform yetkili rolleri okur; mutasyonlar CONTENT_EDITOR/
+ * SUPER_ADMIN, onay/yayın ise CONTENT_REVIEWER/SUPER_ADMIN ile sınırlıdır.
  * normal tenant kullanıcıları 403, kimliksiz istekler 401 alır.
  *
  * KAPSAM: tenantId NULL = GLOBAL katalog (platform yetkisiyle yönetilir);
@@ -36,6 +37,7 @@ const PASSWORD = "test-pass-123!";
 const SUPER_ADMIN_ID = "99999992-0000-7000-8000-000000000001";
 const CONTENT_EDITOR_ID = "99999992-0000-7000-8000-000000000002";
 const NORMAL_USER_ID = "99999992-0000-7000-8000-000000000003";
+const CONTENT_REVIEWER_ID = "99999992-0000-7000-8000-000000000004";
 
 // Tenant'lar
 const ORG_TENANT = "99999992-0000-7000-8000-0000000000b1";
@@ -55,10 +57,11 @@ const TENANT_CONTENT = "99999992-0000-7000-8000-0000000000f2";
 const SUPER_ADMIN_EMAIL = "content-super@example.com";
 const CONTENT_EDITOR_EMAIL = "content-editor@example.com";
 const NORMAL_EMAIL = "content-tenant-user@example.com";
+const CONTENT_REVIEWER_EMAIL = "content-reviewer@example.com";
 
-const USER_IDS = [SUPER_ADMIN_ID, CONTENT_EDITOR_ID, NORMAL_USER_ID];
+const USER_IDS = [SUPER_ADMIN_ID, CONTENT_EDITOR_ID, NORMAL_USER_ID, CONTENT_REVIEWER_ID];
 const TENANT_IDS = [ORG_TENANT, DELETED_TENANT];
-const EMAILS = [SUPER_ADMIN_EMAIL, CONTENT_EDITOR_EMAIL, NORMAL_EMAIL];
+const EMAILS = [SUPER_ADMIN_EMAIL, CONTENT_EDITOR_EMAIL, NORMAL_EMAIL, CONTENT_REVIEWER_EMAIL];
 const FIXED_CONTENT_IDS = [GLOBAL_CONTENT, TENANT_CONTENT];
 const FIXED_SKILL_IDS = [SKILL_1, SKILL_2, SKILL_UNUSED];
 const FIXED_LEVEL_IDS = [LEVEL_1, LEVEL_2];
@@ -141,6 +144,13 @@ describe("content admin", () => {
           displayName: "İçerik Editörü",
           passwordHash,
           platformRole: "CONTENT_EDITOR",
+        },
+        {
+          id: CONTENT_REVIEWER_ID,
+          email: CONTENT_REVIEWER_EMAIL,
+          displayName: "İçerik İnceleyicisi",
+          passwordHash,
+          platformRole: "CONTENT_REVIEWER",
         },
         {
           id: NORMAL_USER_ID,
@@ -279,6 +289,9 @@ describe("content admin", () => {
   const editorHeaders = async () => ({
     authorization: `Bearer ${await login(CONTENT_EDITOR_EMAIL)}`,
   });
+  const reviewerHeaders = async () => ({
+    authorization: `Bearer ${await login(CONTENT_REVIEWER_EMAIL)}`,
+  });
   const tenantUserHeaders = async () => ({
     authorization: `Bearer ${await login(NORMAL_EMAIL)}`,
   });
@@ -305,6 +318,58 @@ describe("content admin", () => {
     });
     expect(res.statusCode).toBe(200);
     return res.json().data;
+  }
+
+  async function approveVersionViaApi(versionId: string) {
+    const reviewed = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${versionId}/review`,
+      headers: await superAdminHeaders(),
+    });
+    expect(reviewed.statusCode).toBe(200);
+
+    const approved = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${versionId}/approve`,
+      headers: await reviewerHeaders(),
+    });
+    expect(approved.statusCode).toBe(200);
+  }
+
+  async function publishVersionViaApi(versionId: string) {
+    await approveVersionViaApi(versionId);
+
+    const version = await app.inject({
+      method: "GET",
+      url: `/admin/content-versions/${versionId}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(version.statusCode).toBe(200);
+    const contentId = version.json().data.contentId as string;
+
+    const reviewedParent = await app.inject({
+      method: "PATCH",
+      url: `/admin/contents/${contentId}/status`,
+      headers: await superAdminHeaders(),
+      payload: { status: "REVIEW" },
+    });
+    expect(reviewedParent.statusCode).toBe(200);
+
+    const approvedParent = await app.inject({
+      method: "PATCH",
+      url: `/admin/contents/${contentId}/status`,
+      headers: await reviewerHeaders(),
+      payload: { status: "APPROVED" },
+    });
+    expect(approvedParent.statusCode).toBe(200);
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${versionId}/publish`,
+      headers: await reviewerHeaders(),
+    });
+    expect(published.statusCode).toBe(200);
+    return published;
   }
 
   // ---------- Güvenlik ----------
@@ -599,11 +664,7 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const version = await createVersionViaApi(created.id, { body: "metin" });
-    await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${version.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
+    await publishVersionViaApi(version.id);
 
     const res = await app.inject({
       method: "PATCH",
@@ -685,6 +746,83 @@ describe("content admin", () => {
     expect(reviewed.json().data.status).toBe("REVIEW");
   });
 
+  it("Sürüm yayınında parent içerik APPROVED değilse erken reddeder", async () => {
+    const created = await createContentViaApi({
+      type: "PASSAGE",
+      title: "Parent yaşam döngüsü",
+      difficulty: 0.5,
+    });
+    const version = await createVersionViaApi(created.id, { body: "Parent durum testi" });
+    await approveVersionViaApi(version.id);
+
+    const draftPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${version.id}/publish`,
+      headers: await reviewerHeaders(),
+    });
+    expect(draftPublish.statusCode).toBe(400);
+    expect(draftPublish.json().error.message).toContain("APPROVED");
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/admin/content-versions/${version.id}`,
+          headers: await superAdminHeaders(),
+        })
+      ).json().data.status,
+    ).toBe("APPROVED");
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/admin/contents/${created.id}`,
+          headers: await superAdminHeaders(),
+        })
+      ).json().data.status,
+    ).toBe("DRAFT");
+
+    const reviewedParent = await app.inject({
+      method: "PATCH",
+      url: `/admin/contents/${created.id}/status`,
+      headers: await superAdminHeaders(),
+      payload: { status: "REVIEW" },
+    });
+    expect(reviewedParent.statusCode).toBe(200);
+
+    const reviewPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${version.id}/publish`,
+      headers: await reviewerHeaders(),
+    });
+    expect(reviewPublish.statusCode).toBe(400);
+    expect(reviewPublish.json().error.message).toContain("APPROVED");
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/admin/contents/${created.id}`,
+          headers: await superAdminHeaders(),
+        })
+      ).json().data.status,
+    ).toBe("REVIEW");
+
+    const approvedParent = await app.inject({
+      method: "PATCH",
+      url: `/admin/contents/${created.id}/status`,
+      headers: await reviewerHeaders(),
+      payload: { status: "APPROVED" },
+    });
+    expect(approvedParent.statusCode).toBe(200);
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${version.id}/publish`,
+      headers: await reviewerHeaders(),
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json().data.status).toBe("PUBLISHED");
+  });
+
   it("Taslak olmayan sürüm incelemeye alınamaz: 400", async () => {
     const created = await createContentViaApi({
       type: "ARTICLE",
@@ -716,12 +854,7 @@ describe("content admin", () => {
     });
     const version = await createVersionViaApi(created.id, { body: "Yayınlanacak metin" });
 
-    const published = await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${version.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
-    expect(published.statusCode).toBe(200);
+    const published = await publishVersionViaApi(version.id);
     const publishedData = published.json().data;
     expect(publishedData.status).toBe("PUBLISHED");
     expect(publishedData.publishedAt).not.toBeNull();
@@ -744,12 +877,7 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const version = await createVersionViaApi(created.id, { body: "metin" });
-    const published = await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${version.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
-    expect(published.statusCode).toBe(200);
+    await publishVersionViaApi(version.id);
 
     const again = await app.inject({
       method: "POST",
@@ -767,12 +895,7 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const version = await createVersionViaApi(created.id, { body: "metin" });
-    const published = await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${version.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
-    expect(published.statusCode).toBe(200);
+    await publishVersionViaApi(version.id);
 
     const updated = await app.inject({
       method: "PATCH",
@@ -791,11 +914,7 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const v1 = await createVersionViaApi(created.id, { body: "İlk sürüm" });
-    await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${v1.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
+    await publishVersionViaApi(v1.id);
 
     const v2 = await createVersionViaApi(created.id, { body: "İkinci sürüm" });
     expect(v2.version).toBe(2);
@@ -1084,11 +1203,7 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const version = await createVersionViaApi(created.id, { body: "Silinecek metin" });
-    await app.inject({
-      method: "POST",
-      url: `/admin/content-versions/${version.id}/publish`,
-      headers: await superAdminHeaders(),
-    });
+    await publishVersionViaApi(version.id);
 
     const deleted = await app.inject({
       method: "DELETE",

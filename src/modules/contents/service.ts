@@ -813,6 +813,11 @@ export async function publishContentVersion(
     if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
     if (existing.status === "PUBLISHED") throw validationError("Sürüm zaten yayınlanmış");
     assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
+    if (existing.content.status !== "APPROVED") {
+      throw validationError(
+        "İçerik sürümü yayınlanmadan önce parent içerik APPROVED durumunda olmalıdır",
+      );
+    }
     await tx.contentVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },

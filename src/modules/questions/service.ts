@@ -862,6 +862,11 @@ export async function publishQuestionVersion(
     if (!existing) throw notFoundError("Soru sürümü bulunamadı");
     if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
     assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
+    if (existing.question.status !== "APPROVED") {
+      throw validationError(
+        "Soru sürümü yayınlanmadan önce parent soru APPROVED durumunda olmalıdır",
+      );
+    }
     await tx.questionVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
