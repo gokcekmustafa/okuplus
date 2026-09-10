@@ -64,6 +64,7 @@ const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(300).default(604800),
   AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
   AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
+  STAGING_OPERATOR_AUTH_SECRET: z.string().max(256).default(""),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),
@@ -87,6 +88,18 @@ export { envSchema };
 
 export type RawEnv = Record<string, string | undefined>;
 
+function validateStagingOperatorSecret(env: Env): void {
+  const secret = env.STAGING_OPERATOR_AUTH_SECRET;
+  if (
+    secret !== "" &&
+    (env.APP_ENV !== "staging" || secret.length < 32 || secret.trim() !== secret)
+  ) {
+    throw new Error(
+      "Geçersiz ortam değişkenleri: STAGING_OPERATOR_AUTH_SECRET yalnızca staging'de güçlü bir process secret olarak kullanılabilir",
+    );
+  }
+}
+
 export function parseEnv(raw: RawEnv): Env {
   const result = envSchema.safeParse(raw);
   if (!result.success) {
@@ -95,6 +108,7 @@ export function parseEnv(raw: RawEnv): Env {
       .join("; ");
     throw new Error(`Geçersiz ortam değişkenleri: ${issues}`);
   }
+  validateStagingOperatorSecret(result.data);
   if (
     result.data.NODE_ENV === "production" &&
     result.data.JWT_SECRET === "oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef"

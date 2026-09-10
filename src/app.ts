@@ -11,6 +11,7 @@ import {
   type SocialTokenVerifier,
 } from "./modules/auth/index.js";
 import { authRoutes } from "./modules/auth/routes.js";
+import { stagingOperatorRoutes } from "./modules/auth/staging-operator-routes.js";
 import { createCookieCsrfGuard } from "./modules/auth/csrf.js";
 import { assessmentAdminRoutes, assessmentStudentRoutes } from "./modules/assessments/index.js";
 import { assignmentAdminRoutes, assignmentStudentRoutes } from "./modules/assignments/index.js";
@@ -90,6 +91,15 @@ export async function buildApp(
     enforceAuthOrigin: env.AUTH_ORIGIN_ENFORCEMENT === "on",
     cookieAuthEnabled: env.AUTH_COOKIE_TRANSPORT === "on",
   });
+  if (env.APP_ENV === "staging") {
+    await app.register(stagingOperatorRoutes, {
+      authProvider,
+      appEnv: env.APP_ENV,
+      operatorSecret: env.STAGING_OPERATOR_AUTH_SECRET,
+      csrfSecret: env.JWT_SECRET,
+      allowedOrigins,
+    });
+  }
   await app.register(tenantAdminRoutes, { authProvider });
   await app.register(userAdminRoutes, { authProvider });
   await app.register(studentAdminRoutes, { authProvider });

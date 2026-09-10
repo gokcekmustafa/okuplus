@@ -15,6 +15,7 @@ const redactPaths = [
   "*.merchantKey",
   "req.headers.authorization",
   "req.headers.cookie",
+  "req.headers.x-staging-operator-secret",
 ];
 
 /**
