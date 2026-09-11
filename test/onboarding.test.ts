@@ -195,7 +195,13 @@ describe.sequential("onboarding", () => {
         title: "Placement 8D",
         type: "PLACEMENT",
         status: "PUBLISHED",
-        config: { templateId: TMPL_ID, templateVersionId: TMPL_VID },
+        config: {
+          templateId: TMPL_ID,
+          templateVersionId: TMPL_VID,
+          canonicalManifestId: "OKU-READING-PLACEMENT-V1",
+          canonicalManifestVersion: "1.1.0",
+          canonicalActive: true,
+        },
       },
     });
     app = await buildApp(loadEnv());

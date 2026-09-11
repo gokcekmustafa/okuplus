@@ -1,6 +1,12 @@
 import { Prisma, type PlatformRole, type PointEvent, type PointEventType } from "@prisma/client";
 import { forbiddenError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
+import {
+  calendarDateKey,
+  calendarDateStorage,
+  storedCalendarDate,
+  storedCalendarDateKey,
+} from "../../lib/calendar.js";
 
 export const POINT_RULES = {
   DAILY_LOGIN: 20,
@@ -60,13 +66,11 @@ export interface StudentGamificationData {
 }
 
 function utcCalendarDay(date: Date): Date {
-  const day = new Date(date);
-  day.setUTCHours(0, 0, 0, 0);
-  return day;
+  return calendarDateStorage(date);
 }
 
 function calendarKey(date: Date): string {
-  return utcCalendarDay(date).toISOString().slice(0, 10);
+  return calendarDateKey(date);
 }
 
 async function findStudentMembership(studentId: string, tenantId: string) {
@@ -109,7 +113,11 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
     return { event: existing, created: false };
   }
 
-  await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  // A streak is a daily-training completion signal. Answers, direct exercise
+  // sessions, placement and login point events must not advance it.
+  if (input.sourceType === "TRAINING_SESSION") {
+    await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  }
   await evaluateBasicBadges(input.tenantId, input.studentId);
   return { event, created: true };
 }
@@ -132,7 +140,7 @@ export async function updateStreak(tenantId: string, studentId: string, activity
     });
   }
 
-  const previousDay = streak.lastActivityDate ? utcCalendarDay(streak.lastActivityDate) : null;
+  const previousDay = streak.lastActivityDate ? storedCalendarDate(streak.lastActivityDate) : null;
   const difference = previousDay
     ? Math.round((activityDay.getTime() - previousDay.getTime()) / DAY_MS)
     : null;
@@ -188,7 +196,7 @@ export async function evaluateBasicBadges(tenantId: string, studentId: string): 
       sourceId = lastCorrect?.sourceId ?? null;
     } else if (badge.code === "SEVEN_DAY_STREAK" && (streak?.currentDays ?? 0) >= 7) {
       sourceType = "STREAK";
-      sourceId = streak?.lastActivityDate ? calendarKey(streak.lastActivityDate) : null;
+      sourceId = streak?.lastActivityDate ? storedCalendarDateKey(streak.lastActivityDate) : null;
     }
     if (!sourceType) continue;
 
@@ -248,6 +256,23 @@ export async function recordExerciseCompleted(input: {
     dedupeKey: `${input.tenantId}:${input.studentId}:exercise-completed:${input.sessionId}`,
     sourceType: "EXERCISE_SESSION",
     sourceId: input.sessionId,
+    activityAt: input.completedAt,
+  });
+}
+
+export async function recordTrainingSessionCompleted(input: {
+  tenantId: string;
+  studentId: string;
+  trainingSessionId: string;
+  completedAt?: Date;
+}): Promise<AwardPointsResult> {
+  return awardPoints({
+    tenantId: input.tenantId,
+    studentId: input.studentId,
+    eventType: "EXERCISE_COMPLETED",
+    dedupeKey: `${input.tenantId}:${input.studentId}:training-session-completed:${input.trainingSessionId}`,
+    sourceType: "TRAINING_SESSION",
+    sourceId: input.trainingSessionId,
     activityAt: input.completedAt,
   });
 }

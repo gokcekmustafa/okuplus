@@ -1,6 +1,10 @@
 import { Prisma, type AssessmentStatus, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
+import { conflictError, forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
+import {
+  findCanonicalPlacementAssessment,
+  selectCanonicalPlacementAssessment,
+} from "./canonical-selector.js";
 import type {
   CreateAssessmentInput,
   ListAssessmentsQuery,
@@ -294,25 +298,38 @@ export async function listStudentAssessments(actor: {
     OR: actor.tenantId ? [{ tenantId: null }, { tenantId: actor.tenantId }] : [{ tenantId: null }],
   };
 
-  const [rows, total] = await Promise.all([
-    prisma.assessment.findMany({
-      where,
-      select: {
-        id: true,
-        title: true,
-        type: true,
-        config: true,
-        level: { select: { name: true } },
-        tenantId: true,
-        _count: { select: { sessions: true, results: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.assessment.count({ where }),
-  ]);
+  const rows = await prisma.assessment.findMany({
+    where,
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      status: true,
+      config: true,
+      deletedAt: true,
+      level: { select: { name: true } },
+      tenantId: true,
+      _count: { select: { sessions: true, results: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const canonicalPlacementSelection = selectCanonicalPlacementAssessment(
+    rows.filter((row) => row.type === "PLACEMENT"),
+    actor.tenantId,
+  );
+  if (canonicalPlacementSelection.status === "CONFLICT") {
+    throw conflictError("Birden fazla aktif canonical placement assessment bulundu");
+  }
+  const visibleRows = rows.filter(
+    (row) =>
+      row.type !== "PLACEMENT" ||
+      (canonicalPlacementSelection.status === "FOUND" &&
+        canonicalPlacementSelection.assessment.id === row.id),
+  );
 
   // ÖğrencininInProgress session'larını bul
-  const assessmentIds = rows.map((r) => r.id);
+  const assessmentIds = visibleRows.map((r) => r.id);
   let studentSessions: Array<{
     assessmentId: string | null;
     id: string;
@@ -362,7 +379,7 @@ export async function listStudentAssessments(actor: {
       resultByAssessment.set(result.assessmentId, result);
 
   return {
-    items: rows.map((r) => {
+    items: visibleRows.map((r) => {
       const config = r.config as { questionCount?: number } | null;
       return {
         id: r.id,
@@ -385,7 +402,7 @@ export async function listStudentAssessments(actor: {
         organizationName: r.tenantId,
       };
     }),
-    total,
+    total: visibleRows.length,
   };
 }
 
@@ -412,6 +429,13 @@ export async function getStudentAssessment(
     },
   });
   if (!row) throw notFoundError("Değerlendirme bulunamadı");
+
+  if (row.type === "PLACEMENT") {
+    const canonical = await findCanonicalPlacementAssessment(prisma, actor.tenantId);
+    if (!canonical || canonical.id !== row.id) {
+      throw notFoundError("Değerlendirme bulunamadı");
+    }
+  }
 
   const inProgressSession = await prisma.exerciseSession.findFirst({
     where: {
@@ -467,10 +491,18 @@ export async function startAssessmentSession(
     select: {
       id: true,
       tenantId: true,
+      type: true,
       config: true,
     },
   });
   if (!assessment) throw notFoundError("Değerlendirme bulunamadı");
+
+  if (assessment.type === "PLACEMENT") {
+    const canonical = await findCanonicalPlacementAssessment(prisma, actor.tenantId);
+    if (!canonical || canonical.id !== assessment.id) {
+      throw notFoundError("Değerlendirme bulunamadı");
+    }
+  }
 
   // Config'den templateVersionId al
   const config = assessment.config as { templateId?: string; templateVersionId?: string } | null;

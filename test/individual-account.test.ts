@@ -398,8 +398,8 @@ describe.sequential("individual account foundation", () => {
       headers: await authHeaders(),
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.totalPoints).toBeGreaterThanOrEqual(80);
-    expect(response.json().data.currentDays).toBe(1);
+    expect(response.json().data.totalPoints).toBeGreaterThanOrEqual(60);
+    expect(response.json().data.currentDays).toBe(0);
     expect(
       response
         .json()
@@ -407,7 +407,7 @@ describe.sequential("individual account foundation", () => {
     ).toBe(true);
     expect(
       await prisma.pointEvent.count({ where: { tenantId: tenantAId, studentId: userAId } }),
-    ).toBe(3);
+    ).toBe(2);
     expect(
       await prisma.studentBadge.count({ where: { tenantId: tenantAId, studentId: userAId } }),
     ).toBeGreaterThan(0);

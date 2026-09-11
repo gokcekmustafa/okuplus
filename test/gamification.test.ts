@@ -195,33 +195,28 @@ describe.sequential("gamification MVP", () => {
     await prisma.$disconnect();
   });
 
-  it("DAILY_LOGIN point oluşturur", async () => {
+  it("login GP üretmez", async () => {
     tokenA = await login(EMAIL_A);
     const events = await prisma.pointEvent.findMany({
       where: { tenantId: TENANT_A, studentId: STUDENT_A },
     });
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      eventType: "DAILY_LOGIN",
-      points: 20,
-      sourceType: "AUTH_LOGIN",
-    });
+    expect(events).toHaveLength(0);
   });
 
-  it("aynı gün login idempotenttir", async () => {
+  it("aynı gün tekrar login de GP üretmez", async () => {
     await login(EMAIL_A);
     expect(
       await prisma.pointEvent.count({
         where: { tenantId: TENANT_A, studentId: STUDENT_A, eventType: "DAILY_LOGIN" },
       }),
-    ).toBe(1);
+    ).toBe(0);
   });
 
-  it("ilk aktivite streak'i 1 yapar", async () => {
+  it("günlük giriş tek başına training streak'i başlatmaz", async () => {
     const streak = await prisma.studentStreak.findUnique({
       where: { tenantId_studentId: { tenantId: TENANT_A, studentId: STUDENT_A } },
     });
-    expect(streak).toMatchObject({ currentDays: 1, longestDays: 1 });
+    expect(streak).toBeNull();
   });
 
   it("CORRECT_ANSWER point oluşturur", async () => {
@@ -347,7 +342,7 @@ describe.sequential("gamification MVP", () => {
       headers: headers(tokenB, TENANT_B),
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.totalPoints).toBe(20);
+    expect(response.json().data.totalPoints).toBe(0);
     expect(
       response
         .json()
@@ -371,7 +366,7 @@ describe.sequential("gamification MVP", () => {
       headers: headers(tokenA, TENANT_A),
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.totalPoints).toBe(80);
+    expect(response.json().data.totalPoints).toBe(60);
   });
 
   it("recentPointEvents son hareketleri döndürür", async () => {
@@ -381,9 +376,9 @@ describe.sequential("gamification MVP", () => {
       headers: headers(tokenA, TENANT_A),
     });
     const events = response.json().data.recentPointEvents;
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(2);
     expect(events.map((event: { eventType: string }) => event.eventType)).toEqual(
-      expect.arrayContaining(["DAILY_LOGIN", "CORRECT_ANSWER", "EXERCISE_COMPLETED"]),
+      expect.arrayContaining(["CORRECT_ANSWER", "EXERCISE_COMPLETED"]),
     );
   });
 
