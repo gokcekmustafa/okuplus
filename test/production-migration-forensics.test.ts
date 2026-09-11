@@ -50,6 +50,20 @@ describe("protected production migration forensics", () => {
     expect(workflow).not.toContain("migrate reset");
   });
 
+  it("binds and validates the protected historical acknowledgement without printing it", () => {
+    expect(workflow).toContain("name: Verify historical acknowledgement binding");
+    expect(workflow).toContain(
+      "PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}",
+    );
+    expect(workflow).toContain("process.env.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
+    expect(workflow).toContain('const migrationName = "20260817000000_init"');
+    expect(workflow).toContain('echo "HISTORICAL_ACK_BINDING=PASS"');
+    expect(workflow).not.toContain(
+      'echo "${PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS}"',
+    );
+    expect(workflow).not.toContain("JSON.stringify(parsed)");
+  });
+
   it("contains only read-only query access and safe output fields", () => {
     expect(script).toContain("$queryRaw");
     expect(script).not.toContain("$executeRaw");

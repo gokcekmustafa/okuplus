@@ -59,9 +59,48 @@ jobs:
           test -n "${PRODUCTION_DATABASE_URL}"
           [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
 
+      - name: Verify historical acknowledgement binding
+        env:
+          PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS}" || {
+            echo "FAIL: historical migration acknowledgement variable is missing"
+            exit 1
+          }
+          node --input-type=module <<'NODE'
+          const raw = process.env.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS?.trim();
+          if (!raw) throw new Error("historical acknowledgement variable is missing");
+
+          let parsed;
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            throw new Error("historical acknowledgement variable must be valid JSON");
+          }
+
+          const migrationName = "20260817000000_init";
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("historical acknowledgement variable must be a JSON object");
+          }
+          const keys = Object.keys(parsed);
+          if (keys.length !== 1 || keys[0] !== migrationName) {
+            throw new Error("historical acknowledgement migration scope is invalid");
+          }
+          if (
+            typeof parsed[migrationName] !== "string" ||
+            !/^[a-f0-9]{64}$/u.test(parsed[migrationName])
+          ) {
+            throw new Error("historical acknowledgement checksum shape is invalid");
+          }
+          NODE
+          echo "HISTORICAL_ACK_BINDING=PASS"
+
       - name: Read production migration history and schema
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
         shell: bash
         run: |
           set -euo pipefail
