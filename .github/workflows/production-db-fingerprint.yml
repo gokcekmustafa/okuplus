@@ -1,0 +1,89 @@
+name: Manual production database fingerprint
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_fingerprint:
+        description: "Type FINGERPRINT to allow the protected production identity check"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-db-fingerprint
+  cancel-in-progress: false
+
+jobs:
+  production-db-fingerprint:
+    name: Read production database identity fingerprint
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+
+    steps:
+      - name: Checkout selected master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify read-only production fingerprint gate
+        env:
+          CONFIRM_FINGERPRINT: ${{ inputs.confirm_fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "${APP_ENV}" = "production"
+          test "${NODE_ENV}" = "production"
+          test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
+          test "${CONFIRM_FINGERPRINT}" = "FINGERPRINT"
+
+      - name: Compute production target identity fingerprint
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -n "${DB_FINGERPRINT_DATABASE_URL}"
+          report="$(npx --no-install tsx scripts/db-fingerprint.ts)"
+          target_identity="$(printf '%s' "${report}" | node --input-type=commonjs -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              let report;
+              try {
+                report = JSON.parse(input);
+              } catch {
+                process.exitCode = 1;
+                return;
+              }
+              const value = report.targetIdentityFingerprint;
+              if (typeof value !== "string") {
+                process.exitCode = 1;
+                return;
+              }
+              process.stdout.write(value.toLowerCase());
+            });
+          ')"
+
+          [[ "${target_identity}" =~ ^[0-9a-f]{64}$ ]]
+          printf 'targetIdentityFingerprint=%s\n' "${target_identity}"
