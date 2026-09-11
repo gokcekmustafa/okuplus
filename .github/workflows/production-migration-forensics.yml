@@ -61,4 +61,148 @@ jobs:
       - name: Read production migration history and schema
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: npx tsx scripts/production-migration-forensics.ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          FORENSICS_OUTPUT_FILE="${RUNNER_TEMP}/production-migration-forensics.json"
+          npx tsx scripts/production-migration-forensics.ts > "${FORENSICS_OUTPUT_FILE}"
+
+          node --input-type=module - "${FORENSICS_OUTPUT_FILE}" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const sourcePath = process.argv[2];
+          const report = JSON.parse(readFileSync(sourcePath, "utf8"));
+          const requiredFields = [
+            "migrationHistoryCount",
+            "failedMigrations",
+            "rolledBackMigrations",
+            "checksumMismatch",
+            "repositoryOnlyMigrations",
+            "productionOnlyMigrations",
+            "schemaDrift",
+            "partialSchemaState",
+            "partialDataState",
+            "releaseMigration1",
+            "releaseMigration2",
+            "remediationClass",
+            "migrateDeploySafe",
+            "resolveRequired",
+            "forwardFixRequired",
+            "schemaSummary",
+          ];
+
+          for (const field of requiredFields) {
+            if (!(field in report)) {
+              throw new Error(`missing forensic output field: ${field}`);
+            }
+          }
+
+          const migrationSummary = (rows) => rows.map((row) => ({
+            migrationName: row.migrationName,
+            state: row.state,
+            checksum: row.checksum,
+            appliedStepsCount: row.appliedStepsCount,
+            startedAt: row.startedAt,
+            finishedAt: row.finishedAt,
+            rolledBackAt: row.rolledBackAt,
+          }));
+
+          const schemaSummary = (schema) => ({
+            columns: schema.columns.map(({ table_name, column_name, data_type, udt_name }) => ({
+              table_name,
+              column_name,
+              data_type,
+              udt_name,
+            })),
+            indexes: schema.indexes.map(({ tablename, indexname }) => ({ tablename, indexname })),
+            constraints: schema.constraints.map(({ table_name, constraint_name, constraint_type, columns }) => ({
+              table_name,
+              constraint_name,
+              constraint_type,
+              columns,
+            })),
+            enums: schema.enums.map(({ type_name, enum_value }) => ({ type_name, enum_value })),
+            policies: schema.policies.map(({ tablename, policyname, cmd }) => ({
+              tablename,
+              policyname,
+              cmd,
+            })),
+          });
+
+          const safe = {
+            migrationHistoryCount: report.migrationHistoryCount,
+            failedMigrations: migrationSummary(report.failedMigrations),
+            rolledBackMigrations: migrationSummary(report.rolledBackMigrations),
+            checksumMismatch: report.checksumMismatch,
+            checksumMismatches: report.checksumMismatches,
+            repositoryOnlyMigrations: report.repositoryOnlyMigrations,
+            productionOnlyMigrations: report.productionOnlyMigrations,
+            schemaDrift: report.schemaDrift,
+            partialSchemaState: report.partialSchemaState,
+            partialDataState: report.partialDataState,
+            releaseMigration1: {
+              history: report.releaseMigration1.history,
+              schema: report.releaseMigration1.schema,
+              dataState: report.releaseMigration1.dataState,
+              partial: report.releaseMigration1.partial,
+            },
+            releaseMigration2: {
+              history: report.releaseMigration2.history,
+              schema: report.releaseMigration2.schema,
+              partial: report.releaseMigration2.partial,
+            },
+            remediationClass: report.remediationClass,
+            migrateDeploySafe: report.migrateDeploySafe,
+            resolveRequired: report.resolveRequired,
+            forwardFixRequired: report.forwardFixRequired,
+            currentSchemaSummary: schemaSummary(report.schemaSummary),
+          };
+
+          const json = `${JSON.stringify(safe, null, 2)}\n`;
+          writeFileSync("production-migration-forensics-summary.json", json, "utf8");
+
+          const lines = [
+            "## Production migration forensics",
+            "",
+            "**PRODUCTION_DB:** CONNECTED_READ_ONLY = YES",
+            "",
+            `**MIGRATION_HISTORY_COUNT:** ${safe.migrationHistoryCount}`,
+            `**FAILED_MIGRATIONS:** ${JSON.stringify(safe.failedMigrations)}`,
+            `**ROLLED_BACK_MIGRATIONS:** ${JSON.stringify(safe.rolledBackMigrations)}`,
+            `**CHECKSUM_MISMATCH:** ${safe.checksumMismatch}`,
+            `**REPOSITORY_ONLY:** ${JSON.stringify(safe.repositoryOnlyMigrations)}`,
+            `**PRODUCTION_ONLY:** ${JSON.stringify(safe.productionOnlyMigrations)}`,
+            `**SCHEMA_DRIFT:** ${safe.schemaDrift}`,
+            `**PARTIAL_SCHEMA_STATE:** ${safe.partialSchemaState}`,
+            `**PARTIAL_DATA_STATE:** ${safe.partialDataState}`,
+            "",
+            "**RELEASE_MIGRATION_1:**",
+            `- history_state: ${safe.releaseMigration1.history}`,
+            `- schema_state: ${safe.releaseMigration1.schema.status}`,
+            `- data_state: ${safe.releaseMigration1.dataState}`,
+            `- partial: ${safe.releaseMigration1.partial}`,
+            "",
+            "**RELEASE_MIGRATION_2:**",
+            `- history_state: ${safe.releaseMigration2.history}`,
+            `- schema_state: ${safe.releaseMigration2.schema.status}`,
+            `- partial: ${safe.releaseMigration2.partial}`,
+            "",
+            `**REMEDIATION_CLASS:** ${safe.remediationClass}`,
+            `**MIGRATE_DEPLOY_SAFE:** ${safe.migrateDeploySafe}`,
+            `**RESOLVE_REQUIRED:** ${safe.resolveRequired}`,
+            `**FORWARD_FIX_REQUIRED:** ${safe.forwardFixRequired}`,
+            "",
+            "**CURRENT_SCHEMA_SUMMARY:**",
+            "```json",
+            JSON.stringify(safe.currentSchemaSummary, null, 2),
+            "```",
+          ];
+          writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, "utf8");
+          NODE
+
+      - name: Upload sanitized forensic summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-migration-forensics-summary
+          path: production-migration-forensics-summary.json
+          if-no-files-found: error

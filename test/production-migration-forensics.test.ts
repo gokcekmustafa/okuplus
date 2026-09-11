@@ -22,7 +22,11 @@ describe("protected production migration forensics", () => {
 
   it("uses only the production secret through process environment", () => {
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
+    expect(workflow).toContain("FORENSICS_OUTPUT_FILE");
+    expect(workflow).toContain("GITHUB_STEP_SUMMARY");
+    expect(workflow).toContain("production-migration-forensics-summary.json");
     expect(workflow).not.toContain("echo ${PRODUCTION_DATABASE_URL}");
+    expect(workflow).not.toContain('cat "${FORENSICS_OUTPUT_FILE}"');
     expect(workflow).not.toContain("migrate deploy");
     expect(workflow).not.toContain("migrate resolve");
     expect(workflow).not.toContain("db push");
@@ -37,6 +41,10 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("applied_steps_count");
     expect(script).toContain("safeErrorSummary");
     expect(script).toContain('productionDbWrite: "NO"');
+    expect(workflow).toContain('"migrationHistoryCount"');
+    expect(workflow).toContain('"failedMigrations"');
+    expect(workflow).toContain('"releaseMigration1"');
+    expect(workflow).toContain("currentSchemaSummary:");
     expect(script).not.toContain("console.log(rawUrl)");
     expect(script).not.toContain("console.log(process.env.DB_FINGERPRINT_DATABASE_URL)");
   });
