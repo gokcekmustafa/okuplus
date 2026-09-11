@@ -1,19 +1,22 @@
 import type { PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
+import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+import { calendarDateKey, calendarDateStorage, calendarDayBounds } from "../../lib/calendar.js";
 import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
   recordUsageInTransaction,
 } from "../entitlements/index.js";
 import { getStudentReview, type StudentReviewResponse } from "./review-service.js";
+import {
+  isTrainingConfigCandidate,
+  resolveTrainingRuntimeConfig,
+  toTrainingRuntimeConfig,
+} from "../training/runtime.js";
 
 function todayBounds(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { start, end };
+  return calendarDayBounds(date);
 }
 
 export interface TodayResponse {
@@ -22,6 +25,19 @@ export interface TodayResponse {
   currentStreak: number;
   longestStreak: number;
   totalPoints: number;
+  pointsToday: number;
+  isFirstTrainingDay: boolean;
+  placementHandoff: boolean;
+  dailyTraining: {
+    id: string;
+    status: string;
+    totalItems: number;
+    completedItems: number;
+    totalGP: number;
+    currentItemPosition: number | null;
+    firstDay: boolean;
+    placementHandoff: boolean;
+  } | null;
   activeSession: {
     id: string;
     assignmentId: string | null;
@@ -39,16 +55,21 @@ export async function getToday(actor: {
   tenantId: string | null;
   platformRole: PlatformRole | null;
 }): Promise<TodayResponse> {
+  assertStudentActor(actor);
   const tenantId = actor.tenantId;
-  if (!tenantId && !actor.platformRole) throw forbiddenError("Tenant gerekli");
   const now = new Date();
   const { start, end } = todayBounds(now);
+  const sessionDate = calendarDateStorage(now);
 
   const [
     completedToday,
     activeSession,
     streak,
     pointsAgg,
+    pointsTodayAgg,
+    dailyTrainingSession,
+    previousTrainingSession,
+    placementResult,
     recentSessions,
     assignments,
     assessments,
@@ -59,6 +80,7 @@ export async function getToday(actor: {
       where: {
         studentId: actor.userId,
         tenantId: tenantId ?? undefined,
+        ...STUDENT_LEARNING_SESSION_FILTER,
         status: "COMPLETED",
         completedAt: { gte: start, lt: end },
       },
@@ -81,6 +103,56 @@ export async function getToday(actor: {
       where: { studentId: actor.userId, tenantId: tenantId ?? undefined },
       _sum: { points: true },
     }),
+    prisma.pointEvent.aggregate({
+      where: {
+        studentId: actor.userId,
+        tenantId: tenantId ?? undefined,
+        createdAt: { gte: start, lt: end },
+      },
+      _sum: { points: true },
+    }),
+    tenantId
+      ? prisma.trainingSession.findUnique({
+          where: {
+            tenantId_studentId_sessionDate: {
+              tenantId,
+              studentId: actor.userId,
+              sessionDate,
+            },
+          },
+          select: {
+            id: true,
+            composition: true,
+            status: true,
+            totalItems: true,
+            completedItems: true,
+            totalGP: true,
+            items: {
+              where: { status: { not: "COMPLETED" } },
+              orderBy: { position: "asc" },
+              take: 1,
+              select: { position: true },
+            },
+          },
+        })
+      : Promise.resolve(null),
+    tenantId
+      ? prisma.trainingSession.findFirst({
+          where: { tenantId, studentId: actor.userId },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+    tenantId
+      ? prisma.assessmentResult.findFirst({
+          where: {
+            tenantId,
+            studentId: actor.userId,
+            assessment: { type: "PLACEMENT", deletedAt: null },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
     prisma.exerciseSession.findMany({
       where: { studentId: actor.userId, tenantId: tenantId ?? undefined, status: "COMPLETED" },
       orderBy: { completedAt: "desc" },
@@ -187,11 +259,34 @@ export async function getToday(actor: {
   }));
 
   return {
-    date: start.toISOString().slice(0, 10),
+    date: calendarDateKey(now),
     completedToday,
     currentStreak: (streak as { currentDays: number } | null)?.currentDays ?? 0,
     longestStreak: (streak as { longestDays: number } | null)?.longestDays ?? 0,
     totalPoints: pointsAgg._sum.points ?? 0,
+    pointsToday: pointsTodayAgg._sum.points ?? 0,
+    isFirstTrainingDay: tenantId ? !previousTrainingSession : false,
+    placementHandoff: Boolean(placementResult),
+    dailyTraining: dailyTrainingSession
+      ? {
+          id: dailyTrainingSession.id,
+          status: dailyTrainingSession.status,
+          totalItems: dailyTrainingSession.totalItems,
+          completedItems: dailyTrainingSession.completedItems,
+          totalGP: dailyTrainingSession.totalGP,
+          currentItemPosition: dailyTrainingSession.items[0]?.position ?? null,
+          firstDay:
+            typeof dailyTrainingSession.composition === "object" &&
+            dailyTrainingSession.composition !== null &&
+            "firstDay" in dailyTrainingSession.composition &&
+            dailyTrainingSession.composition.firstDay === true,
+          placementHandoff:
+            typeof dailyTrainingSession.composition === "object" &&
+            dailyTrainingSession.composition !== null &&
+            "placementHandoff" in dailyTrainingSession.composition &&
+            dailyTrainingSession.composition.placementHandoff === true,
+        }
+      : null,
     activeSession: activeSession ?? null,
     nextAction,
     recentActivity,
@@ -213,6 +308,7 @@ export async function getLearningPath(actor: {
   tenantId: string | null;
   platformRole: PlatformRole | null;
 }) {
+  assertStudentActor(actor);
   const tenantId = actor.tenantId;
   // parallel base data
   const [allSkills, studentProgress, level, today] = await Promise.all([
@@ -478,6 +574,9 @@ export async function getHistory(
   actor: { userId: string; tenantId: string | null; platformRole: string | null },
   opts: { page: number; pageSize: number },
 ) {
+  if (!actor.tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const where = { studentId: actor.userId, tenantId: actor.tenantId ?? undefined };
   const [items, total] = await Promise.all([
     prisma.exerciseSession.findMany({
@@ -509,7 +608,9 @@ export async function startPersonalExercise(
   input: { templateVersionId?: string; clientSessionId?: string },
 ) {
   const tenantId = actor.tenantId;
-  if (!tenantId) throw forbiddenError("Tenant gerekli");
+  if (!tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const clientSessionId = input.clientSessionId?.trim() || null;
   if (clientSessionId && clientSessionId.length > 200) {
     throw validationError("clientSessionId en fazla 200 karakter olmalı");
@@ -605,6 +706,9 @@ export async function getStudentSession(
   id: string,
   actor: { userId: string; tenantId: string | null; platformRole: string | null },
 ) {
+  if (!actor.tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const session = await prisma.exerciseSession.findFirst({
     where: { id, studentId: actor.userId, tenantId: actor.tenantId ?? undefined },
     select: {
@@ -623,6 +727,7 @@ export async function getStudentSession(
       templateVersion: {
         select: {
           id: true,
+          config: true,
           template: { select: { id: true, title: true } },
           contents: {
             select: {
@@ -630,6 +735,7 @@ export async function getStudentSession(
               contentVersion: {
                 select: {
                   id: true,
+                  contentId: true,
                   version: true,
                   title: true,
                   body: true,
@@ -654,5 +760,17 @@ export async function getStudentSession(
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
-  return session;
+  const resolvedTrainingConfig =
+    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+      ? resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config)
+      : null;
+  const trainingConfig =
+    resolvedTrainingConfig?.status === "READY"
+      ? toTrainingRuntimeConfig(resolvedTrainingConfig.config)
+      : null;
+  const { config: _versionConfig, ...templateVersion } = session.templateVersion;
+  return {
+    ...session,
+    templateVersion: { ...templateVersion, training: trainingConfig },
+  };
 }
