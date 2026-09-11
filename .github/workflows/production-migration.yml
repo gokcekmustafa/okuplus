@@ -1,0 +1,163 @@
+name: Manual production database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_migrate:
+        description: "Type MIGRATE to allow the protected production migration step"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration
+  cancel-in-progress: false
+
+jobs:
+  production-migration:
+    name: Apply production Prisma migrations
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+
+    steps:
+      - name: Checkout selected master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify production migration gate
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+          CONFIRM_MIGRATE: ${{ inputs.confirm_migrate }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch" || {
+            echo "FAIL: workflow_dispatch is required"
+            exit 1
+          }
+          test "${GITHUB_REF}" = "refs/heads/master" || {
+            echo "FAIL: this job only accepts the master branch"
+            exit 1
+          }
+          test "${APP_ENV}" = "production" || {
+            echo "FAIL: APP_ENV must be production"
+            exit 1
+          }
+          test "${NODE_ENV}" = "production" || {
+            echo "FAIL: NODE_ENV must be production"
+            exit 1
+          }
+          test "${CONFIRM_MIGRATE}" = "MIGRATE" || {
+            echo "FAIL: explicit MIGRATE confirmation is required"
+            exit 1
+          }
+          test -n "${PRODUCTION_DATABASE_URL}" || {
+            echo "FAIL: production database secret is missing"
+            exit 1
+          }
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]] || {
+            echo "FAIL: approved production database fingerprint is missing or invalid"
+            exit 1
+          }
+
+          if git grep -n -i -E 'DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE([[:space:]]|;)|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP' -- \
+            prisma/migrations/20260905090000_add_exercise_template_version_config/migration.sql \
+            prisma/migrations/20260907150000_add_training_session_models/migration.sql; then
+            echo "FAIL: destructive SQL found in the Release 0.4 migrations"
+            exit 1
+          fi
+          echo "MIGRATION_SQL_SAFETY=PASS"
+
+      - name: Verify production database identity and pre-migration state
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(npx tsx scripts/db-fingerprint.ts)"
+          read -r target_identity failed_count <<EOF
+          $(printf '%s' "${report}" | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              const value = JSON.parse(input);
+              process.stdout.write(`${value.targetIdentityFingerprint ?? ""} ${value.migrations?.failedCount ?? ""}`);
+            });
+          ')
+          EOF
+          test -n "${target_identity}" || { echo "FAIL: production identity was not returned"; exit 1; }
+          test "${target_identity}" = "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" || {
+            echo "FAIL: production database identity does not match the approved target"
+            exit 1
+          }
+          test "${failed_count}" = "0" || {
+            echo "FAIL: failed or rolled-back migration exists"
+            exit 1
+          }
+          echo "PRODUCTION_DB_IDENTITY=PASS"
+
+      - name: Validate Prisma schema
+        run: npx prisma validate --schema=prisma/schema.prisma
+
+      - name: Apply production migrations
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: npx prisma migrate deploy --schema=prisma/schema.prisma
+
+      - name: Verify production migration status
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: npx prisma migrate status --schema=prisma/schema.prisma
+
+      - name: Verify production database identity and post-migration state
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(npx tsx scripts/db-fingerprint.ts)"
+          read -r status pending_count failed_count target_identity <<EOF
+          $(printf '%s' "${report}" | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              const value = JSON.parse(input);
+              process.stdout.write(`${value.status ?? ""} ${value.migrations?.pendingCount ?? ""} ${value.migrations?.failedCount ?? ""} ${value.targetIdentityFingerprint ?? ""}`);
+            });
+          ')
+          EOF
+          test "${status}" = "PASS" || { echo "FAIL: production migration report is not PASS"; exit 1; }
+          test "${pending_count}" = "0" || { echo "FAIL: pending production migrations remain"; exit 1; }
+          test "${failed_count}" = "0" || { echo "FAIL: failed production migrations remain"; exit 1; }
+          test "${target_identity}" = "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" || {
+            echo "FAIL: production database identity changed unexpectedly"
+            exit 1
+          }
+          echo "PRODUCTION_MIGRATIONS=CURRENT"
+          echo "PRODUCTION_DB_IDENTITY_AFTER=PASS"
+
+      - name: Migration summary
+        run: |
+          echo "PRODUCTION_MIGRATION=PASS"
+          echo "PRODUCTION_SMOKE=NOT_RUN"
