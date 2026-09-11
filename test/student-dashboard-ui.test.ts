@@ -37,4 +37,8 @@ describe("student dashboard release 0.4", () => {
     expect(styles).toContain("@media (max-width: 700px)");
     expect(index).toContain('aria-live="polite"');
   });
+
+  it("does not flash the dashboard while student onboarding is being resolved", () => {
+    expect(app).toContain('navigate("onboarding");\n    void maybeShowOnboarding();');
+  });
 });
