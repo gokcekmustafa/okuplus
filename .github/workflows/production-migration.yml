@@ -151,6 +151,8 @@ jobs:
           echo "PRODUCTION_MIGRATION_HISTORY_INTEGRITY=PASS"
 
       - name: Validate Prisma schema
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: npx prisma validate --schema=prisma/schema.prisma
 
       - name: Apply production migrations
