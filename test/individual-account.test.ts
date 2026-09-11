@@ -399,7 +399,7 @@ describe.sequential("individual account foundation", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().data.totalPoints).toBeGreaterThanOrEqual(60);
-    expect(response.json().data.currentDays).toBe(0);
+    expect(response.json().data.currentDays).toBe(1);
     expect(
       response
         .json()
