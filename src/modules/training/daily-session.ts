@@ -1,6 +1,7 @@
 import { Prisma, type TrainingSessionItemStatus, type TrainingSessionStatus } from "@prisma/client";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
+import { calendarDateKey, calendarDateStorage } from "../../lib/calendar.js";
 import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
@@ -72,13 +73,11 @@ function assertDailyStudent(actor: TrainingActor): asserts actor is DailySession
 }
 
 export function utcSessionDate(now = new Date()): Date {
-  const result = new Date(now);
-  result.setUTCHours(0, 0, 0, 0);
-  return result;
+  return calendarDateStorage(now);
 }
 
 export function dailySessionDateKey(now = new Date()): string {
-  return utcSessionDate(now).toISOString().slice(0, 10);
+  return calendarDateKey(now);
 }
 
 /**

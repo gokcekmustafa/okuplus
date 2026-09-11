@@ -100,6 +100,19 @@ describe("daily training planner", () => {
     expect(utcSessionDate(now).toISOString()).toBe("2026-09-07T00:00:00.000Z");
   });
 
+  it("uses the entitlement timezone for the daily uniqueness key", () => {
+    const previousTimezone = process.env.ENTITLEMENT_TIMEZONE;
+    process.env.ENTITLEMENT_TIMEZONE = "Europe/Istanbul";
+    try {
+      const now = new Date("2026-09-07T21:30:00.000Z");
+      expect(dailySessionDateKey(now)).toBe("2026-09-08");
+      expect(utcSessionDate(now).toISOString()).toBe("2026-09-08T00:00:00.000Z");
+    } finally {
+      if (previousTimezone === undefined) delete process.env.ENTITLEMENT_TIMEZONE;
+      else process.env.ENTITLEMENT_TIMEZONE = previousTimezone;
+    }
+  });
+
   it("does not include placement in the planner composition", () => {
     expect(DAILY_TRAINING_COMPOSITION.some((item) => item.family === "PLACEMENT")).toBe(false);
   });

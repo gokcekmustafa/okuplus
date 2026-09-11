@@ -1,6 +1,8 @@
 import type { PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
+import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+import { calendarDateKey, calendarDateStorage, calendarDayBounds } from "../../lib/calendar.js";
 import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
@@ -14,11 +16,7 @@ import {
 } from "../training/runtime.js";
 
 function todayBounds(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { start, end };
+  return calendarDayBounds(date);
 }
 
 export interface TodayResponse {
@@ -57,10 +55,11 @@ export async function getToday(actor: {
   tenantId: string | null;
   platformRole: PlatformRole | null;
 }): Promise<TodayResponse> {
+  assertStudentActor(actor);
   const tenantId = actor.tenantId;
-  if (!tenantId && !actor.platformRole) throw forbiddenError("Tenant gerekli");
   const now = new Date();
   const { start, end } = todayBounds(now);
+  const sessionDate = calendarDateStorage(now);
 
   const [
     completedToday,
@@ -81,6 +80,7 @@ export async function getToday(actor: {
       where: {
         studentId: actor.userId,
         tenantId: tenantId ?? undefined,
+        ...STUDENT_LEARNING_SESSION_FILTER,
         status: "COMPLETED",
         completedAt: { gte: start, lt: end },
       },
@@ -117,7 +117,7 @@ export async function getToday(actor: {
             tenantId_studentId_sessionDate: {
               tenantId,
               studentId: actor.userId,
-              sessionDate: start,
+              sessionDate,
             },
           },
           select: {
@@ -259,7 +259,7 @@ export async function getToday(actor: {
   }));
 
   return {
-    date: start.toISOString().slice(0, 10),
+    date: calendarDateKey(now),
     completedToday,
     currentStreak: (streak as { currentDays: number } | null)?.currentDays ?? 0,
     longestStreak: (streak as { longestDays: number } | null)?.longestDays ?? 0,
@@ -308,6 +308,7 @@ export async function getLearningPath(actor: {
   tenantId: string | null;
   platformRole: PlatformRole | null;
 }) {
+  assertStudentActor(actor);
   const tenantId = actor.tenantId;
   // parallel base data
   const [allSkills, studentProgress, level, today] = await Promise.all([
@@ -573,6 +574,9 @@ export async function getHistory(
   actor: { userId: string; tenantId: string | null; platformRole: string | null },
   opts: { page: number; pageSize: number },
 ) {
+  if (!actor.tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const where = { studentId: actor.userId, tenantId: actor.tenantId ?? undefined };
   const [items, total] = await Promise.all([
     prisma.exerciseSession.findMany({
@@ -604,7 +608,9 @@ export async function startPersonalExercise(
   input: { templateVersionId?: string; clientSessionId?: string },
 ) {
   const tenantId = actor.tenantId;
-  if (!tenantId) throw forbiddenError("Tenant gerekli");
+  if (!tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const clientSessionId = input.clientSessionId?.trim() || null;
   if (clientSessionId && clientSessionId.length > 200) {
     throw validationError("clientSessionId en fazla 200 karakter olmalı");
@@ -700,6 +706,9 @@ export async function getStudentSession(
   id: string,
   actor: { userId: string; tenantId: string | null; platformRole: string | null },
 ) {
+  if (!actor.tenantId || actor.platformRole !== null) {
+    throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
+  }
   const session = await prisma.exerciseSession.findFirst({
     where: { id, studentId: actor.userId, tenantId: actor.tenantId ?? undefined },
     select: {
