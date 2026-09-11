@@ -641,8 +641,9 @@ export async function completeExerciseSession(
     await syncTrainingSessionItem(id);
   }
 
-  // Progress aggregation — transaction dışında, session completion'ı bozmaz
-  void aggregateSessionProgress(id).catch(() => {});
+  // Progress aggregation session transaction'ı dışında kalır; ancak completion
+  // cevabı dönmeden önce tamamlanır. Hata, tamamlanmış oturumu geri almaz.
+  await aggregateSessionProgress(id).catch(() => {});
 
   return toSessionDetail(updated as any);
 }
