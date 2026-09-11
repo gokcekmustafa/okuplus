@@ -93,6 +93,8 @@ describe("protected production migration forensics", () => {
   it("keeps the historical acknowledgement fail-closed and init-only", () => {
     expect(script).toContain("row.migration_name === INIT_MIGRATION");
     expect(script).toContain("approvedChecksum === row.checksum");
+    expect(script).toContain("const historicallyApproved =");
+    expect(script).not.toContain("approvedChecksum === row.checksum &&");
     expect(script).toContain("lineEndingEquivalent");
     expect(script).toContain("unresolvedChecksumMismatches.length === 0");
     expect(script).toContain("!schemaAhead");
