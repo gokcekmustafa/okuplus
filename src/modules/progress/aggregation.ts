@@ -1,4 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
+import { STUDENT_LEARNING_SESSION_FILTER } from "../student-learning/policy.js";
+import { summarizeProgressAttempts } from "./policy.js";
 
 function getWeekRange(date: Date): { periodStart: Date; periodEnd: Date } {
   const d = new Date(date);
@@ -28,6 +30,10 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
       id: true,
       tenantId: true,
       studentId: true,
+      assignmentId: true,
+      assessmentId: true,
+      context: true,
+      sessionType: true,
       completedAt: true,
       attempts: {
         select: {
@@ -48,6 +54,14 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
 
   if (!session) return;
   if (!session.completedAt) return;
+  if (
+    session.assignmentId !== null ||
+    session.assessmentId !== null ||
+    session.context !== "INDIVIDUAL" ||
+    session.sessionType !== "PRACTICE"
+  ) {
+    return;
+  }
 
   // Attempt'leri skill'e göre grupla
   const skillIds = new Set<string>();
@@ -68,6 +82,7 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
         session: {
           studentId: session.studentId,
           tenantId: session.tenantId,
+          ...STUDENT_LEARNING_SESSION_FILTER,
           completedAt: { gte: periodStart, lte: periodEnd },
           status: "COMPLETED",
         },
@@ -88,6 +103,7 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
       where: {
         studentId: session.studentId,
         tenantId: session.tenantId,
+        ...STUDENT_LEARNING_SESSION_FILTER,
         completedAt: { gte: periodStart, lte: periodEnd },
         status: "COMPLETED",
         attempts: {
@@ -102,9 +118,9 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
     });
 
     const sessionCount = sessionIds.length;
-    const attemptCount = allAttempts.length;
-    const correctCount = allAttempts.filter((a) => a.isCorrect === true).length;
+    const progressCounts = summarizeProgressAttempts(allAttempts);
     const scoredAttempts = allAttempts.filter((a) => a.rawScore !== null);
+    const { attemptCount, correctCount } = progressCounts;
     const accuracy = scoredAttempts.length > 0 ? correctCount / scoredAttempts.length : null;
 
     const timeValues = allAttempts.filter((a) => a.timeSpentMs !== null).map((a) => a.timeSpentMs!);

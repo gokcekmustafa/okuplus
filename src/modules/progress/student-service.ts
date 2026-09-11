@@ -1,5 +1,6 @@
 import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "../student-learning/policy.js";
 
 export interface StudentProgressItem {
   skillId: string;
@@ -36,6 +37,7 @@ export async function listStudentProgress(actor: {
   tenantId: string | null;
   platformRole: PlatformRole | null;
 }): Promise<StudentProgressListResult> {
+  assertStudentActor(actor);
   const where: Prisma.StudentProgressWhereInput = {
     studentId: actor.userId,
   };
@@ -67,6 +69,7 @@ export async function listStudentProgress(actor: {
   const sessionScope = {
     studentId: actor.userId,
     tenantId: actor.tenantId ?? undefined,
+    ...STUDENT_LEARNING_SESSION_FILTER,
     status: "COMPLETED" as const,
   };
   const [sessionCount, attemptCount, scoredGroups] = await Promise.all([
@@ -113,6 +116,7 @@ export async function getStudentSkillProgress(
   skillId: string,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
 ): Promise<StudentProgressItem | null> {
+  assertStudentActor(actor);
   const where: Prisma.StudentProgressWhereInput = {
     studentId: actor.userId,
     skillId,
