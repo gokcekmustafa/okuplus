@@ -113,7 +113,11 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
     return { event: existing, created: false };
   }
 
-  await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  // A streak is a daily-training completion signal. Answers, direct exercise
+  // sessions, placement and login point events must not advance it.
+  if (input.sourceType === "TRAINING_SESSION") {
+    await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  }
   await evaluateBasicBadges(input.tenantId, input.studentId);
   return { event, created: true };
 }
