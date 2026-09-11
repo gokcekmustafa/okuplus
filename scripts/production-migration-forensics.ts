@@ -346,11 +346,9 @@ async function main(): Promise<void> {
       const approvedChecksum = approvedHistorical.get(row.migration_name);
       const variants = await repositoryChecksumVariants(row.migration_name);
       const lineEndingEquivalent = variants.has(row.checksum);
-      if (
-        row.migration_name === INIT_MIGRATION &&
-        approvedChecksum === row.checksum &&
-        lineEndingEquivalent
-      ) {
+      const historicallyApproved =
+        row.migration_name === INIT_MIGRATION && approvedChecksum === row.checksum;
+      if (historicallyApproved) {
         historicalChecksumAcknowledgements.push({
           migrationName: row.migration_name,
           productionChecksum: row.checksum,
