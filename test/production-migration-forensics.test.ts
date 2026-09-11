@@ -25,6 +25,12 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("FORENSICS_OUTPUT_FILE");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("production-migration-forensics-summary.json");
+    expect(workflow).toContain('"migrationHistory"');
+    expect(workflow).toContain('"migrationFileHistory"');
+    expect(workflow).toContain("initMigrationChecksumAudit");
+    expect(workflow).toContain("PRODUCTION_CHECKSUM");
+    expect(workflow).toContain("REPOSITORY_CHECKSUM");
+    expect(workflow).toContain("SCHEMA_COMPATIBILITY");
     expect(workflow).not.toContain("echo ${PRODUCTION_DATABASE_URL}");
     expect(workflow).not.toContain('cat "${FORENSICS_OUTPUT_FILE}"');
     expect(workflow).not.toContain("migrate deploy");
@@ -40,6 +46,10 @@ describe("protected production migration forensics", () => {
     expect(script).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE|DROP)\b/u);
     expect(script).toContain("applied_steps_count");
     expect(script).toContain("safeErrorSummary");
+    expect(script).toContain("repositoryChecksum");
+    expect(script).toContain("migrationFileHistory");
+    expect(script).toContain("current_database()");
+    expect(script).toContain("initSchemaCompatibility");
     expect(script).toContain('productionDbWrite: "NO"');
     expect(workflow).toContain('"migrationHistoryCount"');
     expect(workflow).toContain('"failedMigrations"');
