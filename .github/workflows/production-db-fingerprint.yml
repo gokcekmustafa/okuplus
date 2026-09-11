@@ -65,6 +65,8 @@ jobs:
 
           test -n "${DB_FINGERPRINT_DATABASE_URL}"
           report="$(npx --no-install tsx scripts/db-fingerprint.ts)"
+          # The script's stable approved-target field is intentionally distinct
+          # from its live schema/migration `fingerprint` field.
           target_identity="$(printf '%s' "${report}" | node --input-type=commonjs -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
@@ -85,5 +87,9 @@ jobs:
             });
           ')"
 
+          if [ -z "${target_identity}" ]; then
+            echo "targetIdentityFingerprint missing from db fingerprint report" >&2
+            exit 1
+          fi
           [[ "${target_identity}" =~ ^[0-9a-f]{64}$ ]]
           printf 'targetIdentityFingerprint=%s\n' "${target_identity}"
