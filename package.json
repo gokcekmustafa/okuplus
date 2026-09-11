@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "db:fingerprint": "tsx scripts/db-fingerprint.ts",
+    "production:smoke:preflight": "tsx scripts/provision-production-smoke-student.ts --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "qa:curriculum-pack": "tsx scripts/qa-curriculum-pack.ts",
