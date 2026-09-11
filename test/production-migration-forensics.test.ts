@@ -30,6 +30,9 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("initMigrationChecksumAudit");
     expect(workflow).toContain("PRODUCTION_CHECKSUM");
     expect(workflow).toContain("REPOSITORY_CHECKSUM");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
+    expect(workflow).toContain("HISTORICAL_CHECKSUM_ACKNOWLEDGEMENTS");
+    expect(workflow).toContain("UNRESOLVED_CHECKSUM_MISMATCHES");
     expect(workflow).toContain("SCHEMA_COMPATIBILITY");
     expect(workflow).not.toContain("echo ${PRODUCTION_DATABASE_URL}");
     expect(workflow).not.toContain('cat "${FORENSICS_OUTPUT_FILE}"');
@@ -48,6 +51,12 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("safeErrorSummary");
     expect(script).toContain("repositoryChecksum");
     expect(script).toContain("migrationFileHistory");
+    expect(script).toContain("approvedHistoricalChecksums");
+    expect(script).toContain("repositoryChecksumVariants");
+    expect(script).toContain("historicalChecksumAcknowledgements");
+    expect(script).toContain("unresolvedChecksumMismatches");
+    expect(script).toContain('"I_HISTORICAL_CHECKSUM_ACKNOWLEDGED"');
+    expect(script).toContain('"\\r\\n"');
     expect(script).toContain("current_database()");
     expect(script).toContain("initSchemaCompatibility");
     expect(script).toContain('productionDbWrite: "NO"');
@@ -57,5 +66,15 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("currentSchemaSummary:");
     expect(script).not.toContain("console.log(rawUrl)");
     expect(script).not.toContain("console.log(process.env.DB_FINGERPRINT_DATABASE_URL)");
+  });
+
+  it("keeps the historical acknowledgement fail-closed and init-only", () => {
+    expect(script).toContain("row.migration_name === INIT_MIGRATION");
+    expect(script).toContain("approvedChecksum === row.checksum");
+    expect(script).toContain("lineEndingEquivalent");
+    expect(script).toContain("unresolvedChecksumMismatches.length === 0");
+    expect(script).toContain("!schemaAhead");
+    expect(script).toContain("!historyAhead");
+    expect(script).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
   });
 });

@@ -27,6 +27,7 @@ jobs:
       NODE_ENV: production
       DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
       PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
 
     steps:
       - name: Checkout selected master release
@@ -192,6 +193,8 @@ jobs:
             rolledBackMigrations: migrationSummary(report.rolledBackMigrations),
             checksumMismatch: report.checksumMismatch,
             checksumMismatches: report.checksumMismatches,
+            historicalChecksumAcknowledgements: report.historicalChecksumAcknowledgements,
+            unresolvedChecksumMismatches: report.unresolvedChecksumMismatches,
             repositoryOnlyMigrations: report.repositoryOnlyMigrations,
             productionOnlyMigrations: report.productionOnlyMigrations,
             schemaDrift: report.schemaDrift,
@@ -230,6 +233,8 @@ jobs:
             `**CHECKSUM_MISMATCH:** ${safe.checksumMismatch}`,
             `**REPOSITORY_ONLY:** ${JSON.stringify(safe.repositoryOnlyMigrations)}`,
             `**PRODUCTION_ONLY:** ${JSON.stringify(safe.productionOnlyMigrations)}`,
+            `**HISTORICAL_CHECKSUM_ACKNOWLEDGEMENTS:** ${JSON.stringify(safe.historicalChecksumAcknowledgements)}`,
+            `**UNRESOLVED_CHECKSUM_MISMATCHES:** ${JSON.stringify(safe.unresolvedChecksumMismatches)}`,
             `**SCHEMA_DRIFT:** ${safe.schemaDrift}`,
             `**PARTIAL_SCHEMA_STATE:** ${safe.partialSchemaState}`,
             `**PARTIAL_DATA_STATE:** ${safe.partialDataState}`,
@@ -244,9 +249,9 @@ jobs:
             `**MIGRATION_FILE_EXISTS:** ${safe.initMigrationChecksumAudit.migrationFileExists}`,
             `**MIGRATION_FILE_HISTORY:** ${JSON.stringify(safe.migrationFileHistory)}`,
             `**CONTENT_CHANGED_AFTER_CREATION:** ${safe.migrationFileHistory.contentChangedAfterCreation}`,
-            "**LINE_ENDING_FACTOR:** UNKNOWN (CI checkout is LF; production source encoding is not observable from repository history)",
+            `**LINE_ENDING_FACTOR:** ${safe.historicalChecksumAcknowledgements.length > 0 && safe.historicalChecksumAcknowledgements.every(({ lineEndingEquivalent }) => lineEndingEquivalent) ? "YES" : "UNKNOWN"}`,
             `**SCHEMA_COMPATIBILITY:** ${safe.initSchemaCompatibility}`,
-            `**CLASSIFICATION:** ${safe.checksumMismatch ? "F" : "A"}`,
+            `**CLASSIFICATION:** ${safe.remediationClass}`,
             `**MIGRATION_FILE_REWRITE_REQUIRED:** ${safe.migrationFileHistory.contentChangedAfterCreation === "NO" ? "NO" : "UNKNOWN"}`,
             "",
             "**RELEASE_MIGRATION_1:**",

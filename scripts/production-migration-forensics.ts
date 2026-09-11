@@ -9,6 +9,7 @@ import { providerForHost, targetIdentityFingerprint } from "./db-fingerprint-con
 
 const MIGRATION_1 = "20260905090000_add_exercise_template_version_config";
 const MIGRATION_2 = "20260907150000_add_training_session_models";
+const INIT_MIGRATION = "20260817000000_init";
 
 type IdentityRow = {
   database: string;
@@ -45,6 +46,34 @@ type MigrationFileHistory = {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function approvedHistoricalChecksums(): Map<string, string> {
+  const raw = process.env.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS?.trim();
+  if (!raw) return new Map();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("approved historical migration checksums must be valid JSON");
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("approved historical migration checksums must be a JSON object");
+  }
+
+  const result = new Map<string, string>();
+  for (const [migrationName, checksum] of Object.entries(parsed)) {
+    if (!/^20[0-9]{12}_[a-z0-9_]+$/u.test(migrationName)) {
+      throw new Error("approved historical migration name is invalid");
+    }
+    if (typeof checksum !== "string" || !/^[a-f0-9]{64}$/u.test(checksum)) {
+      throw new Error("approved historical migration checksum is invalid");
+    }
+    result.set(migrationName, checksum);
+  }
+  return result;
 }
 
 function safeErrorSummary(value: string | null): string | null {
@@ -87,6 +116,18 @@ async function repositoryChecksums(): Promise<Map<string, string>> {
     result.set(entry.name, sha256(sql));
   }
   return result;
+}
+
+async function repositoryChecksumVariants(migrationName: string): Promise<Set<string>> {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const migrationPath = join(root, "prisma", "migrations", migrationName, "migration.sql");
+  const sql = await readFile(migrationPath, "utf8");
+  const variants = new Set([sha256(sql)]);
+
+  if (migrationName === INIT_MIGRATION) {
+    variants.add(sha256(sql.replace(/\r?\n/gu, "\r\n")));
+  }
+  return variants;
 }
 
 function migrationFileHistory(root: string, migrationName: string): MigrationFileHistory {
@@ -167,6 +208,7 @@ async function main(): Promise<void> {
   }
 
   const parsedUrl = new URL(rawUrl);
+  const approvedHistorical = approvedHistoricalChecksums();
   const checksums = await repositoryChecksums();
   const prisma = new PrismaClient({ datasources: { db: { url: rawUrl } } });
 
@@ -278,6 +320,35 @@ async function main(): Promise<void> {
       .filter((row) => checksums.has(row.migration_name))
       .filter((row) => checksums.get(row.migration_name) !== row.checksum)
       .map((row) => row.migration_name);
+    const historicalChecksumAcknowledgements: Array<{
+      migrationName: string;
+      productionChecksum: string;
+      repositoryChecksum: string;
+      lineEndingEquivalent: boolean;
+    }> = [];
+    const unresolvedChecksumMismatches: string[] = [];
+
+    for (const row of migrations) {
+      if (!checksumMismatches.includes(row.migration_name)) continue;
+
+      const approvedChecksum = approvedHistorical.get(row.migration_name);
+      const variants = await repositoryChecksumVariants(row.migration_name);
+      const lineEndingEquivalent = variants.has(row.checksum);
+      if (
+        row.migration_name === INIT_MIGRATION &&
+        approvedChecksum === row.checksum &&
+        lineEndingEquivalent
+      ) {
+        historicalChecksumAcknowledgements.push({
+          migrationName: row.migration_name,
+          productionChecksum: row.checksum,
+          repositoryChecksum: checksums.get(row.migration_name)!,
+          lineEndingEquivalent,
+        });
+      } else {
+        unresolvedChecksumMismatches.push(row.migration_name);
+      }
+    }
 
     const initSchema = checkSchema(columns, indexes, constraints, enums, policies, {
       columns: [
@@ -417,21 +488,23 @@ async function main(): Promise<void> {
       (stateOf(byName.get(MIGRATION_2)) === "APPLIED" && migration2Schema.status === "ABSENT");
     const multipleConflicts =
       failed.length > 0 &&
-      (partialSchema || checksumMismatches.length > 0 || schemaAhead || historyAhead);
+      (partialSchema || unresolvedChecksumMismatches.length > 0 || schemaAhead || historyAhead);
     const remediationClass =
-      checksumMismatches.length > 0
+      unresolvedChecksumMismatches.length > 0
         ? "D_CHECKSUM_MISMATCH"
-        : multipleConflicts
-          ? "G_MULTIPLE_CONFLICTS"
-          : failed.length > 0 && partialSchema
-            ? "B_FAILED_RECORD_PARTIAL_SCHEMA"
-            : failed.length > 0
-              ? "A_FAILED_RECORD_NO_PARTIAL_SCHEMA_OR_UNKNOWN"
-              : schemaAhead
-                ? "E_SCHEMA_AHEAD_OF_HISTORY"
-                : historyAhead
-                  ? "F_HISTORY_AHEAD_OF_SCHEMA"
-                  : "H_UNKNOWN";
+        : historicalChecksumAcknowledgements.length > 0
+          ? "I_HISTORICAL_CHECKSUM_ACKNOWLEDGED"
+          : multipleConflicts
+            ? "G_MULTIPLE_CONFLICTS"
+            : failed.length > 0 && partialSchema
+              ? "B_FAILED_RECORD_PARTIAL_SCHEMA"
+              : failed.length > 0
+                ? "A_FAILED_RECORD_NO_PARTIAL_SCHEMA_OR_UNKNOWN"
+                : schemaAhead
+                  ? "E_SCHEMA_AHEAD_OF_HISTORY"
+                  : historyAhead
+                    ? "F_HISTORY_AHEAD_OF_SCHEMA"
+                    : "H_UNKNOWN";
 
     console.log(
       JSON.stringify(
@@ -457,6 +530,8 @@ async function main(): Promise<void> {
           rolledBackMigrations: rolledBack,
           checksumMismatch: checksumMismatches.length > 0,
           checksumMismatches,
+          historicalChecksumAcknowledgements,
+          unresolvedChecksumMismatches,
           migrationFileHistory: initMigrationFileHistory,
           repositoryOnlyMigrations: repositoryOnly,
           productionOnlyMigrations: productionOnly,
@@ -480,7 +555,11 @@ async function main(): Promise<void> {
           partialDataState: configDataState,
           remediationClass,
           migrateDeploySafe:
-            failed.length === 0 && checksumMismatches.length === 0 && !partialSchema,
+            failed.length === 0 &&
+            unresolvedChecksumMismatches.length === 0 &&
+            !partialSchema &&
+            !schemaAhead &&
+            !historyAhead,
           resolveRequired: failed.length > 0,
           forwardFixRequired: partialSchema || schemaAhead || historyAhead,
           manualSqlRequired: "NO",

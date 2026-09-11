@@ -27,6 +27,7 @@ jobs:
       NODE_ENV: production
       DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
       PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
 
     steps:
       - name: Checkout selected master release
@@ -116,6 +117,34 @@ jobs:
             exit 1
           }
           echo "PRODUCTION_DB_IDENTITY=PASS"
+
+      - name: Verify production migration history integrity
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(npx tsx scripts/production-migration-forensics.ts)"
+          read -r migrate_deploy_safe unresolved_count <<EOF
+          $(printf '%s' "${report}" | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              const value = JSON.parse(input);
+              process.stdout.write(`${value.migrateDeploySafe ? "true" : "false"} ${value.unresolvedChecksumMismatches?.length ?? -1}`);
+            });
+          ')
+          EOF
+          test "${migrate_deploy_safe}" = "true" || {
+            echo "FAIL: production migration history integrity is not approved"
+            exit 1
+          }
+          test "${unresolved_count}" = "0" || {
+            echo "FAIL: unresolved production migration checksum mismatch exists"
+            exit 1
+          }
+          echo "PRODUCTION_MIGRATION_HISTORY_INTEGRITY=PASS"
 
       - name: Validate Prisma schema
         run: npx prisma validate --schema=prisma/schema.prisma
