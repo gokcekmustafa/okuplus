@@ -182,11 +182,11 @@
           </button>
           <button class="nav-item" data-page="progress" type="button">
             <span class="nav-icon" aria-hidden="true">📈</span>
-            <span class="nav-label">İlerleme</span>
+            <span class="nav-label">Gelişim</span>
           </button>
           <button class="nav-item" data-page="badges" data-student type="button">
             <span class="nav-icon" aria-hidden="true">🏅</span>
-            <span class="nav-label">Rozetler &amp; Puanlar</span>
+            <span class="nav-label">Rozetler &amp; Kupalar</span>
           </button>
           <button class="nav-item" data-page="billing-account" data-student type="button">
             <span class="nav-icon" aria-hidden="true">💳</span>
@@ -225,8 +225,8 @@
               class="topbar-gamification hidden"
               aria-label="Puan ve seri"
             >
-              <span class="gamification-badge" title="Toplam XP"
-                ><span aria-hidden="true">⭐</span> <span id="topbar-xp">0</span> XP</span
+              <span class="gamification-badge" title="Toplam Gelişim Puanı"
+                ><span aria-hidden="true">⭐</span> <span id="topbar-xp">0</span> GP</span
               >
               <span class="gamification-badge" title="Günlük seri"
                 ><span aria-hidden="true">🔥</span> <span id="topbar-streak">0</span></span
@@ -412,8 +412,10 @@
           <!-- Dashboard -->
           <section id="page-dashboard" class="page-view">
             <div class="page-head">
-              <h2>Dashboard</h2>
-              <p class="muted">Hoş geldiniz, <span id="welcome-name">—</span></p>
+              <h2>Bugün de gelişmeye hazır mısın?</h2>
+              <p class="muted">
+                <span id="welcome-name">—</span>, kısa ve düzenli adımlarla ilerlemeye devam et.
+              </p>
             </div>
 
             <div class="stat-grid" data-admin>
@@ -454,12 +456,128 @@
                 İlerlemeni gör →
               </button>
             </section>
-            <div id="today-card" class="card" data-student style="padding: 16px; margin-top: 16px">
-              <h3 style="margin: 0 0 8px">Bugün</h3>
-              <div id="today-next-action" class="muted">Yükleniyor…</div>
-              <div id="today-stats" class="muted" style="margin-top: 8px; font-size: 12px"></div>
-              <div id="today-recent" style="margin-top: 12px"></div>
-            </div>
+            <section
+              id="today-card"
+              class="card training-home-card"
+              data-student
+              aria-labelledby="training-home-title"
+            >
+              <div class="training-home-heading">
+                <div>
+                  <p class="insight-eyebrow">GÜNLÜK RİTMİN</p>
+                  <h2 id="training-home-title">Bugünkü Antrenmanın</h2>
+                  <p id="daily-training-intro" class="muted">Bugünkü antrenmanın hazır.</p>
+                </div>
+                <span id="daily-training-status" class="training-status" role="status"
+                  >Yükleniyor…</span
+                >
+              </div>
+              <div
+                id="daily-training-progress"
+                class="training-progress-track"
+                role="progressbar"
+                aria-label="Günlük antrenman ilerlemesi"
+                aria-valuemin="0"
+                aria-valuemax="6"
+                aria-valuenow="0"
+              >
+                <span id="daily-training-progress-fill"></span>
+              </div>
+              <div class="training-progress-meta">
+                <strong id="daily-training-progress-text">0/6 egzersiz</strong>
+                <span id="daily-training-gp">Bugün kazanılan: 0 GP</span>
+              </div>
+              <div class="training-home-actions">
+                <button
+                  id="start-daily-training"
+                  type="button"
+                  class="btn btn-primary"
+                  aria-describedby="daily-training-status daily-training-progress-text"
+                >
+                  Antrenmana Başla
+                </button>
+                <span id="daily-training-streak" class="muted" aria-live="polite"></span>
+              </div>
+              <p id="daily-training-quota" class="training-quota muted" aria-live="polite"></p>
+              <div class="training-focus-grid" aria-label="Bugünkü gelişim alanları">
+                <article class="training-focus-card">
+                  <span aria-hidden="true">⚡</span>
+                  <div>
+                    <strong>Hızlı Okuma</strong><small>Dikkatini ve akışını güçlendir</small>
+                  </div>
+                </article>
+                <article class="training-focus-card">
+                  <span aria-hidden="true">🧠</span>
+                  <div>
+                    <strong>Okuduğunu Anlama</strong><small>Ana fikir, detay ve çıkarım</small>
+                  </div>
+                </article>
+                <article class="training-focus-card">
+                  <span aria-hidden="true">🌱</span>
+                  <div><strong>Bugünkü Gelişim</strong><small>Kısa adımlarla ilerle</small></div>
+                </article>
+              </div>
+              <div
+                id="today-next-action"
+                class="muted training-home-secondary"
+                aria-live="polite"
+              ></div>
+              <div id="today-stats" class="visually-hidden"></div>
+              <div id="today-recent" class="visually-hidden"></div>
+              <p id="today-training-error" class="error hidden" role="alert"></p>
+            </section>
+
+            <section
+              id="dashboard-progress-card"
+              class="card dashboard-progress-card"
+              data-student
+              aria-labelledby="dashboard-progress-title"
+              aria-busy="true"
+            >
+              <div class="dashboard-card-heading">
+                <div>
+                  <p class="insight-eyebrow">GERÇEK VERİLERLE</p>
+                  <h3 id="dashboard-progress-title">Gelişim özeti</h3>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="dashboard-progress-link">
+                  Tüm ilerlemeyi gör
+                </button>
+              </div>
+              <div class="dashboard-progress-grid" aria-live="polite">
+                <div class="dashboard-progress-stat">
+                  <span>Son performans</span><strong id="dashboard-last-performance">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Genel doğruluk</span><strong id="dashboard-accuracy">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Ortalama süre</span><strong id="dashboard-average-time">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Tamamlanan oturum</span><strong id="dashboard-completed-sessions">—</strong>
+                </div>
+              </div>
+              <p id="dashboard-progress-note" class="muted dashboard-progress-note">
+                İlerlemen yükleniyor…
+              </p>
+            </section>
+
+            <section
+              id="dashboard-recent-card"
+              class="card dashboard-recent-card"
+              data-student
+              aria-labelledby="dashboard-recent-title"
+            >
+              <div class="dashboard-card-heading">
+                <div>
+                  <p class="insight-eyebrow">SON ADIMLARIN</p>
+                  <h3 id="dashboard-recent-title">Son aktivitelerin</h3>
+                </div>
+              </div>
+              <div id="dashboard-recent-list" class="dashboard-recent-list" aria-live="polite">
+                <p class="muted">Aktivitelerin yükleniyor…</p>
+              </div>
+            </section>
 
             <section
               id="entitlement-card"
@@ -3719,7 +3837,7 @@
                   <div style="display: flex; justify-content: space-between; font-size: 12px">
                     <span id="exercise-progress-text" class="muted">Soru yükleniyor</span
                     ><span id="exercise-xp" class="gamification-badge" style="font-size: 11px"
-                      >⭐ — XP</span
+                      >⭐ — GP</span
                     >
                   </div>
                   <div
@@ -3752,6 +3870,12 @@
               <h3 id="student-reading-heading" style="margin: 4px 0 8px">Metin</h3>
               <div id="student-reading-body" class="student-reading-body"></div>
             </section>
+            <p
+              id="exercise-training-instructions"
+              class="muted"
+              role="note"
+              style="display: none; margin: 0 0 16px"
+            ></p>
             <div id="exercise-admin-card" class="card" style="padding: 16px; margin-bottom: 16px">
               <h3 style="margin: 0 0 12px">Yeni Oturum Başlat</h3>
               <div id="exercise-error" class="error-banner hidden" role="alert"></div>
@@ -4082,8 +4206,8 @@
             <header class="insight-heading">
               <div>
                 <p class="insight-eyebrow">KENDİ RİTMİNDE, ADIM ADIM</p>
-                <h2>İlerlemen</h2>
-                <p>Çalışmalarını keşfet, bir sonraki adımını seç.</p>
+                <h2>Gelişimin</h2>
+                <p>Gelişim Puanını, becerilerini ve sıradaki hedeflerini gör.</p>
               </div>
               <button type="button" class="btn btn-secondary" id="progress-refresh">Yenile</button>
             </header>
@@ -4099,6 +4223,40 @@
               aria-label="Öğrenme yolu ilerlemesi"
               id="progress-path"
             ></section>
+            <section
+              id="development-achievements"
+              class="insight-panel development-achievements"
+              aria-labelledby="development-achievements-title"
+            >
+              <div class="development-section-heading">
+                <div>
+                  <p class="insight-eyebrow">KÜÇÜK ADIMLAR, GERÇEK GELİŞİM</p>
+                  <h3 id="development-achievements-title">Başarıların</h3>
+                </div>
+                <span id="development-streak" class="development-streak" aria-live="polite"></span>
+              </div>
+              <div class="development-summary" aria-label="Gelişim özeti">
+                <strong
+                  ><span aria-hidden="true">⭐</span>
+                  <span id="development-total-gp">—</span> GP</strong
+                >
+                <span id="development-achievement-count">Başarıların yükleniyor…</span>
+              </div>
+              <div class="development-columns">
+                <div>
+                  <h4>Rozetler</h4>
+                  <div id="development-badges" class="development-awards"></div>
+                </div>
+                <div>
+                  <h4>Kupalar</h4>
+                  <div id="development-trophies" class="development-awards"></div>
+                </div>
+              </div>
+              <div class="development-targets">
+                <h4>Bir sonraki hedefin</h4>
+                <div id="development-next-targets"></div>
+              </div>
+            </section>
             <div class="insight-columns">
               <section aria-labelledby="progress-skills-title">
                 <h3 id="progress-skills-title">Beceri ilerlemesi</h3>
@@ -4130,7 +4288,7 @@
             <header class="insight-heading">
               <div>
                 <p class="insight-eyebrow">EMEĞİN GÖRÜNÜR OLSUN</p>
-                <h2>Rozetler &amp; Puanlar</h2>
+                <h2>Rozetler &amp; Kupalar</h2>
                 <p>Her çalışma, yeni bir adım. Kendi ritminde devam et.</p>
               </div>
               <button type="button" class="btn btn-secondary" id="gamification-refresh">
@@ -4141,7 +4299,7 @@
             <div id="gamification-error" class="error hidden" role="alert"></div>
             <div class="insight-metrics gamification-summary" aria-label="Gamification özeti">
               <article class="insight-stat insight-gold">
-                <span aria-hidden="true">⭐</span><span>Toplam XP</span
+                <span aria-hidden="true">⭐</span><span>Toplam GP</span
                 ><strong id="gamification-total-points">—</strong>
               </article>
               <article class="insight-stat insight-orange">
@@ -4166,8 +4324,18 @@
               <p id="badge-celebration" role="status" class="insight-celebration"></p>
               <div id="gamification-badges" class="gamification-badges"></div>
             </section>
+            <section class="insight-panel" aria-labelledby="gamification-trophies-title">
+              <h3 id="gamification-trophies-title">Kupa vitrini</h3>
+              <div id="gamification-trophies" class="gamification-badges"></div>
+            </section>
+            <section class="insight-panel" aria-labelledby="gamification-progress-title">
+              <h3 id="gamification-progress-title">Kategori ilerlemesi</h3>
+              <div id="gamification-category-progress" class="insight-facts"></div>
+              <h4>Sonraki hedeflerin</h4>
+              <div id="gamification-next-targets"></div>
+            </section>
             <section class="insight-panel" aria-labelledby="gamification-events-title">
-              <h3 id="gamification-events-title">Son XP hareketleri</h3>
+              <h3 id="gamification-events-title">Son Gelişim Puanı hareketleri</h3>
               <div id="gamification-events" class="insight-events"></div>
             </section>
             <dialog id="badge-detail" aria-labelledby="badge-detail-title">

@@ -5,6 +5,7 @@ import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 import { ScryptPasswordHasher } from "../src/modules/auth/index.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
+import { canonicalPlacementAssessmentConfig } from "../src/curriculum/canonical-placement-assessment.js";
 
 const PASSWORD = "onboarding-pass-123!";
 const EMAIL = "onboard-8d@example.com";
@@ -195,7 +196,12 @@ describe.sequential("onboarding", () => {
         title: "Placement 8D",
         type: "PLACEMENT",
         status: "PUBLISHED",
-        config: { templateId: TMPL_ID, templateVersionId: TMPL_VID },
+        config: {
+          ...canonicalPlacementAssessmentConfig(),
+          canonicalActive: true,
+          templateId: TMPL_ID,
+          templateVersionId: TMPL_VID,
+        },
       },
     });
     app = await buildApp(loadEnv());

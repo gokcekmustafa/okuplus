@@ -4,6 +4,27 @@ import { prisma } from "../../lib/prisma.js";
 import { conflictError, forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { recordExerciseCompleted } from "../gamification/service.js";
 import { aggregateSessionProgress } from "../progress/aggregation.js";
+import {
+  PROFICIENCY_LEVEL_CODES,
+  type ProficiencyLevelCode,
+} from "../../curriculum/proficiency-levels.js";
+import {
+  PLACEMENT_SCORING_CONTRACT_V1,
+  scorePlacementSession,
+  type PlacementSessionQuestion,
+} from "../assessments/placement-scoring.js";
+import {
+  loadAttentionBurstRuntimeGraph,
+  isTrainingConfigCandidate,
+  isTrainingVersionConfig,
+  loadDetailEvidenceRuntimeGraph,
+  loadInferenceRuntimeGraph,
+  loadMainIdeaRuntimeGraph,
+  loadPhraseChunkingRuntimeGraph,
+  loadRapidRecognitionRuntimeGraph,
+  resolveTrainingRuntimeConfig,
+} from "../training/runtime.js";
+import { syncTrainingSessionItem } from "../training/daily-session.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -309,6 +330,8 @@ export async function listQuestionsForSession(
   questions: Array<{
     questionVersionId: string;
     position: number;
+    contentId: string;
+    contentVersionId: string | null;
     prompt: string;
     type: string;
     options: Prisma.JsonValue;
@@ -324,8 +347,17 @@ export async function listQuestionsForSession(
       tenantId: true,
       studentId: true,
       templateVersionId: true,
+      assessmentId: true,
+      context: true,
       templateVersion: {
         select: {
+          config: true,
+          contents: {
+            select: {
+              contentVersionId: true,
+              contentVersion: { select: { contentId: true } },
+            },
+          },
           questions: {
             select: {
               position: true,
@@ -337,7 +369,7 @@ export async function listQuestionsForSession(
                   explanation: true,
                   hint: true,
                   correctAnswer: true,
-                  question: { select: { type: true } },
+                  question: { select: { type: true, contentId: true } },
                 },
               },
             },
@@ -357,6 +389,50 @@ export async function listQuestionsForSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
+
+  if (
+    session.assessmentId === null &&
+    session.context !== "ASSESSMENT" &&
+    isTrainingConfigCandidate(session.templateVersion.config)
+  ) {
+    const resolved = resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config);
+    if (resolved.status !== "READY") {
+      throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+    }
+    const graph =
+      resolved.config.family === "DETAIL_EVIDENCE"
+        ? await loadDetailEvidenceRuntimeGraph(session.templateVersionId, actor)
+        : resolved.config.family === "INFERENCE"
+          ? await loadInferenceRuntimeGraph(session.templateVersionId, actor)
+          : resolved.config.family === "ATTENTION_BURST"
+            ? await loadAttentionBurstRuntimeGraph(session.templateVersionId, actor)
+            : resolved.config.family === "RAPID_RECOGNITION"
+              ? await loadRapidRecognitionRuntimeGraph(session.templateVersionId, actor)
+              : resolved.config.family === "PHRASE_CHUNKING"
+                ? await loadPhraseChunkingRuntimeGraph(session.templateVersionId, actor)
+                : await loadMainIdeaRuntimeGraph(session.templateVersionId, actor);
+    return {
+      questions: graph.questions.map((question) => ({
+        questionVersionId: question.questionVersionId,
+        position: question.position,
+        contentId: question.contentId,
+        contentVersionId: question.contentVersionId,
+        prompt: question.prompt,
+        type: question.type,
+        options: question.options,
+        explanation: question.explanation,
+        hint: question.hint,
+        blankIds: [],
+      })),
+    };
+  }
+
+  const contentVersionByContentId = new Map(
+    session.templateVersion.contents.map((content) => [
+      content.contentVersion.contentId,
+      content.contentVersionId,
+    ]),
+  );
   const questions = session.templateVersion.questions.map((q) => {
     const correctAnswer = q.questionVersion.correctAnswer as {
       blanks?: Array<{ blankId?: string }>;
@@ -364,6 +440,8 @@ export async function listQuestionsForSession(
     return {
       questionVersionId: q.questionVersion.id,
       position: q.position,
+      contentId: q.questionVersion.question.contentId,
+      contentVersionId: contentVersionByContentId.get(q.questionVersion.question.contentId) ?? null,
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
       options: q.questionVersion.options,
@@ -396,15 +474,22 @@ export async function completeExerciseSession(
       templateVersionId: true,
       templateVersion: {
         select: {
+          config: true,
           questions: {
             select: {
               questionVersionId: true,
-              questionVersion: { select: { question: { select: { type: true } } } },
+              questionVersion: {
+                select: {
+                  question: { select: { type: true, skill: { select: { code: true } } } },
+                },
+              },
             },
           },
         },
       },
       attempts: { select: { id: true, rawScore: true, questionVersionId: true } },
+      assessment: { select: { type: true } },
+      trainingSessionItem: { select: { id: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -417,12 +502,41 @@ export async function completeExerciseSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
-  if (session.status === "COMPLETED") throw validationError("Oturum zaten tamamlanmış");
+  if (session.status === "COMPLETED") {
+    if (session.trainingSessionItem) {
+      await syncTrainingSessionItem(id);
+      return getExerciseSession(id, actor);
+    }
+    throw validationError("Oturum zaten tamamlanmış");
+  }
   if (session.status !== "IN_PROGRESS")
     throw validationError("Yalnızca devam eden oturum tamamlanabilir");
 
+  const trainingConfig =
+    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+      ? isTrainingVersionConfig(session.templateVersion.config)
+        ? session.templateVersion.config
+        : null
+      : null;
+  if (
+    session.assessmentId === null &&
+    isTrainingConfigCandidate(session.templateVersion.config) &&
+    !trainingConfig
+  ) {
+    throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+  }
+
   const totalQuestions = session.templateVersion.questions.length;
   const attempts = session.attempts;
+  if (trainingConfig) {
+    const attemptedQuestionIds = new Set(attempts.map((attempt) => attempt.questionVersionId));
+    const missingQuestion = session.templateVersion.questions.find(
+      (question) => !attemptedQuestionIds.has(question.questionVersionId),
+    );
+    if (missingQuestion) {
+      throw validationError("Devam etmeden önce tüm egzersiz sorularını yanıtla");
+    }
+  }
   const scoredAttempts = attempts.filter((a) => a.rawScore !== null);
   const totalRawScore = scoredAttempts.reduce((sum, a) => sum + (a.rawScore ?? 0), 0);
   const averageScore = scoredAttempts.length > 0 ? totalRawScore / scoredAttempts.length : null;
@@ -436,6 +550,30 @@ export async function completeExerciseSession(
     return q?.questionVersion.question.type === "OPEN_ENDED";
   }).length;
 
+  const placementScoring =
+    session.assessment?.type === "PLACEMENT"
+      ? scorePlacementSession(
+          session.templateVersion.questions.map((question): PlacementSessionQuestion => ({
+            questionVersionId: question.questionVersionId,
+            questionType: question.questionVersion.question.type,
+            skillCode: question.questionVersion.question.skill?.code ?? null,
+          })),
+          attempts,
+          await prisma.level
+            .findMany({
+              where: { code: { in: [...PROFICIENCY_LEVEL_CODES] } },
+              select: { id: true, code: true },
+            })
+            .then((levels) =>
+              levels.map((level) => ({
+                id: level.id,
+                code: level.code as ProficiencyLevelCode,
+              })),
+            ),
+          PLACEMENT_SCORING_CONTRACT_V1,
+        )
+      : null;
+
   const scoreSummary = {
     totalQuestions,
     attempted: attempts.length,
@@ -445,6 +583,24 @@ export async function completeExerciseSession(
     openEndedTotal: openEndedPending,
     openEndedAnswered,
     pendingEvaluation: openEndedPending > openEndedAnswered,
+    ...(placementScoring
+      ? {
+          placementScoring: {
+            contractVersion: PLACEMENT_SCORING_CONTRACT_V1.version,
+            calibrationStatus: PLACEMENT_SCORING_CONTRACT_V1.calibrationStatus,
+            score: placementScoring.aggregate.score,
+            scoredCount: placementScoring.aggregate.scoredCount,
+            eligibleQuestionCount: placementScoring.aggregate.eligibleQuestionCount,
+            pendingEvaluationCount: placementScoring.aggregate.pendingEvaluationCount,
+            skillSubscores: placementScoring.aggregate.skillSubscores,
+            recommendedLevelCode: placementScoring.resolution.recommendedLevelCode,
+            resultLevelId: placementScoring.resolution.resultLevelId,
+            reviewRequired: placementScoring.resolution.reviewRequired,
+            resolutionReason: placementScoring.resolution.reason,
+            invalidSkillQuestionCount: placementScoring.invalidSkillQuestionCount,
+          },
+        }
+      : {}),
   };
 
   const updated = await prisma.exerciseSession.update({
@@ -463,21 +619,31 @@ export async function completeExerciseSession(
         tenantId: session.tenantId,
         studentId: session.studentId,
         assessmentId: session.assessmentId,
+        resultLevelId: placementScoring?.resolution.resultLevelId ?? null,
         score: averageScore,
         metrics: scoreSummary as Prisma.InputJsonValue,
       },
     });
   }
 
-  await recordExerciseCompleted({
-    tenantId: session.tenantId,
-    studentId: session.studentId,
-    sessionId: session.id,
-    completedAt: updated.completedAt ?? undefined,
-  }).catch(() => null);
+  // Placement is an assessment, not a training activity: it must not award
+  // GP, unlock achievements, or contribute to the daily training streak.
+  if (!session.assessmentId) {
+    await recordExerciseCompleted({
+      tenantId: session.tenantId,
+      studentId: session.studentId,
+      sessionId: session.id,
+      completedAt: updated.completedAt ?? undefined,
+    }).catch(() => null);
+  }
 
-  // Progress aggregation — transaction dışında, session completion'ı bozmaz
-  void aggregateSessionProgress(id).catch(() => {});
+  if (session.trainingSessionItem) {
+    await syncTrainingSessionItem(id);
+  }
+
+  // Progress aggregation session transaction'ı dışında kalır; ancak completion
+  // cevabı dönmeden önce tamamlanır. Hata, tamamlanmış oturumu geri almaz.
+  await aggregateSessionProgress(id).catch(() => {});
 
   return toSessionDetail(updated as any);
 }
