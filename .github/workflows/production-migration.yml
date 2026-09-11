@@ -103,7 +103,7 @@ jobs:
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.targetIdentityFingerprint ?? ""} ${value.migrations?.failedCount ?? ""}`);
+              process.stdout.write(`${value.targetIdentityFingerprint ?? ""} ${value.migrations?.failed?.length ?? ""}`);
             });
           ')
           EOF
@@ -176,7 +176,7 @@ jobs:
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.status ?? ""} ${value.migrations?.pendingCount ?? ""} ${value.migrations?.failedCount ?? ""} ${value.targetIdentityFingerprint ?? ""}`);
+              process.stdout.write(`${value.status ?? ""} ${value.migrations?.pending?.length ?? ""} ${value.migrations?.failed?.length ?? ""} ${value.targetIdentityFingerprint ?? ""}`);
             });
           ')
           EOF
