@@ -1,0 +1,64 @@
+name: Manual production migration read-only forensics
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_forensics:
+        description: "Type FORENSICS to allow the protected read-only production history check"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration-forensics
+  cancel-in-progress: false
+
+jobs:
+  production-migration-forensics:
+    name: Read production migration history and schema
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+
+    steps:
+      - name: Checkout selected master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify protected read-only forensic gate
+        env:
+          PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          CONFIRM_FORENSICS: ${{ inputs.confirm_forensics }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "${APP_ENV}" = "production"
+          test "${NODE_ENV}" = "production"
+          test "${CONFIRM_FORENSICS}" = "FORENSICS"
+          test -n "${PRODUCTION_DATABASE_URL}"
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
+
+      - name: Read production migration history and schema
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: npx tsx scripts/production-migration-forensics.ts
