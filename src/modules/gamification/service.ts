@@ -136,7 +136,9 @@ export async function updateStreak(tenantId: string, studentId: string, activity
     });
   }
 
-  const previousDay = streak.lastActivityDate ? storedCalendarDate(streak.lastActivityDate) : null;
+  const previousDay = streak.lastActivityDate
+    ? storedCalendarDate(streak.lastActivityDate)
+    : null;
   const difference = previousDay
     ? Math.round((activityDay.getTime() - previousDay.getTime()) / DAY_MS)
     : null;
