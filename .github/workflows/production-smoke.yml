@@ -1,0 +1,59 @@
+name: Manual production synthetic student smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_create:
+        description: "Type CREATE to allow the official production signup/reuse step"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: false
+
+jobs:
+  production-smoke:
+    name: Provision and smoke production synthetic student
+    runs-on: ubuntu-latest
+    environment: production-smoke
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      PRODUCTION_SMOKE_BASE_URL: https://okuplus.vercel.app
+      PRODUCTION_SMOKE_CONFIRM: ${{ inputs.confirm_create }}
+
+    steps:
+      - name: Checkout selected release
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Preflight production smoke environment
+        env:
+          PRODUCTION_SMOKE_EMAIL: ${{ vars.PRODUCTION_SMOKE_EMAIL }}
+          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+        run: npm run production:smoke:preflight
+
+      - name: Provision or reuse synthetic student
+        env:
+          PRODUCTION_SMOKE_EMAIL: ${{ vars.PRODUCTION_SMOKE_EMAIL }}
+          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+        run: npx tsx scripts/provision-production-smoke-student.ts --apply
+
+      - name: Run authenticated read-only smoke
+        env:
+          PRODUCTION_SMOKE_EMAIL: ${{ vars.PRODUCTION_SMOKE_EMAIL }}
+          PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+        run: npx tsx scripts/run-production-auth-smoke.ts
