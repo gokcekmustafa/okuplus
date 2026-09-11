@@ -145,4 +145,4 @@ jobs:
           test -n "$files"
           # The repository-wide baseline has known formatting drift; only the
           # candidate diff is a release gate here.
-          printf '%s\n' "$files" | xargs npx prettier --check --end-of-line crlf --ignore-unknown
+          printf '%s\n' "$files" | xargs npx prettier --check --ignore-unknown
