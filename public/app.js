@@ -430,6 +430,7 @@ function showDashboard(me) {
   if (isPlatform) {
     navigate("dashboard");
   } else {
+    navigate("onboarding");
     void maybeShowOnboarding();
   }
 }
