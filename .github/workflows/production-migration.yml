@@ -126,13 +126,13 @@ jobs:
         run: |
           set -euo pipefail
           report="$(npx tsx scripts/production-migration-forensics.ts)"
-          read -r migrate_deploy_safe unresolved_count <<EOF
+          read -r migrate_deploy_safe unresolved_count backfill_preflight_safe <<EOF
           $(printf '%s' "${report}" | node -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.migrateDeploySafe ? "true" : "false"} ${value.unresolvedChecksumMismatches?.length ?? -1}`);
+              process.stdout.write(`${value.migrateDeploySafe ? "true" : "false"} ${value.unresolvedChecksumMismatches?.length ?? -1} ${value.releaseMigration1?.dataPreflight?.status === "PASS" ? "true" : "false"}`);
             });
           ')
           EOF
@@ -142,6 +142,10 @@ jobs:
           }
           test "${unresolved_count}" = "0" || {
             echo "FAIL: unresolved production migration checksum mismatch exists"
+            exit 1
+          }
+          test "${backfill_preflight_safe}" = "true" || {
+            echo "FAIL: migration 1 backfill data preflight requires review"
             exit 1
           }
           echo "PRODUCTION_MIGRATION_HISTORY_INTEGRITY=PASS"

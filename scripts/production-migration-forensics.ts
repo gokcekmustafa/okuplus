@@ -44,6 +44,18 @@ type MigrationFileHistory = {
   contentChangedAfterCreation: "YES" | "NO" | "UNKNOWN";
 };
 
+type Migration1DataPreflight = {
+  status: "PASS" | "REVIEW_REQUIRED" | "UNKNOWN";
+  totalExerciseTemplateVersions: number | null;
+  backfillTargetCount: number | null;
+  alreadyConfigured: number | null;
+  parentConfigAvailable: number | null;
+  parentConfigMissing: number | null;
+  missingParent: number | null;
+  deterministic: "YES" | "NO" | "UNKNOWN";
+  reason: string;
+};
+
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -464,6 +476,111 @@ async function main(): Promise<void> {
     });
 
     let configDataState: "YES" | "NO" | "UNKNOWN" = "UNKNOWN";
+    let migration1DataPreflight: Migration1DataPreflight = {
+      status: "UNKNOWN",
+      totalExerciseTemplateVersions: null,
+      backfillTargetCount: null,
+      alreadyConfigured: null,
+      parentConfigAvailable: null,
+      parentConfigMissing: null,
+      missingParent: null,
+      deterministic: "UNKNOWN",
+      reason: "required ExerciseTemplateVersion schema is unavailable",
+    };
+
+    const exerciseTemplateVersionTableExists = columns.some(
+      (row) => row.table_name === "ExerciseTemplateVersion",
+    );
+    const exerciseTemplateTableExists = columns.some(
+      (row) => row.table_name === "ExerciseTemplate",
+    );
+    const exerciseTemplateVersionConfigExists = columns.some(
+      (row) => row.table_name === "ExerciseTemplateVersion" && row.column_name === "config",
+    );
+
+    if (exerciseTemplateVersionTableExists && exerciseTemplateTableExists) {
+      const rows = exerciseTemplateVersionConfigExists
+        ? await prisma.$queryRaw<
+            Array<{
+              total: number;
+              target: number;
+              configured: number;
+              parentConfigAvailable: number;
+              parentConfigMissing: number;
+              missingParent: number;
+            }>
+          >`
+            SELECT count(*)::int AS total,
+                   count(*) FILTER (
+                     WHERE version."config" IS NULL OR version."config" = 'null'::jsonb
+                   )::int AS target,
+                   count(*) FILTER (WHERE version."config" IS NOT NULL)::int AS configured,
+                   count(*) FILTER (
+                     WHERE template."id" IS NOT NULL
+                       AND template."config" IS NOT NULL
+                       AND template."config" <> 'null'::jsonb
+                   )::int AS "parentConfigAvailable",
+                   count(*) FILTER (
+                     WHERE template."id" IS NOT NULL
+                       AND (template."config" IS NULL OR template."config" = 'null'::jsonb)
+                   )::int AS "parentConfigMissing",
+                   count(*) FILTER (WHERE template."id" IS NULL)::int AS "missingParent"
+            FROM "ExerciseTemplateVersion" AS version
+            LEFT JOIN "ExerciseTemplate" AS template
+              ON template."id" = version."templateId"
+          `
+        : await prisma.$queryRaw<
+            Array<{
+              total: number;
+              parentConfigAvailable: number;
+              parentConfigMissing: number;
+              missingParent: number;
+            }>
+          >`
+            SELECT count(*)::int AS total,
+                   count(*) FILTER (
+                     WHERE template."id" IS NOT NULL
+                       AND template."config" IS NOT NULL
+                       AND template."config" <> 'null'::jsonb
+                   )::int AS "parentConfigAvailable",
+                   count(*) FILTER (
+                     WHERE template."id" IS NOT NULL
+                       AND (template."config" IS NULL OR template."config" = 'null'::jsonb)
+                   )::int AS "parentConfigMissing",
+                   count(*) FILTER (WHERE template."id" IS NULL)::int AS "missingParent"
+            FROM "ExerciseTemplateVersion" AS version
+            LEFT JOIN "ExerciseTemplate" AS template
+              ON template."id" = version."templateId"
+          `;
+
+      const counts = rows[0];
+      const total = counts?.total ?? 0;
+      const target = exerciseTemplateVersionConfigExists
+        ? (counts as { target: number }).target
+        : total;
+      const configured = exerciseTemplateVersionConfigExists
+        ? (counts as { configured: number }).configured
+        : 0;
+      const parentConfigAvailable = counts?.parentConfigAvailable ?? 0;
+      const parentConfigMissing = counts?.parentConfigMissing ?? 0;
+      const missingParent = counts?.missingParent ?? 0;
+      const safe = missingParent === 0 && parentConfigMissing === 0;
+
+      migration1DataPreflight = {
+        status: safe ? "PASS" : "REVIEW_REQUIRED",
+        totalExerciseTemplateVersions: total,
+        backfillTargetCount: target,
+        alreadyConfigured: configured,
+        parentConfigAvailable,
+        parentConfigMissing,
+        missingParent,
+        deterministic: missingParent === 0 ? "YES" : "NO",
+        reason: safe
+          ? "every target has exactly one parent config source"
+          : "missing parent or null parent config requires review before backfill",
+      };
+    }
+
     if (
       columns.some(
         (row) => row.table_name === "ExerciseTemplateVersion" && row.column_name === "config",
@@ -541,6 +658,7 @@ async function main(): Promise<void> {
             schema: migration1Schema,
             dataState: configDataState,
             partial: migration1Schema.status === "PARTIAL" || configDataState === "YES",
+            dataPreflight: migration1DataPreflight,
           },
           releaseMigration2: {
             name: MIGRATION_2,

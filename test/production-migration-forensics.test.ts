@@ -5,6 +5,10 @@ const workflow = readFileSync(
   new URL("../.github/workflows/production-migration-forensics.yml", import.meta.url),
   "utf8",
 );
+const migrationWorkflow = readFileSync(
+  new URL("../.github/workflows/production-migration.yml", import.meta.url),
+  "utf8",
+);
 const script = readFileSync(
   new URL("../scripts/production-migration-forensics.ts", import.meta.url),
   "utf8",
@@ -33,6 +37,10 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
     expect(workflow).toContain("HISTORICAL_CHECKSUM_ACKNOWLEDGEMENTS");
     expect(workflow).toContain("UNRESOLVED_CHECKSUM_MISMATCHES");
+    expect(workflow).toContain("BACKFILL_TARGET_COUNT");
+    expect(workflow).toContain("dataPreflight: report.releaseMigration1.dataPreflight");
+    expect(workflow).toContain("missing migration 1 data preflight output");
+    expect(migrationWorkflow).toContain("backfill_preflight_safe");
     expect(workflow).toContain("SCHEMA_COMPATIBILITY");
     expect(workflow).not.toContain("echo ${PRODUCTION_DATABASE_URL}");
     expect(workflow).not.toContain('cat "${FORENSICS_OUTPUT_FILE}"');
@@ -76,5 +84,9 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("!schemaAhead");
     expect(script).toContain("!historyAhead");
     expect(script).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
+    expect(script).toContain("migration1DataPreflight");
+    expect(script).toContain("parentConfigMissing");
+    expect(script).toContain("missingParent");
+    expect(script).toContain("backfillTargetCount");
   });
 });

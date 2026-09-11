@@ -95,11 +95,14 @@ jobs:
             "initSchemaCompatibility",
           ];
 
-          for (const field of requiredFields) {
-            if (!(field in report)) {
-              throw new Error(`missing forensic output field: ${field}`);
-            }
-          }
+           for (const field of requiredFields) {
+             if (!(field in report)) {
+               throw new Error(`missing forensic output field: ${field}`);
+             }
+           }
+           if (!report.releaseMigration1?.dataPreflight) {
+             throw new Error("missing migration 1 data preflight output");
+           }
 
           const migrationSummary = (rows) => rows.map((row) => ({
             migrationName: row.migrationName,
@@ -205,6 +208,7 @@ jobs:
               schema: report.releaseMigration1.schema,
               dataState: report.releaseMigration1.dataState,
               partial: report.releaseMigration1.partial,
+              dataPreflight: report.releaseMigration1.dataPreflight,
             },
             releaseMigration2: {
               history: report.releaseMigration2.history,
@@ -236,6 +240,11 @@ jobs:
             `**HISTORICAL_CHECKSUM_ACKNOWLEDGEMENTS:** ${JSON.stringify(safe.historicalChecksumAcknowledgements)}`,
             `**UNRESOLVED_CHECKSUM_MISMATCHES:** ${JSON.stringify(safe.unresolvedChecksumMismatches)}`,
             `**SCHEMA_DRIFT:** ${safe.schemaDrift}`,
+            `**BACKFILL_TARGET_COUNT:** ${safe.releaseMigration1.dataPreflight.backfillTargetCount}`,
+            `**ALREADY_CONFIGURED:** ${safe.releaseMigration1.dataPreflight.alreadyConfigured}`,
+            `**MISSING_PARENT:** ${safe.releaseMigration1.dataPreflight.missingParent}`,
+            `**PARENT_CONFIG_MISSING:** ${safe.releaseMigration1.dataPreflight.parentConfigMissing}`,
+            `**DATA_PRECHECK:** ${safe.releaseMigration1.dataPreflight.status}`,
             `**PARTIAL_SCHEMA_STATE:** ${safe.partialSchemaState}`,
             `**PARTIAL_DATA_STATE:** ${safe.partialDataState}`,
             "",
