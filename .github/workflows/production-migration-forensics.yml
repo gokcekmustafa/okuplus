@@ -74,6 +74,7 @@ jobs:
           const report = JSON.parse(readFileSync(sourcePath, "utf8"));
           const requiredFields = [
             "migrationHistoryCount",
+            "migrationHistory",
             "failedMigrations",
             "rolledBackMigrations",
             "checksumMismatch",
@@ -89,6 +90,8 @@ jobs:
             "resolveRequired",
             "forwardFixRequired",
             "schemaSummary",
+            "migrationFileHistory",
+            "initSchemaCompatibility",
           ];
 
           for (const field of requiredFields) {
@@ -129,8 +132,62 @@ jobs:
             })),
           });
 
+          const hex64 = (value, label) => {
+            if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) {
+              throw new Error(`invalid ${label}`);
+            }
+            return value;
+          };
+
+          const initMigration = report.migrationHistory.find(
+            ({ migrationName }) => migrationName === "20260817000000_init",
+          );
+          if (!initMigration) {
+            throw new Error("missing init migration history row");
+          }
+
+          const productionChecksum = hex64(
+            initMigration.checksum,
+            "production init migration checksum",
+          );
+          const repositoryChecksum = hex64(
+            initMigration.repositoryChecksum,
+            "repository init migration checksum",
+          );
+          const fileHistory = report.migrationFileHistory;
+          if (
+            fileHistory.path !== "prisma/migrations/20260817000000_init/migration.sql" ||
+            (fileHistory.creationCommit !== null &&
+              !/^[0-9a-f]{7,40}$/u.test(fileHistory.creationCommit)) ||
+            !Number.isInteger(fileHistory.changeCommitCount) ||
+            fileHistory.changeCommitCount < 0 ||
+            !["YES", "NO", "UNKNOWN"].includes(fileHistory.contentChangedAfterCreation)
+          ) {
+            throw new Error("invalid init migration file history");
+          }
+
+          const initMigrationChecksumAudit = {
+            migrationName: initMigration.migrationName,
+            productionChecksum,
+            repositoryChecksum,
+            match: initMigration.checksumMatchesRepository ? "YES" : "NO",
+            productionState: initMigration.state,
+            startedAt: initMigration.startedAt,
+            finishedAt: initMigration.finishedAt,
+            rolledBackAt: initMigration.rolledBackAt,
+            appliedStepsCount: initMigration.appliedStepsCount,
+            migrationFileExists: initMigration.migrationFileExists,
+          };
+
           const safe = {
             migrationHistoryCount: report.migrationHistoryCount,
+            initMigrationChecksumAudit,
+            migrationFileHistory: {
+              path: fileHistory.path,
+              creationCommit: fileHistory.creationCommit,
+              changeCommitCount: fileHistory.changeCommitCount,
+              contentChangedAfterCreation: fileHistory.contentChangedAfterCreation,
+            },
             failedMigrations: migrationSummary(report.failedMigrations),
             rolledBackMigrations: migrationSummary(report.rolledBackMigrations),
             checksumMismatch: report.checksumMismatch,
@@ -156,6 +213,7 @@ jobs:
             resolveRequired: report.resolveRequired,
             forwardFixRequired: report.forwardFixRequired,
             currentSchemaSummary: schemaSummary(report.schemaSummary),
+            initSchemaCompatibility: report.initSchemaCompatibility,
           };
 
           const json = `${JSON.stringify(safe, null, 2)}\n`;
@@ -175,6 +233,21 @@ jobs:
             `**SCHEMA_DRIFT:** ${safe.schemaDrift}`,
             `**PARTIAL_SCHEMA_STATE:** ${safe.partialSchemaState}`,
             `**PARTIAL_DATA_STATE:** ${safe.partialDataState}`,
+            "",
+            "**INIT_MIGRATION_CHECKSUM_AUDIT:**",
+            `**MIGRATION:** ${safe.initMigrationChecksumAudit.migrationName}`,
+            `**PRODUCTION_CHECKSUM:** ${safe.initMigrationChecksumAudit.productionChecksum}`,
+            `**REPOSITORY_CHECKSUM:** ${safe.initMigrationChecksumAudit.repositoryChecksum}`,
+            `**MATCH:** ${safe.initMigrationChecksumAudit.match}`,
+            `**PRODUCTION_STATE:** ${safe.initMigrationChecksumAudit.productionState}`,
+            `**APPLIED_STEPS:** ${safe.initMigrationChecksumAudit.appliedStepsCount}`,
+            `**MIGRATION_FILE_EXISTS:** ${safe.initMigrationChecksumAudit.migrationFileExists}`,
+            `**MIGRATION_FILE_HISTORY:** ${JSON.stringify(safe.migrationFileHistory)}`,
+            `**CONTENT_CHANGED_AFTER_CREATION:** ${safe.migrationFileHistory.contentChangedAfterCreation}`,
+            "**LINE_ENDING_FACTOR:** UNKNOWN (CI checkout is LF; production source encoding is not observable from repository history)",
+            `**SCHEMA_COMPATIBILITY:** ${safe.initSchemaCompatibility}`,
+            `**CLASSIFICATION:** ${safe.checksumMismatch ? "F" : "A"}`,
+            `**MIGRATION_FILE_REWRITE_REQUIRED:** ${safe.migrationFileHistory.contentChangedAfterCreation === "NO" ? "NO" : "UNKNOWN"}`,
             "",
             "**RELEASE_MIGRATION_1:**",
             `- history_state: ${safe.releaseMigration1.history}`,

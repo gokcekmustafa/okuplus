@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -35,6 +36,12 @@ type ConstraintRow = {
 };
 type EnumRow = { type_name: string; enum_value: string };
 type PolicyRow = { tablename: string; policyname: string; cmd: string };
+type MigrationFileHistory = {
+  path: string;
+  creationCommit: string | null;
+  changeCommitCount: number;
+  contentChangedAfterCreation: "YES" | "NO" | "UNKNOWN";
+};
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -80,6 +87,35 @@ async function repositoryChecksums(): Promise<Map<string, string>> {
     result.set(entry.name, sha256(sql));
   }
   return result;
+}
+
+function migrationFileHistory(root: string, migrationName: string): MigrationFileHistory {
+  const relativePath = `prisma/migrations/${migrationName}/migration.sql`;
+
+  try {
+    const commits = execFileSync(
+      "git",
+      ["log", "--follow", "--format=%H", "--diff-filter=AM", "--", relativePath],
+      { cwd: root, encoding: "utf8" },
+    )
+      .split(/\r?\n/u)
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    return {
+      path: relativePath,
+      creationCommit: commits.at(-1) ?? null,
+      changeCommitCount: Math.max(commits.length - 1, 0),
+      contentChangedAfterCreation: commits.length > 1 ? "YES" : "NO",
+    };
+  } catch {
+    return {
+      path: relativePath,
+      creationCommit: null,
+      changeCommitCount: 0,
+      contentChangedAfterCreation: "UNKNOWN",
+    };
+  }
 }
 
 function checkSchema(
@@ -150,7 +186,12 @@ async function main(): Promise<void> {
           SELECT table_name, column_name, data_type, udt_name
           FROM information_schema.columns
           WHERE table_schema = 'public'
-            AND table_name IN ('ExerciseTemplateVersion', 'TrainingSession', 'TrainingSessionItem')
+            AND table_name IN (
+              'ExerciseTemplateVersion', 'TrainingSession', 'TrainingSessionItem',
+              'User', 'Tenant', 'Membership', 'Content', 'ContentVersion', 'Question',
+              'QuestionVersion', 'ExerciseTemplate', 'ExerciseSession', 'Attempt',
+              'StudentProfile', 'StudentProgress', 'Assessment', 'PointEvent', 'StudentStreak'
+            )
           ORDER BY table_name, ordinal_position
         `,
         prisma.$queryRaw<IndexRow[]>`
@@ -213,6 +254,10 @@ async function main(): Promise<void> {
         `
       : [];
     const byName = new Map(migrations.map((row) => [row.migration_name, row]));
+    const initMigrationFileHistory = migrationFileHistory(
+      resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+      "20260817000000_init",
+    );
     const failed = migrations
       .filter((row) => !row.finished_at || row.rolled_back_at)
       .map((row) => ({
@@ -233,6 +278,41 @@ async function main(): Promise<void> {
       .filter((row) => checksums.has(row.migration_name))
       .filter((row) => checksums.get(row.migration_name) !== row.checksum)
       .map((row) => row.migration_name);
+
+    const initSchema = checkSchema(columns, indexes, constraints, enums, policies, {
+      columns: [
+        ...["id", "email", "status"].map((column) => `User.${column}`),
+        ...["id", "type", "status"].map((column) => `Tenant.${column}`),
+        ...["id", "tenantId", "userId", "role", "status"].map((column) => `Membership.${column}`),
+        ...["id", "status", "currentVersionId"].map((column) => `Content.${column}`),
+        ...["id", "contentId", "version", "status"].map((column) => `ContentVersion.${column}`),
+        ...["id", "contentId", "status"].map((column) => `Question.${column}`),
+        ...["id", "questionId", "version", "status"].map((column) => `QuestionVersion.${column}`),
+        ...["id", "tenantId", "type", "status"].map((column) => `ExerciseTemplate.${column}`),
+        ...["id", "templateId", "version", "status"].map(
+          (column) => `ExerciseTemplateVersion.${column}`,
+        ),
+        ...["id", "studentId", "templateVersionId", "status"].map(
+          (column) => `ExerciseSession.${column}`,
+        ),
+        ...["id", "tenantId", "sessionId", "questionVersionId"].map(
+          (column) => `Attempt.${column}`,
+        ),
+        ...["id", "tenantId", "studentId"].map((column) => `StudentProfile.${column}`),
+        ...["id", "tenantId", "studentId", "skillId"].map((column) => `StudentProgress.${column}`),
+        ...["id", "status"].map((column) => `Assessment.${column}`),
+        ...["id", "tenantId", "studentId", "eventType", "points"].map(
+          (column) => `PointEvent.${column}`,
+        ),
+        ...["id", "tenantId", "studentId", "currentDays"].map(
+          (column) => `StudentStreak.${column}`,
+        ),
+      ],
+      indexes: [],
+      constraints: [],
+      enums: [],
+      policies: [],
+    });
 
     const migration1Schema = checkSchema(columns, indexes, constraints, enums, policies, {
       columns: ["ExerciseTemplateVersion.config"],
@@ -365,6 +445,8 @@ async function main(): Promise<void> {
             migrationName: row.migration_name,
             state: stateOf(row),
             checksum: row.checksum,
+            repositoryChecksum: checksums.get(row.migration_name) ?? null,
+            migrationFileExists: checksums.has(row.migration_name),
             appliedStepsCount: row.applied_steps_count,
             startedAt: dateValue(row.started_at),
             finishedAt: dateValue(row.finished_at),
@@ -375,6 +457,7 @@ async function main(): Promise<void> {
           rolledBackMigrations: rolledBack,
           checksumMismatch: checksumMismatches.length > 0,
           checksumMismatches,
+          migrationFileHistory: initMigrationFileHistory,
           repositoryOnlyMigrations: repositoryOnly,
           productionOnlyMigrations: productionOnly,
           releaseMigration1: {
@@ -390,6 +473,7 @@ async function main(): Promise<void> {
             schema: migration2Schema,
             partial: migration2Schema.status === "PARTIAL",
           },
+          initSchemaCompatibility: initSchema.status === "COMPLETE" ? "PASS" : "FAIL",
           schemaSummary: { columns, indexes, constraints, enums, policies },
           schemaDrift: partialSchema || schemaAhead || historyAhead,
           partialSchemaState: partialSchema ? "YES" : "NO",
