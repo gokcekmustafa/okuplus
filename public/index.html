@@ -412,8 +412,10 @@
           <!-- Dashboard -->
           <section id="page-dashboard" class="page-view">
             <div class="page-head">
-              <h2>Dashboard</h2>
-              <p class="muted">Hoş geldiniz, <span id="welcome-name">—</span></p>
+              <h2>Bugün de gelişmeye hazır mısın?</h2>
+              <p class="muted">
+                <span id="welcome-name">—</span>, kısa ve düzenli adımlarla ilerlemeye devam et.
+              </p>
             </div>
 
             <div class="stat-grid" data-admin>
@@ -496,6 +498,7 @@
                 </button>
                 <span id="daily-training-streak" class="muted" aria-live="polite"></span>
               </div>
+              <p id="daily-training-quota" class="training-quota muted" aria-live="polite"></p>
               <div class="training-focus-grid" aria-label="Bugünkü gelişim alanları">
                 <article class="training-focus-card">
                   <span aria-hidden="true">⚡</span>
@@ -514,10 +517,66 @@
                   <div><strong>Bugünkü Gelişim</strong><small>Kısa adımlarla ilerle</small></div>
                 </article>
               </div>
-              <div id="today-next-action" class="muted training-home-secondary"></div>
+              <div
+                id="today-next-action"
+                class="muted training-home-secondary"
+                aria-live="polite"
+              ></div>
               <div id="today-stats" class="visually-hidden"></div>
               <div id="today-recent" class="visually-hidden"></div>
               <p id="today-training-error" class="error hidden" role="alert"></p>
+            </section>
+
+            <section
+              id="dashboard-progress-card"
+              class="card dashboard-progress-card"
+              data-student
+              aria-labelledby="dashboard-progress-title"
+              aria-busy="true"
+            >
+              <div class="dashboard-card-heading">
+                <div>
+                  <p class="insight-eyebrow">GERÇEK VERİLERLE</p>
+                  <h3 id="dashboard-progress-title">Gelişim özeti</h3>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="dashboard-progress-link">
+                  Tüm ilerlemeyi gör
+                </button>
+              </div>
+              <div class="dashboard-progress-grid" aria-live="polite">
+                <div class="dashboard-progress-stat">
+                  <span>Son performans</span><strong id="dashboard-last-performance">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Genel doğruluk</span><strong id="dashboard-accuracy">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Ortalama süre</span><strong id="dashboard-average-time">—</strong>
+                </div>
+                <div class="dashboard-progress-stat">
+                  <span>Tamamlanan oturum</span><strong id="dashboard-completed-sessions">—</strong>
+                </div>
+              </div>
+              <p id="dashboard-progress-note" class="muted dashboard-progress-note">
+                İlerlemen yükleniyor…
+              </p>
+            </section>
+
+            <section
+              id="dashboard-recent-card"
+              class="card dashboard-recent-card"
+              data-student
+              aria-labelledby="dashboard-recent-title"
+            >
+              <div class="dashboard-card-heading">
+                <div>
+                  <p class="insight-eyebrow">SON ADIMLARIN</p>
+                  <h3 id="dashboard-recent-title">Son aktivitelerin</h3>
+                </div>
+              </div>
+              <div id="dashboard-recent-list" class="dashboard-recent-list" aria-live="polite">
+                <p class="muted">Aktivitelerin yükleniyor…</p>
+              </div>
             </section>
 
             <section
