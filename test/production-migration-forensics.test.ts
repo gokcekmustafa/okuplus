@@ -105,4 +105,11 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("missingParent");
     expect(script).toContain("backfillTargetCount");
   });
+
+  it("consumes the db fingerprint migration arrays using their actual output contract", () => {
+    expect(migrationWorkflow).toContain('value.migrations?.failed?.length ?? ""');
+    expect(migrationWorkflow).toContain('value.migrations?.pending?.length ?? ""');
+    expect(migrationWorkflow).not.toContain("value.migrations?.failedCount");
+    expect(migrationWorkflow).not.toContain("value.migrations?.pendingCount");
+  });
 });
