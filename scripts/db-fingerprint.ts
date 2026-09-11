@@ -4,6 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { providerForHost, targetIdentityFingerprint } from "./db-fingerprint-contract.js";
 
 const ENVIRONMENTS = new Set(["LOCAL", "TEST", "STAGING", "PRODUCTION"]);
 
@@ -154,6 +155,14 @@ async function main(): Promise<void> {
       migrationManifestHash: repository.migrationManifestHash,
       lastAppliedMigration: lastApplied,
     };
+    const targetIdentity = targetIdentityFingerprint({
+      environment,
+      provider: providerForHost(parsedUrl.hostname),
+      host: parsedUrl.hostname,
+      port: parsedUrl.port || "5432",
+      database: identity.database,
+      dbUser: identity.current_user,
+    });
 
     console.log(
       JSON.stringify(
@@ -191,6 +200,9 @@ async function main(): Promise<void> {
             })),
             lastApplied,
           },
+          // `fingerprint` is the existing live DB/schema/migration fingerprint.
+          // `targetIdentityFingerprint` is the stable approved-target identity.
+          targetIdentityFingerprint: targetIdentity,
           fingerprint: sha256(stableJson(fingerprintInput)),
           productionWrite: "NO",
         },
