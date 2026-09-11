@@ -6,6 +6,11 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, validationError } from "../../lib/errors.js";
+import {
+  calendarDateKey,
+  calendarDayBounds,
+  configuredCalendarTimezone,
+} from "../../lib/calendar.js";
 import { iyzicoCheckoutConfigured } from "../billing/config.js";
 
 export const ENTITLEMENT_FEATURES = {
@@ -68,7 +73,6 @@ type FeaturePolicy = {
   reason: string | null;
 };
 
-const DEFAULT_TIMEZONE = "UTC";
 const FREE_DAILY_PRACTICE_LIMIT = 3;
 const FREE_DAILY_QUESTION_LIMIT = 20;
 
@@ -128,66 +132,15 @@ function assertEntitlementFeature(feature: string): asserts feature is Entitleme
   }
 }
 
-function configuredTimezone(): string {
-  const candidate = process.env.ENTITLEMENT_TIMEZONE?.trim() || DEFAULT_TIMEZONE;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format();
-    return candidate;
-  } catch {
-    return DEFAULT_TIMEZONE;
-  }
-}
-
-function dateParts(date: Date, timezone: string): Record<string, string> {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  return Object.fromEntries(
-    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
-  );
-}
-
-export function entitlementUsageDate(date = new Date(), timezone = configuredTimezone()): string {
-  const parts = dateParts(date, timezone);
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function timezoneOffsetMs(date: Date, timezone: string): number {
-  const parts = dateParts(date, timezone);
-  const asUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  );
-  return asUtc - date.getTime();
+export function entitlementUsageDate(
+  date = new Date(),
+  timezone = configuredCalendarTimezone(),
+): string {
+  return calendarDateKey(date, timezone);
 }
 
 function resetAt(date: Date, timezone: string): string {
-  const current = dateParts(date, timezone);
-  let candidate = Date.UTC(
-    Number(current.year),
-    Number(current.month) - 1,
-    Number(current.day) + 1,
-    0,
-    0,
-    0,
-  );
-  for (let i = 0; i < 3; i += 1) {
-    candidate =
-      Date.UTC(Number(current.year), Number(current.month) - 1, Number(current.day) + 1, 0, 0, 0) -
-      timezoneOffsetMs(new Date(candidate), timezone);
-  }
-  return new Date(candidate).toISOString();
+  return calendarDayBounds(date, timezone).end.toISOString();
 }
 
 function planLabel(plan: EntitlementPlan): string {
@@ -288,7 +241,7 @@ async function loadSnapshot(
   now = new Date(),
 ): Promise<EntitlementSnapshot> {
   const context = await resolveScope(actor, client);
-  const timezone = configuredTimezone();
+  const timezone = configuredCalendarTimezone();
   const usageDate = entitlementUsageDate(now, timezone);
   const [grant, counts] = await Promise.all([
     // 8H-2 deliberately keeps Premium personal-only. Organization scope is
@@ -393,7 +346,7 @@ async function recordUsageInTransactionCore(
     throw validationError("Entitlement kullanım anahtarı geçersiz");
   }
   const context = await resolveScope(actor, tx);
-  const timezone = configuredTimezone();
+  const timezone = configuredCalendarTimezone();
   const usageDate = entitlementUsageDate(now, timezone);
   const grant =
     context.scope === "PERSONAL"

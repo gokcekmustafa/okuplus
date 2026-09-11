@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { ok } from "../../lib/response.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import type { AuthProvider } from "../auth/index.js";
+import { findCanonicalPlacementAssessment } from "../assessments/canonical-selector.js";
 import { completeOnboarding, getOnboardingState, grantConsent, updateProfile } from "./service.js";
 
 export async function onboardingRoutes(
@@ -69,20 +70,10 @@ export async function onboardingRoutes(
   app.get(
     "/student/onboarding/placement",
     { preHandler: [requireAuth(authProvider)] },
-    async () => {
+    async (req) => {
       const { prisma } = await import("../../lib/prisma.js");
-      const a = await prisma.assessment.findFirst({
-        where: { status: "PUBLISHED", type: "PLACEMENT" },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
-      });
-      if (a) return ok({ assessmentId: a.id });
-      const anyP = await prisma.assessment.findFirst({
-        where: { status: "PUBLISHED" },
-        orderBy: { createdAt: "desc" },
-        select: { id: true },
-      });
-      return ok({ assessmentId: anyP?.id ?? null });
+      const a = await findCanonicalPlacementAssessment(prisma, req.tenantContext?.tenantId ?? null);
+      return ok({ assessmentId: a?.id ?? null });
     },
   );
 }
