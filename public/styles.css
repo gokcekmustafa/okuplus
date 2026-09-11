@@ -2666,6 +2666,96 @@ body {
   margin-top: 14px;
   font-size: 13px;
 }
+.dashboard-next-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #243655;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.training-quota {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.dashboard-progress-card,
+.dashboard-recent-card {
+  margin-top: 16px;
+  padding: 20px;
+}
+.dashboard-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.dashboard-card-heading h3 {
+  margin: 4px 0 0;
+  color: #172947;
+}
+.dashboard-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.dashboard-progress-stat {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #e0e8f2;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+.dashboard-progress-stat span {
+  color: #526078;
+  font-size: 12px;
+}
+.dashboard-progress-stat strong {
+  color: #172947;
+  font-size: 20px;
+}
+.dashboard-progress-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+.dashboard-recent-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.dashboard-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e0e8f2;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+.dashboard-recent-item > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e9f6ef;
+  color: #176749;
+  font-weight: 800;
+}
+.dashboard-recent-item strong,
+.dashboard-recent-item small {
+  display: block;
+}
+.dashboard-recent-item strong {
+  color: #243655;
+  font-size: 13px;
+}
+.dashboard-recent-item small {
+  margin-top: 2px;
+  color: #526078;
+  font-size: 12px;
+}
 .training-focus-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3160,8 +3250,16 @@ body {
     align-self: flex-start;
   }
   .training-focus-grid,
-  .development-columns {
+  .development-columns,
+  .dashboard-progress-grid {
     grid-template-columns: 1fr;
+  }
+  .dashboard-card-heading {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .dashboard-card-heading .btn {
+    width: 100%;
   }
   .training-home-actions .btn {
     width: 100%;

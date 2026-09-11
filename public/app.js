@@ -420,7 +420,8 @@ function showDashboard(me) {
   if (bottomNav) bottomNav.classList.toggle("hidden", isPlatform);
   var gamif = $("topbar-gamification");
   if (gamif) gamif.classList.toggle("hidden", isPlatform);
-  if (!isPlatform) void loadTopbarGamification();
+  // Dashboard günlük özetinden toplam GP ve seriyi güncelliyor; ayrı bir
+  // gamification çağrısı yalnızca özet için yapılmıyor.
 
   if (isPlatform) {
     void loadTenants();
@@ -477,26 +478,6 @@ async function loadContextsAndRender() {
   }
 }
 
-async function loadTopbarGamification() {
-  const scope = insightScope();
-  try {
-    var tokens = getStoredTokens();
-    var res = await fetch("/student/gamification", {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    });
-    var data = await parseResponse(res);
-    if (scope !== insightScope()) return;
-    observeInsightAwards(data);
-    var xpEl = $("topbar-xp");
-    var streakEl = $("topbar-streak");
-    if (xpEl) xpEl.textContent = String(data.totalPoints ?? 0);
-    if (streakEl) streakEl.textContent = String(data.currentDays ?? 0);
-  } catch (_e) {
-    void _e;
-    // ignore for non-student or not yet onboarded
-  }
-}
-
 async function switchContext(tenantId) {
   resetInsights();
   localStorage.setItem(STORAGE_KEYS.tenantId, tenantId || "");
@@ -504,8 +485,7 @@ async function switchContext(tenantId) {
   try {
     var me = await fetchMe(tokens.accessToken, tenantId || null);
     showDashboard(me);
-  } catch (_e) {
-    void _e;
+  } catch {
     clearStoredSession();
     showLogin();
   }
@@ -539,12 +519,17 @@ async function maybeShowOnboarding() {
 
 function renderTrainingHome(data) {
   const daily = data?.dailyTraining || null;
+  const dailyGoal = data?.dailyGoal || null;
   const firstDay = Boolean(daily?.firstDay ?? data?.isFirstTrainingDay);
   const placementHandoff = Boolean(daily?.placementHandoff ?? data?.placementHandoff);
-  const total = Math.max(1, Number(daily?.totalItems) || 6);
-  const completed = Math.min(total, Math.max(0, Number(daily?.completedItems) || 0));
-  const isCompleted = daily?.status === "COMPLETED" || completed >= total;
-  const isInProgress = Boolean(daily && !isCompleted);
+  const total = Math.max(1, Number(dailyGoal?.totalItems ?? daily?.totalItems) || 6);
+  const completed = Math.min(
+    total,
+    Math.max(0, Number(dailyGoal?.completedItems ?? daily?.completedItems) || 0),
+  );
+  const goalStatus = dailyGoal?.status ?? daily?.status ?? null;
+  const isCompleted = goalStatus === "COMPLETED" || completed >= total;
+  const isInProgress = goalStatus === "IN_PROGRESS" || Boolean(daily && !isCompleted);
   const progress = Math.round((completed / total) * 100);
   const status = $("daily-training-status");
   const intro = $("daily-training-intro");
@@ -554,9 +539,11 @@ function renderTrainingHome(data) {
   const progressFill = $("daily-training-progress-fill");
   const gp = $("daily-training-gp");
   const streak = $("daily-training-streak");
+  const topbarPoints = $("topbar-xp");
+  const topbarStreak = $("topbar-streak");
   if (status) {
     status.textContent = isCompleted
-      ? "Tamamlandı"
+      ? "Antrenman tamamlandı"
       : isInProgress
         ? "Devam ediyor"
         : "Henüz başlamadı";
@@ -565,7 +552,7 @@ function renderTrainingHome(data) {
     intro.textContent = isCompleted
       ? firstDay
         ? "İlk antrenmanını tamamladın! 🎉"
-        : "Bugünkü antrenmanı tamamladın!"
+        : "Bugünkü hedefini tamamladın! 🎉"
       : isInProgress
         ? firstDay
           ? "İlk antrenmanına kaldığın yerden devam edebilirsin."
@@ -576,15 +563,21 @@ function renderTrainingHome(data) {
             ? "İlk antrenmanına başlayalım."
             : "Bugünkü antrenmanın hazır.";
   }
-  if (progressText) progressText.textContent = `${completed}/${total} egzersiz`;
+  if (progressText) progressText.textContent = `${completed} / ${total} egzersiz`;
   if (progressTrack) progressTrack.setAttribute("aria-valuemax", String(total));
   if (progressTrack) progressTrack.setAttribute("aria-valuenow", String(completed));
   if (progressFill) progressFill.style.width = `${progress}%`;
   const pointsToday = Number(data?.pointsToday ?? daily?.totalGP);
   if (gp) gp.textContent = `Bugün kazanılan: ${Number.isFinite(pointsToday) ? pointsToday : 0} GP`;
+  if (topbarPoints && Number.isFinite(Number(data?.totalPoints)))
+    topbarPoints.textContent = String(data.totalPoints);
+  if (topbarStreak && Number.isFinite(Number(data?.currentStreak)))
+    topbarStreak.textContent = String(data.currentStreak);
   if (streak)
     streak.textContent =
-      Number(data?.currentStreak) > 0 ? `🔥 ${data.currentStreak} günlük seri` : "";
+      Number(dailyGoal?.currentStreak ?? data?.currentStreak) > 0
+        ? `🔥 ${dailyGoal?.currentStreak ?? data.currentStreak} günlük seri`
+        : "";
   if (button) {
     button.disabled = isCompleted;
     button.textContent = isCompleted
@@ -602,12 +595,14 @@ async function loadToday() {
   var na = $("today-next-action");
   var stats = $("today-stats");
   var recent = $("today-recent");
+  var recentList = $("dashboard-recent-list");
   if (!na) return;
   const scope = insightScope();
   try {
     var tokens = getStoredTokens();
     var res = await fetch("/student/today", {
       headers: authHeaders(tokens.accessToken, tokens.tenantId),
+      signal: AbortSignal.timeout(15000),
     });
     var data = await parseResponse(res);
     if (scope !== insightScope()) return;
@@ -634,7 +629,12 @@ async function loadToday() {
     else if (data.nextAction && data.nextAction.type === "PERSONAL_EXERCISE")
       btn =
         '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayExercise()">Çalışmaya Başla</button>';
-    na.innerHTML = escapeHtml(label + title) + " " + btn;
+    na.innerHTML =
+      '<span class="dashboard-next-label">Önerilen sonraki adım</span>' +
+      "<span>" +
+      escapeHtml(label + title) +
+      "</span> " +
+      btn;
     stats.textContent =
       "Bugün tamamlanan: " +
       data.completedToday +
@@ -642,19 +642,86 @@ async function loadToday() {
       data.currentStreak +
       " · Bugün kazanılan GP: " +
       (data.dailyTraining?.totalGP ?? data.pointsToday ?? 0);
-    if (data.recentActivity && data.recentActivity.length) {
-      recent.innerHTML =
-        '<div class="muted" style="font-size:12px;margin-bottom:4px">Son aktivite</div>' +
-        data.recentActivity
+    const activityLabel = {
+      ASSIGNMENT: "Ödev",
+      ASSESSMENT: "Değerlendirme",
+      EXERCISE: "Alıştırma",
+    };
+    const activities = Array.isArray(data.recentActivity) ? data.recentActivity : [];
+    const recentHtml = activities.length
+      ? activities
           .map(function (a) {
-            return "<div>" + escapeHtml(a.title) + " (" + a.type + ")</div>";
+            const type = activityLabel[a.type] || "Çalışma";
+            const date = a.completedAt ? insightDate(a.completedAt) : "Tamamlanıyor";
+            return (
+              '<article class="dashboard-recent-item"><span aria-hidden="true">✓</span><div><strong>' +
+              escapeHtml(a.title || "Çalışma") +
+              "</strong><small>" +
+              escapeHtml(type + " · " + date) +
+              "</small></div></article>"
+            );
           })
-          .join("");
-    } else
-      recent.innerHTML = '<span class="muted" style="font-size:12px">Henüz aktivite yok</span>';
+          .join("")
+      : '<p class="muted">Henüz tamamlanan bir çalışman yok. İlk adımın hazır.</p>';
+    if (recent) recent.innerHTML = recentHtml;
+    if (recentList) recentList.innerHTML = recentHtml;
   } catch (_e) {
     void _e;
     if (na) na.textContent = "Bugün verisi yüklenemedi";
+  }
+}
+
+function formatDashboardDuration(value) {
+  const ms = Number(value);
+  if (typeof value !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
+  const seconds = ms / 1000;
+  return `${Number.isInteger(seconds) ? seconds : seconds.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} sn`;
+}
+
+function renderDashboardProgress(data) {
+  const summary = data?.summary || {};
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const latest = items.find((item) => item?.lastAttemptAt) || items[0] || null;
+  const numericMetric = (value) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  const accuracy = numericMetric(summary.accuracy);
+  const lastAccuracy = numericMetric(latest?.accuracy);
+  const averageTime =
+    items.find((item) => numericMetric(item?.avgTimeMs) !== null)?.avgTimeMs ?? null;
+  const set = (id, value) => {
+    const element = $(id);
+    if (element) element.textContent = value;
+  };
+  set("dashboard-last-performance", lastAccuracy === null ? "—" : formatAccuracy(lastAccuracy));
+  set("dashboard-accuracy", accuracy === null ? "—" : formatAccuracy(accuracy));
+  set("dashboard-average-time", formatDashboardDuration(averageTime));
+  set(
+    "dashboard-completed-sessions",
+    Number.isFinite(Number(summary.sessionCount)) ? String(summary.sessionCount) : "—",
+  );
+  const note = $("dashboard-progress-note");
+  if (note) {
+    note.textContent = items.length
+      ? "Doğruluk yalnızca puanlanan cevaplardan hesaplanır; ölçülemeyen değerler boş bırakılır."
+      : "İlk tamamlanan antrenmanından sonra gerçek gelişim verilerin burada görünecek.";
+  }
+}
+
+async function loadDashboardProgress() {
+  const card = $("dashboard-progress-card");
+  const note = $("dashboard-progress-note");
+  if (!card) return;
+  const scope = insightScope();
+  card.setAttribute("aria-busy", "true");
+  try {
+    const data = await insightApi("progress");
+    if (scope !== insightScope()) return;
+    renderDashboardProgress(data);
+  } catch {
+    if (scope !== insightScope()) return;
+    if (note) note.textContent = "Gelişim özeti şu anda yüklenemedi. Yenile ile tekrar dene.";
+  } finally {
+    if (scope === insightScope()) card.setAttribute("aria-busy", "false");
   }
 }
 
@@ -782,6 +849,16 @@ async function loadEntitlements() {
       '</strong></div><div class="entitlement-usage-row"><span>Günlük soru</span><strong>' +
       escapeHtml(usageValue(questions)) +
       "</strong></div>";
+    const quota = $("daily-training-quota");
+    if (quota) {
+      if (questions.dailyLimit === null || questions.dailyLimit === undefined) {
+        quota.textContent = "Günlük soru hakkın sınırsız.";
+      } else if (Number(questions.remainingToday) <= 0) {
+        quota.textContent = "Günlük soru hakkın doldu; tamamlanmayan adımlar yarına kalabilir.";
+      } else {
+        quota.textContent = `Bugün ${questions.remainingToday} soru hakkın kaldı.`;
+      }
+    }
     $("entitlement-premium-note").textContent =
       plan.code === "PLAN_PREMIUM"
         ? "Premium etkin. Alıştırma ve soru kullanımı günlük sınır olmadan devam eder."
@@ -1335,9 +1412,9 @@ async function loadLearningPath() {
               : n.status === "active"
                 ? "▶"
                 : "○";
-        var label = n.label || n.code;
+        var label = learningPathLabel(n);
         var disabled = n.status === "locked" ? " disabled" : "";
-        var aria = label + " - " + n.status;
+        var aria = label + " - " + learningPathStatusLabel(n.status);
         return (
           '<button type="button" class="path-node ' +
           n.status +
@@ -1390,6 +1467,40 @@ async function loadLearningPath() {
     void _e;
     container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolu yüklenemedi</p>';
   }
+}
+
+const LEARNING_PATH_LABELS = {
+  FAST_ATTENTION: "Dikkat",
+  ATTENTION_BURST: "Dikkat",
+  FAST_RECOGNITION: "Hızlı tanıma",
+  RAPID_RECOGNITION: "Hızlı tanıma",
+  FAST_CHUNKING: "İfade gruplama",
+  PHRASE_CHUNKING: "İfade gruplama",
+  RC_MAIN_IDEA: "Ana fikir",
+  MAIN_IDEA: "Ana fikir",
+  RC_DETAIL: "Detay",
+  DETAIL_EVIDENCE: "Detay ve kanıt",
+  RC_INFERENCE: "Çıkarım",
+  INFERENCE: "Çıkarım",
+  COMPREHENSION: "Okuduğunu anlama",
+};
+const LEARNING_PATH_STATUS_LABELS = {
+  active: "Sıradaki adım",
+  available: "Hazır",
+  completed: "Tamamlandı",
+  locked: "Kilitli",
+};
+
+function learningPathLabel(node) {
+  const raw = String(node?.label || node?.code || "").trim();
+  if (!raw) return "Yeni beceri";
+  const mapped = LEARNING_PATH_LABELS[raw.toUpperCase()];
+  if (mapped) return mapped;
+  return /^[A-Z0-9_-]+$/.test(raw) ? "Yeni beceri" : raw;
+}
+
+function learningPathStatusLabel(status) {
+  return LEARNING_PATH_STATUS_LABELS[String(status || "").toLowerCase()] || "Hazır";
 }
 
 window.resumeTodaySession = async function (id) {
@@ -1859,6 +1970,7 @@ function navigate(page) {
       void loadToday();
       void loadLearningPath();
       void loadEntitlements();
+      void loadDashboardProgress();
     }
   } else if (page === "premium-info") {
     recordPremiumTelemetry("PREMIUM_INFO_VIEWED");
@@ -11133,6 +11245,7 @@ async function loadProgress() {
 function setupProgressEvents() {
   $("progress-refresh").addEventListener("click", loadProgress);
   $("home-progress-link").addEventListener("click", () => navigate("progress"));
+  $("dashboard-progress-link")?.addEventListener("click", () => navigate("progress"));
   $("history-prev").addEventListener("click", () => loadInsightHistory(insightHistoryPage - 1));
   $("history-next").addEventListener("click", () => loadInsightHistory(insightHistoryPage + 1));
   $("page-progress").addEventListener("click", (event) => {
