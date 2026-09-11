@@ -10874,6 +10874,15 @@ function insightDate(value, withTime = false, utc = false) {
 function formatAccuracy(value) {
   return Number.isFinite(value) ? Math.round(value * 100) + "%" : "—";
 }
+function formatAvgTime(value) {
+  if (!Number.isFinite(value) || value < 0) return "";
+  const seconds = value / 1000;
+  return `${
+    Number.isInteger(seconds)
+      ? seconds
+      : seconds.toLocaleString("tr-TR", { maximumFractionDigits: 1 })
+  } sn`;
+}
 function insightMetric(icon, label, value, tone = "", id = "") {
   return `<article class="insight-stat ${tone}"><span aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span><strong${id ? ` id="${id}"` : ""}>${escapeHtml(String(value))}</strong></article>`;
 }
@@ -10923,23 +10932,29 @@ function developmentSkillState(progress) {
   if (value >= 0.5) return { value, label: "Gelişiyor", detail: "Düzenli pratikle güçleniyor." };
   return { value, label: "Başlangıç", detail: "Temel adımlarını güçlendiriyorsun." };
 }
-function findDevelopmentSkill(items, aliases) {
+function findDevelopmentSkill(items, aliases, label) {
   return (items || []).find((item) => {
     const code = String(item.skillCode || "").toUpperCase();
     const name = String(item.skillName || "").toUpperCase();
-    return aliases.some((alias) => code === alias || code.includes(alias) || name.includes(alias));
+    return [label, ...aliases].some((alias) => {
+      const candidate = String(alias || "").toUpperCase();
+      return code === candidate || code.includes(candidate) || name.includes(candidate);
+    });
   });
 }
 function renderProgressList(items) {
   $("progress-skills").innerHTML = DEVELOPMENT_SKILL_CARDS.map((card) => {
-    const progress = findDevelopmentSkill(items, card.aliases);
+    const progress = findDevelopmentSkill(items, card.aliases, card.label);
     const state = developmentSkillState(progress);
     const label = card.label + " gelişimi";
+    const averageTime = Number.isFinite(progress?.avgTimeMs)
+      ? `<div class="skill-time">Ortalama süre: ${escapeHtml(formatAvgTime(progress.avgTimeMs))}</div>`
+      : "";
     return `<article class="insight-panel skill-progress-card" data-skill-code="${escapeHtml(card.aliases[0])}">
       <div class="skill-title"><span aria-hidden="true">${card.icon}</span><h4>${card.label}</h4><strong class="skill-stage">${state.label}</strong></div>
       <p class="muted skill-state-detail">${state.detail}</p>
       ${insightBar(state.value, label)}
-      ${progress ? `<dl class="insight-facts"><div><dt>Oturum</dt><dd class="skill-sessions">${progress.sessionCount}</dd></div><div><dt>Cevap</dt><dd class="skill-attempts">${progress.attemptCount}</dd></div><div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div></dl>` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
+      ${progress ? `<dl class="insight-facts"><div><dt>Oturum</dt><dd class="skill-sessions">${progress.sessionCount}</dd></div><div><dt>Cevap</dt><dd class="skill-attempts">${progress.attemptCount}</dd></div><div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div></dl>${averageTime}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
     </article>`;
   }).join("");
 }
