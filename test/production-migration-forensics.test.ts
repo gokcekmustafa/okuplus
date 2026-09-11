@@ -112,4 +112,9 @@ describe("protected production migration forensics", () => {
     expect(migrationWorkflow).not.toContain("value.migrations?.failedCount");
     expect(migrationWorkflow).not.toContain("value.migrations?.pendingCount");
   });
+
+  it("provides the schema validator with the required database URL without executing migration work", () => {
+    expect(migrationWorkflow).toContain("name: Validate Prisma schema");
+    expect(migrationWorkflow).toContain("DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}");
+  });
 });
