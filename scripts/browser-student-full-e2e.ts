@@ -947,6 +947,7 @@ async function waitForStudentAppReady(page: Page): Promise<void> {
     },
     { timeout: BROWSER_REQUEST_TIMEOUT_MS },
   );
+  await page.waitForLoadState("networkidle", { timeout: BROWSER_REQUEST_TIMEOUT_MS });
 }
 
 async function probeExerciseRender(

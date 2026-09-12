@@ -69,6 +69,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("async function waitForStudentAppReady");
     expect(runnerSource).toContain('app.classList.contains("student-shell")');
     expect(runnerSource).toContain('dashboard.classList.contains("hidden")');
+    expect(runnerSource).toContain('page.waitForLoadState("networkidle"');
     expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
     expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
   });
