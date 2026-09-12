@@ -902,27 +902,19 @@ async function loadBrowserExerciseQuestion(
           response.url().includes(expectedQuestionsPath) && response.request().method() === "GET",
         { timeout: BROWSER_REQUEST_TIMEOUT_MS },
       )
-      .catch((error: unknown) => ({ error }));
-    await page.evaluate((id) => {
-      const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
-        .resumeTodaySession;
-      if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
-      resume(id);
-    }, sessionId);
-    try {
-      const responseResult = await questionsResponse;
-      if ("error" in responseResult) throw responseResult.error;
-      if (responseResult.status() !== 200) {
-        throw new Error(`Exercise questions isteği başarısız (HTTP ${responseResult.status()})`);
-      }
-      await page.waitForSelector("#page-exercise:not(.hidden)", {
-        state: "visible",
-        timeout: BROWSER_REQUEST_TIMEOUT_MS,
-      });
-      await page.waitForFunction(
+      .then((response) => ({ kind: "response" as const, response }))
+      .catch((error: unknown) => ({ kind: "responseError" as const, error }));
+    const questionVisible = page
+      .waitForFunction(
         (expectedId) => {
+          const exercisePage = document.getElementById("page-exercise");
           const element = document.getElementById("exercise-current-question");
-          if (!element || element.getAttribute("data-question-version-id") !== expectedId) {
+          if (
+            !exercisePage ||
+            exercisePage.classList.contains("hidden") ||
+            !element ||
+            element.getAttribute("data-question-version-id") !== expectedId
+          ) {
             return false;
           }
           const style = getComputedStyle(element);
@@ -930,7 +922,38 @@ async function loadBrowserExerciseQuestion(
         },
         questionVersionId,
         { timeout: BROWSER_REQUEST_TIMEOUT_MS },
-      );
+      )
+      .then(() => ({ kind: "visible" as const }))
+      .catch((error: unknown) => ({ kind: "visibleError" as const, error }));
+    await page.evaluate((id) => {
+      const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
+        .resumeTodaySession;
+      if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
+      resume(id);
+    }, sessionId);
+    try {
+      const first = await Promise.race([questionsResponse, questionVisible]);
+      if (first.kind === "visible") return;
+      if (first.kind === "responseError") {
+        const visibleResult = await questionVisible;
+        if (visibleResult.kind === "visible") return;
+        throw first.error;
+      }
+      if (first.kind === "visibleError") {
+        const responseResult = await questionsResponse;
+        if (responseResult.kind === "responseError") throw responseResult.error;
+        if (responseResult.response.status() !== 200) {
+          throw new Error(
+            `Exercise questions isteği başarısız (HTTP ${responseResult.response.status()})`,
+          );
+        }
+        throw first.error;
+      }
+      if (first.response.status() !== 200) {
+        throw new Error(`Exercise questions isteği başarısız (HTTP ${first.response.status()})`);
+      }
+      const visibleResult = await questionVisible;
+      if (visibleResult.kind !== "visible") throw visibleResult.error;
       return;
     } catch (error) {
       lastError = error;
