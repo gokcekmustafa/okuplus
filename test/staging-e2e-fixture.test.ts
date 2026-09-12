@@ -52,4 +52,10 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("await probeExerciseRender(page, sessionId");
     expect(runnerSource).toContain('checkpoint.rendered = "PASS"');
   });
+
+  it("creates the authenticated page from an explicit browser context", () => {
+    expect(runnerSource).toContain("browser.newContext");
+    expect(runnerSource).toContain("browserContext.newPage");
+    expect(runnerSource).not.toContain("browser.newPage");
+  });
 });

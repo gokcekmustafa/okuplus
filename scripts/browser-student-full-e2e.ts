@@ -1282,7 +1282,8 @@ async function main(): Promise<void> {
       headless: true,
       timeout: BROWSER_REQUEST_TIMEOUT_MS,
     });
-    page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const browserContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    page = await browserContext.newPage();
     await login(page, credentials);
     await assertStudentAuth(page);
     report.auth = "PASS";
