@@ -1087,7 +1087,11 @@ async function probeInlineFeedback(
     () => {
       const button = document.getElementById("exercise-submit-attempt") as HTMLButtonElement | null;
       return Boolean(
-        button && !button.disabled && button.textContent?.includes("Cevabı kontrol et"),
+        button &&
+        !button.disabled &&
+        ["Cevabı kontrol et", "Tekrar Cevapla"].some((label) =>
+          button.textContent?.includes(label),
+        ),
       );
     },
     { timeout: 15_000 },
