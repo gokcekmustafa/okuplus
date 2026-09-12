@@ -59,10 +59,9 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).not.toContain("browser.newPage");
   });
 
-  it("isolates inline feedback from the dashboard SPA page", () => {
-    expect(runnerSource).toContain("async function probeInlineFeedbackInIsolatedPage");
-    expect(runnerSource).toContain("return await probeInlineFeedback(feedbackPage");
-    expect(runnerSource).toContain("probeInlineFeedbackInIsolatedPage(page, uiCandidate, budget)");
+  it("waits for the settled dashboard before the inline feedback probe", () => {
+    expect(runnerSource).toContain("await waitForStudentAppReady(page)");
+    expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget)");
   });
 
   it("waits for the authenticated student shell before isolated browser probes", () => {
@@ -71,6 +70,5 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain('dashboard.classList.contains("hidden")');
     expect(runnerSource).toContain('page.waitForLoadState("networkidle"');
     expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
-    expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
   });
 });

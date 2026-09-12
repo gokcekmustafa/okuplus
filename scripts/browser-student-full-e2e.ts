@@ -1079,31 +1079,6 @@ async function probeInlineFeedback(
   return attempt;
 }
 
-async function probeInlineFeedbackInIsolatedPage(
-  page: Page,
-  candidate: DailyWork,
-  budget: AttemptBudget,
-): Promise<JsonObject | null> {
-  // Keep the API/session page independent from the SPA page used for the
-  // visual probe. This prevents dashboard navigation or an earlier exercise
-  // load from suppressing the requested question render.
-  const feedbackPage = await page.context().newPage();
-  try {
-    await feedbackPage.goto(`${BASE_URL}/`, {
-      waitUntil: "networkidle",
-      timeout: BROWSER_REQUEST_TIMEOUT_MS,
-    });
-    await feedbackPage.waitForSelector("#view-app:not(.hidden)", {
-      state: "visible",
-      timeout: BROWSER_REQUEST_TIMEOUT_MS,
-    });
-    await waitForStudentAppReady(feedbackPage);
-    return await probeInlineFeedback(feedbackPage, candidate, budget);
-  } finally {
-    await feedbackPage.close().catch(() => undefined);
-  }
-}
-
 async function ensureScoreCoverage(
   page: Page,
   work: DailyWork[],
@@ -1463,7 +1438,8 @@ async function main(): Promise<void> {
     logStage("ATTEMPT_START");
     if (quotaPlan.plannedAttemptCount > 0) {
       if (!uiCandidate) throw new Error("Inline feedback için uygun unanswered item bulunamadı");
-      const uiAttempt = await probeInlineFeedbackInIsolatedPage(page, uiCandidate, budget);
+      await waitForStudentAppReady(page);
+      const uiAttempt = await probeInlineFeedback(page, uiCandidate, budget);
       if (uiAttempt) checkpointFor(itemCheckpoints, uiCandidate.item.position).rendered = "PASS";
       if (uiAttempt?.isCorrect === true) coverage.correct = true;
       if (uiAttempt?.isCorrect === false) coverage.wrong = true;
