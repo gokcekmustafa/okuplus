@@ -954,23 +954,29 @@ async function loadBrowserExerciseQuestion(
 
 async function waitForStudentAppReady(page: Page): Promise<void> {
   // The shell is revealed before restoreSession() finishes applying the
-  // student role, and completed onboarding redirects through an asynchronous
-  // onboarding check. Wait for the settled student dashboard so that redirect
-  // cannot race exercise navigation.
+  // student role. Confirm onboarding through the authenticated API, then use
+  // the normal dashboard navigation instead of waiting indefinitely for the
+  // SPA's background onboarding redirect.
   await page.waitForFunction(
     () => {
       const app = document.getElementById("view-app");
-      const dashboard = document.getElementById("page-dashboard");
       return Boolean(
-        app &&
-        !app.classList.contains("hidden") &&
-        app.classList.contains("student-shell") &&
-        dashboard &&
-        !dashboard.classList.contains("hidden"),
+        app && !app.classList.contains("hidden") && app.classList.contains("student-shell"),
       );
     },
     { timeout: BROWSER_REQUEST_TIMEOUT_MS },
   );
+  const onboardingResult = await browserApi(page, "/student/onboarding");
+  assertApiOk(onboardingResult, "student onboarding state");
+  const onboarding = asRecord(apiData(onboardingResult), "student onboarding.data");
+  if (onboarding.completed !== true) {
+    throw new Error("Öğrenci onboarding tamamlanmamış; exercise UI güvenli şekilde başlatılamadı");
+  }
+  await page.locator('button.nav-item[data-page="dashboard"]').click();
+  await page.waitForSelector("#page-dashboard:not(.hidden)", {
+    state: "visible",
+    timeout: BROWSER_REQUEST_TIMEOUT_MS,
+  });
   await page.waitForLoadState("networkidle", { timeout: BROWSER_REQUEST_TIMEOUT_MS });
 }
 

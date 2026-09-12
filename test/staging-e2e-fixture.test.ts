@@ -70,7 +70,8 @@ describe("staging Release 0.5 E2E fixture", () => {
   it("waits for the authenticated student shell before isolated browser probes", () => {
     expect(runnerSource).toContain("async function waitForStudentAppReady");
     expect(runnerSource).toContain('app.classList.contains("student-shell")');
-    expect(runnerSource).toContain('dashboard.classList.contains("hidden")');
+    expect(runnerSource).toContain('"/student/onboarding"');
+    expect(runnerSource).toContain('button.nav-item[data-page="dashboard"]');
     expect(runnerSource).toContain('page.waitForLoadState("networkidle"');
     expect(runnerSource).toContain("async function readBrowserExerciseState");
     expect(runnerSource).toContain("Browser exercise question yüklenemedi (expected=");
