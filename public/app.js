@@ -8205,13 +8205,21 @@ async function fetchStudentExercise(id) {
 function restoreExerciseAttempts(session) {
   const previous = exerciseAttempts;
   exerciseAttempts = new Map();
-  for (const attempt of session.attempts || []) {
+  const attempts = [...(session.attempts || [])].sort(
+    (a, b) =>
+      (Number(a.responseOrder) || 1) - (Number(b.responseOrder) || 1) ||
+      String(a.id).localeCompare(String(b.id)),
+  );
+  for (const attempt of attempts) {
     const known = previous.get(attempt.questionVersionId);
     exerciseAttempts.set(attempt.questionVersionId, {
       ...(known?.id === attempt.id ? known : {}),
       ...attempt,
     });
   }
+}
+function exerciseAttemptNeedsRetry(attempt) {
+  return attempt?.isCorrect === false && Number(attempt.responseOrder || 1) === 1;
 }
 async function loadExercisePage() {
   if (exerciseLoading || exerciseBusy) return;
@@ -8532,7 +8540,10 @@ async function loadExerciseQuestions() {
   );
   exerciseQuestions = Array.isArray(data.questions) ? data.questions : [];
   exerciseQuestions.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  const unanswered = exerciseQuestions.findIndex((q) => !exerciseAttempts.has(q.questionVersionId));
+  const unanswered = exerciseQuestions.findIndex((q) => {
+    const attempt = exerciseAttempts.get(q.questionVersionId);
+    return !attempt || exerciseAttemptNeedsRetry(attempt);
+  });
   currentExerciseQuestionIndex =
     unanswered < 0 ? Math.max(0, exerciseQuestions.length - 1) : unanswered;
   renderExerciseQuestion();
@@ -8774,29 +8785,79 @@ function syncExerciseDisclosures(root) {
     sync();
   });
 }
+function exerciseFeedbackMessage(data) {
+  if (typeof data.feedback === "string") return data.feedback;
+  if (data.feedback && typeof data.feedback === "object" && !Array.isArray(data.feedback)) {
+    return typeof data.feedback.message === "string" ? data.feedback.message : "";
+  }
+  return "";
+}
+function exerciseRevealedAnswer(data, question) {
+  const answer =
+    data.revealedAnswer ??
+    (data.feedback && typeof data.feedback === "object" ? data.feedback.revealedAnswer : null);
+  if (answer == null) return "";
+  if (answer.type === "MULTIPLE_CHOICE" && Array.isArray(answer.correctOptionIds)) {
+    const options = Array.isArray(question?.options) ? question.options : [];
+    const labels = answer.correctOptionIds.map((id) => {
+      const option = options.find((candidate) => candidate?.id === id);
+      return option?.text || option?.label || id;
+    });
+    return labels.join(", ");
+  }
+  if (answer.type === "TRUE_FALSE" && typeof answer.answer === "boolean") {
+    return answer.answer ? "Doğru" : "Yanlış";
+  }
+  if (typeof answer === "string") return answer;
+  try {
+    return JSON.stringify(answer);
+  } catch {
+    return "";
+  }
+}
 function showExerciseFeedback(data) {
   const el = $("exercise-attempt-feedback");
   const question = exerciseQuestions.find((q) => q.questionVersionId === data.questionVersionId);
   const pending = data.isCorrect === null;
+  const responseOrder = Number(data.responseOrder || 1);
+  const firstWrong = data.isCorrect === false && responseOrder === 1;
+  const finalWrong = data.isCorrect === false && responseOrder >= 2;
+  const message = exerciseFeedbackMessage(data);
   const kind = pending ? "pending" : data.isCorrect === true ? "correct" : "wrong";
   const title = pending
     ? "⌛ Değerlendirme bekleniyor"
-    : data.isCorrect === true
-      ? "✅ Doğru!"
-      : "💡 Tekrar düşün!";
+    : firstWrong
+      ? "Tekrar düşün."
+      : finalWrong
+        ? "Bu kez olmadı. Doğru cevabı birlikte inceleyelim."
+        : data.isCorrect === true
+          ? responseOrder === 2
+            ? "✓ Güzel yakaladın."
+            : "✅ Doğru!"
+          : "💡 Tekrar düşün!";
   const event = exerciseGamification?.recentPointEvents?.find(
     (e) => e.sourceType === "ATTEMPT" && e.sourceId === data.id,
   );
   const pointsLabel = "GP";
   el.className = "feedback-panel " + kind;
   const disclosureSuffix = String(data.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
-  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-xp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${data.feedback ? `<div>${escapeHtml(typeof data.feedback === "string" ? data.feedback : JSON.stringify(data.feedback))}</div>` : ""}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
+  const reveal = finalWrong ? exerciseRevealedAnswer(data, question) : "";
+  const explanation =
+    finalWrong && data.feedback && typeof data.feedback === "object"
+      ? data.feedback.explanation || question?.explanation
+      : question?.explanation;
+  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-xp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${message ? `<div>${escapeHtml(message)}</div>` : ""}${reveal ? `<div>Doğru cevap: ${escapeHtml(reveal)}</div>` : ""}${explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
   el.style.display = "block";
-  exerciseAwaitingNext = true;
-  lockExerciseInputs(true);
-  $("exercise-submit-attempt").textContent =
-    currentExerciseQuestionIndex < exerciseQuestions.length - 1 ? "Devam Et" : "Tamamla";
+  exerciseAwaitingNext = !firstWrong;
+  lockExerciseInputs(!firstWrong);
+  const button = $("exercise-submit-attempt");
+  button.disabled = false;
+  button.textContent = firstWrong
+    ? "Tekrar Cevapla"
+    : currentExerciseQuestionIndex < exerciseQuestions.length - 1
+      ? "Devam Et"
+      : "Tamamla";
 }
 async function handleExerciseSubmitAttempt() {
   const container = $("exercise-current-question");
@@ -8914,8 +8975,8 @@ async function handleExerciseSubmitAttempt() {
       showCelebration({
         icon: "💡",
         eyebrow: "DEVAM ET",
-        title: "Tekrar düşün!",
-        detail: data.feedback || "Bu cevap öğrenmenin bir parçası.",
+        title: "Tekrar düşün.",
+        detail: exerciseFeedbackMessage(data) || "Bu cevap öğrenmenin bir parçası.",
         kind: "wrong",
         key: "attempt-" + data.id,
       });

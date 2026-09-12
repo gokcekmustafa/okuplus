@@ -414,6 +414,7 @@ export const attemptResponseSchema = z.object({
   timeSpentMs: z.number().nullable(),
   responseOrder: z.number().int(),
   feedback: z.any().nullable(),
+  revealedAnswer: z.any().nullable(),
   answeredAt: z.string(),
   createdAt: z.string(),
 });

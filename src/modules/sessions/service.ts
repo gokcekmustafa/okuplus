@@ -555,7 +555,7 @@ export async function completeExerciseSession(
           },
         },
       },
-      attempts: { select: { id: true, rawScore: true, questionVersionId: true } },
+      attempts: { select: { id: true, isCorrect: true, rawScore: true, questionVersionId: true } },
       assessment: { select: { type: true } },
       trainingSessionItem: { select: { id: true, status: true } },
     },
@@ -610,6 +610,16 @@ export async function completeExerciseSession(
     );
     if (missingQuestion) {
       throw validationError("Devam etmeden önce tüm egzersiz sorularını yanıtla");
+    }
+
+    const retryPendingQuestion = session.templateVersion.questions.find((question) => {
+      const questionAttempts = attempts.filter(
+        (attempt) => attempt.questionVersionId === question.questionVersionId,
+      );
+      return questionAttempts.length === 1 && questionAttempts[0]?.isCorrect === false;
+    });
+    if (retryPendingQuestion) {
+      throw validationError("İlk cevap yanlış; aynı soruyu bir kez daha yanıtla");
     }
   }
   const scoredAttempts = attempts.filter(

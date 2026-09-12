@@ -837,7 +837,16 @@ export async function getStudentSession(
       },
       trainingSessionItem: { select: { status: true } },
       attempts: {
-        select: { id: true, questionVersionId: true, isCorrect: true, answeredAt: true },
+        select: {
+          id: true,
+          questionVersionId: true,
+          isCorrect: true,
+          rawScore: true,
+          responseOrder: true,
+          feedback: true,
+          answeredAt: true,
+        },
+        orderBy: [{ questionVersionId: "asc" }, { responseOrder: "asc" }, { id: "asc" }],
       },
     },
   });

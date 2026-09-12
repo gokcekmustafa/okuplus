@@ -724,9 +724,17 @@ export async function resolvePhraseChunkingTemplateVersion(
   return resolveFastReadingTemplateVersion(actor, requestedTemplateVersionId, PHRASE_CHUNKING_SPEC);
 }
 
-export function buildTrainingFeedback(config: unknown, isCorrect: boolean | null): string | null {
+export function buildTrainingFeedback(
+  config: unknown,
+  isCorrect: boolean | null,
+  responseOrder = 1,
+): string | null {
   const resolved = resolveTrainingRuntimeConfig("TRAINING", config);
   if (resolved.status !== "READY") return null;
+  if (isCorrect === true && responseOrder === 2) return "✓ Güzel yakaladın.";
+  if (isCorrect === false && responseOrder === 2) {
+    return "Bu kez olmadı. Doğru cevabı birlikte inceleyelim.";
+  }
   if (resolved.config.family === ATTENTION_BURST_FAMILY) {
     if (isCorrect === true && resolved.config.feedback.types.includes("POSITIVE")) {
       return "Güzel yakaladın.";
