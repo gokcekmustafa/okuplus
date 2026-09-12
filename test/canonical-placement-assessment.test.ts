@@ -5,6 +5,7 @@ import {
   planCanonicalPlacementAssessment,
   validateCanonicalPlacementAssessmentManifest,
 } from "../src/curriculum/canonical-placement-assessment.js";
+import { CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_VERSION } from "../src/curriculum/canonical-placement-item-bank.js";
 import {
   buildCanonicalPlacementAssessmentGraph,
   planCanonicalPlacementPromotion,
@@ -30,7 +31,9 @@ describe("canonical placement assessment manifest and plan", () => {
       validateCanonicalPlacementAssessmentManifest(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST),
     ).toEqual(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST);
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.manifestVersion).toBe("1.1.0");
-    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.itemBank.manifestVersion).toBe("1.1.0");
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.itemBank.manifestVersion).toBe(
+      CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_VERSION,
+    );
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.graph.assessmentId).toContain("v1-1-0");
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.assessment.targetLevelCodes).toHaveLength(4);
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.totalQuestionCount).toBe(36);

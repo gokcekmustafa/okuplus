@@ -40,6 +40,17 @@ export type {
   AdaptiveStatus,
 } from "./adaptive-selector.js";
 export {
+  emptyTrainingPerformanceSnapshot,
+  loadTrainingPerformance,
+  toTrainingProgressSummary,
+  TRAINING_SKILL_PRESENTATION,
+} from "./performance.js";
+export type {
+  TrainingPerformanceActor,
+  TrainingPerformanceSnapshot,
+  TrainingProgressSkill,
+} from "./performance.js";
+export {
   buildTrainingFeedback,
   isAttentionBurstVersionConfig,
   isTrainingConfigCandidate,
@@ -55,6 +66,7 @@ export {
   loadMainIdeaRuntimeGraph,
   loadPhraseChunkingRuntimeGraph,
   loadRapidRecognitionRuntimeGraph,
+  loadTrainingRuntimeGraph,
   resolveAttentionBurstTemplateVersion,
   resolveDetailEvidenceTemplateVersion,
   resolveInferenceTemplateVersion,

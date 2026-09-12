@@ -106,7 +106,14 @@ describe.sequential("gamification MVP", () => {
       ],
     });
     await prisma.content.create({
-      data: { id: CONTENT, tenantId: TENANT_A, type: "PASSAGE", title: "Metin", difficulty: 1 },
+      data: {
+        id: CONTENT,
+        tenantId: TENANT_A,
+        type: "PASSAGE",
+        title: "Metin",
+        difficulty: 1,
+        status: "PUBLISHED",
+      },
     });
     const contentVersion = await prisma.contentVersion.create({
       data: {

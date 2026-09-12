@@ -14,15 +14,9 @@ import {
   type PlacementSessionQuestion,
 } from "../assessments/placement-scoring.js";
 import {
-  loadAttentionBurstRuntimeGraph,
   isTrainingConfigCandidate,
   isTrainingVersionConfig,
-  loadDetailEvidenceRuntimeGraph,
-  loadInferenceRuntimeGraph,
-  loadMainIdeaRuntimeGraph,
-  loadPhraseChunkingRuntimeGraph,
-  loadRapidRecognitionRuntimeGraph,
-  resolveTrainingRuntimeConfig,
+  loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
 
@@ -83,7 +77,16 @@ const SESSION_SELECT = {
       version: true,
       status: true,
       templateId: true,
-      template: { select: { id: true, title: true, tenantId: true, type: true } },
+      template: {
+        select: {
+          id: true,
+          title: true,
+          tenantId: true,
+          type: true,
+          status: true,
+          deletedAt: true,
+        },
+      },
     },
   },
   student: { select: { id: true, displayName: true, email: true } },
@@ -116,7 +119,10 @@ export async function createExerciseSession(
       id: true,
       status: true,
       templateId: true,
-      template: { select: { id: true, tenantId: true, status: true, title: true } },
+      config: true,
+      template: {
+        select: { id: true, tenantId: true, status: true, deletedAt: true, title: true },
+      },
       contents: { select: { contentVersionId: true } },
       questions: { select: { questionVersionId: true } },
     },
@@ -136,6 +142,9 @@ export async function createExerciseSession(
     if (tmpl.status && tmpl.status !== "PUBLISHED") {
       throw validationError("Şablon yayınlanmamış");
     }
+  }
+  if (templateVersion.template.deletedAt !== null) {
+    throw validationError("Şablon yayınlanmamış");
   }
 
   // Template tenant/global uyumu
@@ -186,6 +195,13 @@ export async function createExerciseSession(
     templateVersion.template.tenantId !== sessionTenantId
   ) {
     throw validationError("Şablon bu tenant'a ait değil");
+  }
+
+  // Student review/personal sessions must use the same published runtime
+  // graph as daily training. Admin-created legacy sessions retain their
+  // existing compatibility path; the student route is fail-closed here.
+  if (!isSuperAdmin && isTrainingConfigCandidate(templateVersion.config)) {
+    await loadTrainingRuntimeGraph(input.templateVersionId, actor);
   }
 
   // İçerik ve soru versiyonlarının PUBLISHED kontrolü
@@ -270,6 +286,24 @@ export async function getExerciseSession(
       throw forbiddenError("Bu oturum size ait değil");
     }
   }
+  if (
+    !isSuperAdmin &&
+    actor.platformRole === null &&
+    (session.templateVersion.status !== "PUBLISHED" ||
+      session.templateVersion.template.status !== "PUBLISHED" ||
+      session.templateVersion.template.deletedAt !== null)
+  ) {
+    throw validationError("Yalnızca yayınlanmış şablon sürümü kullanılabilir");
+  }
+  if (!isSuperAdmin && actor.platformRole === null && actor.tenantId) {
+    const templateVersion = await prisma.exerciseTemplateVersion.findUnique({
+      where: { id: session.templateVersionId },
+      select: { config: true },
+    });
+    if (templateVersion && isTrainingConfigCandidate(templateVersion.config)) {
+      await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+    }
+  }
   return toSessionDetail(session as any);
 }
 
@@ -349,13 +383,22 @@ export async function listQuestionsForSession(
       templateVersionId: true,
       assessmentId: true,
       context: true,
+      status: true,
       templateVersion: {
         select: {
+          status: true,
+          template: { select: { status: true, deletedAt: true } },
           config: true,
           contents: {
             select: {
               contentVersionId: true,
-              contentVersion: { select: { contentId: true } },
+              contentVersion: {
+                select: {
+                  contentId: true,
+                  status: true,
+                  content: { select: { status: true, deletedAt: true } },
+                },
+              },
             },
           },
           questions: {
@@ -364,12 +407,15 @@ export async function listQuestionsForSession(
               questionVersion: {
                 select: {
                   id: true,
+                  status: true,
                   prompt: true,
                   options: true,
                   explanation: true,
                   hint: true,
                   correctAnswer: true,
-                  question: { select: { type: true, contentId: true } },
+                  question: {
+                    select: { type: true, contentId: true, status: true, deletedAt: true },
+                  },
                 },
               },
             },
@@ -377,6 +423,7 @@ export async function listQuestionsForSession(
           },
         },
       },
+      trainingSessionItem: { select: { status: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -391,26 +438,46 @@ export async function listQuestionsForSession(
   }
 
   if (
+    !isSuperAdmin &&
+    actor.platformRole === null &&
+    (session.templateVersion.status !== "PUBLISHED" ||
+      session.templateVersion.template.status !== "PUBLISHED" ||
+      session.templateVersion.template.deletedAt !== null)
+  ) {
+    throw validationError("Yalnızca yayınlanmış şablon sürümü kullanılabilir");
+  }
+
+  if (!isSuperAdmin && actor.platformRole === null) {
+    const hasUnpublishedContent = session.templateVersion.contents.some(
+      (content) =>
+        content.contentVersion.status !== "PUBLISHED" ||
+        content.contentVersion.content.status !== "PUBLISHED" ||
+        content.contentVersion.content.deletedAt !== null,
+    );
+    const hasUnpublishedQuestion = session.templateVersion.questions.some(
+      (question) =>
+        question.questionVersion.status !== "PUBLISHED" ||
+        question.questionVersion.question.status !== "PUBLISHED" ||
+        question.questionVersion.question.deletedAt !== null,
+    );
+    if (hasUnpublishedContent || hasUnpublishedQuestion) {
+      throw validationError("Şablondaki içerik veya soru sürümlerinden biri yayınlanmamış");
+    }
+  }
+
+  if (
     session.assessmentId === null &&
     session.context !== "ASSESSMENT" &&
     isTrainingConfigCandidate(session.templateVersion.config)
   ) {
-    const resolved = resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config);
-    if (resolved.status !== "READY") {
-      throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+    if (
+      session.status === "IN_PROGRESS" &&
+      session.trainingSessionItem &&
+      session.trainingSessionItem.status !== "IN_PROGRESS"
+    ) {
+      throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
     }
-    const graph =
-      resolved.config.family === "DETAIL_EVIDENCE"
-        ? await loadDetailEvidenceRuntimeGraph(session.templateVersionId, actor)
-        : resolved.config.family === "INFERENCE"
-          ? await loadInferenceRuntimeGraph(session.templateVersionId, actor)
-          : resolved.config.family === "ATTENTION_BURST"
-            ? await loadAttentionBurstRuntimeGraph(session.templateVersionId, actor)
-            : resolved.config.family === "RAPID_RECOGNITION"
-              ? await loadRapidRecognitionRuntimeGraph(session.templateVersionId, actor)
-              : resolved.config.family === "PHRASE_CHUNKING"
-                ? await loadPhraseChunkingRuntimeGraph(session.templateVersionId, actor)
-                : await loadMainIdeaRuntimeGraph(session.templateVersionId, actor);
+    const graph = await loadTrainingRuntimeGraph(session.templateVersionId, actor);
     return {
       questions: graph.questions.map((question) => ({
         questionVersionId: question.questionVersionId,
@@ -489,7 +556,7 @@ export async function completeExerciseSession(
       },
       attempts: { select: { id: true, rawScore: true, questionVersionId: true } },
       assessment: { select: { type: true } },
-      trainingSessionItem: { select: { id: true } },
+      trainingSessionItem: { select: { id: true, status: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -526,6 +593,13 @@ export async function completeExerciseSession(
     throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
   }
 
+  if (trainingConfig) {
+    if (session.trainingSessionItem && session.trainingSessionItem.status !== "IN_PROGRESS") {
+      throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
+    }
+    await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+  }
+
   const totalQuestions = session.templateVersion.questions.length;
   const attempts = session.attempts;
   if (trainingConfig) {
@@ -537,7 +611,9 @@ export async function completeExerciseSession(
       throw validationError("Devam etmeden önce tüm egzersiz sorularını yanıtla");
     }
   }
-  const scoredAttempts = attempts.filter((a) => a.rawScore !== null);
+  const scoredAttempts = attempts.filter(
+    (attempt) => typeof attempt.rawScore === "number" && Number.isFinite(attempt.rawScore),
+  );
   const totalRawScore = scoredAttempts.reduce((sum, a) => sum + (a.rawScore ?? 0), 0);
   const averageScore = scoredAttempts.length > 0 ? totalRawScore / scoredAttempts.length : null;
   const openEndedPending = session.templateVersion.questions.filter(

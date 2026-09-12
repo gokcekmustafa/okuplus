@@ -225,6 +225,7 @@ describe("question admin", () => {
           type: "PASSAGE",
           title: "Soru İçeriği A",
           difficulty: 0.5,
+          createdById: CONTENT_EDITOR_ID,
         },
         {
           id: CONTENT_B,
@@ -484,10 +485,12 @@ describe("question admin", () => {
         headers: await adminHeaders(),
       })
     ).json().data;
-    const reordered = rows.map((question: { id: string }, index: number) => ({
-      questionId: question.id,
-      position: index + 30,
-    }));
+    const reordered = rows
+      .filter((question: { status: string }) => question.status === "DRAFT")
+      .map((question: { id: string }, index: number) => ({
+        questionId: question.id,
+        position: index + 30,
+      }));
     expect(
       (
         await app.inject({

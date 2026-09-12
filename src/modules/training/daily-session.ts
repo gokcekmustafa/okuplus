@@ -8,28 +8,22 @@ import {
   recordUsageInTransaction,
 } from "../entitlements/index.js";
 import {
-  loadAttentionBurstRuntimeGraph,
-  loadDetailEvidenceRuntimeGraph,
-  loadInferenceRuntimeGraph,
-  loadMainIdeaRuntimeGraph,
-  loadPhraseChunkingRuntimeGraph,
-  loadRapidRecognitionRuntimeGraph,
+  loadTrainingRuntimeGraph,
   resolveTrainingRuntimeConfig,
   type TrainingActor,
 } from "./runtime.js";
+import { loadTrainingPerformance } from "./performance.js";
 import {
   ADAPTIVE_TRAINING_COMPOSITION,
   ADAPTIVE_TRAINING_FAMILIES,
-  deriveAdaptivePerformance,
   planFirstDayTraining,
   planAdaptiveTraining,
   type AdaptiveCandidate,
-  type AdaptiveDifficulty,
   type AdaptiveFamily,
   type AdaptivePerformanceState,
-  type AdaptiveSession,
 } from "./adaptive-selector.js";
 import { recordTrainingSessionCompleted } from "../gamification/service.js";
+import { findBestReviewCandidate } from "./review-candidates.js";
 
 export const DAILY_TRAINING_COMPOSITION = ADAPTIVE_TRAINING_COMPOSITION;
 
@@ -40,11 +34,13 @@ export type DailyTrainingCandidate = AdaptiveCandidate;
 export type DailyTrainingPlanItem = DailyTrainingCandidate & {
   position: number;
   adaptiveBand?: "WEAK" | "NORMAL" | "STRETCH";
+  review?: boolean;
+  reviewReason?: string;
 };
 
 export type DailyTrainingPlan = {
   version: 1;
-  totalItems: 6;
+  totalItems: number;
   firstDay: boolean;
   placementHandoff: boolean;
   items: DailyTrainingPlanItem[];
@@ -111,6 +107,50 @@ export function planDailyTraining(
   return { version: 1, totalItems: 6, firstDay: false, placementHandoff: false, items };
 }
 
+/**
+ * Review is an optional reinforcement item. It is deliberately appended after
+ * the six-item learning composition so it cannot displace a new family.
+ */
+export function appendReviewToDailyPlan(
+  plan: DailyTrainingPlan,
+  review: {
+    templateVersionId: string;
+    family: AdaptiveFamily;
+    competency: string;
+    difficulty: DailyTrainingCandidate["difficulty"];
+    version?: number;
+    publishedAt?: Date | string | null;
+    reason: string;
+  },
+): DailyTrainingPlan {
+  if (
+    plan.firstDay ||
+    plan.items.some((item) => item.templateVersionId === review.templateVersionId)
+  ) {
+    return plan;
+  }
+  const position = plan.items.length + 1;
+  return {
+    ...plan,
+    totalItems: position,
+    items: [
+      ...plan.items,
+      {
+        templateVersionId: review.templateVersionId,
+        family: review.family,
+        competency: review.competency,
+        difficulty: review.difficulty,
+        version: review.version,
+        publishedAt: review.publishedAt,
+        position,
+        review: true,
+        reviewReason: review.reason,
+        adaptiveBand: "WEAK",
+      },
+    ],
+  };
+}
+
 function visibleTemplateWhere(actor: DailySessionActor): Prisma.ExerciseTemplateVersionWhereInput {
   return {
     status: "PUBLISHED",
@@ -122,66 +162,10 @@ function visibleTemplateWhere(actor: DailySessionActor): Prisma.ExerciseTemplate
   };
 }
 
-function isAdaptiveFamily(value: string): value is AdaptiveFamily {
-  return (ADAPTIVE_TRAINING_FAMILIES as readonly string[]).includes(value);
-}
-
-function isAdaptiveDifficulty(value: string): value is AdaptiveDifficulty {
-  return value === "FOUNDATION" || value === "DEVELOPING" || value === "CHALLENGING";
-}
-
 async function loadAdaptivePerformance(
   actor: DailySessionActor,
 ): Promise<AdaptivePerformanceState> {
-  const sessions = await prisma.exerciseSession.findMany({
-    where: {
-      tenantId: actor.tenantId,
-      studentId: actor.userId,
-      context: "INDIVIDUAL",
-      sessionType: "PRACTICE",
-      assessmentId: null,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    select: {
-      id: true,
-      status: true,
-      templateVersionId: true,
-      templateVersion: { select: { config: true } },
-      trainingSessionItem: {
-        select: {
-          family: true,
-          competency: true,
-          difficulty: true,
-          templateVersionId: true,
-        },
-      },
-      attempts: {
-        orderBy: { answeredAt: "asc" },
-        select: { rawScore: true, isCorrect: true, timeSpentMs: true, answeredAt: true },
-      },
-    },
-  });
-
-  const adaptiveSessions: AdaptiveSession[] = [];
-  for (const session of sessions) {
-    const resolved = resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config);
-    if (resolved.status !== "READY") continue;
-    const family = session.trainingSessionItem?.family ?? resolved.config.family;
-    const competency = session.trainingSessionItem?.competency ?? resolved.config.competency;
-    const difficulty = session.trainingSessionItem?.difficulty ?? resolved.config.difficulty;
-    if (!isAdaptiveFamily(family) || !isAdaptiveDifficulty(difficulty)) continue;
-    adaptiveSessions.push({
-      sessionId: session.id,
-      family,
-      competency,
-      difficulty,
-      exposureId: session.trainingSessionItem?.templateVersionId ?? session.templateVersionId,
-      status: session.status,
-      attempts: session.attempts,
-    });
-  }
-  return deriveAdaptivePerformance(adaptiveSessions);
+  return (await loadTrainingPerformance(actor)).performance;
 }
 
 async function loadDailyPlan(
@@ -216,7 +200,7 @@ async function loadDailyPlan(
   const adaptivePlan = flags.firstDay
     ? planFirstDayTraining(runtimeCandidates, seed)
     : planAdaptiveTraining(runtimeCandidates, await loadAdaptivePerformance(actor), seed);
-  const plan: DailyTrainingPlan = {
+  let plan: DailyTrainingPlan = {
     version: 1,
     totalItems: 6,
     ...flags,
@@ -226,19 +210,14 @@ async function loadDailyPlan(
     })),
   };
   for (const item of plan.items) {
-    if (item.family === "MAIN_IDEA") {
-      await loadMainIdeaRuntimeGraph(item.templateVersionId, actor);
-    } else if (item.family === "DETAIL_EVIDENCE") {
-      await loadDetailEvidenceRuntimeGraph(item.templateVersionId, actor);
-    } else if (item.family === "INFERENCE") {
-      await loadInferenceRuntimeGraph(item.templateVersionId, actor);
-    } else if (item.family === "ATTENTION_BURST") {
-      await loadAttentionBurstRuntimeGraph(item.templateVersionId, actor);
-    } else if (item.family === "RAPID_RECOGNITION") {
-      await loadRapidRecognitionRuntimeGraph(item.templateVersionId, actor);
-    } else {
-      await loadPhraseChunkingRuntimeGraph(item.templateVersionId, actor);
-    }
+    await loadTrainingRuntimeGraph(item.templateVersionId, actor);
+  }
+  if (!flags.firstDay) {
+    const review = await findBestReviewCandidate(
+      actor,
+      new Set(plan.items.map((item) => item.templateVersionId)),
+    );
+    if (review) plan = appendReviewToDailyPlan(plan, review);
   }
   return plan;
 }
@@ -257,6 +236,13 @@ function dailySessionInclude() {
 
 function toDailySessionResponse(session: DailySessionWithItems) {
   const composition = session.composition;
+  const compositionItems =
+    typeof composition === "object" &&
+    composition !== null &&
+    "items" in composition &&
+    Array.isArray(composition.items)
+      ? composition.items
+      : [];
   const firstDay =
     typeof composition === "object" && composition !== null && "firstDay" in composition
       ? composition.firstDay === true
@@ -266,6 +252,28 @@ function toDailySessionResponse(session: DailySessionWithItems) {
       ? composition.placementHandoff === true
       : false;
   const items = session.items.map((item) => ({
+    ...(() => {
+      const planItem = compositionItems.find(
+        (entry) =>
+          typeof entry === "object" &&
+          entry !== null &&
+          "position" in entry &&
+          entry.position === item.position,
+      );
+      return {
+        review:
+          typeof planItem === "object" && planItem !== null && "review" in planItem
+            ? planItem.review === true
+            : false,
+        reviewReason:
+          typeof planItem === "object" &&
+          planItem !== null &&
+          "reviewReason" in planItem &&
+          typeof planItem.reviewReason === "string"
+            ? planItem.reviewReason
+            : null,
+      };
+    })(),
     id: item.id,
     position: item.position,
     family: item.family,
@@ -454,14 +462,32 @@ export async function syncTrainingSessionItem(exerciseSessionId: string): Promis
     tenantId: string;
     studentId: string;
     completedAt: Date;
+    basePoints: number;
   } | null = null;
 
   await prisma.$transaction(async (tx) => {
+    // Serialise completion of the same child session. The point/streak award
+    // is deliberately outside this transaction, so this lock ensures only
+    // one transaction can observe the transition to a completed daily item.
+    await tx.$queryRaw`
+      SELECT 1::int AS acquired
+      FROM pg_advisory_xact_lock(hashtextextended(${`training-item:${exerciseSessionId}`}, 0))
+    `;
     const item = await tx.trainingSessionItem.findUnique({
       where: { exerciseSessionId },
       select: { id: true, trainingSessionId: true, status: true },
     });
     if (!item) return;
+
+    // Different child completions can arrive concurrently. Serialize the
+    // parent read/update as well, otherwise two final items may each observe
+    // the other one as pending and leave the daily session incomplete.
+    await tx.$queryRaw`
+      SELECT 1::int AS acquired
+      FROM pg_advisory_xact_lock(
+        hashtextextended(${`training-session:${item.trainingSessionId}`}, 0)
+      )
+    `;
 
     if (item.status !== "COMPLETED") {
       await tx.trainingSessionItem.update({
@@ -502,12 +528,13 @@ export async function syncTrainingSessionItem(exerciseSessionId: string): Promis
       : { _sum: { points: null } };
     const isComplete = completedItems >= parent.totalItems && parent.totalItems > 0;
     const completedAt = new Date();
-    if (isComplete && parent.status !== "COMPLETED") {
+    if (isComplete) {
       completion = {
         trainingSessionId: item.trainingSessionId,
         tenantId: parent.tenantId,
         studentId: parent.studentId,
         completedAt,
+        basePoints: points._sum.points ?? 0,
       };
     }
     if (!isComplete) {
@@ -540,13 +567,14 @@ export async function syncTrainingSessionItem(exerciseSessionId: string): Promis
     tenantId: string;
     studentId: string;
     completedAt: Date;
+    basePoints: number;
   } | null;
   if (!finalized) return;
   const award = await recordTrainingSessionCompleted(finalized).catch(() => null);
-  if (award?.created) {
+  if (award) {
     await prisma.trainingSession.update({
       where: { id: finalized.trainingSessionId },
-      data: { totalGP: { increment: award.event.points } },
+      data: { totalGP: finalized.basePoints + award.event.points },
     });
   }
 }

@@ -119,11 +119,18 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
 
     const sessionCount = sessionIds.length;
     const progressCounts = summarizeProgressAttempts(allAttempts);
-    const scoredAttempts = allAttempts.filter((a) => a.rawScore !== null);
     const { attemptCount, correctCount } = progressCounts;
-    const accuracy = scoredAttempts.length > 0 ? correctCount / scoredAttempts.length : null;
+    const accuracy =
+      progressCounts.scoredCount > 0 ? correctCount / progressCounts.scoredCount : null;
 
-    const timeValues = allAttempts.filter((a) => a.timeSpentMs !== null).map((a) => a.timeSpentMs!);
+    const timeValues = allAttempts
+      .filter(
+        (attempt) =>
+          typeof attempt.rawScore === "number" &&
+          Number.isFinite(attempt.rawScore) &&
+          attempt.timeSpentMs !== null,
+      )
+      .map((a) => a.timeSpentMs!);
     const avgTimeMs =
       timeValues.length > 0
         ? Math.round(timeValues.reduce((sum, t) => sum + t, 0) / timeValues.length)

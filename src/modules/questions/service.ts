@@ -29,6 +29,7 @@ import {
   buildTrainingFeedback,
   isTrainingConfigCandidate,
   isTrainingVersionConfig,
+  loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
 import {
   ENTITLEMENT_FEATURES,
@@ -1233,14 +1234,22 @@ export async function createAttempt(
     select: {
       id: true,
       questionId: true,
-      question: { select: { type: true, contentId: true } },
+      status: true,
+      question: {
+        select: { type: true, contentId: true, status: true, deletedAt: true },
+      },
     },
   });
   if (!version) throw notFoundError("Soru sürümü bulunamadı");
 
   const question = await prisma.question.findUnique({
     where: { id: version.questionId },
-    select: { contentId: true, content: { select: { tenantId: true } } },
+    select: {
+      contentId: true,
+      status: true,
+      deletedAt: true,
+      content: { select: { tenantId: true, status: true, deletedAt: true } },
+    },
   });
   if (!question) throw notFoundError("Soru bulunamadı");
 
@@ -1256,7 +1265,14 @@ export async function createAttempt(
       sessionType: true,
       status: true,
       assessmentId: true,
-      templateVersion: { select: { config: true } },
+      templateVersion: {
+        select: {
+          config: true,
+          status: true,
+          template: { select: { status: true, deletedAt: true } },
+        },
+      },
+      trainingSessionItem: { select: { status: true } },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
@@ -1280,6 +1296,23 @@ export async function createAttempt(
     }
   }
 
+  if (
+    !isSuperAdmin &&
+    actor.platformRole === null &&
+    (session.templateVersion.status !== "PUBLISHED" ||
+      session.templateVersion.template.status !== "PUBLISHED" ||
+      session.templateVersion.template.deletedAt !== null ||
+      version.status !== "PUBLISHED" ||
+      version.question.status !== "PUBLISHED" ||
+      version.question.deletedAt !== null ||
+      question.status !== "PUBLISHED" ||
+      question.deletedAt !== null ||
+      question.content.status !== "PUBLISHED" ||
+      question.content.deletedAt !== null)
+  ) {
+    throw validationError("Yalnızca yayınlanmış içerikle cevap gönderilebilir");
+  }
+
   // Soru kapsamı: session tenant ile soru tenant uyumu (SUPER_ADMIN bypass)
   const questionTenantId = question.content.tenantId; // null = global
   if (!isSuperAdmin && questionTenantId !== null && questionTenantId !== session.tenantId) {
@@ -1293,6 +1326,16 @@ export async function createAttempt(
   });
   if (!link) {
     throw validationError("Bu soru bu oturumun şablonuna ait değil");
+  }
+
+  if (session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)) {
+    if (session.trainingSessionItem && session.trainingSessionItem.status !== "IN_PROGRESS") {
+      throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
+    }
+    const graph = await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+    if (!graph.questions.some((question) => question.questionVersionId === questionVersionId)) {
+      throw validationError("Bu soru yayınlanmış egzersiz grafiğine ait değil");
+    }
   }
 
   // 3) scoreAttempt ile puanla (deterministik, yan etkisiz)

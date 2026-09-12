@@ -12,7 +12,11 @@ export const POINT_RULES = {
   DAILY_LOGIN: 20,
   CORRECT_ANSWER: 10,
   EXERCISE_COMPLETED: 50,
-} as const satisfies Record<"DAILY_LOGIN" | "CORRECT_ANSWER" | "EXERCISE_COMPLETED", number>;
+  TRAINING_SESSION_COMPLETED: 15,
+} as const satisfies Record<
+  "DAILY_LOGIN" | "CORRECT_ANSWER" | "EXERCISE_COMPLETED" | "TRAINING_SESSION_COMPLETED",
+  number
+>;
 
 const BASIC_BADGE_CODES = ["FIRST_EXERCISE", "TEN_CORRECT", "SEVEN_DAY_STREAK"] as const;
 const RECENT_EVENT_LIMIT = 20;
@@ -32,11 +36,17 @@ export interface AwardPointsInput {
   sourceType: string;
   sourceId: string;
   activityAt?: Date;
+  updateStreak?: boolean;
 }
 
 export interface AwardPointsResult {
   event: PointEvent;
   created: boolean;
+}
+
+/** Only a completed daily TrainingSession advances the learning streak. */
+export function isTrainingStreakEvent(eventType: keyof typeof POINT_RULES): boolean {
+  return eventType === "TRAINING_SESSION_COMPLETED";
 }
 
 export interface StudentGamificationData {
@@ -110,10 +120,15 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
       },
     });
     if (!existing) throw error;
+    if (input.updateStreak && isTrainingStreakEvent(input.eventType)) {
+      await updateStreak(input.tenantId, input.studentId, input.activityAt ?? existing.createdAt);
+    }
     return { event: existing, created: false };
   }
 
-  await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  if (input.updateStreak && isTrainingStreakEvent(input.eventType)) {
+    await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
+  }
   await evaluateBasicBadges(input.tenantId, input.studentId);
   return { event, created: true };
 }
@@ -136,9 +151,7 @@ export async function updateStreak(tenantId: string, studentId: string, activity
     });
   }
 
-  const previousDay = streak.lastActivityDate
-    ? storedCalendarDate(streak.lastActivityDate)
-    : null;
+  const previousDay = streak.lastActivityDate ? storedCalendarDate(streak.lastActivityDate) : null;
   const difference = previousDay
     ? Math.round((activityDay.getTime() - previousDay.getTime()) / DAY_MS)
     : null;
@@ -221,6 +234,7 @@ export async function recordDailyLogin(
     sourceType: "AUTH_LOGIN",
     sourceId: day,
     activityAt,
+    updateStreak: false,
   });
 }
 
@@ -230,14 +244,22 @@ export async function recordCorrectAnswer(input: {
   attemptId: string;
   answeredAt?: Date;
 }): Promise<AwardPointsResult> {
+  const attempt = await prisma.attempt.findUnique({
+    where: { id: input.attemptId },
+    select: { sessionId: true, questionVersionId: true },
+  });
+  const answerBonusKey = attempt
+    ? `${attempt.sessionId}:${attempt.questionVersionId}`
+    : input.attemptId;
   return awardPoints({
     tenantId: input.tenantId,
     studentId: input.studentId,
     eventType: "CORRECT_ANSWER",
-    dedupeKey: `${input.tenantId}:${input.studentId}:correct-answer:${input.attemptId}`,
+    dedupeKey: `${input.tenantId}:${input.studentId}:correct-answer:${answerBonusKey}`,
     sourceType: "ATTEMPT",
     sourceId: input.attemptId,
     activityAt: input.answeredAt,
+    updateStreak: false,
   });
 }
 
@@ -255,6 +277,7 @@ export async function recordExerciseCompleted(input: {
     sourceType: "EXERCISE_SESSION",
     sourceId: input.sessionId,
     activityAt: input.completedAt,
+    updateStreak: false,
   });
 }
 
@@ -267,11 +290,12 @@ export async function recordTrainingSessionCompleted(input: {
   return awardPoints({
     tenantId: input.tenantId,
     studentId: input.studentId,
-    eventType: "EXERCISE_COMPLETED",
+    eventType: "TRAINING_SESSION_COMPLETED",
     dedupeKey: `${input.tenantId}:${input.studentId}:training-session-completed:${input.trainingSessionId}`,
     sourceType: "TRAINING_SESSION",
     sourceId: input.trainingSessionId,
     activityAt: input.completedAt,
+    updateStreak: true,
   });
 }
 

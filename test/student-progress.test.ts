@@ -479,7 +479,8 @@ describe("student progress", () => {
     expect(skillB.attemptCount).toBe(1);
     expect(skillB.correctCount).toBe(0);
     expect(skillB.accuracy).toBeNull();
-    expect(skillB.avgTimeMs).toBe(8000);
+    // Unscored attempts (rawScore null) are excluded from measured timing.
+    expect(skillB.avgTimeMs).toBeNull();
   });
 
   it("accuracy: correctCount / scored attempts", async () => {

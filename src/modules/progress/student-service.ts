@@ -1,5 +1,11 @@
 import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import {
+  emptyTrainingPerformanceSnapshot,
+  loadTrainingPerformance,
+  toTrainingProgressSummary,
+  type TrainingProgressSkill,
+} from "../training/performance.js";
 import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "../student-learning/policy.js";
 
 export interface StudentProgressItem {
@@ -29,6 +35,15 @@ export interface StudentProgressListResult {
     correctCount: number;
     scoredCount: number;
     accuracy: number | null;
+  };
+  training: {
+    version: 1;
+    sessionCount: number;
+    completedTrainingSessionCount: number;
+    scoredAttemptCount: number;
+    correctCount: number;
+    accuracy: number | null;
+    skills: TrainingProgressSkill[];
   };
 }
 
@@ -72,7 +87,10 @@ export async function listStudentProgress(actor: {
     ...STUDENT_LEARNING_SESSION_FILTER,
     status: "COMPLETED" as const,
   };
-  const [sessionCount, attemptCount, scoredGroups] = await Promise.all([
+  const trainingPerformancePromise = actor.tenantId
+    ? loadTrainingPerformance({ userId: actor.userId, tenantId: actor.tenantId })
+    : Promise.resolve(emptyTrainingPerformanceSnapshot());
+  const [sessionCount, attemptCount, scoredGroups, trainingPerformance] = await Promise.all([
     prisma.exerciseSession.count({ where: sessionScope }),
     prisma.attempt.count({ where: { session: sessionScope } }),
     prisma.attempt.groupBy({
@@ -80,6 +98,7 @@ export async function listStudentProgress(actor: {
       where: { session: sessionScope, rawScore: { not: null } },
       _count: true,
     }),
+    trainingPerformancePromise,
   ]);
   const scoredCount = scoredGroups.reduce((sum, row) => sum + row._count, 0);
   const correctCount = scoredGroups.find((row) => row.isCorrect === true)?._count ?? 0;
@@ -109,6 +128,7 @@ export async function listStudentProgress(actor: {
       scoredCount,
       accuracy: scoredCount ? correctCount / scoredCount : null,
     },
+    training: toTrainingProgressSummary(trainingPerformance),
   };
 }
 
