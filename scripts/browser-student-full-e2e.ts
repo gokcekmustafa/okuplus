@@ -1125,62 +1125,84 @@ async function probeInlineFeedback(
   );
   if (!question) throw new Error("Inline feedback için yanıtsız MULTIPLE_CHOICE soru bulunamadı");
 
-  await loadBrowserExerciseQuestion(
-    page,
-    candidate.item.exerciseSessionId,
-    question.questionVersionId,
-  );
-  const selector = "#exercise-mc-options label.answer-card[role='radio']:visible";
-  await page.waitForSelector(selector, { timeout: BROWSER_REQUEST_TIMEOUT_MS });
-  await page.locator(selector).first().click();
-  await page.waitForFunction(
-    () => {
-      const button = document.getElementById("exercise-submit-attempt") as HTMLButtonElement | null;
-      return Boolean(
-        button &&
-        !button.disabled &&
-        ["Cevabı kontrol et", "Tekrar Cevapla"].some((label) =>
-          button.textContent?.includes(label),
-        ),
-      );
-    },
-    { timeout: 15_000 },
-  );
-  const expectedPath = `/student/questions/${encodeURIComponent(question.questionVersionId)}/attempts`;
-  const responsePromise = page.waitForResponse(
-    (response) => response.url().includes(expectedPath) && response.request().method() === "POST",
-    { timeout: 30_000 },
-  );
-  await page.click("#exercise-submit-attempt");
-  const response = await responsePromise;
-  const body = await response.json().catch(() => null);
-  if (isQuestionQuotaExhausted({ status: response.status(), body })) {
-    budget.quotaExhausted = true;
-    return null;
-  }
-  if (response.status() !== 200) {
-    throw new Error(
-      `Browser answer başarısız (${safeErrorMessage({ status: response.status(), body })})`,
+  // Use an isolated authenticated page for the interactive probe. The main
+  // API page may retain a previous SPA exercise state while the daily planner
+  // promotes the next item, even though the backend session is ready.
+  const feedbackPage = await page.context().newPage();
+  try {
+    await feedbackPage.goto(`${BASE_URL}/`, {
+      waitUntil: "networkidle",
+      timeout: BROWSER_REQUEST_TIMEOUT_MS,
+    });
+    await feedbackPage.waitForSelector("#view-app:not(.hidden)", {
+      state: "visible",
+      timeout: BROWSER_REQUEST_TIMEOUT_MS,
+    });
+    await waitForStudentAppReady(feedbackPage);
+    await loadBrowserExerciseQuestion(
+      feedbackPage,
+      candidate.item.exerciseSessionId,
+      question.questionVersionId,
     );
+    const selector = "#exercise-mc-options label.answer-card[role='radio']:visible";
+    await feedbackPage.waitForSelector(selector, { timeout: BROWSER_REQUEST_TIMEOUT_MS });
+    await feedbackPage.locator(selector).first().click();
+    await feedbackPage.waitForFunction(
+      () => {
+        const button = document.getElementById(
+          "exercise-submit-attempt",
+        ) as HTMLButtonElement | null;
+        return Boolean(
+          button &&
+          !button.disabled &&
+          ["Cevabı kontrol et", "Tekrar Cevapla"].some((label) =>
+            button.textContent?.includes(label),
+          ),
+        );
+      },
+      { timeout: 15_000 },
+    );
+    const expectedPath = `/student/questions/${encodeURIComponent(question.questionVersionId)}/attempts`;
+    const responsePromise = feedbackPage.waitForResponse(
+      (response) => response.url().includes(expectedPath) && response.request().method() === "POST",
+      { timeout: 30_000 },
+    );
+    await feedbackPage.click("#exercise-submit-attempt");
+    const response = await responsePromise;
+    const body = await response.json().catch(() => null);
+    if (isQuestionQuotaExhausted({ status: response.status(), body })) {
+      budget.quotaExhausted = true;
+      return null;
+    }
+    if (response.status() !== 200) {
+      throw new Error(
+        `Browser answer başarısız (${safeErrorMessage({ status: response.status(), body })})`,
+      );
+    }
+    const attempt = asRecord(apiData({ status: response.status(), body }), "browser attempt.data");
+    await feedbackPage.waitForSelector("#exercise-attempt-feedback", {
+      state: "visible",
+      timeout: 10_000,
+    });
+    const feedback = await feedbackPage.$eval("#exercise-attempt-feedback", (element) => ({
+      text: element.textContent?.trim() ?? "",
+      display: getComputedStyle(element).display,
+    }));
+    if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback görünmedi");
+    if ((await feedbackPage.locator("#celebration-layer:not(.hidden)").count()) > 0) {
+      throw new Error("Ara cevapta celebration popup göründü");
+    }
+    budget.attempted += 1;
+    if (attempt.isCorrect === false) {
+      candidate.retryQuestionIds.add(question.questionVersionId);
+    } else {
+      candidate.retryQuestionIds.delete(question.questionVersionId);
+    }
+    candidate.attemptedQuestionIds.add(question.questionVersionId);
+    return attempt;
+  } finally {
+    await feedbackPage.close().catch(() => undefined);
   }
-  const attempt = asRecord(apiData({ status: response.status(), body }), "browser attempt.data");
-  await page.waitForSelector("#exercise-attempt-feedback", { state: "visible", timeout: 10_000 });
-  const feedback = await page.$eval("#exercise-attempt-feedback", (element) => ({
-    text: element.textContent?.trim() ?? "",
-    display: getComputedStyle(element).display,
-  }));
-  if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback görünmedi");
-  if ((await page.locator("#celebration-layer:not(.hidden)").count()) > 0) {
-    throw new Error("Ara cevapta celebration popup göründü");
-  }
-  budget.attempted += 1;
-  if (attempt.isCorrect === false) {
-    candidate.retryQuestionIds.add(question.questionVersionId);
-  } else {
-    candidate.retryQuestionIds.delete(question.questionVersionId);
-  }
-  candidate.attemptedQuestionIds.add(question.questionVersionId);
-  return attempt;
 }
 
 async function ensureScoreCoverage(

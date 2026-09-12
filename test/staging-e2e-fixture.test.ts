@@ -48,7 +48,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain('"Tekrar Cevapla"');
     expect(runnerSource).toContain("async function isVisibleBrowserExerciseQuestion");
     expect(runnerSource).toContain("isVisibleBrowserExerciseQuestion(page, questionVersionId)");
-    expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n    page,");
+    expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n      feedbackPage,");
   });
 
   it("probes every daily item in an isolated authenticated page", () => {
@@ -66,6 +66,8 @@ describe("staging Release 0.5 E2E fixture", () => {
 
   it("waits for the settled dashboard before the inline feedback probe", () => {
     expect(runnerSource).toContain("await waitForStudentAppReady(page)");
+    expect(runnerSource).toContain("const feedbackPage = await page.context().newPage()");
+    expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
     expect(runnerSource).toContain('await page.waitForLoadState("networkidle"');
     expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget)");
   });
