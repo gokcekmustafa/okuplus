@@ -1,7 +1,6 @@
 import type { PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
-import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
 import { calendarDateKey, calendarDateStorage, calendarDayBounds } from "../../lib/calendar.js";
 import {
   ENTITLEMENT_FEATURES,
@@ -11,9 +10,20 @@ import {
 import { getStudentReview, type StudentReviewResponse } from "./review-service.js";
 import {
   isTrainingConfigCandidate,
+  isTrainingVersionConfig,
+  loadTrainingRuntimeGraph,
   resolveTrainingRuntimeConfig,
   toTrainingRuntimeConfig,
 } from "../training/runtime.js";
+import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+
+export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+
+export function dailyGoalStatus(status: string | null | undefined): DailyGoalStatus {
+  if (status === "COMPLETED") return "COMPLETED";
+  if (status === "IN_PROGRESS") return "IN_PROGRESS";
+  return "NOT_STARTED";
+}
 
 function todayBounds(date: Date): { start: Date; end: Date } {
   return calendarDayBounds(date);
@@ -28,6 +38,14 @@ export interface TodayResponse {
   pointsToday: number;
   isFirstTrainingDay: boolean;
   placementHandoff: boolean;
+  dailyGoal: {
+    status: DailyGoalStatus;
+    totalItems: number;
+    completedItems: number;
+    currentStreak: number;
+    longestStreak: number;
+    lastTrainingDate: Date | null;
+  };
   dailyTraining: {
     id: string;
     status: string;
@@ -86,7 +104,18 @@ export async function getToday(actor: {
       },
     }),
     prisma.exerciseSession.findFirst({
-      where: { studentId: actor.userId, tenantId: tenantId ?? undefined, status: "IN_PROGRESS" },
+      where: {
+        studentId: actor.userId,
+        tenantId: tenantId ?? undefined,
+        status: "IN_PROGRESS",
+        // Daily training creates all child sessions up front. Only the item
+        // currently opened by the server is resumable from the dashboard;
+        // pending children must not win this query by their creation time.
+        OR: [
+          { trainingSessionItem: { is: { status: "IN_PROGRESS" } } },
+          { trainingSessionItem: { is: null } },
+        ],
+      },
       orderBy: { startedAt: "desc" },
       select: {
         id: true,
@@ -206,17 +235,22 @@ export async function getToday(actor: {
       if (hasResult > 0) return null;
       return candidate;
     })(),
-    prisma.exerciseTemplateVersion.findFirst({
-      where: {
-        status: "PUBLISHED",
-        template: {
+    prisma.exerciseTemplateVersion
+      .findMany({
+        where: {
           status: "PUBLISHED",
-          OR: [{ tenantId: null }, { tenantId: tenantId ?? undefined }],
+          template: {
+            deletedAt: null,
+            status: "PUBLISHED",
+            OR: [{ tenantId: null }, { tenantId: tenantId ?? undefined }],
+          },
         },
-      },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, template: { select: { title: true } } },
-    }),
+        orderBy: { createdAt: "desc" },
+        select: { id: true, config: true, template: { select: { title: true } } },
+      })
+      .then(
+        (versions) => versions.find((version) => isTrainingVersionConfig(version.config)) ?? null,
+      ),
     tenantId ? getStudentReview(actor) : Promise.resolve(null),
   ]);
 
@@ -258,15 +292,30 @@ export async function getToday(actor: {
     completedAt: s.completedAt,
   }));
 
+  const currentStreak = (streak as { currentDays: number } | null)?.currentDays ?? 0;
+  const longestStreak = (streak as { longestDays: number } | null)?.longestDays ?? 0;
+  const lastTrainingDate =
+    (streak as { lastActivityDate: Date | null } | null)?.lastActivityDate ?? null;
+  const dailyGoalTotal = dailyTrainingSession?.totalItems ?? 6;
+  const dailyGoalCompleted = dailyTrainingSession?.completedItems ?? 0;
+
   return {
     date: calendarDateKey(now),
     completedToday,
-    currentStreak: (streak as { currentDays: number } | null)?.currentDays ?? 0,
-    longestStreak: (streak as { longestDays: number } | null)?.longestDays ?? 0,
+    currentStreak,
+    longestStreak,
     totalPoints: pointsAgg._sum.points ?? 0,
     pointsToday: pointsTodayAgg._sum.points ?? 0,
     isFirstTrainingDay: tenantId ? !previousTrainingSession : false,
     placementHandoff: Boolean(placementResult),
+    dailyGoal: {
+      status: dailyGoalStatus(dailyTrainingSession?.status),
+      totalItems: dailyGoalTotal,
+      completedItems: dailyGoalCompleted,
+      currentStreak,
+      longestStreak,
+      lastTrainingDate,
+    },
     dailyTraining: dailyTrainingSession
       ? {
           id: dailyTrainingSession.id,
@@ -352,6 +401,7 @@ export async function getLearningPath(actor: {
   if (!useTemplateNodes && skills.length > 0) {
     const templates = await prisma.exerciseTemplate.findMany({
       where: {
+        deletedAt: null,
         status: "PUBLISHED",
         skillId: { in: skills.map((s) => s.id) },
         OR: [{ tenantId: null }, { tenantId: tenantId ?? undefined }] as never,
@@ -395,6 +445,7 @@ export async function getLearningPath(actor: {
       where: {
         status: "PUBLISHED",
         template: {
+          deletedAt: null,
           status: "PUBLISHED",
           OR: [{ tenantId: null }, { tenantId: tenantId ?? undefined }] as never,
         },
@@ -616,26 +667,46 @@ export async function startPersonalExercise(
     throw validationError("clientSessionId en fazla 200 karakter olmalı");
   }
   let templateVersionId = input.templateVersionId;
+  let selectedTemplateConfig: unknown = null;
   if (!templateVersionId) {
-    const tv = await prisma.exerciseTemplateVersion.findFirst({
+    const versions = await prisma.exerciseTemplateVersion.findMany({
       where: {
         status: "PUBLISHED",
-        template: { status: "PUBLISHED", OR: [{ tenantId: null }, { tenantId }] },
+        template: {
+          deletedAt: null,
+          status: "PUBLISHED",
+          OR: [{ tenantId: null }, { tenantId }],
+        },
       },
       orderBy: { createdAt: "desc" },
-      select: { id: true },
+      select: { id: true, config: true },
     });
+    const tv = versions.find((version) => isTrainingVersionConfig(version.config));
     if (!tv) throw validationError("Uygun şablon bulunamadı");
     templateVersionId = tv.id;
+    selectedTemplateConfig = tv.config;
   } else {
     const tv = await prisma.exerciseTemplateVersion.findUnique({
       where: { id: templateVersionId },
-      select: { status: true, template: { select: { tenantId: true, status: true } } },
+      select: {
+        status: true,
+        config: true,
+        template: { select: { tenantId: true, status: true, deletedAt: true } },
+      },
     });
-    if (!tv || tv.status !== "PUBLISHED" || tv.template.status !== "PUBLISHED")
+    if (
+      !tv ||
+      tv.status !== "PUBLISHED" ||
+      tv.template.status !== "PUBLISHED" ||
+      tv.template.deletedAt !== null
+    )
       throw validationError("Şablon yayınlanmış olmalı");
     if (tv.template.tenantId && tv.template.tenantId !== tenantId)
       throw forbiddenError("Şablon tenant uyuşmazlığı");
+    selectedTemplateConfig = tv.config;
+  }
+  if (isTrainingConfigCandidate(selectedTemplateConfig)) {
+    await loadTrainingRuntimeGraph(templateVersionId!, actor);
   }
   return prisma.$transaction(async (tx) => {
     const requestLockKey = `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
@@ -704,7 +775,7 @@ export async function startPersonalExercise(
 
 export async function getStudentSession(
   id: string,
-  actor: { userId: string; tenantId: string | null; platformRole: string | null },
+  actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
 ) {
   if (!actor.tenantId || actor.platformRole !== null) {
     throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
@@ -727,8 +798,9 @@ export async function getStudentSession(
       templateVersion: {
         select: {
           id: true,
+          status: true,
           config: true,
-          template: { select: { id: true, title: true } },
+          template: { select: { id: true, title: true, status: true, deletedAt: true } },
           contents: {
             select: {
               position: true,
@@ -740,6 +812,8 @@ export async function getStudentSession(
                   title: true,
                   body: true,
                   wordCount: true,
+                  status: true,
+                  content: { select: { status: true, deletedAt: true } },
                 },
               },
             },
@@ -749,21 +823,66 @@ export async function getStudentSession(
             select: {
               questionVersionId: true,
               position: true,
-              questionVersion: { select: { id: true, prompt: true } },
+              questionVersion: {
+                select: {
+                  id: true,
+                  prompt: true,
+                  status: true,
+                  question: { select: { status: true, deletedAt: true } },
+                },
+              },
             },
           },
         },
       },
+      trainingSessionItem: { select: { status: true } },
       attempts: {
         select: { id: true, questionVersionId: true, isCorrect: true, answeredAt: true },
       },
     },
   });
   if (!session) throw notFoundError("Oturum bulunamadı");
+  if (
+    session.templateVersion.status !== "PUBLISHED" ||
+    session.templateVersion.template.status !== "PUBLISHED" ||
+    session.templateVersion.template.deletedAt !== null
+  ) {
+    throw validationError("Yalnızca yayınlanmış şablon sürümü kullanılabilir");
+  }
+  const hasUnpublishedContent = session.templateVersion.contents.some(
+    ({ contentVersion }) =>
+      contentVersion.status !== "PUBLISHED" ||
+      contentVersion.content.status !== "PUBLISHED" ||
+      contentVersion.content.deletedAt !== null,
+  );
+  const hasUnpublishedQuestion = session.templateVersion.questions.some(
+    ({ questionVersion }) =>
+      questionVersion.status !== "PUBLISHED" ||
+      questionVersion.question.status !== "PUBLISHED" ||
+      questionVersion.question.deletedAt !== null,
+  );
+  if (hasUnpublishedContent || hasUnpublishedQuestion) {
+    throw validationError("Şablondaki içerik veya soru sürümlerinden biri yayınlanmamış");
+  }
+  if (
+    session.status === "IN_PROGRESS" &&
+    session.assessmentId === null &&
+    isTrainingConfigCandidate(session.templateVersion.config) &&
+    session.trainingSessionItem &&
+    session.trainingSessionItem.status !== "IN_PROGRESS"
+  ) {
+    throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
+  }
   const resolvedTrainingConfig =
     session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
       ? resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config)
       : null;
+  if (resolvedTrainingConfig && resolvedTrainingConfig.status !== "READY") {
+    throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+  }
+  if (resolvedTrainingConfig?.status === "READY") {
+    await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+  }
   const trainingConfig =
     resolvedTrainingConfig?.status === "READY"
       ? toTrainingRuntimeConfig(resolvedTrainingConfig.config)

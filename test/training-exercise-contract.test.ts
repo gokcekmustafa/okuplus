@@ -194,6 +194,18 @@ describe("training exercise phase 0/1 contract", () => {
     });
   });
 
+  it("rejects a version config whose competency does not match its family", () => {
+    const config = toTrainingExerciseVersionConfig({
+      ...validContract(),
+      family: "ATTENTION_BURST",
+      competency: "FAST_ATTENTION",
+      versionConfig: { rendererKey: "QUESTION_ATTENTION_BURST", settings: { optionCount: 4 } },
+    });
+    expect(() =>
+      parseTrainingExerciseVersionConfig({ ...config, competency: "RC_MAIN_IDEA" }),
+    ).toThrow("ATTENTION_BURST için competency FAST_ATTENTION olmalı");
+  });
+
   it("keeps explicit legacy and placement paths separate from training config", () => {
     expect(resolveTrainingRuntimeConfig("LEGACY", { rendererKey: "LEGACY" })).toMatchObject({
       status: "LEGACY_COMPATIBILITY",
