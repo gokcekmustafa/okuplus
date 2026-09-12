@@ -930,13 +930,19 @@ async function loadBrowserExerciseQuestion(
 
 async function waitForStudentAppReady(page: Page): Promise<void> {
   // The shell is revealed before restoreSession() finishes applying the
-  // student role. Wait for the existing student-shell state so exercise
-  // navigation cannot enter the platform/admin loading path.
+  // student role, and completed onboarding redirects through an asynchronous
+  // onboarding check. Wait for the settled student dashboard so that redirect
+  // cannot race exercise navigation.
   await page.waitForFunction(
     () => {
       const app = document.getElementById("view-app");
+      const dashboard = document.getElementById("page-dashboard");
       return Boolean(
-        app && !app.classList.contains("hidden") && app.classList.contains("student-shell"),
+        app &&
+        !app.classList.contains("hidden") &&
+        app.classList.contains("student-shell") &&
+        dashboard &&
+        !dashboard.classList.contains("hidden"),
       );
     },
     { timeout: BROWSER_REQUEST_TIMEOUT_MS },
