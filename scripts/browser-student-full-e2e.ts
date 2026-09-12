@@ -467,6 +467,19 @@ function needsQuestionAttempt(entry: DailyWork, questionVersionId: string): bool
   );
 }
 
+function recordAttemptState(
+  entry: DailyWork,
+  questionVersionId: string,
+  attempt: JsonObject,
+): void {
+  entry.attemptedQuestionIds.add(questionVersionId);
+  if (attempt.isCorrect === false && Number(attempt.responseOrder || 1) === 1) {
+    entry.retryQuestionIds.add(questionVersionId);
+  } else {
+    entry.retryQuestionIds.delete(questionVersionId);
+  }
+}
+
 async function login(page: Page, credentials: { email: string; password: string }): Promise<void> {
   await page.goto(`${BASE_URL}/`, {
     waitUntil: "networkidle",
@@ -1254,7 +1267,7 @@ async function ensureScoreCoverage(
       budget,
     );
     if (!data) return;
-    target.attemptedQuestionIds.add(question.questionVersionId);
+    recordAttemptState(target, question.questionVersionId, data);
     if (data.isCorrect === true) coverage.correct = true;
     if (data.isCorrect === false) coverage.wrong = true;
   }
