@@ -72,6 +72,12 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget)");
   });
 
+  it("verifies the selected answer before submitting the browser probe", () => {
+    expect(runnerSource).toContain("input[data-exercise-opt]:checked");
+    expect(runnerSource).toContain('getAttribute("aria-checked") !== "true"');
+    expect(runnerSource).toContain("question.questionVersionId");
+  });
+
   it("waits for the authenticated student shell before isolated browser probes", () => {
     expect(runnerSource).toContain("async function waitForStudentAppReady");
     expect(runnerSource).toContain('app.classList.contains("student-shell")');

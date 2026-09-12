@@ -1148,7 +1148,19 @@ async function probeInlineFeedback(
     await feedbackPage.waitForSelector(selector, { timeout: BROWSER_REQUEST_TIMEOUT_MS });
     await feedbackPage.locator(selector).first().click();
     await feedbackPage.waitForFunction(
-      () => {
+      (expectedQuestionVersionId) => {
+        const question = document.getElementById("exercise-current-question");
+        const selected = question?.querySelector(
+          "input[data-exercise-opt]:checked",
+        ) as HTMLInputElement | null;
+        const selectedCard = selected?.closest("label.answer-card");
+        if (
+          question?.getAttribute("data-question-version-id") !== expectedQuestionVersionId ||
+          !selected ||
+          selectedCard?.getAttribute("aria-checked") !== "true"
+        ) {
+          return false;
+        }
         const button = document.getElementById(
           "exercise-submit-attempt",
         ) as HTMLButtonElement | null;
@@ -1160,6 +1172,7 @@ async function probeInlineFeedback(
           ),
         );
       },
+      question.questionVersionId,
       { timeout: 15_000 },
     );
     const expectedPath = `/student/questions/${encodeURIComponent(question.questionVersionId)}/attempts`;
