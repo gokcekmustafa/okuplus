@@ -225,6 +225,7 @@ describe("question admin", () => {
           type: "PASSAGE",
           title: "Soru İçeriği A",
           difficulty: 0.5,
+          createdById: CONTENT_EDITOR_ID,
         },
         {
           id: CONTENT_B,

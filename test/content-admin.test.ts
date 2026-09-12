@@ -629,7 +629,7 @@ describe("content admin", () => {
       payload: { status: "PUBLISHED" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.message).toContain("sürüm");
+    expect(res.json().error.message).toBe("CONTENT için DRAFT → PUBLISHED geçişi geçersiz");
   });
 
   it("İçerik arşivlenebilir ve arşivden taslağa alınabilir", async () => {
@@ -674,7 +674,7 @@ describe("content admin", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("VALIDATION_ERROR");
-    expect(res.json().error.message).toContain("arşivlenmiş");
+    expect(res.json().error.message).toBe("CONTENT için PUBLISHED → DRAFT geçişi geçersiz");
   });
 
   // ---------- Sürüm yaşam döngüsü ----------
@@ -904,7 +904,9 @@ describe("content admin", () => {
       payload: { body: "değişiklik" },
     });
     expect(updated.statusCode).toBe(400);
-    expect(updated.json().error.message).toContain("Yayınlanmış sürüm düzenlenemez");
+    expect(updated.json().error.message).toBe(
+      "Yalnızca taslak sürüm düzenlenebilir. Yeni sürüm oluşturulmalı.",
+    );
   });
 
   it("Yayın sonrası yeni sürüm oluşturulabilir (version 2)", async () => {
