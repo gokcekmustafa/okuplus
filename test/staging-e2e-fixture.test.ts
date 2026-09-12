@@ -37,4 +37,12 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("!hadRetryPending");
     expect(runnerSource).toContain("-retry");
   });
+
+  it("waits for the requested question and retries a promoted daily item", () => {
+    expect(runnerSource).toContain("async function loadBrowserExerciseQuestion");
+    expect(runnerSource).toContain("expectedId");
+    expect(runnerSource).toContain("attempt < 2");
+    expect(runnerSource).toContain("exercise-load-status");
+    expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n    page,");
+  });
 });

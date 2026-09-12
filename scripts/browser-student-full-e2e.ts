@@ -877,31 +877,55 @@ function checkpointFor(checkpoints: ItemCheckpoint[], position: number): ItemChe
   return checkpoint;
 }
 
-async function probeExerciseRender(
+async function loadBrowserExerciseQuestion(
   page: Page,
   sessionId: string,
   questionVersionId: string,
 ): Promise<void> {
-  await page.evaluate((id) => {
-    const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
-      .resumeTodaySession;
-    if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
-    resume(id);
-  }, sessionId);
-  await page.waitForSelector("#page-exercise:not(.hidden)", {
-    state: "visible",
-    timeout: 15_000,
-  });
-  await page.waitForSelector("#exercise-current-question", {
-    state: "visible",
-    timeout: 15_000,
-  });
-  const renderedId = await page
-    .locator("#exercise-current-question")
-    .getAttribute("data-question-version-id");
-  if (renderedId !== questionVersionId) {
-    throw new Error("Browser question ile API questionVersionId eşleşmedi");
+  // The SPA's navigation starts loadExercisePage() asynchronously. When a
+  // daily item is promoted immediately after the previous item completes, a
+  // second navigate("exercise") can observe the first load's in-flight guard
+  // and leave the previous question in the DOM. Wait for the requested ID and
+  // retry the official resume helper once after the first load settles.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.evaluate((id) => {
+      const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
+        .resumeTodaySession;
+      if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
+      resume(id);
+    }, sessionId);
+    try {
+      await page.waitForSelector("#page-exercise:not(.hidden)", {
+        state: "visible",
+        timeout: BROWSER_REQUEST_TIMEOUT_MS,
+      });
+      await page.waitForFunction(
+        (expectedId) => {
+          const element = document.getElementById("exercise-current-question");
+          if (!element || element.getAttribute("data-question-version-id") !== expectedId) {
+            return false;
+          }
+          const style = getComputedStyle(element);
+          return style.display !== "none" && style.visibility !== "hidden";
+        },
+        questionVersionId,
+        { timeout: BROWSER_REQUEST_TIMEOUT_MS },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) {
+        await page.waitForFunction(
+          () =>
+            document.getElementById("exercise-load-status")?.textContent?.trim() !==
+            "Alıştırma yükleniyor…",
+          { timeout: BROWSER_REQUEST_TIMEOUT_MS },
+        );
+      }
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error("Browser exercise question yüklenemedi");
 }
 
 async function submitAttempt(
@@ -954,21 +978,13 @@ async function probeInlineFeedback(
   );
   if (!question) throw new Error("Inline feedback için yanıtsız MULTIPLE_CHOICE soru bulunamadı");
 
-  await page.evaluate((id) => {
-    const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
-      .resumeTodaySession;
-    if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
-    resume(id);
-  }, candidate.item.exerciseSessionId);
-  await page.waitForSelector("#page-exercise:not(.hidden)", { state: "visible", timeout: 15_000 });
+  await loadBrowserExerciseQuestion(
+    page,
+    candidate.item.exerciseSessionId,
+    question.questionVersionId,
+  );
   const selector = "#exercise-mc-options label.answer-card[role='radio']:visible";
-  await page.waitForSelector(selector, { timeout: 15_000 });
-  const renderedId = await page
-    .locator("#exercise-current-question")
-    .getAttribute("data-question-version-id");
-  if (renderedId !== question.questionVersionId) {
-    throw new Error("Browser question ile API questionVersionId eşleşmedi");
-  }
+  await page.waitForSelector(selector, { timeout: BROWSER_REQUEST_TIMEOUT_MS });
   await page.locator(selector).first().click();
   await page.waitForFunction(
     () => {
@@ -1082,12 +1098,6 @@ async function processDailyWork(
       continue;
     }
     await assertPublishedGraph(page, entry.item, entry.questions);
-    const firstQuestion =
-      entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
-      entry.questions[0];
-    if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
-    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId);
-    checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
     let submitted = 0;
     let correct = 0;
@@ -1375,6 +1385,7 @@ async function main(): Promise<void> {
     if (quotaPlan.plannedAttemptCount > 0) {
       if (!uiCandidate) throw new Error("Inline feedback için uygun unanswered item bulunamadı");
       const uiAttempt = await probeInlineFeedback(page, uiCandidate, budget);
+      if (uiAttempt) checkpointFor(itemCheckpoints, uiCandidate.item.position).rendered = "PASS";
       if (uiAttempt?.isCorrect === true) coverage.correct = true;
       if (uiAttempt?.isCorrect === false) coverage.wrong = true;
       if (!quotaPlan.fullCompletionPossible) {
