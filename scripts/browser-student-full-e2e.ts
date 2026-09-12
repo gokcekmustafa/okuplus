@@ -1133,6 +1133,18 @@ async function probeInlineFeedback(
   }
   if (!candidate.item.exerciseSessionId)
     throw new Error("Inline feedback için exercise session eksik");
+
+  // The daily snapshot is read before the isolated browser page is opened.
+  // Reconcile the candidate from the session endpoint immediately before the
+  // probe so a prior attempt cannot make the SPA promote a different question.
+  const sessionState = await browserApi(
+    page,
+    `/student/sessions/${encodeURIComponent(candidate.item.exerciseSessionId)}`,
+  );
+  assertApiOk(sessionState, "inline feedback session state");
+  const sessionData = apiData(sessionState);
+  candidate.attemptedQuestionIds = attemptedIds(sessionData);
+  candidate.retryQuestionIds = retryQuestionIds(sessionData);
   const question = candidate.questions.find(
     (entry) =>
       entry.type === "MULTIPLE_CHOICE" && needsQuestionAttempt(candidate, entry.questionVersionId),
