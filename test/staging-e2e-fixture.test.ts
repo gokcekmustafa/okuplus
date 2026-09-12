@@ -61,6 +61,7 @@ describe("staging Release 0.5 E2E fixture", () => {
 
   it("waits for the settled dashboard before the inline feedback probe", () => {
     expect(runnerSource).toContain("await waitForStudentAppReady(page)");
+    expect(runnerSource).toContain('await page.waitForLoadState("networkidle"');
     expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget)");
   });
 

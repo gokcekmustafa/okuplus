@@ -896,6 +896,7 @@ async function loadBrowserExerciseQuestion(
       resume(id);
     }, sessionId);
     try {
+      await page.waitForLoadState("networkidle", { timeout: BROWSER_REQUEST_TIMEOUT_MS });
       await page.waitForSelector("#page-exercise:not(.hidden)", {
         state: "visible",
         timeout: BROWSER_REQUEST_TIMEOUT_MS,
