@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   REVIEW_COOLDOWN_HOURS,
   isReviewEligible,
+  priorityForReviewReason,
+  reviewReasonForSignal,
   sortReviewItems,
   type ReviewItem,
 } from "../src/modules/student-learning/review-service.js";
@@ -16,6 +18,9 @@ function item(overrides: Partial<ReviewItem>): ReviewItem {
     templateVersionId: "template-version",
     templateTitle: "Tekrar seti",
     templateVersion: 1,
+    family: "MAIN_IDEA",
+    competency: "RC_MAIN_IDEA",
+    difficulty: "DEVELOPING",
     lastAttemptAt: new Date("2026-08-28T12:00:00.000Z"),
     accuracy: 1,
     priority: "STANDARD",
@@ -49,5 +54,49 @@ describe("review foundation policy", () => {
     const ordered = sortReviewItems(original);
     expect(original[0]?.skillId).toBe("b");
     expect(ordered[0]?.skillId).toBe("a");
+  });
+
+  it("applies review triggers in the documented priority order", () => {
+    const base = {
+      masteryState: "DEVELOPING" as const,
+      consecutiveFailures: 0,
+      recent5Accuracy: 0.8,
+      accuracy: 0.8,
+      scoredCount: 5,
+      mastery: false,
+      lastActivityAt: new Date("2026-09-01T12:00:00.000Z"),
+    };
+    expect(reviewReasonForSignal({ ...base, masteryState: "NEEDS_REVIEW" }, now)).toBe(
+      "MASTERY_NEEDS_REVIEW",
+    );
+    expect(reviewReasonForSignal({ ...base, consecutiveFailures: 2 }, now)).toBe(
+      "CONSECUTIVE_FAILURE",
+    );
+    expect(reviewReasonForSignal({ ...base, recent5Accuracy: 0.59 }, now)).toBe("LOW_ACCURACY");
+    expect(
+      reviewReasonForSignal(
+        { ...base, accuracy: 0.7, lastActivityAt: new Date("2026-08-30") },
+        now,
+      ),
+    ).toBe("OVERDUE_LOW_PERFORMANCE");
+    expect(priorityForReviewReason("MASTERY_NEEDS_REVIEW")).toBe("CRITICAL");
+    expect(priorityForReviewReason("CONSECUTIVE_FAILURE")).toBe("HIGH");
+  });
+
+  it("does not create a review candidate without a scored signal", () => {
+    expect(
+      reviewReasonForSignal(
+        {
+          masteryState: "NOT_STARTED",
+          consecutiveFailures: 0,
+          recent5Accuracy: null,
+          accuracy: null,
+          scoredCount: 0,
+          mastery: false,
+          lastActivityAt: null,
+        },
+        now,
+      ),
+    ).toBeNull();
   });
 });

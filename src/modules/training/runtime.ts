@@ -70,6 +70,7 @@ const mainIdeaVersionSelect = {
         select: {
           id: true,
           questionId: true,
+          contentVersionId: true,
           prompt: true,
           options: true,
           correctAnswer: true,
@@ -149,6 +150,45 @@ export type RapidRecognitionRuntimeConfig = MainIdeaRuntimeConfig;
 export type RapidRecognitionRuntimeGraph = MainIdeaRuntimeGraph;
 export type PhraseChunkingRuntimeConfig = MainIdeaRuntimeConfig;
 export type PhraseChunkingRuntimeGraph = MainIdeaRuntimeGraph;
+
+/**
+ * Loads the published runtime graph for the family declared by the version
+ * snapshot.  All student-facing training entry points should use this
+ * dispatcher so that publication, tenant visibility and content/question
+ * validation cannot drift between routes.
+ */
+export async function loadTrainingRuntimeGraph(
+  templateVersionId: string,
+  actor: TrainingActor,
+): Promise<MainIdeaRuntimeGraph> {
+  const version = await prisma.exerciseTemplateVersion.findUnique({
+    where: { id: templateVersionId },
+    select: { config: true },
+  });
+  if (!version) throw notFoundError("Egzersiz sürümü bulunamadı");
+
+  const resolved = resolveTrainingRuntimeConfig("TRAINING", version.config);
+  if (resolved.status !== "READY") {
+    throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
+  }
+
+  switch (resolved.config.family) {
+    case ATTENTION_BURST_FAMILY:
+      return loadAttentionBurstRuntimeGraph(templateVersionId, actor);
+    case RAPID_RECOGNITION_FAMILY:
+      return loadRapidRecognitionRuntimeGraph(templateVersionId, actor);
+    case PHRASE_CHUNKING_FAMILY:
+      return loadPhraseChunkingRuntimeGraph(templateVersionId, actor);
+    case DETAIL_EVIDENCE_FAMILY:
+      return loadDetailEvidenceRuntimeGraph(templateVersionId, actor);
+    case INFERENCE_FAMILY:
+      return loadInferenceRuntimeGraph(templateVersionId, actor);
+    case MAIN_IDEA_FAMILY:
+      return loadMainIdeaRuntimeGraph(templateVersionId, actor);
+  }
+
+  throw validationError("Egzersiz ailesi desteklenmiyor");
+}
 
 export function toMainIdeaRuntimeConfig(
   config: TrainingExerciseVersionConfig,
@@ -318,6 +358,7 @@ function validateComprehensionRow(
   const config = resolved.config;
   if (
     config.family !== spec.family ||
+    config.competency !== spec.skillCode ||
     config.interactionType !== MAIN_IDEA_INTERACTION ||
     config.contentRequirement !== "REQUIRED" ||
     config.questionRequirement !== "REQUIRED" ||
@@ -331,6 +372,7 @@ function validateComprehensionRow(
   }
 
   const contentByContentId = new Map<string, MainIdeaVersionRow["contents"][number]>();
+  const contentPositions = new Set<number>();
   for (const entry of row.contents) {
     const contentVersion = entry.contentVersion;
     const content = contentVersion.content;
@@ -342,6 +384,10 @@ function validateComprehensionRow(
     ) {
       throw validationError(`${spec.label} içerik grafiği yayınlanmış değil`);
     }
+    if (contentPositions.has(entry.position)) {
+      throw validationError(`${spec.label} içerik pozisyonları benzersiz olmalı`);
+    }
+    contentPositions.add(entry.position);
     if (!tenantVisible(content.tenantId, actor)) {
       throw forbiddenError("İçerik bu tenant kapsamına ait değil");
     }
@@ -351,11 +397,21 @@ function validateComprehensionRow(
     contentByContentId.set(contentVersion.contentId, entry);
   }
 
+  const questionPositions = new Set<number>();
+  const questionVersionIds = new Set<string>();
   const questions = row.questions.map((entry): MainIdeaStudentQuestion => {
     const questionVersion = entry.questionVersion;
     const question = questionVersion.question;
     const content = contentByContentId.get(question.contentId);
     if (!content) throw validationError("Soru güncel içerik sürümüne bağlı değil");
+    if (questionPositions.has(entry.position)) {
+      throw validationError(`${spec.label} soru pozisyonları benzersiz olmalı`);
+    }
+    questionPositions.add(entry.position);
+    if (questionVersionIds.has(questionVersion.id)) {
+      throw validationError(`${spec.label} soru grafiğinde tekrar var`);
+    }
+    questionVersionIds.add(questionVersion.id);
     if (
       questionVersion.status !== "PUBLISHED" ||
       question.status !== "PUBLISHED" ||
@@ -364,6 +420,12 @@ function validateComprehensionRow(
       question.skill?.code !== spec.skillCode
     ) {
       throw validationError(`${spec.label} soru grafiği yayınlanmış veya uyumlu değil`);
+    }
+    if (
+      questionVersion.contentVersionId !== null &&
+      questionVersion.contentVersionId !== content.contentVersionId
+    ) {
+      throw validationError(`${spec.label} soru sürümü içerik sürümüyle uyumlu değil`);
     }
     if (!isOptionList(questionVersion.options, spec.optionCount)) {
       throw validationError(`${spec.label} sorusu ${spec.optionCount} geçerli seçenek içermeli`);

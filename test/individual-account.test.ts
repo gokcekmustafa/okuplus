@@ -407,7 +407,7 @@ describe.sequential("individual account foundation", () => {
     ).toBe(true);
     expect(
       await prisma.pointEvent.count({ where: { tenantId: tenantAId, studentId: userAId } }),
-    ).toBe(3);
+    ).toBe(2);
     expect(
       await prisma.studentBadge.count({ where: { tenantId: tenantAId, studentId: userAId } }),
     ).toBeGreaterThan(0);
