@@ -78,6 +78,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("question.questionVersionId");
     expect(runnerSource).toContain('loadStatus !== "Alıştırma yükleniyor…"');
     expect(runnerSource).toContain("function recordAttemptState");
+    expect(runnerSource).toContain("const hadRetryPending = entry.retryQuestionIds.has");
     expect(runnerSource).toContain("retryQuestionIds.delete(questionVersionId)");
   });
 

@@ -472,8 +472,9 @@ function recordAttemptState(
   questionVersionId: string,
   attempt: JsonObject,
 ): void {
+  const hadRetryPending = entry.retryQuestionIds.has(questionVersionId);
   entry.attemptedQuestionIds.add(questionVersionId);
-  if (attempt.isCorrect === false && Number(attempt.responseOrder || 1) === 1) {
+  if (attempt.isCorrect === false && !hadRetryPending && Number(attempt.responseOrder || 1) === 1) {
     entry.retryQuestionIds.add(questionVersionId);
   } else {
     entry.retryQuestionIds.delete(questionVersionId);
@@ -1221,12 +1222,7 @@ async function probeInlineFeedback(
       throw new Error("Ara cevapta celebration popup göründü");
     }
     budget.attempted += 1;
-    if (attempt.isCorrect === false) {
-      candidate.retryQuestionIds.add(question.questionVersionId);
-    } else {
-      candidate.retryQuestionIds.delete(question.questionVersionId);
-    }
-    candidate.attemptedQuestionIds.add(question.questionVersionId);
+    recordAttemptState(candidate, question.questionVersionId, attempt);
     return attempt;
   } finally {
     await feedbackPage.close().catch(() => undefined);
