@@ -64,4 +64,11 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("return await probeInlineFeedback(feedbackPage");
     expect(runnerSource).toContain("probeInlineFeedbackInIsolatedPage(page, uiCandidate, budget)");
   });
+
+  it("waits for the authenticated student shell before isolated browser probes", () => {
+    expect(runnerSource).toContain("async function waitForStudentAppReady");
+    expect(runnerSource).toContain('app.classList.contains("student-shell")');
+    expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
+    expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
+  });
 });

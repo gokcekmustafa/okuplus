@@ -928,6 +928,21 @@ async function loadBrowserExerciseQuestion(
   throw lastError instanceof Error ? lastError : new Error("Browser exercise question yüklenemedi");
 }
 
+async function waitForStudentAppReady(page: Page): Promise<void> {
+  // The shell is revealed before restoreSession() finishes applying the
+  // student role. Wait for the existing student-shell state so exercise
+  // navigation cannot enter the platform/admin loading path.
+  await page.waitForFunction(
+    () => {
+      const app = document.getElementById("view-app");
+      return Boolean(
+        app && !app.classList.contains("hidden") && app.classList.contains("student-shell"),
+      );
+    },
+    { timeout: BROWSER_REQUEST_TIMEOUT_MS },
+  );
+}
+
 async function probeExerciseRender(
   page: Page,
   sessionId: string,
@@ -946,6 +961,7 @@ async function probeExerciseRender(
       state: "visible",
       timeout: BROWSER_REQUEST_TIMEOUT_MS,
     });
+    await waitForStudentAppReady(renderPage);
     await loadBrowserExerciseQuestion(renderPage, sessionId, questionVersionId);
   } finally {
     await renderPage.close().catch(() => undefined);
@@ -1074,6 +1090,7 @@ async function probeInlineFeedbackInIsolatedPage(
       state: "visible",
       timeout: BROWSER_REQUEST_TIMEOUT_MS,
     });
+    await waitForStudentAppReady(feedbackPage);
     return await probeInlineFeedback(feedbackPage, candidate, budget);
   } finally {
     await feedbackPage.close().catch(() => undefined);
