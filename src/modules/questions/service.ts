@@ -31,6 +31,7 @@ import {
   isTrainingVersionConfig,
   loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
+import { decideTrainingAttempt } from "../training/retry-policy.js";
 import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
@@ -73,6 +74,24 @@ const VERSION_SUMMARY_SELECT = {
     select: { id: true, version: true, title: true, status: true, publishedAt: true },
   },
 } satisfies Prisma.QuestionVersionSelect;
+
+const ATTEMPT_RESULT_SELECT = {
+  id: true,
+  questionVersionId: true,
+  questionId: true,
+  answer: true,
+  isCorrect: true,
+  rawScore: true,
+  timeSpentMs: true,
+  responseOrder: true,
+  feedback: true,
+  answeredAt: true,
+  createdAt: true,
+} satisfies Prisma.AttemptSelect;
+
+function isObjectJson(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
 
 const QUESTION_LIST_SELECT = {
   id: true,
@@ -1235,6 +1254,8 @@ export async function createAttempt(
       id: true,
       questionId: true,
       status: true,
+      correctAnswer: true,
+      explanation: true,
       question: {
         select: { type: true, contentId: true, status: true, deletedAt: true },
       },
@@ -1344,14 +1365,59 @@ export async function createAttempt(
     rawScore,
     feedback: scorerFeedback,
   } = await scoreAttempt(questionVersionId, answer);
-  const feedback =
-    (session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
-      ? buildTrainingFeedback(session.templateVersion.config, isCorrect)
-      : null) ?? scorerFeedback;
+  const isStudentTrainingAttempt =
+    actor.platformRole === null &&
+    session.assessmentId === null &&
+    isTrainingVersionConfig(session.templateVersion.config);
 
   // 4) Attempt kaydı - transaction güvenliği
   try {
     const attempt = await prisma.$transaction(async (tx) => {
+      let responseOrder = 1 as 1 | 2;
+      if (isStudentTrainingAttempt) {
+        // Aynı sorunun paralel cevaplarını transaction süresince sırala.
+        await tx.$queryRaw`
+          SELECT 1::int AS acquired
+          FROM pg_advisory_xact_lock(hashtextextended(${`training-attempt:${sessionId}:${questionVersionId}`}, 0))
+        `;
+
+        const existingForClient = await tx.attempt.findUnique({
+          where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
+          select: ATTEMPT_RESULT_SELECT,
+        });
+        if (existingForClient) return existingForClient;
+
+        const previousAttempts = await tx.attempt.findMany({
+          where: { sessionId, questionVersionId },
+          select: { isCorrect: true },
+          orderBy: [{ responseOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        });
+        const decision = decideTrainingAttempt(previousAttempts);
+        if (!decision.allowed) {
+          throw validationError(
+            decision.reason === "ALREADY_CORRECT"
+              ? "Bu soru zaten doğru yanıtlandı"
+              : decision.reason === "PENDING_EVALUATION"
+                ? "Bu sorunun önceki yanıtı hâlâ değerlendiriliyor"
+                : "Bu soru için en fazla iki cevap hakkı vardır",
+          );
+        }
+        responseOrder = decision.responseOrder;
+      }
+
+      const feedback =
+        (session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
+          ? buildTrainingFeedback(session.templateVersion.config, isCorrect, responseOrder)
+          : null) ?? scorerFeedback;
+      const finalWrongFeedback =
+        isStudentTrainingAttempt && responseOrder === 2 && isCorrect === false
+          ? {
+              message: feedback ?? "Bu kez olmadı. Doğru cevabı birlikte inceleyelim.",
+              revealedAnswer: version.correctAnswer,
+              explanation: version.explanation ?? null,
+            }
+          : feedback;
+
       // Admin/back-office attempt imports are not end-user B2C practice usage.
       // Only an authenticated personal-context student attempt consumes the
       // personal daily question allowance.
@@ -1388,22 +1454,11 @@ export async function createAttempt(
           isCorrect,
           rawScore,
           timeSpentMs: timeSpentMs ?? null,
-          responseOrder: 1,
-          feedback: (feedback ?? null) as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+          responseOrder,
+          feedback: (finalWrongFeedback ?? null) as
+            Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
         },
-        select: {
-          id: true,
-          questionVersionId: true,
-          questionId: true,
-          answer: true,
-          isCorrect: true,
-          rawScore: true,
-          timeSpentMs: true,
-          responseOrder: true,
-          feedback: true,
-          answeredAt: true,
-          createdAt: true,
-        },
+        select: ATTEMPT_RESULT_SELECT,
       });
     });
 
@@ -1417,6 +1472,10 @@ export async function createAttempt(
       timeSpentMs: attempt.timeSpentMs,
       responseOrder: attempt.responseOrder,
       feedback: attempt.feedback,
+      revealedAnswer:
+        isObjectJson(attempt.feedback) && "revealedAnswer" in attempt.feedback
+          ? attempt.feedback.revealedAnswer
+          : null,
       answeredAt: attempt.answeredAt.toISOString(),
       createdAt: attempt.createdAt.toISOString(),
     };
@@ -1444,17 +1503,7 @@ export async function createAttempt(
           const existing = await prisma.attempt.findUnique({
             where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
             select: {
-              id: true,
-              questionVersionId: true,
-              questionId: true,
-              answer: true,
-              isCorrect: true,
-              rawScore: true,
-              timeSpentMs: true,
-              responseOrder: true,
-              feedback: true,
-              answeredAt: true,
-              createdAt: true,
+              ...ATTEMPT_RESULT_SELECT,
             },
           });
           if (existing) {
@@ -1468,6 +1517,10 @@ export async function createAttempt(
               timeSpentMs: existing.timeSpentMs,
               responseOrder: existing.responseOrder,
               feedback: existing.feedback,
+              revealedAnswer:
+                isObjectJson(existing.feedback) && "revealedAnswer" in existing.feedback
+                  ? existing.feedback.revealedAnswer
+                  : null,
               answeredAt: existing.answeredAt.toISOString(),
               createdAt: existing.createdAt.toISOString(),
             };

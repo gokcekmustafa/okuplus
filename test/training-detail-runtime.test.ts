@@ -113,6 +113,15 @@ describe("DETAIL_EVIDENCE training contract", () => {
     expect(incorrect).not.toContain("doğru cevap");
   });
 
+  it("uses the agreed messages for a second response", () => {
+    const config = toTrainingExerciseVersionConfig(detailContract());
+
+    expect(buildTrainingFeedback(config, true, 2)).toBe("✓ Güzel yakaladın.");
+    expect(buildTrainingFeedback(config, false, 2)).toBe(
+      "Bu kez olmadı. Doğru cevabı birlikte inceleyelim.",
+    );
+  });
+
   it("fails closed for missing or invalid detail config", () => {
     expect(isDetailEvidenceVersionConfig(null)).toBe(false);
     expect(isDetailEvidenceVersionConfig({ family: "DETAIL_EVIDENCE" })).toBe(false);

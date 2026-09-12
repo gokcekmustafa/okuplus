@@ -67,6 +67,57 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("100 GP");
   });
 
+  it("keeps the same question active after the first wrong response", () => {
+    const h = harness();
+    h.run(
+      'showExerciseFeedback({ id: "a", questionVersionId: "q1", isCorrect: false, rawScore: 0, responseOrder: 1, feedback: "İpucu: seçeneği tekrar karşılaştır." })',
+    );
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Tekrar düşün.");
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("İpucu");
+    expect(h.get("exercise-submit-attempt").textContent).toBe("Tekrar Cevapla");
+    expect(h.context.exerciseAwaitingNext).toBe(false);
+  });
+
+  it("shows the exact second-correct message and advances normally", () => {
+    const h = harness();
+    h.run(
+      'showExerciseFeedback({ id: "a", questionVersionId: "q1", isCorrect: true, rawScore: 1, responseOrder: 2, feedback: "✓ Güzel yakaladın." })',
+    );
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("✓ Güzel yakaladın.");
+    expect(h.context.exerciseAwaitingNext).toBe(true);
+  });
+
+  it("reveals the server-provided answer only after the second wrong response", () => {
+    const h = harness();
+    h.context.exerciseQuestions = [
+      {
+        questionVersionId: "q1",
+        options: [
+          { id: "a", text: "Birinci seçenek" },
+          { id: "b", text: "Doğru seçenek" },
+        ],
+      },
+    ];
+    h.run(`showExerciseFeedback({
+      id: "a",
+      questionVersionId: "q1",
+      isCorrect: false,
+      rawScore: 0,
+      responseOrder: 2,
+      feedback: {
+        message: "Bu kez olmadı. Doğru cevabı birlikte inceleyelim.",
+        revealedAnswer: { type: "MULTIPLE_CHOICE", correctOptionIds: ["b"] },
+        explanation: "Metindeki kanıt bu seçeneği destekliyor.",
+      },
+    })`);
+    const html = h.get("exercise-attempt-feedback").innerHTML;
+    expect(html).toContain("Bu kez olmadı. Doğru cevabı birlikte inceleyelim.");
+    expect(html).toContain("Doğru seçenek");
+    expect(html).toContain("Kısa açıklamayı göster");
+    expect(h.get("exercise-submit-attempt").textContent).toBe("Tamamla");
+    expect(h.context.exerciseAwaitingNext).toBe(true);
+  });
+
   it("keeps answered but unscored items pending even when summary flag is false", () => {
     const h = harness();
     h.context.exerciseSession.scoreSummary = {
@@ -95,6 +146,15 @@ describe("exercise UX state from production frontend", () => {
     expect(attempt.id).toBe("new");
     expect(attempt.isCorrect).toBeNull();
     expect(attempt.rawScore).toBeUndefined();
+  });
+
+  it("restores the latest response order for a retried question", () => {
+    const h = harness();
+    h.run(
+      'restoreExerciseAttempts({ attempts: [{ id: "second", questionVersionId: "q1", isCorrect: true, responseOrder: 2 }, { id: "first", questionVersionId: "q1", isCorrect: false, responseOrder: 1 }] })',
+    );
+    expect(h.context.exerciseAttempts.get("q1").id).toBe("second");
+    expect(h.context.exerciseAttempts.get("q1").responseOrder).toBe(2);
   });
 
   it("ignores reentrant submit and complete calls while a request is pending", async () => {

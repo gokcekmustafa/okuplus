@@ -60,6 +60,7 @@ type DailyWork = {
   item: DailyItem;
   questions: StudentQuestion[];
   attemptedQuestionIds: Set<string>;
+  retryQuestionIds: Set<string>;
   questionCount: number;
   attemptCount: number;
   questionsLoaded: boolean;
@@ -393,6 +394,20 @@ function answerForQuestion(question: StudentQuestion): unknown {
   }
 }
 
+function retryAnswerForQuestion(question: StudentQuestion, firstAnswer: unknown): unknown {
+  if (question.type === "MULTIPLE_CHOICE") {
+    const firstIds = Array.isArray(firstAnswer)
+      ? firstAnswer.filter((value): value is string => typeof value === "string")
+      : [];
+    const alternative = optionIds(question).find((id) => !firstIds.includes(id));
+    return alternative ? [alternative] : firstAnswer;
+  }
+  if (question.type === "TRUE_FALSE" && typeof firstAnswer === "boolean") {
+    return !firstAnswer;
+  }
+  return firstAnswer;
+}
+
 function attemptedIds(value: unknown): Set<string> {
   const attempts = isObject(value) && Array.isArray(value.attempts) ? value.attempts : [];
   return new Set(
@@ -400,6 +415,24 @@ function attemptedIds(value: unknown): Set<string> {
       .filter(isObject)
       .map((attempt) => attempt.questionVersionId)
       .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+  );
+}
+
+function retryQuestionIds(value: unknown): Set<string> {
+  const attempts = isObject(value) && Array.isArray(value.attempts) ? value.attempts : [];
+  return new Set(
+    attempts
+      .filter(isObject)
+      .filter((attempt) => attempt.isCorrect === false && Number(attempt.responseOrder || 1) === 1)
+      .map((attempt) => attempt.questionVersionId)
+      .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
+  );
+}
+
+function needsQuestionAttempt(entry: DailyWork, questionVersionId: string): boolean {
+  return (
+    !entry.attemptedQuestionIds.has(questionVersionId) ||
+    entry.retryQuestionIds.has(questionVersionId)
   );
 }
 
@@ -627,6 +660,7 @@ async function readDailyWork(
 
     let questions: StudentQuestion[] = [];
     let attemptedQuestionIds = new Set<string>();
+    let retryQuestionIdsForEntry = new Set<string>();
     const questionsLoaded = item.status === "IN_PROGRESS" || item.status === "COMPLETED";
     if (questionsLoaded) {
       const sessionState = await browserApi(
@@ -635,6 +669,7 @@ async function readDailyWork(
       );
       assertApiOk(sessionState, `daily item ${item.position} session state`);
       attemptedQuestionIds = attemptedIds(apiData(sessionState));
+      retryQuestionIdsForEntry = retryQuestionIds(apiData(sessionState));
       const questionResult = await browserApi(
         page,
         `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}/questions`,
@@ -653,6 +688,7 @@ async function readDailyWork(
       item,
       questions,
       attemptedQuestionIds,
+      retryQuestionIds: retryQuestionIdsForEntry,
       questionCount,
       attemptCount,
       questionsLoaded,
@@ -669,7 +705,8 @@ function countOutstandingQuestions(work: DailyWork[]): number {
         0,
         entry.questionCount -
           (entry.questionsLoaded ? entry.attemptedQuestionIds.size : entry.attemptCount),
-      ),
+      ) +
+      entry.retryQuestionIds.size,
     0,
   );
 }
@@ -718,6 +755,7 @@ async function loadDailyItemQuestions(
   }
   entry.questions = questions;
   entry.attemptedQuestionIds = attemptedIds(apiData(sessionState));
+  entry.retryQuestionIds = retryQuestionIds(apiData(sessionState));
   entry.attemptCount = entry.attemptedQuestionIds.size;
   entry.questionsLoaded = true;
 }
@@ -826,8 +864,7 @@ async function probeInlineFeedback(
     throw new Error("Inline feedback için exercise session eksik");
   const question = candidate.questions.find(
     (entry) =>
-      entry.type === "MULTIPLE_CHOICE" &&
-      !candidate.attemptedQuestionIds.has(entry.questionVersionId),
+      entry.type === "MULTIPLE_CHOICE" && needsQuestionAttempt(candidate, entry.questionVersionId),
   );
   if (!question) throw new Error("Inline feedback için yanıtsız MULTIPLE_CHOICE soru bulunamadı");
 
@@ -884,6 +921,11 @@ async function probeInlineFeedback(
     throw new Error("Ara cevapta celebration popup göründü");
   }
   budget.attempted += 1;
+  if (attempt.isCorrect === false) {
+    candidate.retryQuestionIds.add(question.questionVersionId);
+  } else {
+    candidate.retryQuestionIds.delete(question.questionVersionId);
+  }
   candidate.attemptedQuestionIds.add(question.questionVersionId);
   return attempt;
 }
@@ -943,10 +985,20 @@ async function processDailyWork(
     await loadDailyItemQuestions(page, dailyId, entry);
     if (entry.item.status === "COMPLETED") continue;
     await assertPublishedGraph(page, entry.item, entry.questions);
+    const firstQuestion =
+      entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
+      entry.questions[0];
+    if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
+    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId);
+    checkpoint.rendered = "PASS";
+    const before = await readProgressSnapshot(page);
+    let submitted = 0;
+    let correct = 0;
 
     for (const [index, question] of entry.questions.entries()) {
-      if (entry.attemptedQuestionIds.has(question.questionVersionId)) continue;
-      const data = await submitAttempt(
+      if (!needsQuestionAttempt(entry, question.questionVersionId)) continue;
+      const hadRetryPending = entry.retryQuestionIds.has(question.questionVersionId);
+      let data = await submitAttempt(
         page,
         sessionId,
         question,
@@ -954,10 +1006,50 @@ async function processDailyWork(
         `${runId}-item-${entry.item.position}-question-${index}`,
         budget,
       );
-      if (!data) return null;
-      entry.attemptedQuestionIds.add(question.questionVersionId);
+      if (!data) {
+        checkpoint.submit = "BLOCKED_BY_QUOTA";
+        checkpoint.finalStatus = "BLOCKED_BY_QUOTA";
+        checkpoint.serverResults = { submitted, correct, incorrect: submitted - correct };
+        const afterQuota = await readProgressSnapshot(page);
+        checkpoint.gpDelta = afterQuota.totalPoints - before.totalPoints;
+        checkpoint.progressDelta = afterQuota.scoredAttemptCount - before.scoredAttemptCount;
+        logItemCheckpoint("DONE", checkpoint);
+        return null;
+      }
+      submitted += 1;
+      if (data.isCorrect === true) correct += 1;
       if (data.isCorrect === true) coverage.correct = true;
       if (data.isCorrect === false) coverage.wrong = true;
+
+      // A first wrong answer leaves the item retry-pending. Consume exactly
+      // one retry before allowing the exercise session to complete.
+      if (data.isCorrect === false && !hadRetryPending) {
+        const retryData = await submitAttempt(
+          page,
+          sessionId,
+          question,
+          retryAnswerForQuestion(question, answerForQuestion(question)),
+          `${runId}-item-${entry.item.position}-question-${index}-retry`,
+          budget,
+        );
+        if (!retryData) {
+          checkpoint.submit = "BLOCKED_BY_QUOTA";
+          checkpoint.finalStatus = "BLOCKED_BY_QUOTA";
+          checkpoint.serverResults = { submitted, correct, incorrect: submitted - correct };
+          const afterQuota = await readProgressSnapshot(page);
+          checkpoint.gpDelta = afterQuota.totalPoints - before.totalPoints;
+          checkpoint.progressDelta = afterQuota.scoredAttemptCount - before.scoredAttemptCount;
+          logItemCheckpoint("DONE", checkpoint);
+          return null;
+        }
+        data = retryData;
+        submitted += 1;
+        if (data.isCorrect === true) correct += 1;
+        if (data.isCorrect === true) coverage.correct = true;
+        if (data.isCorrect === false) coverage.wrong = true;
+      }
+      entry.attemptedQuestionIds.add(question.questionVersionId);
+      entry.retryQuestionIds.delete(question.questionVersionId);
     }
 
     const current = await browserApi(
@@ -1120,7 +1212,12 @@ async function main(): Promise<void> {
     report.completionBlockedByQuota = quotaPlan.completionBlockedByQuota;
 
     const budget: AttemptBudget = {
-      maxAttempts: quotaPlan.plannedAttemptCount,
+      // A full run may need one retry after each first wrong answer. The
+      // budget is only a ceiling; no extra request is sent unless scoring
+      // actually returns a first wrong result.
+      maxAttempts: quotaPlan.fullCompletionPossible
+        ? quotaPlan.plannedAttemptCount * 2
+        : quotaPlan.plannedAttemptCount,
       attempted: 0,
       quotaExhausted: quotaPlan.quotaRemainingAtStart === 0,
       budgetExhausted: false,
@@ -1145,7 +1242,7 @@ async function main(): Promise<void> {
       entry.questions.some(
         (question) =>
           question.type === "MULTIPLE_CHOICE" &&
-          !entry.attemptedQuestionIds.has(question.questionVersionId),
+          needsQuestionAttempt(entry, question.questionVersionId),
       ),
     );
 

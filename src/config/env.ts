@@ -65,6 +65,9 @@ const envSchema = z.object({
   AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
   AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
   STAGING_OPERATOR_AUTH_SECRET: z.string().max(256).default(""),
+  // Explicit opt-in for the staging-only full student E2E fixture. The
+  // value is validated below and is never accepted outside APP_ENV=staging.
+  STAGING_E2E_PREMIUM_EMAIL: z.string().trim().toLowerCase().default(""),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),
@@ -100,6 +103,18 @@ function validateStagingOperatorSecret(env: Env): void {
   }
 }
 
+function validateStagingE2EPremiumEmail(env: Env): void {
+  const email = env.STAGING_E2E_PREMIUM_EMAIL;
+  if (
+    email !== "" &&
+    (env.APP_ENV !== "staging" || !/^[^@\s]+@[^@\s]+\.invalid$/u.test(email) || email.length > 254)
+  ) {
+    throw new Error(
+      "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAIL yalnızca staging'de .invalid synthetic öğrenci hesabı için kullanılabilir",
+    );
+  }
+}
+
 export function parseEnv(raw: RawEnv): Env {
   const result = envSchema.safeParse(raw);
   if (!result.success) {
@@ -109,6 +124,7 @@ export function parseEnv(raw: RawEnv): Env {
     throw new Error(`Geçersiz ortam değişkenleri: ${issues}`);
   }
   validateStagingOperatorSecret(result.data);
+  validateStagingE2EPremiumEmail(result.data);
   if (
     result.data.NODE_ENV === "production" &&
     result.data.JWT_SECRET === "oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef"
