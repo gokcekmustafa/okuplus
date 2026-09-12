@@ -45,4 +45,11 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("exercise-load-status");
     expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n    page,");
   });
+
+  it("probes every daily item in an isolated authenticated page", () => {
+    expect(runnerSource).toContain("async function probeExerciseRender");
+    expect(runnerSource).toContain("page.context().newPage()");
+    expect(runnerSource).toContain("await probeExerciseRender(page, sessionId");
+    expect(runnerSource).toContain('checkpoint.rendered = "PASS"');
+  });
 });

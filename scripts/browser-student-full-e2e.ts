@@ -928,6 +928,30 @@ async function loadBrowserExerciseQuestion(
   throw lastError instanceof Error ? lastError : new Error("Browser exercise question yüklenemedi");
 }
 
+async function probeExerciseRender(
+  page: Page,
+  sessionId: string,
+  questionVersionId: string,
+): Promise<void> {
+  // Each daily item has its own exercise session. Use a fresh page in the
+  // authenticated browser context so the previous item's SPA state cannot
+  // race the promoted item's render.
+  const renderPage = await page.context().newPage();
+  try {
+    await renderPage.goto(`${BASE_URL}/`, {
+      waitUntil: "networkidle",
+      timeout: BROWSER_REQUEST_TIMEOUT_MS,
+    });
+    await renderPage.waitForSelector("#view-app:not(.hidden)", {
+      state: "visible",
+      timeout: BROWSER_REQUEST_TIMEOUT_MS,
+    });
+    await loadBrowserExerciseQuestion(renderPage, sessionId, questionVersionId);
+  } finally {
+    await renderPage.close().catch(() => undefined);
+  }
+}
+
 async function submitAttempt(
   page: Page,
   sessionId: string,
@@ -1098,6 +1122,12 @@ async function processDailyWork(
       continue;
     }
     await assertPublishedGraph(page, entry.item, entry.questions);
+    const firstQuestion =
+      entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
+      entry.questions[0];
+    if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
+    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId);
+    checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
     let submitted = 0;
     let correct = 0;
