@@ -58,4 +58,10 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("browserContext.newPage");
     expect(runnerSource).not.toContain("browser.newPage");
   });
+
+  it("isolates inline feedback from the dashboard SPA page", () => {
+    expect(runnerSource).toContain("async function probeInlineFeedbackInIsolatedPage");
+    expect(runnerSource).toContain("return await probeInlineFeedback(feedbackPage");
+    expect(runnerSource).toContain("probeInlineFeedbackInIsolatedPage(page, uiCandidate, budget)");
+  });
 });
