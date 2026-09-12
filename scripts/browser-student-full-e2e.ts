@@ -66,6 +66,19 @@ type DailyWork = {
   questionsLoaded: boolean;
 };
 
+type ItemCheckpoint = {
+  position: number;
+  family: string;
+  competency: string;
+  questionCount: number;
+  rendered: "PASS" | "NOT_RUN";
+  submit: "PASS" | "NOT_RUN" | "BLOCKED_BY_QUOTA";
+  serverResults: { submitted: number; correct: number; incorrect: number };
+  gpDelta: number | null;
+  progressDelta: number | null;
+  finalStatus: string;
+};
+
 type ScoreCoverage = {
   correct: boolean;
   wrong: boolean;
@@ -109,6 +122,7 @@ type RunnerReport = {
   questionsAttempted: number;
   quotaExhausted: boolean;
   completionBlockedByQuota: boolean;
+  items: ItemCheckpoint[];
   stagingE2EReady: "YES" | "LIMITED_BY_FREE_QUOTA" | "NO";
   productionTouched: "NO";
 };
@@ -135,6 +149,23 @@ let currentStage: E2EStage = "E2E_START";
 function logStage(stage: E2EStage): void {
   currentStage = stage;
   console.log(stage);
+}
+
+function logItemCheckpoint(event: "START" | "DONE", checkpoint: ItemCheckpoint): void {
+  console.log(
+    JSON.stringify({
+      checkpoint: `ITEM_${checkpoint.position}_${event}`,
+      family: checkpoint.family,
+      competency: checkpoint.competency,
+      questionCount: checkpoint.questionCount,
+      rendered: checkpoint.rendered,
+      submit: checkpoint.submit,
+      serverResults: checkpoint.serverResults,
+      gpDelta: checkpoint.gpDelta,
+      progressDelta: checkpoint.progressDelta,
+      finalStatus: checkpoint.finalStatus,
+    }),
+  );
 }
 
 function isObject(value: unknown): value is JsonObject {
@@ -780,6 +811,12 @@ async function assertPublishedGraph(
     throw new Error(`Daily item ${item.position} published olmayan template version kullandı`);
   }
 
+  // Pending daily items are intentionally not exposed through the student
+  // session route until the planner advances them. Their published template
+  // state is validated from the detail projection and their question graph is
+  // checked when loadDailyItemQuestions promotes the item.
+  if (questions.length === 0) return;
+
   const studentSession = await browserApi(
     page,
     `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}`,
@@ -816,6 +853,55 @@ async function readPracticeQuestionEntitlement(page: Page): Promise<PracticeQues
   const result = await browserApi(page, "/account/entitlements");
   assertApiOk(result, "account entitlements");
   return readPracticeQuestionQuota(result.body);
+}
+
+async function readProgressSnapshot(
+  page: Page,
+): Promise<{ scoredAttemptCount: number; totalPoints: number }> {
+  const progress = await browserApi(page, "/student/progress");
+  assertApiOk(progress, "progress checkpoint");
+  const data = asRecord(apiData(progress), "progress checkpoint.data");
+  const training = asRecord(data.training, "progress checkpoint.training");
+  const gamification = await browserApi(page, "/student/gamification");
+  assertApiOk(gamification, "gamification checkpoint");
+  const gamificationData = asRecord(apiData(gamification), "gamification checkpoint.data");
+  return {
+    scoredAttemptCount: readNumber(training, "scoredAttemptCount", "progress checkpoint.training"),
+    totalPoints: readNumber(gamificationData, "totalPoints", "gamification checkpoint"),
+  };
+}
+
+function checkpointFor(checkpoints: ItemCheckpoint[], position: number): ItemCheckpoint {
+  const checkpoint = checkpoints.find((entry) => entry.position === position);
+  if (!checkpoint) throw new Error(`Item checkpoint bulunamadı: ${position}`);
+  return checkpoint;
+}
+
+async function probeExerciseRender(
+  page: Page,
+  sessionId: string,
+  questionVersionId: string,
+): Promise<void> {
+  await page.evaluate((id) => {
+    const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
+      .resumeTodaySession;
+    if (typeof resume !== "function") throw new Error("student resume helper bulunamadı");
+    resume(id);
+  }, sessionId);
+  await page.waitForSelector("#page-exercise:not(.hidden)", {
+    state: "visible",
+    timeout: 15_000,
+  });
+  await page.waitForSelector("#exercise-current-question", {
+    state: "visible",
+    timeout: 15_000,
+  });
+  const renderedId = await page
+    .locator("#exercise-current-question")
+    .getAttribute("data-question-version-id");
+  if (renderedId !== questionVersionId) {
+    throw new Error("Browser question ile API questionVersionId eşleşmedi");
+  }
 }
 
 async function submitAttempt(
@@ -977,13 +1063,24 @@ async function processDailyWork(
   coverage: ScoreCoverage,
   runId: string,
   budget: AttemptBudget,
+  checkpoints: ItemCheckpoint[],
 ): Promise<JsonObject | null> {
   for (const entry of work.sort((a, b) => a.item.position - b.item.position)) {
-    if (entry.item.status === "COMPLETED") continue;
+    const checkpoint = checkpointFor(checkpoints, entry.item.position);
+    if (entry.item.status === "COMPLETED") {
+      checkpoint.finalStatus = "COMPLETED";
+      logItemCheckpoint("DONE", checkpoint);
+      continue;
+    }
     const sessionId = entry.item.exerciseSessionId;
     if (!sessionId) throw new Error(`Daily item ${entry.item.position} session eksik`);
+    logItemCheckpoint("START", checkpoint);
     await loadDailyItemQuestions(page, dailyId, entry);
-    if (entry.item.status === "COMPLETED") continue;
+    if (entry.item.status === "COMPLETED") {
+      checkpoint.finalStatus = "COMPLETED";
+      logItemCheckpoint("DONE", checkpoint);
+      continue;
+    }
     await assertPublishedGraph(page, entry.item, entry.questions);
     const firstQuestion =
       entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
@@ -1078,6 +1175,13 @@ async function processDailyWork(
     if (!isObject(refreshedItem) || refreshedItem.status !== "COMPLETED") {
       throw new Error(`Daily item ${entry.item.position} completion state doğrulanamadı`);
     }
+    const after = await readProgressSnapshot(page);
+    checkpoint.submit = submitted > 0 ? "PASS" : "NOT_RUN";
+    checkpoint.serverResults = { submitted, correct, incorrect: submitted - correct };
+    checkpoint.gpDelta = after.totalPoints - before.totalPoints;
+    checkpoint.progressDelta = after.scoredAttemptCount - before.scoredAttemptCount;
+    checkpoint.finalStatus = "COMPLETED";
+    logItemCheckpoint("DONE", checkpoint);
   }
   const finalDailyResult = await browserApi(
     page,
@@ -1118,6 +1222,7 @@ async function main(): Promise<void> {
     questionsAttempted: 0,
     quotaExhausted: false,
     completionBlockedByQuota: false,
+    items: [],
     stagingE2EReady: "NO",
     productionTouched: "NO",
   };
@@ -1179,6 +1284,22 @@ async function main(): Promise<void> {
     const dailyStartData = asRecord(apiData(dailyStart), "daily start.data");
     const dailyId = readString(dailyStartData, "id", "daily start");
     const { daily, work } = await readDailyWork(page, dailyId);
+    const itemCheckpoints: ItemCheckpoint[] = work
+      .slice()
+      .sort((a, b) => a.item.position - b.item.position)
+      .map((entry) => ({
+        position: entry.item.position,
+        family: entry.item.family,
+        competency: entry.item.competency,
+        questionCount: entry.questionCount,
+        rendered: "NOT_RUN",
+        submit: "NOT_RUN",
+        serverResults: { submitted: 0, correct: 0, incorrect: 0 },
+        gpDelta: null,
+        progressDelta: null,
+        finalStatus: entry.item.status,
+      }));
+    report.items = itemCheckpoints;
     const totalItems = readNumber(daily, "totalItems", "daily");
     if (totalItems !== work.length || totalItems < 6) {
       throw new Error("Daily composition item sayısı runtime sözleşmesiyle uyuşmuyor");
@@ -1191,9 +1312,13 @@ async function main(): Promise<void> {
     const duplicatePositions =
       new Set(work.map((entry) => entry.item.position)).size !== work.length;
     if (duplicatePositions) throw new Error("Daily item position değerleri unique değil");
-    if (daily.firstDay !== true)
-      throw new Error("İlk daily Training firstDay olarak işaretlenmedi");
-    report.firstTraining = `PASS (firstDay=true, ${totalItems} item)`;
+    if (daily.firstDay !== true && daily.status !== "IN_PROGRESS") {
+      throw new Error("Daily Training first-day/resume durumu geçersiz");
+    }
+    report.firstTraining =
+      daily.firstDay === true
+        ? `PASS (firstDay=true, ${totalItems} item)`
+        : `PASS_RESUME (mevcut IN_PROGRESS daily training, ${totalItems} item)`;
     report.fastReading = "PASS (ATTENTION_BURST/RAPID_RECOGNITION/PHRASE_CHUNKING mevcut)";
     report.comprehension = "PASS (MAIN_IDEA/DETAIL_EVIDENCE/INFERENCE mevcut)";
     report.adaptiveSelection =
@@ -1298,7 +1423,15 @@ async function main(): Promise<void> {
     logStage("COMPLETION_START");
     let finalDaily: JsonObject | null = null;
     if (quotaPlan.fullCompletionPossible) {
-      finalDaily = await processDailyWork(page, dailyId, work, coverage, runId, budget);
+      finalDaily = await processDailyWork(
+        page,
+        dailyId,
+        work,
+        coverage,
+        runId,
+        budget,
+        itemCheckpoints,
+      );
       if (finalDaily) {
         if (!coverage.correct || !coverage.wrong) {
           throw new Error("Günlük akışta hem doğru hem yanlış server-side sonuç gözlenemedi");
