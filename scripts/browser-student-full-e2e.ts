@@ -1164,7 +1164,9 @@ async function probeInlineFeedback(
         const button = document.getElementById(
           "exercise-submit-attempt",
         ) as HTMLButtonElement | null;
+        const loadStatus = document.getElementById("exercise-load-status")?.textContent?.trim();
         return Boolean(
+          loadStatus !== "Alıştırma yükleniyor…" &&
           button &&
           !button.disabled &&
           ["Cevabı kontrol et", "Tekrar Cevapla"].some((label) =>

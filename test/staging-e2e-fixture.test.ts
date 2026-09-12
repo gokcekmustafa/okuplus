@@ -76,6 +76,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("input[data-exercise-opt]:checked");
     expect(runnerSource).toContain('getAttribute("aria-checked") !== "true"');
     expect(runnerSource).toContain("question.questionVersionId");
+    expect(runnerSource).toContain('loadStatus !== "Alıştırma yükleniyor…"');
   });
 
   it("waits for the authenticated student shell before isolated browser probes", () => {
