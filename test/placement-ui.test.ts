@@ -64,7 +64,14 @@ function harness() {
   });
 
   runInContext(`${setupCode}\nsetupOnboardingEvents();`, context);
-  return { elements, calls, navigations, get csrfHeaderCalls() { return csrfHeaderCalls; } };
+  return {
+    elements,
+    calls,
+    navigations,
+    get csrfHeaderCalls() {
+      return csrfHeaderCalls;
+    },
+  };
 }
 
 describe("placement onboarding UI request contract", () => {
