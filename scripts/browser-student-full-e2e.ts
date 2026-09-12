@@ -60,6 +60,9 @@ type DailyWork = {
   item: DailyItem;
   questions: StudentQuestion[];
   attemptedQuestionIds: Set<string>;
+  questionCount: number;
+  attemptCount: number;
+  questionsLoaded: boolean;
 };
 
 type ScoreCoverage = {
@@ -610,19 +613,50 @@ async function readDailyWork(
   for (const item of items) {
     if (!item.exerciseSessionId)
       throw new Error(`Daily item ${item.position} exercise session eksik`);
-    const sessionState = await browserApi(
+    const detailResult = await browserApi(
       page,
-      `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}`,
+      `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}/detail`,
     );
-    assertApiOk(sessionState, `daily item ${item.position} session state`);
-    const questionResult = await browserApi(
-      page,
-      `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}/questions`,
-    );
-    assertApiOk(questionResult, `daily item ${item.position} questions`);
-    const questions = readQuestions(apiData(questionResult));
-    if (questions.length === 0) throw new Error(`Daily item ${item.position} için soru bulunamadı`);
-    work.push({ item, questions, attemptedQuestionIds: attemptedIds(apiData(sessionState)) });
+    assertApiOk(detailResult, `daily item ${item.position} detail`);
+    const detail = asRecord(apiData(detailResult), `daily item ${item.position}.detail`);
+    const questionCount = readNumber(detail, "questionCount", `daily item ${item.position}.detail`);
+    const attemptCount = readNumber(detail, "attemptCount", `daily item ${item.position}.detail`);
+    if (questionCount < 1) {
+      throw new Error(`Daily item ${item.position} için soru sayısı bulunamadı`);
+    }
+
+    let questions: StudentQuestion[] = [];
+    let attemptedQuestionIds = new Set<string>();
+    const questionsLoaded = item.status === "IN_PROGRESS" || item.status === "COMPLETED";
+    if (questionsLoaded) {
+      const sessionState = await browserApi(
+        page,
+        `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}`,
+      );
+      assertApiOk(sessionState, `daily item ${item.position} session state`);
+      attemptedQuestionIds = attemptedIds(apiData(sessionState));
+      const questionResult = await browserApi(
+        page,
+        `/student/sessions/${encodeURIComponent(item.exerciseSessionId)}/questions`,
+      );
+      assertApiOk(questionResult, `daily item ${item.position} questions`);
+      questions = readQuestions(apiData(questionResult));
+      if (questions.length === 0)
+        throw new Error(`Daily item ${item.position} için soru bulunamadı`);
+      if (questions.length !== questionCount) {
+        throw new Error(
+          `Daily item ${item.position} soru sayısı detail ile eşleşmedi (${questions.length}/${questionCount})`,
+        );
+      }
+    }
+    work.push({
+      item,
+      questions,
+      attemptedQuestionIds,
+      questionCount,
+      attemptCount,
+      questionsLoaded,
+    });
   }
   return { daily, work };
 }
@@ -631,11 +665,61 @@ function countOutstandingQuestions(work: DailyWork[]): number {
   return work.reduce(
     (total, entry) =>
       total +
-      entry.questions.filter(
-        (question) => !entry.attemptedQuestionIds.has(question.questionVersionId),
-      ).length,
+      Math.max(
+        0,
+        entry.questionCount -
+          (entry.questionsLoaded ? entry.attemptedQuestionIds.size : entry.attemptCount),
+      ),
     0,
   );
+}
+
+async function loadDailyItemQuestions(
+  page: Page,
+  dailyId: string,
+  entry: DailyWork,
+): Promise<void> {
+  if (!entry.item.exerciseSessionId) {
+    throw new Error(`Daily item ${entry.item.position} exercise session eksik`);
+  }
+  const dailyResult = await browserApi(
+    page,
+    `/student/training/daily/${encodeURIComponent(dailyId)}`,
+  );
+  assertApiOk(dailyResult, "daily state before item questions");
+  const daily = asRecord(apiData(dailyResult), "daily current.data");
+  const rows = asArray(daily.items, "daily current.items");
+  const row = rows.find((candidate) => isObject(candidate) && candidate.id === entry.item.id);
+  if (!isObject(row)) throw new Error(`Daily item ${entry.item.position} bulunamadı`);
+  const status = readString(row, "status", `daily item ${entry.item.position}`);
+  entry.item.status = status;
+  if (status === "COMPLETED") return;
+  if (status !== "IN_PROGRESS") {
+    throw new Error(`Daily item ${entry.item.position} henüz sıraya gelmedi`);
+  }
+
+  const sessionState = await browserApi(
+    page,
+    `/student/sessions/${encodeURIComponent(entry.item.exerciseSessionId)}`,
+  );
+  assertApiOk(sessionState, `daily item ${entry.item.position} session state`);
+  const questionResult = await browserApi(
+    page,
+    `/student/sessions/${encodeURIComponent(entry.item.exerciseSessionId)}/questions`,
+  );
+  assertApiOk(questionResult, `daily item ${entry.item.position} questions`);
+  const questions = readQuestions(apiData(questionResult));
+  if (questions.length === 0)
+    throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
+  if (questions.length !== entry.questionCount) {
+    throw new Error(
+      `Daily item ${entry.item.position} soru sayısı detail ile eşleşmedi (${questions.length}/${entry.questionCount})`,
+    );
+  }
+  entry.questions = questions;
+  entry.attemptedQuestionIds = attemptedIds(apiData(sessionState));
+  entry.attemptCount = entry.attemptedQuestionIds.size;
+  entry.questionsLoaded = true;
 }
 
 async function assertPublishedGraph(
@@ -853,8 +937,11 @@ async function processDailyWork(
   budget: AttemptBudget,
 ): Promise<JsonObject | null> {
   for (const entry of work.sort((a, b) => a.item.position - b.item.position)) {
+    if (entry.item.status === "COMPLETED") continue;
     const sessionId = entry.item.exerciseSessionId;
     if (!sessionId) throw new Error(`Daily item ${entry.item.position} session eksik`);
+    await loadDailyItemQuestions(page, dailyId, entry);
+    if (entry.item.status === "COMPLETED") continue;
     await assertPublishedGraph(page, entry.item, entry.questions);
 
     for (const [index, question] of entry.questions.entries()) {
