@@ -10,6 +10,7 @@ const exerciseCode = source.slice(
 
 function harness() {
   const elements = new Map<string, ReturnType<typeof element>>();
+  const performanceEntries: Array<{ type: "mark" | "measure"; name: string }> = [];
   function element() {
     return {
       textContent: "",
@@ -38,9 +39,22 @@ function harness() {
     exerciseQuestions: [{ questionVersionId: "q1" }],
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
+    performance: {
+      mark(name: string) {
+        performanceEntries.push({ type: "mark", name });
+      },
+      measure(name: string) {
+        performanceEntries.push({ type: "measure", name });
+      },
+    },
   });
   runInContext(exerciseCode, context);
-  return { context, get, run: (code: string) => runInContext(code, context) };
+  return {
+    context,
+    get,
+    performanceEntries,
+    run: (code: string) => runInContext(code, context),
+  };
 }
 
 describe("exercise UX state from production frontend", () => {
@@ -181,5 +195,28 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").className).toContain("pending");
     expect(h.get("exercise-submit-attempt").disabled).toBe(false);
     expect(h.context.exerciseBusy).toBe(false);
+  });
+
+  it("marks the authoritative response and feedback render separately", async () => {
+    const h = harness();
+    h.run(`
+      exerciseRequest = null;
+      crypto = { randomUUID: () => "request-id" };
+      $("exercise-current-question").dataset = { questionVersionId: "q1", questionType: "OPEN_ENDED" };
+      $("exercise-current-question").querySelector = () => ({ value: "My answer" });
+      exerciseApi = async () => ({});
+      parseResponse = async () => ({ id: "attempt", isCorrect: null, rawScore: null });
+      refreshExerciseGamification = async () => null;
+    `);
+    await h.run("handleExerciseSubmitAttempt()");
+    expect(h.performanceEntries).toEqual(
+      expect.arrayContaining([
+        { type: "mark", name: "oku-exercise-answer-request-id-start" },
+        { type: "mark", name: "oku-exercise-answer-request-id-response" },
+        { type: "measure", name: "oku-exercise-answer-response" },
+        { type: "mark", name: "oku-exercise-answer-request-id-feedback" },
+        { type: "measure", name: "oku-exercise-feedback-render" },
+      ]),
+    );
   });
 });

@@ -209,9 +209,11 @@ async function loadDailyPlan(
       adaptiveBand: band,
     })),
   };
-  for (const item of plan.items) {
-    await loadTrainingRuntimeGraph(item.templateVersionId, actor);
-  }
+  // The selected graphs are independent read-only validations. Running them
+  // together avoids making first-training start wait on six serial graph loads.
+  await Promise.all(
+    plan.items.map((item) => loadTrainingRuntimeGraph(item.templateVersionId, actor)),
+  );
   if (!flags.firstDay) {
     const review = await findBestReviewCandidate(
       actor,

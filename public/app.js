@@ -505,16 +505,12 @@ async function maybeShowOnboarding() {
     var data = await parseResponse(res);
     if (data.completed) {
       navigate("dashboard");
-      void loadToday();
-      void loadLearningPath();
       return;
     }
     showOnboarding(data);
   } catch (_e) {
     void _e;
     navigate("dashboard");
-    void loadToday();
-    void loadLearningPath();
   }
 }
 
@@ -8164,6 +8160,22 @@ function resetExerciseState() {
   exerciseGamificationRequest++;
   currentExerciseQuestionIndex = 0;
 }
+function markExerciseTiming(name) {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  try {
+    performance.mark(name);
+  } catch (_e) {
+    void _e;
+  }
+}
+function measureExerciseTiming(name, start, end) {
+  if (typeof performance === "undefined" || typeof performance.measure !== "function") return;
+  try {
+    performance.measure(name, start, end);
+  } catch (_e) {
+    void _e;
+  }
+}
 async function refreshExerciseGamification() {
   const requestId = ++exerciseGamificationRequest;
   let next = null;
@@ -8281,7 +8293,9 @@ async function loadExercisePage() {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
       }
-      await refreshExerciseGamification();
+      // Gamification is a non-critical refresh; render the exercise as soon
+      // as the session/question data is ready.
+      void refreshExerciseGamification();
     } else {
       await Promise.all([populateExerciseStudentSelect(), populateExerciseTemplateVersionSelect()]);
       if (exerciseSession) await loadExerciseQuestions();
@@ -8947,6 +8961,11 @@ async function handleExerciseSubmitAttempt() {
       answer,
       clientAttemptId: crypto.randomUUID(),
     };
+  const answerTimingId = "oku-exercise-answer-" + exerciseRequest.clientAttemptId;
+  const answerTimingStart = answerTimingId + "-start";
+  const answerTimingResponse = answerTimingId + "-response";
+  const answerTimingFeedback = answerTimingId + "-feedback";
+  markExerciseTiming(answerTimingStart);
   try {
     let data;
     if (retry && isPlatformUser === false) {
@@ -8966,11 +8985,19 @@ async function handleExerciseSubmitAttempt() {
         if (!data) await parseResponse(response);
       } else data = await parseResponse(response);
     }
+    markExerciseTiming(answerTimingResponse);
+    measureExerciseTiming("oku-exercise-answer-response", answerTimingStart, answerTimingResponse);
     if (!data?.id || ![true, false, null].includes(data.isCorrect))
       throw new Error("Geçersiz cevap yanıtı");
     exerciseAttempts.set(questionVersionId, data);
     exerciseRequest = null;
     showExerciseFeedback(data);
+    markExerciseTiming(answerTimingFeedback);
+    measureExerciseTiming(
+      "oku-exercise-feedback-render",
+      answerTimingResponse,
+      answerTimingFeedback,
+    );
     if (data.isCorrect === false && !isFastReadingExercise() && !isDailyTrainingExercise()) {
       showCelebration({
         icon: "💡",
