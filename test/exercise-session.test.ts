@@ -416,6 +416,16 @@ describe("exercise session", () => {
     SESSION_A_ID = res.json().data.id;
   });
 
+  it("session detail gerçek template soru sayısını döndürür", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: `/admin/exercise-sessions/${SESSION_A_ID}`,
+      headers: await auth("session-student-a@example.com"),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.questionCount).toBe(2);
+  });
+
   afterAll(async () => {
     if (app) await app.close();
     await cleanup();
