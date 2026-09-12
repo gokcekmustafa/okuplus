@@ -77,6 +77,7 @@ const SESSION_SELECT = {
       version: true,
       status: true,
       templateId: true,
+      _count: { select: { questions: true } },
       template: {
         select: {
           id: true,
@@ -725,6 +726,9 @@ export async function completeExerciseSession(
 }
 
 function toSessionDetail(row: any): ExerciseSessionDetail {
+  const templateVersion = row.templateVersion ? { ...row.templateVersion } : row.templateVersion;
+  if (templateVersion) delete templateVersion._count;
+  const templateQuestionCount = row.templateVersion?._count?.questions;
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -742,9 +746,10 @@ function toSessionDetail(row: any): ExerciseSessionDetail {
     scoreSummary: row.scoreSummary,
     deviceInfo: row.deviceInfo,
     createdAt: row.createdAt,
-    templateVersion: row.templateVersion,
+    templateVersion,
     student: row.student,
     questionCount:
+      templateQuestionCount ??
       row.templateVersion?.questions?.length ??
       row._count?.attempts ??
       row.templateVersion?.questions?.length ??
