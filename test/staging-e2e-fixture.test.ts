@@ -46,6 +46,8 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("page.waitForResponse");
     expect(runnerSource).toContain("/student/sessions/${encodeURIComponent(sessionId)}/questions");
     expect(runnerSource).toContain('"Tekrar Cevapla"');
+    expect(runnerSource).toContain("async function isVisibleBrowserExerciseQuestion");
+    expect(runnerSource).toContain("isVisibleBrowserExerciseQuestion(page, questionVersionId)");
     expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n    page,");
   });
 

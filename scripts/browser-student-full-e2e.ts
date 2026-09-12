@@ -889,6 +889,12 @@ async function loadBrowserExerciseQuestion(
   // retry the official resume helper once after the first load settles.
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // A resumed session can already have the requested question rendered (for
+    // example, when the question is waiting for a retry). In that case the
+    // official helper has no new questions request to emit, so waiting for a
+    // response would time out even though the browser is ready for the probe.
+    if (await isVisibleBrowserExerciseQuestion(page, questionVersionId)) return;
+
     const expectedQuestionsPath = `/student/sessions/${encodeURIComponent(sessionId)}/questions`;
     const questionsResponse = page
       .waitForResponse(
@@ -940,6 +946,7 @@ async function loadBrowserExerciseQuestion(
           // Preserve the original request/DOM failure and let the second
           // official resume attempt produce the final diagnostic state.
         }
+        if (await isVisibleBrowserExerciseQuestion(page, questionVersionId)) return;
       }
     }
   }
@@ -950,6 +957,26 @@ async function loadBrowserExerciseQuestion(
     );
   }
   throw lastError instanceof Error ? lastError : new Error("Browser exercise question yüklenemedi");
+}
+
+async function isVisibleBrowserExerciseQuestion(
+  page: Page,
+  questionVersionId: string,
+): Promise<boolean> {
+  return page.evaluate((expectedId) => {
+    const exercisePage = document.getElementById("page-exercise");
+    const element = document.getElementById("exercise-current-question");
+    if (
+      !exercisePage ||
+      exercisePage.classList.contains("hidden") ||
+      !element ||
+      element.getAttribute("data-question-version-id") !== expectedId
+    ) {
+      return false;
+    }
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }, questionVersionId);
 }
 
 async function waitForStudentAppReady(page: Page): Promise<void> {
