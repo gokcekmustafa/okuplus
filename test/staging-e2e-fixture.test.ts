@@ -43,6 +43,8 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("expectedId");
     expect(runnerSource).toContain("attempt < 2");
     expect(runnerSource).toContain("exercise-load-status");
+    expect(runnerSource).toContain("page.waitForResponse");
+    expect(runnerSource).toContain("/student/sessions/${encodeURIComponent(sessionId)}/questions");
     expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n    page,");
   });
 
@@ -70,6 +72,8 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain('app.classList.contains("student-shell")');
     expect(runnerSource).toContain('dashboard.classList.contains("hidden")');
     expect(runnerSource).toContain('page.waitForLoadState("networkidle"');
+    expect(runnerSource).toContain("async function readBrowserExerciseState");
+    expect(runnerSource).toContain("Browser exercise question yüklenemedi (expected=");
     expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
   });
 });

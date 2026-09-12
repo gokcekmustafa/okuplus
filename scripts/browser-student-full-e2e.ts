@@ -889,6 +889,14 @@ async function loadBrowserExerciseQuestion(
   // retry the official resume helper once after the first load settles.
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const expectedQuestionsPath = `/student/sessions/${encodeURIComponent(sessionId)}/questions`;
+    const questionsResponse = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes(expectedQuestionsPath) && response.request().method() === "GET",
+        { timeout: BROWSER_REQUEST_TIMEOUT_MS },
+      )
+      .catch((error: unknown) => ({ error }));
     await page.evaluate((id) => {
       const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
         .resumeTodaySession;
@@ -896,7 +904,11 @@ async function loadBrowserExerciseQuestion(
       resume(id);
     }, sessionId);
     try {
-      await page.waitForLoadState("networkidle", { timeout: BROWSER_REQUEST_TIMEOUT_MS });
+      const responseResult = await questionsResponse;
+      if ("error" in responseResult) throw responseResult.error;
+      if (responseResult.status() !== 200) {
+        throw new Error(`Exercise questions isteği başarısız (HTTP ${responseResult.status()})`);
+      }
       await page.waitForSelector("#page-exercise:not(.hidden)", {
         state: "visible",
         timeout: BROWSER_REQUEST_TIMEOUT_MS,
@@ -917,14 +929,25 @@ async function loadBrowserExerciseQuestion(
     } catch (error) {
       lastError = error;
       if (attempt === 0) {
-        await page.waitForFunction(
-          () =>
-            document.getElementById("exercise-load-status")?.textContent?.trim() !==
-            "Alıştırma yükleniyor…",
-          { timeout: BROWSER_REQUEST_TIMEOUT_MS },
-        );
+        try {
+          await page.waitForFunction(
+            () =>
+              document.getElementById("exercise-load-status")?.textContent?.trim() !==
+              "Alıştırma yükleniyor…",
+            { timeout: BROWSER_REQUEST_TIMEOUT_MS },
+          );
+        } catch {
+          // Preserve the original request/DOM failure and let the second
+          // official resume attempt produce the final diagnostic state.
+        }
       }
     }
+  }
+  const state = await readBrowserExerciseState(page).catch(() => null);
+  if (state) {
+    throw new Error(
+      `Browser exercise question yüklenemedi (expected=${questionVersionId}, actual=${state.questionVersionId ?? "none"}, page=${state.activePage ?? "none"}, loadStatus=${state.loadStatus || "empty"}, retry=${state.retryVisible ? "visible" : "hidden"})`,
+    );
   }
   throw lastError instanceof Error ? lastError : new Error("Browser exercise question yüklenemedi");
 }
@@ -949,6 +972,26 @@ async function waitForStudentAppReady(page: Page): Promise<void> {
     { timeout: BROWSER_REQUEST_TIMEOUT_MS },
   );
   await page.waitForLoadState("networkidle", { timeout: BROWSER_REQUEST_TIMEOUT_MS });
+}
+
+async function readBrowserExerciseState(page: Page): Promise<{
+  activePage: string | null;
+  loadStatus: string;
+  questionVersionId: string | null;
+  retryVisible: boolean;
+}> {
+  return page.evaluate(() => ({
+    activePage:
+      [...document.querySelectorAll("[id^='page-']")].find(
+        (element) => !element.classList.contains("hidden"),
+      )?.id ?? null,
+    loadStatus: document.getElementById("exercise-load-status")?.textContent?.trim() ?? "",
+    questionVersionId:
+      document
+        .getElementById("exercise-current-question")
+        ?.getAttribute("data-question-version-id") ?? null,
+    retryVisible: !document.getElementById("exercise-retry-load")?.classList.contains("hidden"),
+  }));
 }
 
 async function probeExerciseRender(
