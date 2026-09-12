@@ -37,6 +37,8 @@ export interface AwardPointsInput {
   sourceId: string;
   activityAt?: Date;
   updateStreak?: boolean;
+  /** Badge evaluation is non-critical for the authoritative reward response. */
+  evaluateBadges?: boolean;
 }
 
 export interface AwardPointsResult {
@@ -129,7 +131,9 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
   if (input.updateStreak && isTrainingStreakEvent(input.eventType)) {
     await updateStreak(input.tenantId, input.studentId, input.activityAt ?? event.createdAt);
   }
-  await evaluateBasicBadges(input.tenantId, input.studentId);
+  if (input.evaluateBadges !== false) {
+    await evaluateBasicBadges(input.tenantId, input.studentId);
+  }
   return { event, created: true };
 }
 
@@ -243,14 +247,23 @@ export async function recordCorrectAnswer(input: {
   studentId: string;
   attemptId: string;
   answeredAt?: Date;
+  sessionId?: string;
+  questionVersionId?: string;
+  evaluateBadges?: boolean;
 }): Promise<AwardPointsResult> {
-  const attempt = await prisma.attempt.findUnique({
-    where: { id: input.attemptId },
-    select: { sessionId: true, questionVersionId: true },
-  });
-  const answerBonusKey = attempt
-    ? `${attempt.sessionId}:${attempt.questionVersionId}`
-    : input.attemptId;
+  const attempt =
+    input.sessionId && input.questionVersionId
+      ? null
+      : await prisma.attempt.findUnique({
+          where: { id: input.attemptId },
+          select: { sessionId: true, questionVersionId: true },
+        });
+  const answerBonusKey =
+    input.sessionId && input.questionVersionId
+      ? `${input.sessionId}:${input.questionVersionId}`
+      : attempt
+        ? `${attempt.sessionId}:${attempt.questionVersionId}`
+        : input.attemptId;
   return awardPoints({
     tenantId: input.tenantId,
     studentId: input.studentId,
@@ -260,6 +273,7 @@ export async function recordCorrectAnswer(input: {
     sourceId: input.attemptId,
     activityAt: input.answeredAt,
     updateStreak: false,
+    evaluateBadges: input.evaluateBadges,
   });
 }
 

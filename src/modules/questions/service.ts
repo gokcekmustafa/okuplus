@@ -5,6 +5,7 @@ import {
   type QuestionType,
   type PlatformRole,
 } from "@prisma/client";
+import { performance } from "node:perf_hooks";
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError, validationError, forbiddenError } from "../../lib/errors.js";
 import { withTenantContext } from "../tenant/index.js";
@@ -24,7 +25,7 @@ import {
   buildVersionCreatedAuditEntry,
   type ContentMutationActor,
 } from "../contents/lifecycle.js";
-import { recordCorrectAnswer } from "../gamification/service.js";
+import { evaluateBasicBadges, recordCorrectAnswer } from "../gamification/service.js";
 import {
   buildTrainingFeedback,
   isTrainingConfigCandidate,
@@ -88,6 +89,31 @@ const ATTEMPT_RESULT_SELECT = {
   answeredAt: true,
   createdAt: true,
 } satisfies Prisma.AttemptSelect;
+
+export interface AttemptTimingBreakdown {
+  validationMs?: number;
+  scoringMs?: number;
+  persistenceMs?: number;
+  rewardMs?: number;
+  totalMs?: number;
+}
+
+/**
+ * Formats only coarse phase durations for the standard Server-Timing header.
+ * It intentionally contains no IDs, query text, or request data.
+ */
+export function formatAttemptServerTiming(timings: AttemptTimingBreakdown): string {
+  return Object.entries({
+    validation: timings.validationMs,
+    scoring: timings.scoringMs,
+    persistence: timings.persistenceMs,
+    reward: timings.rewardMs,
+    total: timings.totalMs,
+  })
+    .filter(([, duration]) => typeof duration === "number" && Number.isFinite(duration))
+    .map(([name, duration]) => `${name};dur=${Math.max(0, Number(duration!.toFixed(1)))}`)
+    .join(", ");
+}
 
 function isObjectJson(value: Prisma.JsonValue | null): value is Prisma.JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -1035,22 +1061,16 @@ export async function updateContentQuestions(
  * Geçersiz cevap formatı: validationError fırlatır.
  * Yan etkisiz, deterministik.
  */
-export async function scoreAttempt(
-  questionVersionId: string,
-  answer: Prisma.JsonValue,
-): Promise<{ isCorrect: boolean | null; rawScore: number | null; feedback?: string }> {
-  const version = await prisma.questionVersion.findUnique({
-    where: { id: questionVersionId },
-    select: {
-      id: true,
-      options: true,
-      correctAnswer: true,
-      partialCreditEnabled: true,
-      question: { select: { type: true } },
-    },
-  });
-  if (!version) throw notFoundError("Soru sürümü bulunamadı");
+type ScoringVersion = {
+  options: Prisma.JsonValue | null;
+  correctAnswer: Prisma.JsonValue | null;
+  question: { type: QuestionType } | null;
+};
 
+export function scoreAttemptValue(
+  version: ScoringVersion,
+  answer: Prisma.JsonValue,
+): { isCorrect: boolean | null; rawScore: number | null; feedback?: string } {
   const type = version.question?.type as QuestionType;
   const correctAnswer = version.correctAnswer as CorrectAnswer;
   const options = (version.options as Option[]) ?? [];
@@ -1232,6 +1252,24 @@ export async function scoreAttempt(
   };
 }
 
+export async function scoreAttempt(
+  questionVersionId: string,
+  answer: Prisma.JsonValue,
+): Promise<{ isCorrect: boolean | null; rawScore: number | null; feedback?: string }> {
+  const version = await prisma.questionVersion.findUnique({
+    where: { id: questionVersionId },
+    select: {
+      id: true,
+      options: true,
+      correctAnswer: true,
+      partialCreditEnabled: true,
+      question: { select: { type: true } },
+    },
+  });
+  if (!version) throw notFoundError("Soru sürümü bulunamadı");
+  return scoreAttemptValue(version, answer);
+}
+
 /**
  * Öğrencinin cevabını kaydeder ve puanlar.
  * - Gerçek ExerciseSession doğrulanır (FK güvenliği)
@@ -1244,8 +1282,12 @@ export async function createAttempt(
   questionVersionId: string,
   input: CreateAttemptInput,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
+  options: { timings?: AttemptTimingBreakdown } = {},
 ): Promise<AttemptResponse> {
   const { sessionId, answer, clientAttemptId, timeSpentMs } = input;
+  const timings = options.timings;
+  const totalStartedAt = performance.now();
+  const validationStartedAt = performance.now();
 
   // 1) QuestionVersion'ı yükle
   const version = await prisma.questionVersion.findUnique({
@@ -1254,6 +1296,7 @@ export async function createAttempt(
       id: true,
       questionId: true,
       status: true,
+      options: true,
       correctAnswer: true,
       explanation: true,
       question: {
@@ -1360,11 +1403,10 @@ export async function createAttempt(
   }
 
   // 3) scoreAttempt ile puanla (deterministik, yan etkisiz)
-  const {
-    isCorrect,
-    rawScore,
-    feedback: scorerFeedback,
-  } = await scoreAttempt(questionVersionId, answer);
+  if (timings) timings.validationMs = performance.now() - validationStartedAt;
+  const scoringStartedAt = performance.now();
+  const { isCorrect, rawScore, feedback: scorerFeedback } = scoreAttemptValue(version, answer);
+  if (timings) timings.scoringMs = performance.now() - scoringStartedAt;
   const isStudentTrainingAttempt =
     actor.platformRole === null &&
     session.assessmentId === null &&
@@ -1372,6 +1414,7 @@ export async function createAttempt(
 
   // 4) Attempt kaydı - transaction güvenliği
   try {
+    const persistenceStartedAt = performance.now();
     const attempt = await prisma.$transaction(async (tx) => {
       let responseOrder = 1 as 1 | 2;
       if (isStudentTrainingAttempt) {
@@ -1461,6 +1504,7 @@ export async function createAttempt(
         select: ATTEMPT_RESULT_SELECT,
       });
     });
+    if (timings) timings.persistenceMs = performance.now() - persistenceStartedAt;
 
     const response = {
       id: attempt.id,
@@ -1481,14 +1525,31 @@ export async function createAttempt(
     };
     // Placement is diagnostic only; it must not create GP or achievement
     // progress. Training/practice scoring keeps the existing deduped event.
+    const rewardStartedAt = performance.now();
+    let rewardRecorded = false;
     if (attempt.isCorrect === true && session.assessmentId === null) {
-      await recordCorrectAnswer({
-        tenantId: session.tenantId,
-        studentId: session.studentId,
-        attemptId: attempt.id,
-        answeredAt: attempt.answeredAt,
-      }).catch(() => null);
+      try {
+        await recordCorrectAnswer({
+          tenantId: session.tenantId,
+          studentId: session.studentId,
+          attemptId: attempt.id,
+          sessionId,
+          questionVersionId,
+          answeredAt: attempt.answeredAt,
+          evaluateBadges: false,
+        });
+        rewardRecorded = true;
+      } catch {
+        // Reward failures must not hide an authoritative scored attempt.
+      }
     }
+    if (timings) timings.rewardMs = performance.now() - rewardStartedAt;
+    if (rewardRecorded) {
+      // Badge evaluation is derived, non-critical work. It must not delay
+      // authoritative answer feedback or the deduped GP event.
+      void evaluateBasicBadges(session.tenantId, session.studentId).catch(() => null);
+    }
+    if (timings) timings.totalMs = performance.now() - totalStartedAt;
     return response;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
