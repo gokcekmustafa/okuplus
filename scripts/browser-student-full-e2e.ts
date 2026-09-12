@@ -1795,13 +1795,14 @@ async function main(): Promise<void> {
   } catch (error) {
     report.status = "FAIL";
     report.bugs.push(`[${currentStage}] ${errorMessage(error)}`);
-  } finally {
-    if (page) await page.close().catch(() => undefined);
-    if (browser) await browser.close().catch(() => undefined);
   }
 
+  // Emit the result before browser cleanup. A long-running or stalled
+  // Playwright close must never hide the final stage/report from CI logs.
   console.log(JSON.stringify(report, null, 2));
   if (report.status === "FAIL") process.exitCode = 1;
+  if (page) await page.close().catch(() => undefined);
+  if (browser) await browser.close().catch(() => undefined);
 }
 
 try {

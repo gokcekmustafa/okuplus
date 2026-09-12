@@ -96,4 +96,13 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("Browser exercise question yüklenemedi (expected=");
     expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
   });
+
+  it("prints the final report before Playwright cleanup can block", () => {
+    const reportIndex = runnerSource.indexOf("console.log(JSON.stringify(report, null, 2))");
+    const cleanupIndex = runnerSource.indexOf(
+      "if (page) await page.close().catch(() => undefined)",
+    );
+    expect(reportIndex).toBeGreaterThan(-1);
+    expect(cleanupIndex).toBeGreaterThan(reportIndex);
+  });
 });
