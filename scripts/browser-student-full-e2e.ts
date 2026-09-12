@@ -451,13 +451,36 @@ function attemptedIds(value: unknown): Set<string> {
 
 function retryQuestionIds(value: unknown): Set<string> {
   const attempts = isObject(value) && Array.isArray(value.attempts) ? value.attempts : [];
-  return new Set(
-    attempts
-      .filter(isObject)
-      .filter((attempt) => attempt.isCorrect === false && Number(attempt.responseOrder || 1) === 1)
-      .map((attempt) => attempt.questionVersionId)
-      .filter((id): id is string => typeof id === "string" && id.trim().length > 0),
-  );
+  const attemptsByQuestion = new Map<string, JsonObject[]>();
+  for (const attempt of attempts.filter(isObject)) {
+    const questionVersionId = attempt.questionVersionId;
+    if (typeof questionVersionId !== "string" || !questionVersionId.trim()) continue;
+    const questionAttempts = attemptsByQuestion.get(questionVersionId) ?? [];
+    questionAttempts.push(attempt);
+    attemptsByQuestion.set(questionVersionId, questionAttempts);
+  }
+
+  const retryIds = new Set<string>();
+  for (const [questionVersionId, questionAttempts] of attemptsByQuestion) {
+    const latest = questionAttempts
+      .slice()
+      .sort(
+        (left, right) =>
+          Number(left.responseOrder || 1) - Number(right.responseOrder || 1) ||
+          String(left.answeredAt || left.createdAt || left.id || "").localeCompare(
+            String(right.answeredAt || right.createdAt || right.id || ""),
+          ),
+      )
+      .at(-1);
+    if (
+      questionAttempts.length === 1 &&
+      latest?.isCorrect === false &&
+      Number(latest.responseOrder || 1) === 1
+    ) {
+      retryIds.add(questionVersionId);
+    }
+  }
+  return retryIds;
 }
 
 function needsQuestionAttempt(entry: DailyWork, questionVersionId: string): boolean {

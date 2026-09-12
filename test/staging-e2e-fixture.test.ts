@@ -35,6 +35,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("retryQuestionIds");
     expect(runnerSource).toContain("retryAnswerForQuestion");
     expect(runnerSource).toContain("!hadRetryPending");
+    expect(runnerSource).toContain("questionAttempts.length === 1");
     expect(runnerSource).toContain("-retry");
   });
 
