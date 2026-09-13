@@ -24,6 +24,9 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("/health /health/db /ready");
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("staging-e2e-summary.json");
+    expect(workflow).toContain("consoleErrors: result.consoleErrors ?? 0");
+    expect(workflow).toContain("networkErrors: result.networkErrors ?? 0");
+    expect(workflow).toContain("duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0");
     expect(workflow).not.toContain("prisma migrate");
     expect(workflow).not.toContain("vercel deploy");
     expect(workflow).not.toContain("vercel pull");

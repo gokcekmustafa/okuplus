@@ -141,6 +141,9 @@ jobs:
             questionsAttempted: result.questionsAttempted ?? 0,
             quotaExhausted: result.quotaExhausted === true,
             completionBlockedByQuota: result.completionBlockedByQuota === true,
+            consoleErrors: result.consoleErrors ?? 0,
+            networkErrors: result.networkErrors ?? 0,
+            duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0,
             timings: result.timings ?? null,
             items,
             productionTouched: "NO",
@@ -150,6 +153,9 @@ jobs:
           console.log(`firstExerciseRenderMs=${safe.timings?.firstExerciseRenderMs ?? "NA"}`);
           console.log(`answerLatencyMs=${safe.timings?.answerLatencyMs ?? "NA"}`);
           console.log(`feedbackRenderLatencyMs=${safe.timings?.feedbackRenderLatencyMs ?? "NA"}`);
+          console.log(`consoleErrors=${safe.consoleErrors}`);
+          console.log(`networkErrors=${safe.networkErrors}`);
+          console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
           if (Number(process.env.E2E_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
           NODE
           rm -f .e2e-output/e2e.raw .e2e-output/e2e.stderr
