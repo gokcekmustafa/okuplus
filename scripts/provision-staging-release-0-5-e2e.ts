@@ -8,8 +8,9 @@
  * accepted only for the configured .invalid synthetic email.
  */
 
-const STAGING_ORIGIN = "https://okuplus-git-staging-gokcekmustafas-projects.vercel.app";
-const BASE_URL = (process.env.BASE_URL?.trim() || STAGING_ORIGIN).replace(/\/$/u, "");
+import { validateStagingBaseUrl } from "./browser-student-full-e2e-policy.js";
+
+const BASE_URL = validateStagingBaseUrl(process.env.BASE_URL);
 
 type JsonObject = Record<string, unknown>;
 type ApiResult = { status: number; data: unknown };
@@ -19,18 +20,7 @@ function isObject(value: unknown): value is JsonObject {
 }
 
 function assertStagingTarget(): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(BASE_URL);
-  } catch {
-    throw new Error("BASE_URL geçerli bir URL olmalı");
-  }
-  if (
-    parsed.origin !== STAGING_ORIGIN ||
-    /production|okuplus\.online|localhost/iu.test(parsed.hostname)
-  ) {
-    throw new Error("BASE_URL yalnızca onaylı staging origin olabilir");
-  }
+  validateStagingBaseUrl(BASE_URL);
 }
 
 function credentials(): { email: string; password: string } {
