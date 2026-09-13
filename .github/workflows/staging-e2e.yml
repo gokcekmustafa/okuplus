@@ -120,11 +120,17 @@ jobs:
           E2E_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           const raw = readFileSync(".e2e-output/e2e.raw", "utf8");
-          let result = null;
-          const rootStart = raw.lastIndexOf("\n{\n");
-          try {
-            result = JSON.parse((rootStart >= 0 ? raw.slice(rootStart + 1) : raw).trim());
-          } catch { result = { status: "FAIL" }; }
+          const errorOutput = readFileSync(".e2e-output/e2e.stderr", "utf8");
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };
           const items = Array.isArray(result.items) ? result.items.map((item) => ({
             position: item.position,
             family: item.family,
@@ -156,6 +162,12 @@ jobs:
             networkErrors: result.networkErrors ?? 0,
             duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0,
             timings: result.timings ?? null,
+            error:
+              typeof result.error === "string"
+                ? result.error.slice(0, 200)
+                : Array.isArray(result.bugs) && typeof result.bugs[0] === "string"
+                  ? result.bugs[0].slice(0, 200)
+                  : "e2e failed",
             items,
             productionTouched: "NO",
           };
@@ -167,6 +179,7 @@ jobs:
           console.log(`consoleErrors=${safe.consoleErrors}`);
           console.log(`networkErrors=${safe.networkErrors}`);
           console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
+          console.log(`e2e.error=${safe.error}`);
           if (Number(process.env.E2E_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
           NODE
           rm -f .e2e-output/e2e.raw .e2e-output/e2e.stderr
