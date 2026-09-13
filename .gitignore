@@ -22,3 +22,5 @@ reports/
 .DS_Store
 # Local PostgreSQL data, recovery evidence, and temporary diagnostics
 .tmp/
+.vercel
+.env*
