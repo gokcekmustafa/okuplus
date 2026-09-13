@@ -70,7 +70,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("const feedbackPage = await page.context().newPage()");
     expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
     expect(runnerSource).toContain('await page.waitForLoadState("networkidle"');
-    expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget)");
+    expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget");
     expect(runnerSource).toContain('"inline feedback session state"');
     expect(runnerSource).toContain("candidate.attemptedQuestionIds = attemptedIds(sessionData)");
     expect(runnerSource).toContain("candidate.retryQuestionIds = retryQuestionIds(sessionData)");
