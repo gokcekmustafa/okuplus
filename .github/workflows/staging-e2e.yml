@@ -41,7 +41,7 @@ jobs:
           const value = process.env.BASE_URL?.trim();
           if (!value) throw new Error("BASE_URL is not configured");
           const url = new URL(value);
-          if (url.protocol !== "https:" || !/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\\.vercel\\.app$/u.test(url.hostname)) {
+          if (url.protocol !== "https:" || !/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\.vercel\.app$/u.test(url.hostname)) {
             throw new Error("BASE_URL is not an approved staging deployment URL");
           }
           if (!process.env.STAGING_STUDENT_EMAIL?.trim()) throw new Error("STAGING_STUDENT_EMAIL is not configured");
