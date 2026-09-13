@@ -291,17 +291,17 @@ async function browserApi(
 
 function assertApiOk(result: BrowserApiResult, label: string): void {
   if (result.status !== 200) {
-    throw new Error(`${label} baüarçsçz (${safeErrorMessage(result)})`);
+    throw new Error(`${label} ba≈üarƒ±sƒ±z (${safeErrorMessage(result)})`);
   }
 }
 
 function asRecord(value: unknown, label: string): JsonObject {
-  if (!isObject(value)) throw new Error(`${label} response formatç geáersiz`);
+  if (!isObject(value)) throw new Error(`${label} response formatƒ± ge√ßersiz`);
   return value;
 }
 
 function asArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} listesi response formatç geáersiz`);
+  if (!Array.isArray(value)) throw new Error(`${label} listesi response formatƒ± ge√ßersiz`);
   return value;
 }
 
@@ -319,7 +319,7 @@ function readOptionalString(value: unknown, key: string): string | null {
 function readNumber(value: unknown, key: string, label: string): number {
   const result = isObject(value) ? value[key] : undefined;
   if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error(`${label}.${key} eksik veya geáersiz`);
+    throw new Error(`${label}.${key} eksik veya ge√ßersiz`);
   }
   return result;
 }
@@ -328,7 +328,7 @@ function readNullableNumber(value: unknown, key: string, label: string): number 
   const result = isObject(value) ? value[key] : undefined;
   if (result === null) return null;
   if (typeof result !== "number" || !Number.isFinite(result)) {
-    throw new Error(`${label}.${key} eksik veya geáersiz`);
+    throw new Error(`${label}.${key} eksik veya ge√ßersiz`);
   }
   return result;
 }
@@ -350,13 +350,13 @@ function readPracticeQuestionQuota(value: unknown): PracticeQuestionQuota {
     "entitlements.PRACTICE_QUESTION",
   );
   if (!Number.isInteger(usedToday) || usedToday < 0) {
-    throw new Error("entitlements.PRACTICE_QUESTION.usedToday geáersiz");
+    throw new Error("entitlements.PRACTICE_QUESTION.usedToday ge√ßersiz");
   }
   if (dailyLimit !== null && (!Number.isInteger(dailyLimit) || dailyLimit < 0)) {
-    throw new Error("entitlements.PRACTICE_QUESTION.dailyLimit geáersiz");
+    throw new Error("entitlements.PRACTICE_QUESTION.dailyLimit ge√ßersiz");
   }
   if (remainingToday !== null && (!Number.isInteger(remainingToday) || remainingToday < 0)) {
-    throw new Error("entitlements.PRACTICE_QUESTION.remainingToday geáersiz");
+    throw new Error("entitlements.PRACTICE_QUESTION.remainingToday ge√ßersiz");
   }
   return {
     plan: readString(plan, "code", "entitlements.plan"),
@@ -372,7 +372,7 @@ function canAttempt(budget: AttemptBudget): boolean {
 
 function isQuestionQuotaExhausted(result: BrowserApiResult): boolean {
   return (
-    result.status === 403 && safeErrorMessage(result).includes("GÅnlÅk Åcretsiz soru hakkçn doldu")
+    result.status === 403 && safeErrorMessage(result).includes("G√ºnl√ºk √ºcretsiz soru hakkƒ±n doldu")
   );
 }
 
@@ -388,7 +388,7 @@ function readQuestions(value: unknown): StudentQuestion[] {
       ? question.blankIds.filter((id): id is string => typeof id === "string")
       : [];
     if (hasPrivateAnswerFields(question)) {
-      throw new Error("ôßrenci soru response'unda doßru cevap alanç sçzdç");
+      throw new Error("√ñƒürenci soru response'unda doƒüru cevap alanƒ± sƒ±zdƒ±");
     }
     return {
       questionVersionId,
@@ -413,7 +413,7 @@ function answerForQuestion(question: StudentQuestion): unknown {
   switch (question.type) {
     case "MULTIPLE_CHOICE": {
       const first = optionIds(question)[0];
-      if (!first) throw new Error("MULTIPLE_CHOICE sorusunda seáenek bulunamadç");
+      if (!first) throw new Error("MULTIPLE_CHOICE sorusunda se√ßenek bulunamadƒ±");
       return [first];
     }
     case "TRUE_FALSE":
@@ -423,7 +423,7 @@ function answerForQuestion(question: StudentQuestion): unknown {
     case "FILL_BLANK":
       return Object.fromEntries(question.blankIds.map((blankId) => [blankId, ""]));
     case "OPEN_ENDED":
-      return "Pasajda verilen bilgileri temel alan kçsa bir yançt.";
+      return "Pasajda verilen bilgileri temel alan kƒ±sa bir yanƒ±t.";
     default:
       throw new Error(`Desteklenmeyen soru tipi: ${question.type}`);
   }
@@ -528,7 +528,7 @@ async function login(page: Page, credentials: { email: string; password: string 
   const body = await response.json().catch(() => null);
   if (response.status() !== 200) {
     const result: BrowserApiResult = { status: response.status(), body };
-    throw new Error(`ôßrenci login baüarçsçz (${safeErrorMessage(result)})`);
+    throw new Error(`√ñƒürenci login ba≈üarƒ±sƒ±z (${safeErrorMessage(result)})`);
   }
   await page.waitForSelector("#view-app:not(.hidden)", {
     state: "visible",
@@ -541,16 +541,16 @@ async function assertStudentAuth(page: Page): Promise<void> {
   assertApiOk(me, "auth/me");
   const data = asRecord(apiData(me), "auth/me.data");
   const user = asRecord(data.user, "auth/me.user");
-  if (typeof user.id !== "string" || !user.id) throw new Error("auth/me îßrenci kimlißi eksik");
+  if (typeof user.id !== "string" || !user.id) throw new Error("auth/me √∂ƒürenci kimliƒüi eksik");
   if (user.platformRole !== null && user.platformRole !== undefined) {
-    throw new Error("Test hesabç platform kullançcçsç; îßrenci akçüç reddedildi");
+    throw new Error("Test hesabƒ± platform kullanƒ±cƒ±sƒ±; √∂ƒürenci akƒ±≈üƒ± reddedildi");
   }
   const tenantContext = asRecord(data.tenantContext, "auth/me.tenantContext");
   if (typeof tenantContext.tenantId !== "string" || !tenantContext.tenantId) {
-    throw new Error("ôßrenci tenant context eksik");
+    throw new Error("√ñƒürenci tenant context eksik");
   }
   if (tenantContext.tenantType !== "INDIVIDUAL") {
-    throw new Error("Test hesabç individual student tenant context'inde deßil");
+    throw new Error("Test hesabƒ± individual student tenant context'inde deƒüil");
   }
 
   const contexts = await browserApi(page, "/auth/contexts");
@@ -563,7 +563,7 @@ async function assertStudentAuth(page: Page): Promise<void> {
     (row) =>
       isObject(row) && row.active === true && row.isPersonal === true && row.role === "STUDENT",
   );
-  if (!hasStudentContext) throw new Error("Aktif individual STUDENT membership doßrulanamadç");
+  if (!hasStudentContext) throw new Error("Aktif individual STUDENT membership doƒürulanamadƒ±");
 }
 
 async function runPlacement(
@@ -583,7 +583,7 @@ async function runPlacement(
     const profileResult = await browserApi(page, "/student/onboarding");
     assertApiOk(profileResult, "existing placement learning profile");
     if (apiData(profileResult) === null) {
-      throw new Error("Mevcut placement sonucu var ancak learning profile okunamadç");
+      throw new Error("Mevcut placement sonucu var ancak learning profile okunamadƒ±");
     }
 
     const existingGamificationResult = await browserApi(page, "/student/gamification");
@@ -608,10 +608,10 @@ async function runPlacement(
     "assessments",
   );
   const assessment = items.find((row) => isObject(row) && row.id === assessmentId);
-  if (!assessment) throw new Error("Canonical placement assessment îßrenci listesinde bulunamadç");
+  if (!assessment) throw new Error("Canonical placement assessment √∂ƒürenci listesinde bulunamadƒ±");
   if (isObject(assessment) && assessment.sessionStatus === "COMPLETED") {
     throw new Error(
-      "Placement session tamamlanmçü fakat sonuá bulunamadç; gÅvenli tekrar durduruldu",
+      "Placement session tamamlanmƒ±≈ü fakat sonu√ß bulunamadƒ±; g√ºvenli tekrar durduruldu",
     );
   }
 
@@ -636,7 +636,7 @@ async function runPlacement(
   );
   assertApiOk(questionResult, "placement questions");
   const questions = readQuestions(apiData(questionResult));
-  if (questions.length === 0) throw new Error("Placement iáin soru bulunamadç");
+  if (questions.length === 0) throw new Error("Placement i√ßin soru bulunamadƒ±");
   const existing = attemptedIds(apiData(sessionState));
 
   for (const [index, question] of questions.entries()) {
@@ -670,7 +670,7 @@ async function runPlacement(
   );
   assertApiOk(resultAfter, "placement result");
   const resultData = apiData(resultAfter);
-  if (resultData === null) throw new Error("Placement sonucu completion sonrasçnda oluümadç");
+  if (resultData === null) throw new Error("Placement sonucu completion sonrasƒ±nda olu≈ümadƒ±");
 
   const profile = await browserApi(page, "/student/onboarding");
   assertApiOk(profile, "learning profile");
@@ -683,7 +683,7 @@ async function runPlacement(
   const beforeStreak = readNumber(baselineGamification, "currentDays", "baseline gamification");
   const afterStreak = readNumber(afterData, "currentDays", "placement gamification");
   if (afterPoints !== beforePoints || afterStreak !== beforeStreak) {
-    throw new Error("Placement GP veya streak deßerini deßiütirdi");
+    throw new Error("Placement GP veya streak deƒüerini deƒüi≈ütirdi");
   }
 
   return {
@@ -733,7 +733,7 @@ async function readDailyWork(
     const questionCount = readNumber(detail, "questionCount", `daily item ${item.position}.detail`);
     const attemptCount = readNumber(detail, "attemptCount", `daily item ${item.position}.detail`);
     if (questionCount < 1) {
-      throw new Error(`Daily item ${item.position} iáin soru sayçsç bulunamadç`);
+      throw new Error(`Daily item ${item.position} i√ßin soru sayƒ±sƒ± bulunamadƒ±`);
     }
 
     let questions: StudentQuestion[] = [];
@@ -755,10 +755,10 @@ async function readDailyWork(
       assertApiOk(questionResult, `daily item ${item.position} questions`);
       questions = readQuestions(apiData(questionResult));
       if (questions.length === 0)
-        throw new Error(`Daily item ${item.position} iáin soru bulunamadç`);
+        throw new Error(`Daily item ${item.position} i√ßin soru bulunamadƒ±`);
       if (questions.length !== questionCount) {
         throw new Error(
-          `Daily item ${item.position} soru sayçsç detail ile eüleümedi (${questions.length}/${questionCount})`,
+          `Daily item ${item.position} soru sayƒ±sƒ± detail ile e≈üle≈ümedi (${questions.length}/${questionCount})`,
         );
       }
     }
@@ -805,12 +805,12 @@ async function loadDailyItemQuestions(
   const daily = asRecord(apiData(dailyResult), "daily current.data");
   const rows = asArray(daily.items, "daily current.items");
   const row = rows.find((candidate) => isObject(candidate) && candidate.id === entry.item.id);
-  if (!isObject(row)) throw new Error(`Daily item ${entry.item.position} bulunamadç`);
+  if (!isObject(row)) throw new Error(`Daily item ${entry.item.position} bulunamadƒ±`);
   const status = readString(row, "status", `daily item ${entry.item.position}`);
   entry.item.status = status;
   if (status === "COMPLETED") return;
   if (status !== "IN_PROGRESS") {
-    throw new Error(`Daily item ${entry.item.position} henÅz sçraya gelmedi`);
+    throw new Error(`Daily item ${entry.item.position} hen√ºz sƒ±raya gelmedi`);
   }
 
   const sessionState = await browserApi(
@@ -825,10 +825,10 @@ async function loadDailyItemQuestions(
   assertApiOk(questionResult, `daily item ${entry.item.position} questions`);
   const questions = readQuestions(apiData(questionResult));
   if (questions.length === 0)
-    throw new Error(`Daily item ${entry.item.position} iáin soru bulunamadç`);
+    throw new Error(`Daily item ${entry.item.position} i√ßin soru bulunamadƒ±`);
   if (questions.length !== entry.questionCount) {
     throw new Error(
-      `Daily item ${entry.item.position} soru sayçsç detail ile eüleümedi (${questions.length}/${entry.questionCount})`,
+      `Daily item ${entry.item.position} soru sayƒ±sƒ± detail ile e≈üle≈ümedi (${questions.length}/${entry.questionCount})`,
     );
   }
   entry.questions = questions;
@@ -855,7 +855,7 @@ async function assertPublishedGraph(
     `daily item ${item.position}.templateVersion`,
   );
   if (templateVersion.status !== "PUBLISHED") {
-    throw new Error(`Daily item ${item.position} published olmayan template version kullandç`);
+    throw new Error(`Daily item ${item.position} published olmayan template version kullandƒ±`);
   }
 
   // Pending daily items are intentionally not exposed through the student
@@ -890,7 +890,7 @@ async function assertPublishedGraph(
     });
     if (!mappedContent) {
       throw new Error(
-        `Daily item ${item.position} Question  ContentVersion mapping doßrulanamadç`,
+        `Daily item ${item.position} Question ‚Üí ContentVersion mapping doƒürulanamadƒ±`,
       );
     }
   }
@@ -920,7 +920,7 @@ async function readProgressSnapshot(
 
 function checkpointFor(checkpoints: ItemCheckpoint[], position: number): ItemCheckpoint {
   const checkpoint = checkpoints.find((entry) => entry.position === position);
-  if (!checkpoint) throw new Error(`Item checkpoint bulunamadç: ${position}`);
+  if (!checkpoint) throw new Error(`Item checkpoint bulunamadƒ±: ${position}`);
   return checkpoint;
 }
 
@@ -975,7 +975,7 @@ async function loadBrowserExerciseQuestion(
     await page.evaluate((id) => {
       const resume = (window as unknown as { resumeTodaySession?: (value: string) => void })
         .resumeTodaySession;
-      if (typeof resume !== "function") throw new Error("student resume helper bulunamadç");
+      if (typeof resume !== "function") throw new Error("student resume helper bulunamadƒ±");
       resume(id);
     }, sessionId);
     try {
@@ -991,13 +991,13 @@ async function loadBrowserExerciseQuestion(
         if (responseResult.kind === "responseError") throw responseResult.error;
         if (responseResult.response.status() !== 200) {
           throw new Error(
-            `Exercise questions isteßi baüarçsçz (HTTP ${responseResult.response.status()})`,
+            `Exercise questions isteƒüi ba≈üarƒ±sƒ±z (HTTP ${responseResult.response.status()})`,
           );
         }
         throw first.error;
       }
       if (first.response.status() !== 200) {
-        throw new Error(`Exercise questions isteßi baüarçsçz (HTTP ${first.response.status()})`);
+        throw new Error(`Exercise questions isteƒüi ba≈üarƒ±sƒ±z (HTTP ${first.response.status()})`);
       }
       const visibleResult = await questionVisible;
       if (visibleResult.kind !== "visible") throw visibleResult.error;
@@ -1009,7 +1009,7 @@ async function loadBrowserExerciseQuestion(
           await page.waitForFunction(
             () =>
               document.getElementById("exercise-load-status")?.textContent?.trim() !==
-              "Alçütçrma yÅkleniyor",
+              "Alƒ±≈ütƒ±rma y√ºkleniyor‚Ä¶",
             { timeout: BROWSER_REQUEST_TIMEOUT_MS },
           );
         } catch {
@@ -1023,10 +1023,10 @@ async function loadBrowserExerciseQuestion(
   const state = await readBrowserExerciseState(page).catch(() => null);
   if (state) {
     throw new Error(
-      `Browser exercise question yÅklenemedi (expected=${questionVersionId}, actual=${state.questionVersionId ?? "none"}, page=${state.activePage ?? "none"}, loadStatus=${state.loadStatus || "empty"}, retry=${state.retryVisible ? "visible" : "hidden"})`,
+      `Browser exercise question y√ºklenemedi (expected=${questionVersionId}, actual=${state.questionVersionId ?? "none"}, page=${state.activePage ?? "none"}, loadStatus=${state.loadStatus || "empty"}, retry=${state.retryVisible ? "visible" : "hidden"})`,
     );
   }
-  throw lastError instanceof Error ? lastError : new Error("Browser exercise question yÅklenemedi");
+  throw lastError instanceof Error ? lastError : new Error("Browser exercise question y√ºklenemedi");
 }
 
 async function isVisibleBrowserExerciseQuestion(
@@ -1067,7 +1067,7 @@ async function waitForStudentAppReady(page: Page): Promise<void> {
   assertApiOk(onboardingResult, "student onboarding state");
   const onboarding = asRecord(apiData(onboardingResult), "student onboarding.data");
   if (onboarding.completed !== true) {
-    throw new Error("ôßrenci onboarding tamamlanmamçü; exercise UI gÅvenli üekilde baülatçlamadç");
+    throw new Error("√ñƒürenci onboarding tamamlanmamƒ±≈ü; exercise UI g√ºvenli ≈üekilde ba≈ülatƒ±lamadƒ±");
   }
   await page.locator('button.nav-item[data-page="dashboard"]').click();
   await page.waitForSelector("#page-dashboard:not(.hidden)", {
@@ -1155,7 +1155,7 @@ async function submitAttempt(
   assertApiOk(result, `training attempt ${question.questionVersionId}`);
   const data = asRecord(apiData(result), "attempt.data");
   if (data.questionVersionId !== question.questionVersionId) {
-    throw new Error("Attempt response questionVersionId ile istek eüleümedi");
+    throw new Error("Attempt response questionVersionId ile istek e≈üle≈ümedi");
   }
   budget.attempted += 1;
   return data;
@@ -1172,7 +1172,7 @@ async function probeInlineFeedback(
     return null;
   }
   if (!candidate.item.exerciseSessionId)
-    throw new Error("Inline feedback iáin exercise session eksik");
+    throw new Error("Inline feedback i√ßin exercise session eksik");
 
   // The daily snapshot is read before the isolated browser page is opened.
   // Reconcile the candidate from the session endpoint immediately before the
@@ -1189,7 +1189,7 @@ async function probeInlineFeedback(
     (entry) =>
       entry.type === "MULTIPLE_CHOICE" && needsQuestionAttempt(candidate, entry.questionVersionId),
   );
-  if (!question) throw new Error("Inline feedback iáin yançtsçz MULTIPLE_CHOICE soru bulunamadç");
+  if (!question) throw new Error("Inline feedback i√ßin yanƒ±tsƒ±z MULTIPLE_CHOICE soru bulunamadƒ±");
 
   // Use an isolated authenticated page for the interactive probe. The main
   // API page may retain a previous SPA exercise state while the daily planner
@@ -1234,10 +1234,10 @@ async function probeInlineFeedback(
         ) as HTMLButtonElement | null;
         const loadStatus = document.getElementById("exercise-load-status")?.textContent?.trim();
         return Boolean(
-          loadStatus !== "Alçütçrma yÅkleniyor" &&
+          loadStatus !== "Alƒ±≈ütƒ±rma y√ºkleniyor‚Ä¶" &&
           button &&
           !button.disabled &&
-          ["Cevabç kontrol et", "Tekrar Cevapla"].some((label) =>
+          ["Cevabƒ± kontrol et", "Tekrar Cevapla"].some((label) =>
             button.textContent?.includes(label),
           ),
         );
@@ -1264,7 +1264,7 @@ async function probeInlineFeedback(
     }
     if (response.status() !== 200) {
       throw new Error(
-        `Browser answer baüarçsçz (${safeErrorMessage({ status: response.status(), body })})`,
+        `Browser answer ba≈üarƒ±sƒ±z (${safeErrorMessage({ status: response.status(), body })})`,
       );
     }
     const attempt = asRecord(apiData({ status: response.status(), body }), "browser attempt.data");
@@ -1277,11 +1277,11 @@ async function probeInlineFeedback(
       text: element.textContent?.trim() ?? "",
       display: getComputedStyle(element).display,
     }));
-    if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback gîrÅnmedi");
+    if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback g√∂r√ºnmedi");
     if (timings.feedbackRenderLatencyMs === null)
       timings.feedbackRenderLatencyMs = roundedDurationMs(feedbackStartedAt);
     if ((await feedbackPage.locator("#celebration-layer:not(.hidden)").count()) > 0) {
-      throw new Error("Ara cevapta celebration popup gîrÅndÅ");
+      throw new Error("Ara cevapta celebration popup g√∂r√ºnd√º");
     }
     budget.attempted += 1;
     recordAttemptState(candidate, question.questionVersionId, attempt);
@@ -1311,7 +1311,7 @@ async function ensureScoreCoverage(
   );
   if (!question) return;
   const choices = optionIds(question);
-  if (choices.length < 2) throw new Error("Doßru/yanlçü coverage iáin en az iki seáenek gerekli");
+  if (choices.length < 2) throw new Error("Doƒüru/yanlƒ±≈ü coverage i√ßin en az iki se√ßenek gerekli");
 
   const optionsToTry = coverage.correct || coverage.wrong ? choices.slice(1) : choices;
   for (const [index, optionId] of optionsToTry.entries()) {
@@ -1360,7 +1360,7 @@ async function processDailyWork(
     const firstQuestion =
       entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
       entry.questions[0];
-    if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} iáin soru bulunamadç`);
+    if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} i√ßin soru bulunamadƒ±`);
     await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, report.timings);
     checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
@@ -1456,7 +1456,7 @@ async function processDailyWork(
     const refreshedItems = asArray(refreshedData.items, "daily refreshed.items");
     const refreshedItem = refreshedItems.find((row) => isObject(row) && row.id === entry.item.id);
     if (!isObject(refreshedItem) || refreshedItem.status !== "COMPLETED") {
-      throw new Error(`Daily item ${entry.item.position} completion state doßrulanamadç`);
+      throw new Error(`Daily item ${entry.item.position} completion state doƒürulanamadƒ±`);
     }
     const after = await readProgressSnapshot(page);
     checkpoint.submit = submitted > 0 ? "PASS" : "NOT_RUN";
@@ -1476,11 +1476,11 @@ async function processDailyWork(
   );
   assertApiOk(finalDailyResult, "final daily state");
   const finalDaily = asRecord(apiData(finalDailyResult), "final daily.data");
-  if (finalDaily.status !== "COMPLETED") throw new Error("Daily Training tamamlanmadç");
+  if (finalDaily.status !== "COMPLETED") throw new Error("Daily Training tamamlanmadƒ±");
   const completedItems = readNumber(finalDaily, "completedItems", "final daily");
   const totalItems = readNumber(finalDaily, "totalItems", "final daily");
   if (completedItems !== totalItems)
-    throw new Error("Daily item tamamlanma sayçsç toplamla eüleümedi");
+    throw new Error("Daily item tamamlanma sayƒ±sƒ± toplamla e≈üle≈ümedi");
   return finalDaily;
 }
 
@@ -1502,7 +1502,7 @@ async function main(): Promise<void> {
     publishedContent: "NOT_RUN",
     finalState: "NOT_RUN",
     bugs: [],
-    normalFlowWrites: "PLACEMENT/TRAINING SESSION, ATTEMPT VE COMPLETION AKIûIYLA SINIRLI",
+    normalFlowWrites: "PLACEMENT/TRAINING SESSION, ATTEMPT VE COMPLETION AKI≈ûIYLA SINIRLI",
     quotaLimit: null,
     quotaUsedAtStart: null,
     quotaRemainingAtStart: null,
@@ -1587,8 +1587,8 @@ async function main(): Promise<void> {
     const placement = await runPlacement(page, baselineGamification);
     report.placement =
       placement.mode === "PASS_EXISTING"
-        ? `PASS_EXISTING (assessment=${placement.assessmentId}, mevcut placement sonucu ve profil kullançldç; yeni placement yazçmç yapçlmadç)`
-        : `PASS (assessment=${placement.assessmentId}, GP/streak deßiümedi)`;
+        ? `PASS_EXISTING (assessment=${placement.assessmentId}, mevcut placement sonucu ve profil kullanƒ±ldƒ±; yeni placement yazƒ±mƒ± yapƒ±lmadƒ±)`
+        : `PASS (assessment=${placement.assessmentId}, GP/streak deƒüi≈ümedi)`;
     logStage("PLACEMENT_DONE");
 
     logStage("FIRST_TRAINING_START");
@@ -1600,7 +1600,7 @@ async function main(): Promise<void> {
       : null;
     if (existingDaily?.status === "COMPLETED") {
       throw new Error(
-        "BugÅnkÅ Training zaten tamamlanmçü; gÅvenli tekrar iáin yeni test hesabç gerekli",
+        "Bug√ºnk√º Training zaten tamamlanmƒ±≈ü; g√ºvenli tekrar i√ßin yeni test hesabƒ± gerekli",
       );
     }
 
@@ -1632,18 +1632,18 @@ async function main(): Promise<void> {
     report.items = itemCheckpoints;
     const totalItems = readNumber(daily, "totalItems", "daily");
     if (totalItems !== work.length || totalItems < 6) {
-      throw new Error("Daily composition item sayçsç runtime sîzleümesiyle uyuümuyor");
+      throw new Error("Daily composition item sayƒ±sƒ± runtime s√∂zle≈ümesiyle uyu≈ümuyor");
     }
     const families = work.map((entry) => entry.item.family);
     const missingFamilies = DAILY_FAMILIES.filter((family) => !families.includes(family));
     if (missingFamilies.length > 0) {
-      throw new Error(`Daily composition eksik family iáeriyor: ${missingFamilies.join(", ")}`);
+      throw new Error(`Daily composition eksik family i√ßeriyor: ${missingFamilies.join(", ")}`);
     }
     const duplicatePositions =
       new Set(work.map((entry) => entry.item.position)).size !== work.length;
-    if (duplicatePositions) throw new Error("Daily item position deßerleri unique deßil");
+    if (duplicatePositions) throw new Error("Daily item position deƒüerleri unique deƒüil");
     if (daily.firstDay !== true && daily.status !== "IN_PROGRESS") {
-      throw new Error("Daily Training first-day/resume durumu geáersiz");
+      throw new Error("Daily Training first-day/resume durumu ge√ßersiz");
     }
     report.firstTraining =
       daily.firstDay === true
@@ -1652,7 +1652,7 @@ async function main(): Promise<void> {
     report.fastReading = "PASS (ATTENTION_BURST/RAPID_RECOGNITION/PHRASE_CHUNKING mevcut)";
     report.comprehension = "PASS (MAIN_IDEA/DETAIL_EVIDENCE/INFERENCE mevcut)";
     report.adaptiveSelection =
-      "PASS (family, competency, difficulty, templateVersionId ve adaptiveBand plan iáinde taüçndç)";
+      "PASS (family, competency, difficulty, templateVersionId ve adaptiveBand plan i√ßinde ta≈üƒ±ndƒ±)";
     logStage("FIRST_TRAINING_DONE");
 
     const quota = await readPracticeQuestionEntitlement(page);
@@ -1682,7 +1682,7 @@ async function main(): Promise<void> {
       await assertPublishedGraph(page, entry.item, entry.questions);
     }
     report.publishedContent =
-      "PASS (student graph yalnçz published template/content graph Åzerinden yÅklendi)";
+      "PASS (student graph yalnƒ±z published template/content graph √ºzerinden y√ºklendi)";
 
     const trainingGamificationBeforeResult = await browserApi(page, "/student/gamification");
     assertApiOk(trainingGamificationBeforeResult, "training gamification baseline");
@@ -1703,7 +1703,7 @@ async function main(): Promise<void> {
 
     logStage("ATTEMPT_START");
     if (quotaPlan.plannedAttemptCount > 0) {
-      if (!uiCandidate) throw new Error("Inline feedback iáin uygun unanswered item bulunamadç");
+      if (!uiCandidate) throw new Error("Inline feedback i√ßin uygun unanswered item bulunamadƒ±");
       await waitForStudentAppReady(page);
       const uiAttempt = await probeInlineFeedback(page, uiCandidate, budget, report.timings);
       if (uiAttempt) checkpointFor(itemCheckpoints, uiCandidate.item.position).rendered = "PASS";
@@ -1717,12 +1717,12 @@ async function main(): Promise<void> {
     report.questionsAttempted = budget.attempted;
     report.quotaExhausted = budget.quotaExhausted;
     if (budget.attempted === 0) {
-      report.attempt = "NOT_RUN (PRACTICE_QUESTION kotasç bu áalçüma iáin kullançlabilir deßil)";
+      report.attempt = "NOT_RUN (PRACTICE_QUESTION kotasƒ± bu √ßalƒ±≈üma i√ßin kullanƒ±labilir deƒüil)";
     } else if (coverage.correct && coverage.wrong) {
       report.attempt =
-        "PASS (en az bir doßru ve bir yanlçü server-side scoring; inline feedback doßrulandç)";
+        "PASS (en az bir doƒüru ve bir yanlƒ±≈ü server-side scoring; inline feedback doƒürulandƒ±)";
     } else {
-      report.attempt = `PASS_WITH_LIMITATIONS (${budget.attempted} kontrollÅ attempt; doßru/yanlçü kapsamç tamamlanmadç)`;
+      report.attempt = `PASS_WITH_LIMITATIONS (${budget.attempted} kontroll√º attempt; doƒüru/yanlƒ±≈ü kapsamƒ± tamamlanmadƒ±)`;
     }
     logStage("ATTEMPT_DONE");
     logStage("EXERCISE_DONE");
@@ -1744,12 +1744,12 @@ async function main(): Promise<void> {
       "training gamification after attempts",
     );
     if (budget.attempted > 0 && pointsAfterAttempt < pointsAtStart) {
-      throw new Error("Training attempt sonrasç GP deßeri azaldç");
+      throw new Error("Training attempt sonrasƒ± GP deƒüeri azaldƒ±");
     }
     if (budget.attempted > 0) {
-      report.gp = `PASS (attempt sonrasç totalGP=${pointsAfterAttempt} API'den gîzlendi)`;
+      report.gp = `PASS (attempt sonrasƒ± totalGP=${pointsAfterAttempt} API'den g√∂zlendi)`;
     } else {
-      report.gp = "NOT_RUN (attempt quota bÅtáesi yok)";
+      report.gp = "NOT_RUN (attempt quota b√ºt√ßesi yok)";
     }
 
     logStage("COMPLETION_START");
@@ -1766,10 +1766,10 @@ async function main(): Promise<void> {
       );
       if (finalDaily) {
         if (!coverage.correct || !coverage.wrong) {
-          throw new Error("GÅnlÅk akçüta hem doßru hem yanlçü server-side sonuá gîzlenemedi");
+          throw new Error("G√ºnl√ºk akƒ±≈üta hem doƒüru hem yanlƒ±≈ü server-side sonu√ß g√∂zlenemedi");
         }
         report.attempt =
-          "PASS (en az bir doßru ve bir yanlçü server-side scoring; inline feedback doßrulandç)";
+          "PASS (en az bir doƒüru ve bir yanlƒ±≈ü server-side scoring; inline feedback doƒürulandƒ±)";
         report.trainingCompletion = `PASS (${readNumber(finalDaily, "completedItems", "final daily")} / ${readNumber(finalDaily, "totalItems", "final daily")})`;
 
         const beforeDuplicate = await browserApi(page, "/student/gamification");
@@ -1797,34 +1797,34 @@ async function main(): Promise<void> {
           readNumber(beforeDuplicateData, "currentDays", "duplicate baseline") !==
             readNumber(afterDuplicateData, "currentDays", "duplicate after")
         ) {
-          throw new Error("Duplicate completion GP/streak deßerini tekrar ilerletti");
+          throw new Error("Duplicate completion GP/streak deƒüerini tekrar ilerletti");
         }
 
         const todayAfter = await browserApi(page, "/student/today");
         assertApiOk(todayAfter, "today final");
         const todayAfterData = asRecord(apiData(todayAfter), "today final.data");
         const goal = asRecord(todayAfterData.dailyGoal, "daily goal");
-        if (goal.status !== "COMPLETED") throw new Error("Daily goal COMPLETED olmadç");
+        if (goal.status !== "COMPLETED") throw new Error("Daily goal COMPLETED olmadƒ±");
         report.dailyGoal = "PASS (COMPLETED)";
-        report.streak = `PASS (currentStreak=${readNumber(afterDuplicateData, "currentDays", "gamification")}, duplicate artçü yok)`;
-        report.gp = `PASS (totalGP=${readNumber(finalDaily, "totalGP", "final daily")}, PointEvent sonucu API'den gîzlendi)`;
+        report.streak = `PASS (currentStreak=${readNumber(afterDuplicateData, "currentDays", "gamification")}, duplicate artƒ±≈ü yok)`;
+        report.gp = `PASS (totalGP=${readNumber(finalDaily, "totalGP", "final daily")}, PointEvent sonucu API'den g√∂zlendi)`;
         report.stagingE2EReady = "YES";
       } else {
         if (!budget.quotaExhausted) {
-          throw new Error("Full completion planç beklenenden înce attempt bÅtáesine ulaütç");
+          throw new Error("Full completion planƒ± beklenenden √∂nce attempt b√ºt√ßesine ula≈ütƒ±");
         }
         report.status = "PASS_WITH_LIMITATIONS";
         report.completionBlockedByQuota = true;
         report.trainingCompletion = "COMPLETION_BLOCKED_BY_FREE_QUOTA";
-        report.dailyGoal = "NOT_RUN (TrainingSession tamamlanmadç)";
-        report.streak = "NOT_ADVANCED (TrainingSession tamamlanmadç)";
+        report.dailyGoal = "NOT_RUN (TrainingSession tamamlanmadƒ±)";
+        report.streak = "NOT_ADVANCED (TrainingSession tamamlanmadƒ±)";
         report.stagingE2EReady = "LIMITED_BY_FREE_QUOTA";
       }
     } else {
       report.status = "PASS_WITH_LIMITATIONS";
       report.trainingCompletion = "COMPLETION_BLOCKED_BY_FREE_QUOTA";
-      report.dailyGoal = "NOT_RUN (TrainingSession tamamlanmadç)";
-      report.streak = "NOT_ADVANCED (TrainingSession tamamlanmadç)";
+      report.dailyGoal = "NOT_RUN (TrainingSession tamamlanmadƒ±)";
+      report.streak = "NOT_ADVANCED (TrainingSession tamamlanmadƒ±)";
       report.stagingE2EReady = "LIMITED_BY_FREE_QUOTA";
     }
     report.questionsAttempted = budget.attempted;
@@ -1842,20 +1842,20 @@ async function main(): Promise<void> {
       "progress.training",
     );
     if (budget.attempted > 0 && scoredAttemptCount < 1) {
-      throw new Error("Training performance scored attempt gÅncellenmedi");
+      throw new Error("Training performance scored attempt g√ºncellenmedi");
     }
     report.performance =
       budget.attempted > 0
         ? "PASS (student progress training aggregate okunabildi)"
-        : "NOT_RUN (bu áalçümada yeni attempt yapçlmadç)";
+        : "NOT_RUN (bu √ßalƒ±≈ümada yeni attempt yapƒ±lmadƒ±)";
 
     const learningPath = await browserApi(page, "/student/learning-path");
     assertApiOk(learningPath, "learning path");
     const learningPathData = asRecord(apiData(learningPath), "learning path.data");
     if (!Array.isArray(learningPathData.nodes))
-      throw new Error("Adaptive learning path response formatç geáersiz");
+      throw new Error("Adaptive learning path response formatƒ± ge√ßersiz");
     report.adaptiveSelection =
-      "PASS (daily planner adaptive metadata + learning path response doßrulandç)";
+      "PASS (daily planner adaptive metadata + learning path response doƒürulandƒ±)";
 
     const placementResult = await browserApi(
       page,
@@ -1871,7 +1871,7 @@ async function main(): Promise<void> {
     report.finalState =
       report.status === "PASS"
         ? "PASS (placement, daily session, attempts, GP/streak/goal/progress API read-only kontrolleri)"
-        : "PASS_WITH_LIMITATIONS (quota nedeniyle gÅnlÅk tamamlanma ve streak doßrulanmadç)";
+        : "PASS_WITH_LIMITATIONS (quota nedeniyle g√ºnl√ºk tamamlanma ve streak doƒürulanmadƒ±)";
     logStage("FINAL_STATE_DONE");
   } catch (error) {
     report.status = "FAIL";
