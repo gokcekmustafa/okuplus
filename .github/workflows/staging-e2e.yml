@@ -91,6 +91,7 @@ jobs:
             auth: result.auth === "PASS" ? "PASS" : "FAIL",
             onboarding: result.onboarding === "PASS" ? "PASS" : "FAIL",
             entitlement: result.entitlement === "PLAN_PREMIUM_STAGING_FIXTURE" ? "PASS" : "FAIL",
+            error: typeof result.message === "string" ? result.message.slice(0, 200) : "provisioning failed",
             productionTouched: "NO",
           };
           console.log(`provisioning=${summary.status} account=${summary.account}`);
@@ -165,22 +166,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          {
-            echo "## Staging authenticated E2E"
-            if test -f .e2e-output/staging-e2e-summary.json; then
-              node --input-type=module <<'NODE'
-              import { readFileSync } from "node:fs";
-              const result = JSON.parse(readFileSync(".e2e-output/staging-e2e-summary.json", "utf8"));
-              for (const [key, value] of Object.entries(result)) {
-                if (key === "items" || key === "timings") continue;
-                console.log(`- ${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
-              }
-              for (const [key, value] of Object.entries(result.timings ?? {})) console.log(`- ${key}: ${value ?? "NA"}`);
-              NODE
-            else
-              echo "- status: NOT_RUN"
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "## Staging authenticated E2E" >> "$GITHUB_STEP_SUMMARY"
+          if ! test -f .e2e-output/staging-e2e-summary.json; then
+            echo "- status: NOT_RUN" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(".e2e-output/staging-e2e-summary.json", "utf8"));
+          for (const [key, value] of Object.entries(result)) {
+            if (key === "items" || key === "timings") continue;
+            console.log(`- ${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
+          }
+          for (const [key, value] of Object.entries(result.timings ?? {})) console.log(`- ${key}: ${value ?? "NA"}`);
+          NODE
 
       - name: Upload sanitized E2E artifact
         if: always()
