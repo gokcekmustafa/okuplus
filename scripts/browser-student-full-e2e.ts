@@ -1338,6 +1338,7 @@ async function processDailyWork(
   coverage: ScoreCoverage,
   runId: string,
   budget: AttemptBudget,
+  timings: E2eTimings,
   checkpoints: ItemCheckpoint[],
 ): Promise<JsonObject | null> {
   for (const entry of work.sort((a, b) => a.item.position - b.item.position)) {
@@ -1361,7 +1362,7 @@ async function processDailyWork(
       entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
       entry.questions[0];
     if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
-    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, report.timings);
+    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, timings);
     checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
     let submitted = 0;
@@ -1762,6 +1763,7 @@ async function main(): Promise<void> {
         coverage,
         runId,
         budget,
+        report.timings,
         itemCheckpoints,
       );
       if (finalDaily) {

@@ -55,8 +55,20 @@ describe("staging Release 0.5 E2E fixture", () => {
   it("probes every daily item in an isolated authenticated page", () => {
     expect(runnerSource).toContain("async function probeExerciseRender");
     expect(runnerSource).toContain("page.context().newPage()");
-    expect(runnerSource).toContain("await probeExerciseRender(page, sessionId");
+    expect(runnerSource).toContain(
+      "await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, timings)",
+    );
     expect(runnerSource).toContain('checkpoint.rendered = "PASS"');
+  });
+
+  it("passes timing state explicitly into daily completion work", () => {
+    expect(runnerSource).toContain("runId: string,");
+    expect(runnerSource).toContain("budget: AttemptBudget,");
+    expect(runnerSource).toContain("timings: E2eTimings,");
+    expect(runnerSource).toContain("checkpoints: ItemCheckpoint[],");
+    expect(runnerSource).not.toContain("firstQuestion.questionVersionId, report.timings");
+    expect(runnerSource).toContain("report.timings");
+    expect(runnerSource).toContain("itemCheckpoints,");
   });
 
   it("creates the authenticated page from an explicit browser context", () => {
