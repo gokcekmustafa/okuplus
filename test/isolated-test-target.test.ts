@@ -3,6 +3,7 @@ import { parseCatalogTargetUrl } from "../src/curriculum/catalog-target-verifica
 import {
   assertIsolatedFirstRealPackTestTarget,
   ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+  SECURITY_REMEDIATION_TEST_DATABASE,
 } from "../scripts/isolated-test-target.js";
 
 function target(url: string) {
@@ -14,6 +15,14 @@ describe("isolated First Real Pack TEST target", () => {
     expect(() =>
       assertIsolatedFirstRealPackTestTarget(
         target(`postgresql://owner@127.0.0.1:5432/${ISOLATED_FIRST_REAL_PACK_TEST_DATABASE}`),
+      ),
+    ).not.toThrow();
+  });
+
+  it("security remediation exact disposable DB allowed", () => {
+    expect(() =>
+      assertIsolatedFirstRealPackTestTarget(
+        target(`postgresql://owner@127.0.0.1:5432/${SECURITY_REMEDIATION_TEST_DATABASE}`),
       ),
     ).not.toThrow();
   });

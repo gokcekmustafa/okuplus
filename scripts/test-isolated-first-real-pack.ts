@@ -28,7 +28,7 @@ import { FIRST_REAL_CURRICULUM_PACK } from "../src/curriculum/first-real-pack.js
 import { catalogFixtureReason } from "../src/curriculum/catalog-validation.js";
 import {
   assertIsolatedFirstRealPackTestTarget,
-  ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+  ISOLATED_FIRST_REAL_PACK_TEST_DATABASES,
 } from "./isolated-test-target.js";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -560,7 +560,7 @@ async function main(): Promise<void> {
     fail(error instanceof Error ? error.message : String(error));
   }
   assert(
-    target.database === ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+    ISOLATED_FIRST_REAL_PACK_TEST_DATABASES.has(target.database),
     "isolated database adı eşleşmiyor",
   );
   const prisma = new PrismaClient({
@@ -636,7 +636,7 @@ async function main(): Promise<void> {
         {
           status: "PASS",
           harness: "ISOLATED_TEST_FIRST_REAL_PACK",
-          isolatedDatabase: ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
+          isolatedDatabase: target.database,
           fingerprint,
           migrations,
           canonicalCatalog: { action: catalogPlan.action, level: LEVEL_CODE, skills: SKILL_CODES },
