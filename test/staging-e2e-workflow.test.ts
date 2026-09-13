@@ -34,6 +34,7 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain(
       'const errorOutput = readFileSync(".e2e-output/e2e.stderr", "utf8");',
     );
+    expect(workflow).toContain('const rootStart = text.lastIndexOf("\\n{\\n");');
     expect(workflow).toContain("e2e.error=${safe.error}");
     expect(workflow).toContain("staging-provision-summary.json");
     expect(workflow).toContain(

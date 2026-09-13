@@ -122,9 +122,13 @@ jobs:
           const raw = readFileSync(".e2e-output/e2e.raw", "utf8");
           const errorOutput = readFileSync(".e2e-output/e2e.stderr", "utf8");
           const parseJson = (text) => {
-            for (const line of text.trim().split("\n").reverse()) {
+            const trimmed = text.trim();
+            const rootStart = text.lastIndexOf("\n{\n");
+            const candidates = [trimmed, rootStart >= 0 ? text.slice(rootStart + 1).trim() : ""];
+            for (const candidate of candidates) {
+              if (!candidate) continue;
               try {
-                const parsed = JSON.parse(line);
+                const parsed = JSON.parse(candidate);
                 if (parsed && typeof parsed === "object") return parsed;
               } catch {}
             }
