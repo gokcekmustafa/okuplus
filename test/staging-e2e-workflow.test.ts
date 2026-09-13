@@ -28,6 +28,9 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("staging-e2e-summary.json");
     expect(workflow).toContain('error: typeof result.message === "string"');
+    expect(workflow).toContain(
+      'const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };',
+    );
     expect(workflow).toContain("staging-provision-summary.json");
     expect(workflow).toContain(
       "provisioning=${summary.status} account=${summary.account} error=${summary.error}",
