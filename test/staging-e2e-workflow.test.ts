@@ -28,6 +28,10 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("staging-e2e-summary.json");
     expect(workflow).toContain('error: typeof result.message === "string"');
+    expect(workflow).toContain("staging-provision-summary.json");
+    expect(workflow).toContain(
+      "provisioning=${summary.status} account=${summary.account} error=${summary.error}",
+    );
     expect(workflow).toContain("node --input-type=module <<'NODE' >> \"$GITHUB_STEP_SUMMARY\"");
     expect(workflow).toContain("consoleErrors: result.consoleErrors ?? 0");
     expect(workflow).toContain("networkErrors: result.networkErrors ?? 0");
