@@ -82,9 +82,18 @@ jobs:
           set -e
           PROVISION_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
-          const raw = readFileSync(".e2e-output/provision.raw", "utf8").trim();
-          let result;
-          try { result = JSON.parse(raw); } catch { result = { status: "FAIL" }; }
+          const raw = readFileSync(".e2e-output/provision.raw", "utf8");
+          const errorOutput = readFileSync(".e2e-output/provision.stderr", "utf8");
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };
           const summary = {
             status: result.status === "PASS" ? "PASS" : "FAIL",
             account: result.account === "CREATED" || result.account === "EXISTING" ? result.account : "UNKNOWN",
