@@ -27,6 +27,8 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("/health /health/db /ready");
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("staging-e2e-summary.json");
+    expect(workflow).toContain('error: typeof result.message === "string"');
+    expect(workflow).toContain("node --input-type=module <<'NODE' >> \"$GITHUB_STEP_SUMMARY\"");
     expect(workflow).toContain("consoleErrors: result.consoleErrors ?? 0");
     expect(workflow).toContain("networkErrors: result.networkErrors ?? 0");
     expect(workflow).toContain("duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0");
