@@ -81,7 +81,7 @@ jobs:
           exit_code=$?
           set -e
           PROVISION_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs";
+          import { readFileSync, writeFileSync } from "node:fs";
           const raw = readFileSync(".e2e-output/provision.raw", "utf8").trim();
           let result;
           try { result = JSON.parse(raw); } catch { result = { status: "FAIL" }; }
@@ -94,7 +94,8 @@ jobs:
             error: typeof result.message === "string" ? result.message.slice(0, 200) : "provisioning failed",
             productionTouched: "NO",
           };
-          console.log(`provisioning=${summary.status} account=${summary.account}`);
+          writeFileSync(".e2e-output/staging-provision-summary.json", JSON.stringify(summary, null, 2));
+          console.log(`provisioning=${summary.status} account=${summary.account} error=${summary.error}`);
           if (summary.status !== "PASS" || Number(process.env.PROVISION_EXIT_CODE) !== 0) process.exit(1);
           NODE
           rm -f .e2e-output/provision.raw .e2e-output/provision.stderr
@@ -167,11 +168,15 @@ jobs:
         run: |
           set -euo pipefail
           echo "## Staging authenticated E2E" >> "$GITHUB_STEP_SUMMARY"
-          if ! test -f .e2e-output/staging-e2e-summary.json; then
-            echo "- status: NOT_RUN" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          if test -f .e2e-output/staging-provision-summary.json; then
+            node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(".e2e-output/staging-provision-summary.json", "utf8"));
+          for (const [key, value] of Object.entries(result)) console.log(`- provisioning.${key}: ${value}`);
+          NODE
           fi
-          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          if test -f .e2e-output/staging-e2e-summary.json; then
+            node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
           import { readFileSync } from "node:fs";
           const result = JSON.parse(readFileSync(".e2e-output/staging-e2e-summary.json", "utf8"));
           for (const [key, value] of Object.entries(result)) {
@@ -180,11 +185,14 @@ jobs:
           }
           for (const [key, value] of Object.entries(result.timings ?? {})) console.log(`- ${key}: ${value ?? "NA"}`);
           NODE
+          else
+            echo "- e2e.status: NOT_RUN" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload sanitized E2E artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: staging-e2e-summary
-          path: .e2e-output/staging-e2e-summary.json
+          path: .e2e-output/*-summary.json
           if-no-files-found: ignore
