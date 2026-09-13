@@ -106,6 +106,7 @@ type E2eTimings = {
   answerLatencyMs: number | null;
   backendResponseLatencyMs: number | null;
   feedbackRenderLatencyMs: number | null;
+  answerServerTiming: Record<string, number> | null;
 };
 
 type RunnerReport = {
@@ -204,6 +205,18 @@ function errorMessage(error: unknown): string {
 
 function roundedDurationMs(startedAt: number): number {
   return Math.max(0, Math.round(performance.now() - startedAt));
+}
+
+function parseServerTiming(value: string | null): Record<string, number> | null {
+  if (!value) return null;
+  const timings: Record<string, number> = {};
+  for (const part of value.split(",")) {
+    const match = /^([a-z]+);dur=([0-9]+(?:\.[0-9]+)?)$/u.exec(part.trim());
+    if (!match) continue;
+    const duration = Number(match[2]);
+    if (Number.isFinite(duration)) timings[match[1]!] = duration;
+  }
+  return Object.keys(timings).length > 0 ? timings : null;
 }
 
 function assertStagingTarget(): void {
@@ -1104,25 +1117,30 @@ async function probeExerciseRender(
   sessionId: string,
   questionVersionId: string,
   timings: E2eTimings,
+  options: { reuseAuthenticatedPage?: boolean } = {},
 ): Promise<void> {
   const startedAt = performance.now();
   // Each daily item has its own exercise session. Use a fresh page in the
   // authenticated browser context so the previous item's SPA state cannot
-  // race the promoted item's render.
-  const renderPage = await page.context().newPage();
+  // race the promoted item's render. The first item can use the already
+  // authenticated page: opening a second SPA shell was previously included
+  // in the first-exercise metric, but is not part of the student flow.
+  const reuseAuthenticatedPage = options.reuseAuthenticatedPage === true;
+  const renderPage = reuseAuthenticatedPage ? page : await page.context().newPage();
   try {
-    await renderPage.goto(`${BASE_URL}/`, {
-      waitUntil: "networkidle",
-      timeout: BROWSER_REQUEST_TIMEOUT_MS,
-    });
+    if (!reuseAuthenticatedPage)
+      await renderPage.goto(`${BASE_URL}/`, {
+        waitUntil: "networkidle",
+        timeout: BROWSER_REQUEST_TIMEOUT_MS,
+      });
     await renderPage.waitForSelector("#view-app:not(.hidden)", {
       state: "visible",
       timeout: BROWSER_REQUEST_TIMEOUT_MS,
     });
-    await waitForStudentAppReady(renderPage);
+    if (!reuseAuthenticatedPage) await waitForStudentAppReady(renderPage);
     await loadBrowserExerciseQuestion(renderPage, sessionId, questionVersionId);
   } finally {
-    await renderPage.close().catch(() => undefined);
+    if (!reuseAuthenticatedPage) await renderPage.close().catch(() => undefined);
     if (timings.firstExerciseRenderMs === null)
       timings.firstExerciseRenderMs = roundedDurationMs(startedAt);
   }
@@ -1268,6 +1286,9 @@ async function probeInlineFeedback(
       );
     }
     const attempt = asRecord(apiData({ status: response.status(), body }), "browser attempt.data");
+    if (timings.answerServerTiming === null) {
+      timings.answerServerTiming = parseServerTiming(await response.headerValue("server-timing"));
+    }
     const feedbackStartedAt = performance.now();
     await feedbackPage.waitForSelector("#exercise-attempt-feedback", {
       state: "visible",
@@ -1362,7 +1383,9 @@ async function processDailyWork(
       entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
       entry.questions[0];
     if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
-    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, timings);
+    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, timings, {
+      reuseAuthenticatedPage: entry.item.position === 1,
+    });
     checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
     let submitted = 0;
@@ -1518,6 +1541,7 @@ async function main(): Promise<void> {
       answerLatencyMs: null,
       backendResponseLatencyMs: null,
       feedbackRenderLatencyMs: null,
+      answerServerTiming: null,
     },
     stagingE2EReady: "NO",
     productionTouched: "NO",

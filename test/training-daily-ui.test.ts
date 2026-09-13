@@ -13,6 +13,13 @@ describe("daily training student flow", () => {
     expect(app).toContain("nextDailyTrainingItem");
   });
 
+  it("reuses the daily start snapshot before loading the first exercise", () => {
+    expect(app).toContain("const hasDailySnapshot = Boolean(dailyTrainingSummary)");
+    expect(app).toContain("const today = hasDailySnapshot");
+    expect(app).toContain("let dailySession = dailyTrainingSummary");
+    expect(app).toContain("if (id) {");
+  });
+
   it("renders six-item progress and a final daily summary", () => {
     expect(app).toContain("Egzersiz ${position} / ${total}");
     expect(app).toContain("Bugünkü antrenmanı tamamladın!");
