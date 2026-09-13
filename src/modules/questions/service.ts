@@ -1289,56 +1289,60 @@ export async function createAttempt(
   const totalStartedAt = performance.now();
   const validationStartedAt = performance.now();
 
-  // 1) QuestionVersion'ı yükle
-  const version = await prisma.questionVersion.findUnique({
-    where: { id: questionVersionId },
-    select: {
-      id: true,
-      questionId: true,
-      status: true,
-      options: true,
-      correctAnswer: true,
-      explanation: true,
-      question: {
-        select: { type: true, contentId: true, status: true, deletedAt: true },
-      },
-    },
-  });
-  if (!version) throw notFoundError("Soru sürümü bulunamadı");
-
-  const question = await prisma.question.findUnique({
-    where: { id: version.questionId },
-    select: {
-      contentId: true,
-      status: true,
-      deletedAt: true,
-      content: { select: { tenantId: true, status: true, deletedAt: true } },
-    },
-  });
-  if (!question) throw notFoundError("Soru bulunamadı");
-
-  // 2) Session doğrula
-  const session = await prisma.exerciseSession.findUnique({
-    where: { id: sessionId },
-    select: {
-      id: true,
-      tenantId: true,
-      studentId: true,
-      templateVersionId: true,
-      context: true,
-      sessionType: true,
-      status: true,
-      assessmentId: true,
-      templateVersion: {
-        select: {
-          config: true,
-          status: true,
-          template: { select: { status: true, deletedAt: true } },
+  // 1) Soru sürümü ve oturum birbirinden bağımsızdır; ilk ağ/DB turunu
+  // kısaltmak için birlikte yüklenir. Soru->içerik doğrulaması da aynı
+  // snapshot'a alınır, böylece ikinci question.findUnique turu gerekmez.
+  const [version, session] = await Promise.all([
+    prisma.questionVersion.findUnique({
+      where: { id: questionVersionId },
+      select: {
+        id: true,
+        questionId: true,
+        status: true,
+        options: true,
+        correctAnswer: true,
+        explanation: true,
+        question: {
+          select: {
+            type: true,
+            contentId: true,
+            status: true,
+            deletedAt: true,
+            content: { select: { tenantId: true, status: true, deletedAt: true } },
+          },
         },
       },
-      trainingSessionItem: { select: { status: true } },
-    },
-  });
+    }),
+    prisma.exerciseSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        tenantId: true,
+        studentId: true,
+        templateVersionId: true,
+        context: true,
+        sessionType: true,
+        status: true,
+        assessmentId: true,
+        templateVersion: {
+          select: {
+            config: true,
+            status: true,
+            template: { select: { status: true, deletedAt: true } },
+            questions: {
+              where: { questionVersionId },
+              select: { templateVersionId: true },
+              take: 1,
+            },
+          },
+        },
+        trainingSessionItem: { select: { status: true } },
+      },
+    }),
+  ]);
+  if (!version) throw notFoundError("Soru sürümü bulunamadı");
+  const question = version.question;
+  if (!question) throw notFoundError("Soru bulunamadı");
   if (!session) throw notFoundError("Oturum bulunamadı");
 
   if (
@@ -1384,10 +1388,7 @@ export async function createAttempt(
   }
 
   // Session'ın template'i bu soruyu içermeli
-  const link = await prisma.exerciseTemplateVersionQuestion.findFirst({
-    where: { templateVersionId: session.templateVersionId, questionVersionId },
-    select: { templateVersionId: true },
-  });
+  const link = session.templateVersion.questions[0];
   if (!link) {
     throw validationError("Bu soru bu oturumun şablonuna ait değil");
   }

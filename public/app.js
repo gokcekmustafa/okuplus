@@ -8249,14 +8249,21 @@ async function loadExercisePage() {
         resetDailyTrainingState();
       }
       exerciseScope = scope;
+      // startDailyTraining() already returned the current daily snapshot.
+      // Reusing it avoids two redundant round trips before the first question
+      // can render. A fresh/resumed tab still loads the source of truth below.
+      const hasDailySnapshot = Boolean(dailyTrainingSummary);
       const t = getStoredTokens();
-      const today = await parseResponse(
-        await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
-      );
+      const today = hasDailySnapshot
+        ? null
+        : await parseResponse(
+            await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
+          );
       const persistedDaily = restoreDailyTrainingState();
       if (!dailyTrainingSessionId && persistedDaily?.id) dailyTrainingSessionId = persistedDaily.id;
-      let dailySession = null;
-      if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
+      let dailySession = dailyTrainingSummary;
+      if (!dailySession && dailyTrainingSessionId)
+        dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
       if (dailySession) dailyTrainingSummary = dailySession;
       if (dailySession) $("exercise-xp").textContent = "⭐ — GP";
@@ -8269,11 +8276,11 @@ async function loadExercisePage() {
       const id =
         exerciseRequestedSessionId ||
         dailyItem?.exerciseSessionId ||
-        today.activeSession?.id ||
+        today?.activeSession?.id ||
         exerciseSession?.id ||
         savedId;
       exerciseRequestedSessionId = null;
-      if (id && !dailyTrainingSummary) {
+      if (id) {
         let session;
         try {
           session = await fetchStudentExercise(id);

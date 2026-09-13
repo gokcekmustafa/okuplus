@@ -52,12 +52,10 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("loadBrowserExerciseQuestion(\n      feedbackPage,");
   });
 
-  it("probes every daily item in an isolated authenticated page", () => {
+  it("does not charge first-render time for a second SPA shell", () => {
     expect(runnerSource).toContain("async function probeExerciseRender");
     expect(runnerSource).toContain("page.context().newPage()");
-    expect(runnerSource).toContain(
-      "await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, timings)",
-    );
+    expect(runnerSource).toContain("reuseAuthenticatedPage: entry.item.position === 1");
     expect(runnerSource).toContain('checkpoint.rendered = "PASS"');
   });
 
