@@ -13,6 +13,9 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}");
     expect(workflow).toContain("STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}");
     expect(workflow).toContain("STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}");
+    expect(workflow).toContain(
+      "!/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\\.vercel\\.app$/u.test(url.hostname)",
+    );
     expect(workflow).not.toMatch(/^\s+push:/mu);
     expect(workflow).not.toMatch(/^\s+pull_request:/mu);
   });
