@@ -6,15 +6,16 @@
  * endpoints. The only writes it can cause are the same placement/training
  * session, attempt, and completion writes a student makes in the product.
  */
+import { performance } from "node:perf_hooks";
 import { chromium, type Browser, type Page } from "playwright-core";
 import {
   planQuotaAwareAttempts,
+  validateStagingBaseUrl,
   type PracticeQuestionQuota,
   type QuotaAwareAttemptPlan,
 } from "./browser-student-full-e2e-policy.js";
 
-const STAGING_ORIGIN = "https://okuplus-git-staging-gokcekmustafas-projects.vercel.app";
-const BASE_URL = (process.env.BASE_URL?.trim() || STAGING_ORIGIN).replace(/\/$/u, "");
+const BASE_URL = (process.env.BASE_URL?.trim() ?? "").replace(/\/$/u, "");
 const CHROME_PATH =
   process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const BROWSER_REQUEST_TIMEOUT_MS = 30_000;
@@ -98,6 +99,15 @@ type PlacementOutcome = {
   mode: "PASS_EXISTING" | "PASS_CREATED";
 };
 
+type E2eTimings = {
+  dashboardLoadMs: number | null;
+  trainingLoadMs: number | null;
+  firstExerciseRenderMs: number | null;
+  answerLatencyMs: number | null;
+  backendResponseLatencyMs: number | null;
+  feedbackRenderLatencyMs: number | null;
+};
+
 type RunnerReport = {
   status: "PASS" | "PASS_WITH_LIMITATIONS" | "FAIL";
   auth: string;
@@ -125,6 +135,7 @@ type RunnerReport = {
   items: ItemCheckpoint[];
   stagingE2EReady: "YES" | "LIMITED_BY_FREE_QUOTA" | "NO";
   productionTouched: "NO";
+  timings: E2eTimings;
 };
 
 type E2EStage =
@@ -188,22 +199,12 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Bilinmeyen hata";
 }
 
-function assertStagingTarget(): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(BASE_URL);
-  } catch {
-    throw new Error("BASE_URL geçerli bir URL olmalı");
-  }
+function roundedDurationMs(startedAt: number): number {
+  return Math.max(0, Math.round(performance.now() - startedAt));
+}
 
-  if (parsed.origin !== STAGING_ORIGIN) {
-    throw new Error(
-      `BASE_URL reddedildi: yalnızca onaylı staging origin kullanılabilir (${parsed.origin})`,
-    );
-  }
-  if (/production|okuplus\.online/iu.test(parsed.hostname)) {
-    throw new Error("Production BASE_URL full student E2E runner tarafından reddedildi");
-  }
+function assertStagingTarget(): void {
+  validateStagingBaseUrl(BASE_URL);
 }
 
 function requireStudentCredentials(): { email: string; password: string } {
@@ -1091,7 +1092,9 @@ async function probeExerciseRender(
   page: Page,
   sessionId: string,
   questionVersionId: string,
+  timings: E2eTimings,
 ): Promise<void> {
+  const startedAt = performance.now();
   // Each daily item has its own exercise session. Use a fresh page in the
   // authenticated browser context so the previous item's SPA state cannot
   // race the promoted item's render.
@@ -1109,6 +1112,7 @@ async function probeExerciseRender(
     await loadBrowserExerciseQuestion(renderPage, sessionId, questionVersionId);
   } finally {
     await renderPage.close().catch(() => undefined);
+    if (timings.firstExerciseRenderMs === null) timings.firstExerciseRenderMs = roundedDurationMs(startedAt);
   }
 }
 
@@ -1149,6 +1153,7 @@ async function probeInlineFeedback(
   page: Page,
   candidate: DailyWork,
   budget: AttemptBudget,
+  timings: E2eTimings,
 ): Promise<JsonObject | null> {
   if (!canAttempt(budget)) {
     budget.budgetExhausted = true;
@@ -1231,8 +1236,12 @@ async function probeInlineFeedback(
       (response) => response.url().includes(expectedPath) && response.request().method() === "POST",
       { timeout: 30_000 },
     );
+    const answerStartedAt = performance.now();
     await feedbackPage.click("#exercise-submit-attempt");
     const response = await responsePromise;
+    const answerLatencyMs = roundedDurationMs(answerStartedAt);
+    if (timings.answerLatencyMs === null) timings.answerLatencyMs = answerLatencyMs;
+    if (timings.backendResponseLatencyMs === null) timings.backendResponseLatencyMs = answerLatencyMs;
     const body = await response.json().catch(() => null);
     if (isQuestionQuotaExhausted({ status: response.status(), body })) {
       budget.quotaExhausted = true;
@@ -1244,6 +1253,7 @@ async function probeInlineFeedback(
       );
     }
     const attempt = asRecord(apiData({ status: response.status(), body }), "browser attempt.data");
+    const feedbackStartedAt = performance.now();
     await feedbackPage.waitForSelector("#exercise-attempt-feedback", {
       state: "visible",
       timeout: 10_000,
@@ -1253,6 +1263,7 @@ async function probeInlineFeedback(
       display: getComputedStyle(element).display,
     }));
     if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback görünmedi");
+    if (timings.feedbackRenderLatencyMs === null) timings.feedbackRenderLatencyMs = roundedDurationMs(feedbackStartedAt);
     if ((await feedbackPage.locator("#celebration-layer:not(.hidden)").count()) > 0) {
       throw new Error("Ara cevapta celebration popup göründü");
     }
@@ -1334,7 +1345,7 @@ async function processDailyWork(
       entry.questions.find((question) => needsQuestionAttempt(entry, question.questionVersionId)) ??
       entry.questions[0];
     if (!firstQuestion) throw new Error(`Daily item ${entry.item.position} için soru bulunamadı`);
-    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId);
+    await probeExerciseRender(page, sessionId, firstQuestion.questionVersionId, report.timings);
     checkpoint.rendered = "PASS";
     const before = await readProgressSnapshot(page);
     let submitted = 0;
@@ -1471,6 +1482,14 @@ async function main(): Promise<void> {
     quotaExhausted: false,
     completionBlockedByQuota: false,
     items: [],
+    timings: {
+      dashboardLoadMs: null,
+      trainingLoadMs: null,
+      firstExerciseRenderMs: null,
+      answerLatencyMs: null,
+      backendResponseLatencyMs: null,
+      feedbackRenderLatencyMs: null,
+    },
     stagingE2EReady: "NO",
     productionTouched: "NO",
   };
@@ -1492,7 +1511,9 @@ async function main(): Promise<void> {
     });
     const browserContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     page = await browserContext.newPage();
+    const dashboardStartedAt = performance.now();
     await login(page, credentials);
+    report.timings.dashboardLoadMs = roundedDurationMs(dashboardStartedAt);
     await assertStudentAuth(page);
     report.auth = "PASS";
     logStage("AUTH_DONE");
@@ -1525,6 +1546,7 @@ async function main(): Promise<void> {
       );
     }
 
+    const trainingStartedAt = performance.now();
     const dailyStart = await browserApi(page, "/student/training/daily/start", {
       method: "POST",
       body: {},
@@ -1533,6 +1555,7 @@ async function main(): Promise<void> {
     const dailyStartData = asRecord(apiData(dailyStart), "daily start.data");
     const dailyId = readString(dailyStartData, "id", "daily start");
     const { daily, work } = await readDailyWork(page, dailyId);
+    report.timings.trainingLoadMs = roundedDurationMs(trainingStartedAt);
     const itemCheckpoints: ItemCheckpoint[] = work
       .slice()
       .sort((a, b) => a.item.position - b.item.position)
@@ -1624,7 +1647,7 @@ async function main(): Promise<void> {
     if (quotaPlan.plannedAttemptCount > 0) {
       if (!uiCandidate) throw new Error("Inline feedback için uygun unanswered item bulunamadı");
       await waitForStudentAppReady(page);
-      const uiAttempt = await probeInlineFeedback(page, uiCandidate, budget);
+      const uiAttempt = await probeInlineFeedback(page, uiCandidate, budget, report.timings);
       if (uiAttempt) checkpointFor(itemCheckpoints, uiCandidate.item.position).rendered = "PASS";
       if (uiAttempt?.isCorrect === true) coverage.correct = true;
       if (uiAttempt?.isCorrect === false) coverage.wrong = true;

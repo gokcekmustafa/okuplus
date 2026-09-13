@@ -1,0 +1,185 @@
+name: Staging authenticated E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-e2e:
+    name: Run authenticated staging E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      BASE_URL: ${{ vars.BASE_URL }}
+      STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
+      STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
+      STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
+    steps:
+      - name: Checkout staging
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Validate staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const value = process.env.BASE_URL?.trim();
+          if (!value) throw new Error("BASE_URL is not configured");
+          const url = new URL(value);
+          if (url.protocol !== "https:" || !/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\\.vercel\\.app$/u.test(url.hostname)) {
+            throw new Error("BASE_URL is not an approved staging deployment URL");
+          }
+          if (!process.env.STAGING_STUDENT_EMAIL?.trim()) throw new Error("STAGING_STUDENT_EMAIL is not configured");
+          if (!process.env.STAGING_STUDENT_PASSWORD) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
+          if (process.env.STAGING_E2E_PREMIUM_EMAIL?.trim().toLowerCase() !== process.env.STAGING_STUDENT_EMAIL.trim().toLowerCase()) {
+            throw new Error("staging synthetic entitlement identity is not aligned");
+          }
+          console.log("staging configuration=present");
+          NODE
+
+      - name: Check staging health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /health /health/db /ready; do
+            status="$(curl --fail --silent --show-error --location --max-time 20 -o /dev/null -w '%{http_code}' "${BASE_URL}${path}")"
+            test "$status" = "200"
+            echo "${path}=200"
+          done
+
+      - name: Locate Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v chromium || command -v google-chrome || command -v chromium-browser || true)"
+          test -n "$browser"
+          printf 'CHROME_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
+          echo "browser=available"
+
+      - name: Provision supported staging E2E student
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .e2e-output
+          set +e
+          npx tsx scripts/provision-staging-release-0-5-e2e.ts > .e2e-output/provision.raw 2> .e2e-output/provision.stderr
+          exit_code=$?
+          set -e
+          PROVISION_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const raw = readFileSync(".e2e-output/provision.raw", "utf8").trim();
+          let result;
+          try { result = JSON.parse(raw); } catch { result = { status: "FAIL" }; }
+          const summary = {
+            status: result.status === "PASS" ? "PASS" : "FAIL",
+            account: result.account === "CREATED" || result.account === "EXISTING" ? result.account : "UNKNOWN",
+            auth: result.auth === "PASS" ? "PASS" : "FAIL",
+            onboarding: result.onboarding === "PASS" ? "PASS" : "FAIL",
+            entitlement: result.entitlement === "PLAN_PREMIUM_STAGING_FIXTURE" ? "PASS" : "FAIL",
+            productionTouched: "NO",
+          };
+          console.log(`provisioning=${summary.status} account=${summary.account}`);
+          if (summary.status !== "PASS" || Number(process.env.PROVISION_EXIT_CODE) !== 0) process.exit(1);
+          NODE
+          rm -f .e2e-output/provision.raw .e2e-output/provision.stderr
+
+      - name: Run focused authenticated student E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          npx tsx scripts/browser-student-full-e2e.ts > .e2e-output/e2e.raw 2> .e2e-output/e2e.stderr
+          exit_code=$?
+          set -e
+          E2E_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const raw = readFileSync(".e2e-output/e2e.raw", "utf8");
+          let result = null;
+          const rootStart = raw.lastIndexOf("\n{\n");
+          try {
+            result = JSON.parse((rootStart >= 0 ? raw.slice(rootStart + 1) : raw).trim());
+          } catch { result = { status: "FAIL" }; }
+          const items = Array.isArray(result.items) ? result.items.map((item) => ({
+            position: item.position,
+            family: item.family,
+            rendered: item.rendered,
+            submit: item.submit,
+            finalStatus: item.finalStatus,
+            serverResults: item.serverResults,
+          })) : [];
+          const safe = {
+            status: result.status ?? "FAIL",
+            stagingE2EReady: result.stagingE2EReady ?? "NO",
+            auth: result.auth ?? "NOT_RUN",
+            firstTraining: result.firstTraining ?? "NOT_RUN",
+            fastReading: result.fastReading ?? "NOT_RUN",
+            comprehension: result.comprehension ?? "NOT_RUN",
+            attempt: result.attempt ?? "NOT_RUN",
+            gp: result.gp ?? "NOT_RUN",
+            performance: result.performance ?? "NOT_RUN",
+            adaptiveSelection: result.adaptiveSelection ?? "NOT_RUN",
+            publishedContent: result.publishedContent ?? "NOT_RUN",
+            finalState: result.finalState ?? "NOT_RUN",
+            quotaLimit: result.quotaLimit ?? null,
+            quotaUsedAtStart: result.quotaUsedAtStart ?? null,
+            quotaRemainingAtStart: result.quotaRemainingAtStart ?? null,
+            questionsAttempted: result.questionsAttempted ?? 0,
+            quotaExhausted: result.quotaExhausted === true,
+            completionBlockedByQuota: result.completionBlockedByQuota === true,
+            timings: result.timings ?? null,
+            items,
+            productionTouched: "NO",
+          };
+          writeFileSync(".e2e-output/staging-e2e-summary.json", JSON.stringify(safe, null, 2));
+          console.log(`e2e=${safe.status} ready=${safe.stagingE2EReady}`);
+          console.log(`firstExerciseRenderMs=${safe.timings?.firstExerciseRenderMs ?? "NA"}`);
+          console.log(`answerLatencyMs=${safe.timings?.answerLatencyMs ?? "NA"}`);
+          console.log(`feedbackRenderLatencyMs=${safe.timings?.feedbackRenderLatencyMs ?? "NA"}`);
+          if (Number(process.env.E2E_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
+          NODE
+          rm -f .e2e-output/e2e.raw .e2e-output/e2e.stderr
+
+      - name: Publish sanitized E2E summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Staging authenticated E2E"
+            if test -f .e2e-output/staging-e2e-summary.json; then
+              node --input-type=module <<'NODE'
+              import { readFileSync } from "node:fs";
+              const result = JSON.parse(readFileSync(".e2e-output/staging-e2e-summary.json", "utf8"));
+              for (const [key, value] of Object.entries(result)) {
+                if (key === "items" || key === "timings") continue;
+                console.log(`- ${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
+              }
+              for (const [key, value] of Object.entries(result.timings ?? {})) console.log(`- ${key}: ${value ?? "NA"}`);
+              NODE
+            else
+              echo "- status: NOT_RUN"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized E2E artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-e2e-summary
+          path: .e2e-output/staging-e2e-summary.json
+          if-no-files-found: ignore
