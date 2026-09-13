@@ -9,12 +9,12 @@
 import { chromium, type Browser, type Page } from "playwright-core";
 import {
   planQuotaAwareAttempts,
+  validateStagingBaseUrl,
   type PracticeQuestionQuota,
   type QuotaAwareAttemptPlan,
 } from "./browser-student-full-e2e-policy.js";
 
-const STAGING_ORIGIN = "https://okuplus-git-staging-gokcekmustafas-projects.vercel.app";
-const BASE_URL = (process.env.BASE_URL?.trim() || STAGING_ORIGIN).replace(/\/$/u, "");
+const BASE_URL = (process.env.BASE_URL?.trim() ?? "").replace(/\/$/u, "");
 const CHROME_PATH =
   process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const BROWSER_REQUEST_TIMEOUT_MS = 30_000;
@@ -189,21 +189,7 @@ function errorMessage(error: unknown): string {
 }
 
 function assertStagingTarget(): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(BASE_URL);
-  } catch {
-    throw new Error("BASE_URL geçerli bir URL olmalı");
-  }
-
-  if (parsed.origin !== STAGING_ORIGIN) {
-    throw new Error(
-      `BASE_URL reddedildi: yalnızca onaylı staging origin kullanılabilir (${parsed.origin})`,
-    );
-  }
-  if (/production|okuplus\.online/iu.test(parsed.hostname)) {
-    throw new Error("Production BASE_URL full student E2E runner tarafından reddedildi");
-  }
+  validateStagingBaseUrl(BASE_URL);
 }
 
 function requireStudentCredentials(): { email: string; password: string } {

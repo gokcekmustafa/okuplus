@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   MINIMUM_VALIDATION_ATTEMPTS,
   planQuotaAwareAttempts,
+  validateStagingBaseUrl,
 } from "../scripts/browser-student-full-e2e-policy.js";
 
 describe("staging student E2E quota policy", () => {
@@ -63,5 +64,21 @@ describe("staging student E2E quota policy", () => {
       fullCompletionPossible: true,
       completionBlockedByQuota: false,
     });
+  });
+
+  it("güncel staging deployment URL'sini açıkça verildiğinde kabul eder", () => {
+    expect(
+      validateStagingBaseUrl("https://okuplus-icrrskl7c-gokcekmustafas-projects.vercel.app"),
+    ).toBe("https://okuplus-icrrskl7c-gokcekmustafas-projects.vercel.app");
+  });
+
+  it("BASE_URL yoksa veya production host ise fail-closed davranır", () => {
+    expect(() => validateStagingBaseUrl(undefined)).toThrow("BASE_URL gerekli");
+    expect(() => validateStagingBaseUrl("https://okuplus.vercel.app")).toThrow(
+      "BASE_URL reddedildi",
+    );
+    expect(() =>
+      validateStagingBaseUrl("https://okuplus-git-staging-gokcekmustafas-projects.vercel.app"),
+    ).not.toThrow();
   });
 });
