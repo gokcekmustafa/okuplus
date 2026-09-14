@@ -564,7 +564,7 @@ describe("content admin", () => {
       payload: { status: "PUBLISHED" },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json().error.message).toContain("sürüm");
+    expect(res.json().error.message).toBe("Yayınlanmış bir sürümü olmayan içerik yayınlanamaz");
   });
 
   it("İçerik arşivlenebilir ve arşivden taslağa alınabilir", async () => {
@@ -613,7 +613,7 @@ describe("content admin", () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error.code).toBe("VALIDATION_ERROR");
-    expect(res.json().error.message).toContain("arşivlenmiş");
+    expect(res.json().error.message).toBe("Yalnızca arşivlenmiş içerik taslağa alınabilir");
   });
 
   // ---------- Sürüm yaşam döngüsü ----------
@@ -781,7 +781,9 @@ describe("content admin", () => {
       payload: { body: "değişiklik" },
     });
     expect(updated.statusCode).toBe(400);
-    expect(updated.json().error.message).toContain("Yayınlanmış sürüm düzenlenemez");
+    expect(updated.json().error.message).toBe(
+      "Yayınlanmış sürüm düzenlenemez. Yeni bir sürüm oluşturulmalı.",
+    );
   });
 
   it("Yayın sonrası yeni sürüm oluşturulabilir (version 2)", async () => {

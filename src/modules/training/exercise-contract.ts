@@ -305,6 +305,13 @@ const trainingExerciseVersionConfigSchema = z
   .strict()
   .superRefine((value, ctx) => {
     const expected = FAMILY_RULES[value.family];
+    if (expected.competency !== value.competency) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["competency"],
+        message: `${value.family} için competency ${expected.competency} olmalı`,
+      });
+    }
     if (expected.interactionType !== value.interactionType) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

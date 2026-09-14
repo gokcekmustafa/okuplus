@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DAILY_TRAINING_COMPOSITION,
+  appendReviewToDailyPlan,
   dailySessionDateKey,
   planDailyTraining,
   utcSessionDate,
   type DailyTrainingCandidate,
 } from "../src/modules/training/daily-session.js";
+import { dailyGoalStatus } from "../src/modules/student-learning/service.js";
 
 function candidates(): DailyTrainingCandidate[] {
   return [
@@ -49,6 +51,13 @@ function candidates(): DailyTrainingCandidate[] {
 }
 
 describe("daily training planner", () => {
+  it("derives the daily goal state from the persisted session status", () => {
+    expect(dailyGoalStatus(undefined)).toBe("NOT_STARTED");
+    expect(dailyGoalStatus("IN_PROGRESS")).toBe("IN_PROGRESS");
+    expect(dailyGoalStatus("COMPLETED")).toBe("COMPLETED");
+    expect(dailyGoalStatus("ABANDONED")).toBe("NOT_STARTED");
+  });
+
   it("keeps the fixed six-item composition and deterministic order", () => {
     const plan = planDailyTraining(candidates());
 
@@ -121,5 +130,40 @@ describe("daily training planner", () => {
     expect(() =>
       planDailyTraining(candidates().filter((item) => item.family !== "RAPID_RECOGNITION")),
     ).toThrow("RAPID_RECOGNITION için günlük antrenmanda yayınlanmış egzersiz gerekli");
+  });
+
+  it("appends at most one review item without replacing new learning", () => {
+    const plan = planDailyTraining(candidates());
+    const reviewed = appendReviewToDailyPlan(plan, {
+      templateVersionId: "main-review-2",
+      family: "MAIN_IDEA",
+      competency: "RC_MAIN_IDEA",
+      difficulty: "FOUNDATION",
+      version: 2,
+      reason: "LOW_ACCURACY",
+    });
+
+    expect(reviewed.totalItems).toBe(7);
+    expect(reviewed.items).toHaveLength(7);
+    expect(reviewed.items.slice(0, 6)).toEqual(plan.items);
+    expect(reviewed.items[6]).toMatchObject({
+      position: 7,
+      templateVersionId: "main-review-2",
+      review: true,
+      reviewReason: "LOW_ACCURACY",
+    });
+    expect(appendReviewToDailyPlan(reviewed, reviewed.items[6])).toBe(reviewed);
+  });
+
+  it("does not add review work to the first-day plan", () => {
+    const firstDay = { ...planDailyTraining(candidates()), firstDay: true };
+    const result = appendReviewToDailyPlan(firstDay, {
+      templateVersionId: "review-1",
+      family: "MAIN_IDEA",
+      competency: "RC_MAIN_IDEA",
+      difficulty: "FOUNDATION",
+      reason: "INSUFFICIENT_MASTERY",
+    });
+    expect(result).toBe(firstDay);
   });
 });

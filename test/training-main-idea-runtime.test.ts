@@ -3,6 +3,7 @@ import {
   buildTrainingFeedback,
   isMainIdeaVersionConfig,
   isTrainingConfigCandidate,
+  isTrainingVersionConfig,
   toMainIdeaRuntimeConfig,
 } from "../src/modules/training/runtime.js";
 import {
@@ -68,6 +69,11 @@ describe("MAIN_IDEA training runtime contract", () => {
   it("rejects missing and malformed version config", () => {
     expect(isMainIdeaVersionConfig(null)).toBe(false);
     expect(isMainIdeaVersionConfig({ family: "MAIN_IDEA" })).toBe(false);
+  });
+
+  it("keeps personal training selection on valid version snapshots", () => {
+    expect(isTrainingVersionConfig(validConfig())).toBe(true);
+    expect(isTrainingVersionConfig({ canonicalActive: true })).toBe(false);
   });
 
   it("keeps configured positive feedback Turkish and short", () => {

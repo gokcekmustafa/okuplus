@@ -55,6 +55,7 @@ export type AdaptiveSession = {
   exposureId: string;
   status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED" | "EXPIRED";
   attempts: readonly AdaptiveAttempt[];
+  lastActivityAt?: Date | string | null;
 };
 
 export type AdaptiveSignal = {
@@ -74,6 +75,11 @@ export type AdaptiveSignal = {
   recentExposureIds: string[];
   currentDifficulty: AdaptiveDifficulty;
   mastery: boolean;
+  masteryState: AdaptiveStatus;
+  recentAccuracy: number | null;
+  recent5Accuracy: number | null;
+  trend: "DEVELOPING" | "STABLE" | "NEEDS_REVIEW" | null;
+  lastActivityAt: Date | string | null;
 };
 
 export type AdaptivePerformanceState = Record<AdaptiveFamily, AdaptiveSignal>;
@@ -96,8 +102,6 @@ function scoreOf(attempt: AdaptiveAttempt): number | null {
   if (typeof attempt.rawScore === "number" && Number.isFinite(attempt.rawScore)) {
     return Math.max(0, Math.min(1, attempt.rawScore));
   }
-  if (attempt.isCorrect === true) return 1;
-  if (attempt.isCorrect === false) return 0;
   return null;
 }
 
@@ -124,6 +128,11 @@ function emptySignal(family: AdaptiveFamily, competency: string): AdaptiveSignal
     recentExposureIds: [],
     currentDifficulty: "FOUNDATION",
     mastery: false,
+    masteryState: "NOT_STARTED",
+    recentAccuracy: null,
+    recent5Accuracy: null,
+    trend: null,
+    lastActivityAt: null,
   };
 }
 
@@ -134,6 +143,36 @@ function recentConsecutiveFailures(attempts: readonly AdaptiveAttempt[]): number
     count += 1;
   }
   return count;
+}
+
+function attemptDate(attempt: AdaptiveAttempt): number {
+  const value = new Date(String(attempt.answeredAt)).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function sessionDate(session: AdaptiveSession): number {
+  const explicit = session.lastActivityAt ? new Date(session.lastActivityAt).getTime() : NaN;
+  if (Number.isFinite(explicit)) return explicit;
+  const lastAttempt = session.attempts.at(-1);
+  return lastAttempt ? attemptDate(lastAttempt) : 0;
+}
+
+function accuracyOf(attempts: readonly AdaptiveAttempt[]): number | null {
+  if (attempts.length === 0) return null;
+  return attempts.reduce((total, attempt) => total + (scoreOf(attempt) ?? 0), 0) / attempts.length;
+}
+
+function trendOf(
+  scoredAttempts: readonly AdaptiveAttempt[],
+): "DEVELOPING" | "STABLE" | "NEEDS_REVIEW" | null {
+  if (scoredAttempts.length < 10) return null;
+  const previous = accuracyOf(scoredAttempts.slice(-10, -5));
+  const recent = accuracyOf(scoredAttempts.slice(-5));
+  if (previous === null || recent === null) return null;
+  const delta = recent - previous;
+  if (delta >= 0.1) return "DEVELOPING";
+  if (delta <= -0.1) return "NEEDS_REVIEW";
+  return "STABLE";
 }
 
 export function deriveAdaptiveSignal(
@@ -147,23 +186,22 @@ export function deriveAdaptiveSignal(
   if (relevant.length === 0) return emptySignal(family, competency);
 
   const orderedSessions = [...relevant].sort((a, b) => {
-    const aTime = a.attempts.at(-1)?.answeredAt;
-    const bTime = b.attempts.at(-1)?.answeredAt;
-    return new Date(String(aTime ?? 0)).getTime() - new Date(String(bTime ?? 0)).getTime();
+    const byDate = sessionDate(a) - sessionDate(b);
+    return byDate !== 0 ? byDate : a.sessionId.localeCompare(b.sessionId);
   });
-  const allAttempts = orderedSessions.flatMap((session) => session.attempts);
+  const allAttempts = orderedSessions
+    .flatMap((session) => session.attempts)
+    .sort((a, b) => attemptDate(a) - attemptDate(b));
   const scoredAttempts = allAttempts.filter((attempt) => scoreOf(attempt) !== null);
   const recentScored = scoredAttempts.slice(-10);
+  const recent5Scored = scoredAttempts.slice(-5);
   const accuracy =
     scoredAttempts.length > 0
       ? scoredAttempts.reduce((total, attempt) => total + (scoreOf(attempt) ?? 0), 0) /
         scoredAttempts.length
       : null;
-  const recentAccuracy =
-    recentScored.length > 0
-      ? recentScored.reduce((total, attempt) => total + (scoreOf(attempt) ?? 0), 0) /
-        recentScored.length
-      : null;
+  const recentAccuracy = recentScored.length >= 5 ? accuracyOf(recentScored) : null;
+  const recent5Accuracy = recent5Scored.length >= 5 ? accuracyOf(recent5Scored) : null;
   const consecutiveFailures = recentConsecutiveFailures(scoredAttempts);
   const scoredSessions = orderedSessions
     .map((session) => ({
@@ -182,7 +220,7 @@ export function deriveAdaptiveSignal(
   const lastTwoHaveNoRepeatFailure = lastTwoSessions.every(
     (entry) => recentConsecutiveFailures(entry.attempts) < 2,
   );
-  const exposureIds = new Set(orderedSessions.map((session) => session.exposureId));
+  const exposureIds = new Set(scoredSessions.map((entry) => entry.session.exposureId));
   const mastery =
     scoredAttempts.length >= 10 &&
     scoredSessions.length >= 3 &&
@@ -192,7 +230,7 @@ export function deriveAdaptiveSignal(
     lastTwoHaveNoRepeatFailure &&
     exposureIds.size >= 2;
   const weak =
-    (scoredAttempts.length >= 5 && (recentAccuracy ?? 0) < 0.6) || consecutiveFailures >= 2;
+    (scoredAttempts.length >= 5 && (recent5Accuracy ?? 0) < 0.6) || consecutiveFailures >= 2;
   const completionCount = orderedSessions.filter(
     (session) => session.status === "COMPLETED",
   ).length;
@@ -203,6 +241,15 @@ export function deriveAdaptiveSignal(
   const status: AdaptiveStatus = weak
     ? "NEEDS_REVIEW"
     : mastery || high
+      ? "STABLE"
+      : scoredAttempts.length === 0
+        ? "NOT_STARTED"
+        : scoredSessions.length < 2 || scoredAttempts.length < 5
+          ? "PRACTICING"
+          : "DEVELOPING";
+  const masteryState: AdaptiveStatus = weak
+    ? "NEEDS_REVIEW"
+    : mastery
       ? "STABLE"
       : scoredAttempts.length === 0
         ? "NOT_STARTED"
@@ -235,6 +282,13 @@ export function deriveAdaptiveSignal(
     recentExposureIds: orderedSessions.slice(-10).map((session) => session.exposureId),
     currentDifficulty: recentSession?.difficulty ?? "FOUNDATION",
     mastery,
+    masteryState,
+    recentAccuracy,
+    recent5Accuracy,
+    trend: trendOf(scoredAttempts),
+    lastActivityAt: recentSession
+      ? (recentSession.lastActivityAt ?? recentSession.attempts.at(-1)?.answeredAt ?? null)
+      : null,
   };
 }
 

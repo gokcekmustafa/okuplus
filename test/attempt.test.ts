@@ -138,6 +138,7 @@ describe("attempt", () => {
           type: "PASSAGE",
           title: "Attempt İçerik A",
           difficulty: 0.5,
+          status: "PUBLISHED",
         },
         {
           id: CONTENT_B,
@@ -145,6 +146,7 @@ describe("attempt", () => {
           type: "PASSAGE",
           title: "Attempt İçerik B",
           difficulty: 0.5,
+          status: "PUBLISHED",
         },
       ],
     });
@@ -152,9 +154,27 @@ describe("attempt", () => {
     // Questions
     await prisma.question.createMany({
       data: [
-        { id: QUESTION_A, contentId: CONTENT_A, position: 0, type: "MULTIPLE_CHOICE" },
-        { id: QUESTION_OE, contentId: CONTENT_A, position: 1, type: "OPEN_ENDED" },
-        { id: QUESTION_B, contentId: CONTENT_B, position: 0, type: "MULTIPLE_CHOICE" },
+        {
+          id: QUESTION_A,
+          contentId: CONTENT_A,
+          position: 0,
+          type: "MULTIPLE_CHOICE",
+          status: "PUBLISHED",
+        },
+        {
+          id: QUESTION_OE,
+          contentId: CONTENT_A,
+          position: 1,
+          type: "OPEN_ENDED",
+          status: "PUBLISHED",
+        },
+        {
+          id: QUESTION_B,
+          contentId: CONTENT_B,
+          position: 0,
+          type: "MULTIPLE_CHOICE",
+          status: "PUBLISHED",
+        },
       ],
     });
     const qvA = await prisma.questionVersion.create({

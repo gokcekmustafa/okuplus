@@ -15,6 +15,7 @@ import {
   resolveRapidRecognitionTemplateVersion,
   type TrainingActor,
 } from "./runtime.js";
+import { assertStudentActor } from "../student-learning/policy.js";
 
 type TrainingStartResolver = (
   actor: TrainingActor,
@@ -49,6 +50,7 @@ function registerTrainingStartRoute(
       tenantId: request.tenantContext?.tenantId ?? null,
       platformRole: request.authUser!.platformRole ?? null,
     };
+    assertStudentActor(actor);
     const graph = await resolveTemplateVersion(actor, body.templateVersionId);
     return ok(
       await startPersonalExercise(actor, {
@@ -72,7 +74,11 @@ export async function trainingStudentRoutes(
   app.post(
     "/student/training/daily/start",
     { preHandler: [requireAuth(opts.authProvider)] },
-    async (request) => ok(await startDailyTraining(dailyActor(request))),
+    async (request) => {
+      const actor = dailyActor(request);
+      assertStudentActor(actor);
+      return ok(await startDailyTraining(actor));
+    },
   );
   app.get(
     "/student/training/daily/:id",
@@ -80,7 +86,9 @@ export async function trainingStudentRoutes(
     async (request) => {
       const id = (request.params as { id?: string }).id?.trim();
       if (!id) throw validationError("Günlük antrenman kimliği gerekli");
-      return ok(await getDailyTrainingSession(id, dailyActor(request)));
+      const actor = dailyActor(request);
+      assertStudentActor(actor);
+      return ok(await getDailyTrainingSession(id, actor));
     },
   );
 
