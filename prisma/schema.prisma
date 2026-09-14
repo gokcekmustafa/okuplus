@@ -45,6 +45,7 @@ enum AuthIdentityProvider {
 enum PlatformRole {
   SUPER_ADMIN
   CONTENT_EDITOR
+  CONTENT_REVIEWER
   SUPPORT
   ANALYST
 }
@@ -119,14 +120,19 @@ enum ContentType {
 
 enum ContentStatus {
   DRAFT
+  REVIEW
+  APPROVED
   PUBLISHED
+  RETIRED
   ARCHIVED
 }
 
 enum VersionStatus {
   DRAFT
   REVIEW
+  APPROVED
   PUBLISHED
+  RETIRED
   ARCHIVED
 }
 
@@ -140,7 +146,10 @@ enum QuestionType {
 
 enum QuestionStatus {
   DRAFT
+  REVIEW
+  APPROVED
   PUBLISHED
+  RETIRED
   ARCHIVED
 }
 
@@ -240,7 +249,11 @@ enum AuditAction {
   CREATE
   UPDATE
   DELETE
+  SUBMITTED_FOR_REVIEW
+  APPROVED
   PUBLISH
+  RETIRED
+  VERSION_CREATED
   ROLE_CHANGED
   ENROLLMENT_CHANGED
   CONSENT_GRANTED
@@ -405,8 +418,12 @@ model User {
   assessmentResults        AssessmentResult[]
   createdContents          Content[]                 @relation("ContentCreatedBy")
   createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
+  reviewedContentVersions  ContentVersion[]          @relation("ContentVersionReviewedBy")
+  approvedContentVersions  ContentVersion[]          @relation("ContentVersionApprovedBy")
   createdQuestions         Question[]                @relation("QuestionCreatedBy")
   createdQuestionVersions  QuestionVersion[]         @relation("QuestionVersionCreatedBy")
+  reviewedQuestionVersions  QuestionVersion[]        @relation("QuestionVersionReviewedBy")
+  approvedQuestionVersions  QuestionVersion[]        @relation("QuestionVersionApprovedBy")
   createdTemplates         ExerciseTemplate[]        @relation("TemplateCreatedBy")
   createdTemplateVersions  ExerciseTemplateVersion[] @relation("TemplateVersionCreatedBy")
   createdAssessments       Assessment[]              @relation("AssessmentCreatedBy")
@@ -740,6 +757,8 @@ model Content {
   currentVersion   ContentVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
   createdById      String?
   createdBy        User?           @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata         Json?
+  retiredAt        DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   deletedAt        DateTime?
@@ -767,11 +786,21 @@ model ContentVersion {
   changelog        String?
   status           VersionStatus @default(DRAFT)
   publishedAt      DateTime?
+  retiredAt        DateTime?
   createdById      String?
   createdBy        User?         @relation("ContentVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedById     String?
+  reviewedBy       User?         @relation("ContentVersionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  approvedById     String?
+  approvedBy       User?         @relation("ContentVersionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt       DateTime?
+  metadata         Json?
   createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   publishedContentPointer Content?                         @relation("CurrentVersion")
+  questionVersions         QuestionVersion[]                 @relation("QuestionVersionContentVersion")
   templateContents        ExerciseTemplateVersionContent[]
   sessionContents         SessionContentVersion[]
 
@@ -801,6 +830,8 @@ model Question {
   status      QuestionStatus @default(DRAFT)
   createdById String?
   createdBy   User?          @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  metadata    Json?
+  retiredAt   DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   deletedAt   DateTime?
@@ -819,6 +850,8 @@ model QuestionVersion {
   id                   String        @id @default(dbgenerated("uuidv7()"))
   questionId           String
   question             Question      @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  contentVersionId     String?
+  contentVersion       ContentVersion? @relation("QuestionVersionContentVersion", fields: [contentVersionId], references: [id], onDelete: Restrict)
   version              Int
   prompt               String
   options              Json?
@@ -828,9 +861,18 @@ model QuestionVersion {
   difficulty           Float?
   status               VersionStatus @default(DRAFT)
   publishedAt          DateTime?
+  retiredAt            DateTime?
   createdById          String?
   createdBy            User?         @relation("QuestionVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reviewedById         String?
+  reviewedBy           User?         @relation("QuestionVersionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt           DateTime?
+  approvedById         String?
+  approvedBy           User?         @relation("QuestionVersionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt           DateTime?
+  metadata             Json?
   createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
   partialCreditEnabled Boolean       @default(true)
   generationMetadata   Json?
 
