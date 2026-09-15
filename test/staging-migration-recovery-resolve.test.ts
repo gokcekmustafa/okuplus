@@ -50,10 +50,12 @@ describe("staging migration recovery resolve workflow", () => {
     expect(workflow).toContain('public."_prisma_migrations"');
     expect(workflow).toContain("databaseUrlMatchesFingerprintTarget");
     expect(workflow).toContain("safeToResolveApplied: true");
+    expect((workflow.match(/async function main\(\)/gu) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(workflow).toContain("staging-resolve-precheck.json");
     expect(workflow).toContain("staging-resolve-postcheck.json");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("migrationStatusAcceptable");
+    expect(workflow).toContain("TSX_EVAL_TOP_LEVEL_AWAIT_UNSUPPORTED");
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN|COOKIE)/iu);
     expect(workflow).not.toContain("raw");
   });
