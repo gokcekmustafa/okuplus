@@ -11,8 +11,19 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("const failedChecks = Object.entries(checks)");
     expect(workflow).toContain("staging-migration-precondition.json");
     expect(workflow).toContain("staging-migration-postcondition.json");
-    expect(workflow).toContain("throw new Error(`staging precondition failed:");
+    expect(workflow).toContain("throw new Error(");
+    expect(workflow).toContain("staging precondition failed:");
     expect(workflow).not.toContain("continue-on-error");
+  });
+
+  it("reports pending migration categories without weakening the allowlist", () => {
+    expect(workflow).toContain("pendingMigrations,");
+    expect(workflow).toContain("allowedPendingMigrations,");
+    expect(workflow).toContain("unexpectedPendingMigrations,");
+    expect(workflow).toContain("allowedPendingMigrationPolicy: [foundation]");
+    expect(workflow).toContain("pendingMigrationsShape: pendingMigrations !== null");
+    expect(workflow).toContain("pendingMigrations=${formatMigrationList(");
+    expect(workflow).toContain("unexpectedPendingMigrations=${formatMigrationList(");
   });
 
   it("keeps staging credentials explicitly bound in the same job", () => {

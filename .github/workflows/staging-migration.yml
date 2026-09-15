@@ -92,6 +92,13 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
+            ? pending
+            : null;
+          const allowedPendingMigrations = pendingMigrations?.filter((name) => name === foundation) ?? null;
+          const unexpectedPendingMigrations = pendingMigrations?.filter((name) => name !== foundation) ?? null;
+          const formatMigrationList = (names) =>
+            names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
           const identity = {
             database: report.database?.database,
@@ -104,11 +111,12 @@ jobs:
             targetEnvironment: report.target?.environment === "STAGING",
             targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
             migrationCollections: Array.isArray(pending) && Array.isArray(failed),
+            pendingMigrationsShape: pendingMigrations !== null,
             noFailedMigrations: Array.isArray(failed) && failed.length === 0,
             allowedPendingMigrations:
-              Array.isArray(pending) &&
-              pending.length <= 1 &&
-              pending.every((name) => name === foundation),
+              pendingMigrations !== null &&
+              pendingMigrations.length <= 1 &&
+              unexpectedPendingMigrations.length === 0,
             noUnexpectedAppliedMigrations:
               report.migrations?.appliedCount <= report.migrations?.repositoryCount,
           };
@@ -117,11 +125,29 @@ jobs:
             .map(([name]) => name);
           writeFileSync(
             `${process.env.RUNNER_TEMP}/staging-migration-precondition.json`,
-            JSON.stringify({ result: failedChecks.length === 0 ? "PASS" : "FAIL", failedChecks, checks }, null, 2),
+            JSON.stringify(
+              {
+                result: failedChecks.length === 0 ? "PASS" : "FAIL",
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
+                allowedPendingMigrationPolicy: [foundation],
+                failedChecks,
+                checks,
+              },
+              null,
+              2,
+            ),
           );
 
           if (failedChecks.length > 0) {
-            throw new Error(`staging precondition failed: ${failedChecks.join(",")}`);
+            throw new Error(
+              `staging precondition failed: ${failedChecks.join(",")}; pendingMigrations=${formatMigrationList(
+                pendingMigrations,
+              )}; allowedPendingMigrations=${formatMigrationList(
+                allowedPendingMigrations,
+              )}; unexpectedPendingMigrations=${formatMigrationList(unexpectedPendingMigrations)}`,
+            );
           }
 
           writeFileSync(
@@ -132,7 +158,9 @@ jobs:
                 fingerprint: actual,
                 migrationStatus: report.status,
                 migrationHistoryCount: report.migrations.appliedCount,
-                pendingMigrations: pending,
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
                 failedMigrations: failed.length,
                 rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
               },
@@ -199,6 +227,11 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
+            ? pending
+            : null;
+          const allowedPendingMigrations = pendingMigrations?.filter((name) => name === foundation) ?? null;
+          const unexpectedPendingMigrations = pendingMigrations?.filter((name) => name !== foundation) ?? null;
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
           const identity = {
             database: report.database?.database,
@@ -215,7 +248,8 @@ jobs:
             migrationStatusCurrent: report.status === "PASS",
             targetEnvironment: report.target?.environment === "STAGING",
             targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
-            noPendingMigrations: Array.isArray(pending) && pending.length === 0,
+            pendingMigrationsShape: pendingMigrations !== null,
+            noPendingMigrations: pendingMigrations !== null && pendingMigrations.length === 0,
             noFailedMigrations: Array.isArray(failed) && failed.length === 0,
             expectedMigrationApplied: appliedMigrationNames.includes(foundation),
             migrationCountsMatch:
@@ -227,7 +261,15 @@ jobs:
           writeFileSync(
             `${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`,
             JSON.stringify(
-              { result: failedChecks.length === 0 ? "PASS" : "FAIL", failedChecks, checks },
+              {
+                result: failedChecks.length === 0 ? "PASS" : "FAIL",
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
+                allowedPendingMigrationPolicy: [foundation],
+                failedChecks,
+                checks,
+              },
               null,
               2,
             ),
@@ -278,6 +320,20 @@ jobs:
           const safe = verification ?? preflight;
           const applied = verification?.appliedMigrationNames ?? [];
           const checks = postcondition?.checks ?? precondition?.checks ?? {};
+          const pendingMigrations =
+            postcondition?.pendingMigrations ?? precondition?.pendingMigrations ?? preflight?.pendingMigrations ?? null;
+          const allowedPendingMigrations =
+            postcondition?.allowedPendingMigrations ??
+            precondition?.allowedPendingMigrations ??
+            preflight?.allowedPendingMigrations ??
+            null;
+          const unexpectedPendingMigrations =
+            postcondition?.unexpectedPendingMigrations ??
+            precondition?.unexpectedPendingMigrations ??
+            preflight?.unexpectedPendingMigrations ??
+            null;
+          const formatMigrationList = (names) =>
+            Array.isArray(names) ? (names.length ? names.join(", ") : "NONE") : "NOT_AVAILABLE";
 
           console.log("## Staging database migration");
           console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
@@ -285,6 +341,9 @@ jobs:
           console.log(`- migrationHistoryCount: ${safe?.migrationHistoryCount ?? "NOT_AVAILABLE"}`);
           console.log(`- migrationStatus: ${verification?.migrationStatus ?? preflight?.migrationStatus ?? "NOT_RUN"}`);
           console.log(`- appliedMigrationNames: ${applied.length ? applied.join(", ") : "NOT_VERIFIED"}`);
+          console.log(`- pendingMigrations: ${formatMigrationList(pendingMigrations)}`);
+          console.log(`- allowedPendingMigrations: ${formatMigrationList(allowedPendingMigrations)}`);
+          console.log(`- unexpectedPendingMigrations: ${formatMigrationList(unexpectedPendingMigrations)}`);
           console.log(`- failedMigrations: ${verification?.failedMigrations ?? preflight?.failedMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- rolledBackMigrations: ${verification?.rolledBackMigrations ?? preflight?.rolledBackMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- schema: ${verification?.schema ?? "NOT_VERIFIED"}`);
