@@ -100,19 +100,28 @@ jobs:
           assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
           assertLiveCatalogTargetIdentity(target, identity);
           const actual = targetFingerprint(target, identity);
+          const checks = {
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+            migrationCollections: Array.isArray(pending) && Array.isArray(failed),
+            noFailedMigrations: Array.isArray(failed) && failed.length === 0,
+            allowedPendingMigrations:
+              Array.isArray(pending) &&
+              pending.length <= 1 &&
+              pending.every((name) => name === foundation),
+            noUnexpectedAppliedMigrations:
+              report.migrations?.appliedCount <= report.migrations?.repositoryCount,
+          };
+          const failedChecks = Object.entries(checks)
+            .filter(([, passed]) => !passed)
+            .map(([name]) => name);
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-precondition.json`,
+            JSON.stringify({ result: failedChecks.length === 0 ? "PASS" : "FAIL", failedChecks, checks }, null, 2),
+          );
 
-          if (
-            report.target?.environment !== "STAGING" ||
-            actual !== expected ||
-            !/^[a-f0-9]{64}$/u.test(actual) ||
-            !Array.isArray(pending) ||
-            !Array.isArray(failed) ||
-            failed.length !== 0 ||
-            report.migrations.appliedCount > report.migrations.repositoryCount ||
-            pending.some((name) => name !== foundation) ||
-            pending.length > 1
-          ) {
-            throw new Error("staging identity or migration precondition failed");
+          if (failedChecks.length > 0) {
+            throw new Error(`staging precondition failed: ${failedChecks.join(",")}`);
           }
 
           writeFileSync(
@@ -202,20 +211,30 @@ jobs:
             .filter((entry) => entry.isDirectory())
             .map((entry) => entry.name)
             .sort();
+          const checks = {
+            migrationStatusCurrent: report.status === "PASS",
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+            noPendingMigrations: Array.isArray(pending) && pending.length === 0,
+            noFailedMigrations: Array.isArray(failed) && failed.length === 0,
+            expectedMigrationApplied: appliedMigrationNames.includes(foundation),
+            migrationCountsMatch:
+              report.migrations?.appliedCount === report.migrations?.repositoryCount,
+          };
+          const failedChecks = Object.entries(checks)
+            .filter(([, passed]) => !passed)
+            .map(([name]) => name);
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`,
+            JSON.stringify(
+              { result: failedChecks.length === 0 ? "PASS" : "FAIL", failedChecks, checks },
+              null,
+              2,
+            ),
+          );
 
-          if (
-            report.status !== "PASS" ||
-            report.target?.environment !== "STAGING" ||
-            actual !== expected ||
-            !/^[a-f0-9]{64}$/u.test(actual) ||
-            !Array.isArray(pending) ||
-            pending.length !== 0 ||
-            !Array.isArray(failed) ||
-            failed.length !== 0 ||
-            report.migrations.appliedCount !== report.migrations.repositoryCount ||
-            !appliedMigrationNames.includes(foundation)
-          ) {
-            throw new Error("staging migration or schema validation failed");
+          if (failedChecks.length > 0) {
+            throw new Error(`staging postcondition failed: ${failedChecks.join(",")}`);
           }
 
           writeFileSync(
@@ -253,9 +272,12 @@ jobs:
 
           const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null);
           const preflight = readJson(`${process.env.RUNNER_TEMP}/staging-migration-preflight.json`);
+          const precondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-precondition.json`);
+          const postcondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`);
           const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
           const safe = verification ?? preflight;
           const applied = verification?.appliedMigrationNames ?? [];
+          const checks = postcondition?.checks ?? precondition?.checks ?? {};
 
           console.log("## Staging database migration");
           console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
@@ -270,4 +292,7 @@ jobs:
           console.log(`- migrateDeploy: ${process.env.APPLY_OUTCOME === "success" ? "PASS" : process.env.APPLY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- verification: ${process.env.VERIFY_OUTCOME === "success" ? "PASS" : process.env.VERIFY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- result: ${verification?.result ?? "FAIL_OR_NOT_RUN"}`);
+          console.log(`- preconditionResult: ${postcondition?.result ?? precondition?.result ?? "NOT_VERIFIED"}`);
+          for (const [key, value] of Object.entries(checks)) console.log(`- precondition.${key}: ${value ? "PASS" : "FAIL"}`);
+          console.log(`- failedPreconditions: ${(postcondition?.failedChecks ?? precondition?.failedChecks ?? []).join(", ") || "NONE"}`);
           NODE
