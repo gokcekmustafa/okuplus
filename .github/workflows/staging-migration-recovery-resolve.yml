@@ -77,12 +77,17 @@ jobs:
             exit 1
           fi
 
+          precheck_log="$RUNNER_TEMP/staging-resolve-precheck.log"
+          set +e
           FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx -e '
           import { readFileSync, writeFileSync } from "node:fs";
           import { PrismaClient } from "@prisma/client";
           import { assertTargetIdentityFingerprint, providerForHost } from "./scripts/db-fingerprint-contract.ts";
 
+          const recoveryTargetMigration = "20260907160000_add_training_session_completed_point_event";
+          const recoveryOutputPath = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+          async function main() {
           const targetMigration = "20260907160000_add_training_session_completed_point_event";
           const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
           const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
@@ -237,7 +242,45 @@ jobs:
           } finally {
             await prisma.$disconnect();
           }
+          }
+          main().catch((error) => {
+            if (error instanceof Error && error.message === "staging resolve precondition failed") {
+              process.exitCode = 1;
+              return;
+            }
+            writeFileSync(
+              recoveryOutputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration: recoveryTargetMigration,
+                  failedChecks: ["precheckRuntimeError"],
+                  safeToResolveApplied: false,
+                },
+                null,
+                2,
+              ),
+            );
+            process.exitCode = 1;
+          });
           ' >"$RUNNER_TEMP/staging-resolve-precheck.log" 2>&1
+          precheck_exit=$?
+          set -e
+          if test "$precheck_exit" -ne 0; then
+            reason="PRECHECK_RUNTIME_ERROR"
+            if grep -Eqi "Top-level await is currently not supported" "$precheck_log"; then
+              reason="TSX_EVAL_TOP_LEVEL_AWAIT_UNSUPPORTED"
+            elif grep -Eqi "staging resolve precondition failed" "$precheck_log"; then
+              reason="STAGING_PRECONDITION_FAILED"
+            elif grep -Eqi "ERR_MODULE_NOT_FOUND|Cannot find module" "$precheck_log"; then
+              reason="MODULE_LOAD_FAILED"
+            elif grep -Eqi "PrismaClient|P1001|P1000|Can't reach database" "$precheck_log"; then
+              reason="READ_ONLY_PRISMA_PRECHECK_FAILED"
+            fi
+            echo "staging recovery precheck failed; reason=$reason; exitCode=$precheck_exit" >&2
+            exit "$precheck_exit"
+          fi
 
       - name: Resolve only the targeted staging migration
         id: resolve
@@ -273,13 +316,18 @@ jobs:
             exit 1
           fi
 
+          postcheck_log="$RUNNER_TEMP/staging-resolve-postcheck.log"
+          set +e
           MIGRATE_STATUS_EXIT="$migration_status_exit" \
-            FINGERPRINT_OUTPUT="$fingerprint_output" \
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx -e '
           import { readFileSync, writeFileSync } from "node:fs";
           import { PrismaClient } from "@prisma/client";
           import { assertTargetIdentityFingerprint } from "./scripts/db-fingerprint-contract.ts";
 
+          const recoveryTargetMigration = "20260907160000_add_training_session_completed_point_event";
+          const recoveryOutputPath = `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`;
+          async function main() {
           const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
           const targetMigration = "20260907160000_add_training_session_completed_point_event";
           const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
@@ -356,7 +404,31 @@ jobs:
           } finally {
             await prisma.$disconnect();
           }
+          }
+          main().catch(() => {
+            writeFileSync(
+              recoveryOutputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration: recoveryTargetMigration,
+                  failedChecks: ["postcheckRuntimeError"],
+                  migrateDeploy: "NOT_RUN",
+                },
+                null,
+                2,
+              ),
+            );
+            process.exitCode = 1;
+          });
           ' >"$RUNNER_TEMP/staging-resolve-postcheck.log" 2>&1
+          postcheck_exit=$?
+          set -e
+          if test "$postcheck_exit" -ne 0; then
+            echo "staging post-resolve verification failed; exitCode=$postcheck_exit" >&2
+            exit "$postcheck_exit"
+          fi
 
       - name: Publish sanitized staging recovery summary
         if: always()
