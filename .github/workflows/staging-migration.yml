@@ -91,12 +91,16 @@ jobs:
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
+          const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const allowedPendingMigrationPolicy = [completedPointEvent, foundation];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
-          const allowedPendingMigrations = pendingMigrations?.filter((name) => name === foundation) ?? null;
-          const unexpectedPendingMigrations = pendingMigrations?.filter((name) => name !== foundation) ?? null;
+          const allowedPendingMigrations =
+            pendingMigrations?.filter((name) => allowedPendingMigrationPolicy.includes(name)) ?? null;
+          const unexpectedPendingMigrations =
+            pendingMigrations?.filter((name) => !allowedPendingMigrationPolicy.includes(name)) ?? null;
           const formatMigrationList = (names) =>
             names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
@@ -115,7 +119,7 @@ jobs:
             noFailedMigrations: Array.isArray(failed) && failed.length === 0,
             allowedPendingMigrations:
               pendingMigrations !== null &&
-              pendingMigrations.length <= 1 &&
+              pendingMigrations.length <= allowedPendingMigrationPolicy.length &&
               unexpectedPendingMigrations.length === 0,
             noUnexpectedAppliedMigrations:
               report.migrations?.appliedCount <= report.migrations?.repositoryCount,
@@ -131,7 +135,7 @@ jobs:
                 pendingMigrations,
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
-                allowedPendingMigrationPolicy: [foundation],
+                allowedPendingMigrationPolicy,
                 failedChecks,
                 checks,
               },
@@ -161,6 +165,7 @@ jobs:
                 pendingMigrations,
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
+                allowedPendingMigrationPolicy,
                 failedMigrations: failed.length,
                 rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
               },
@@ -226,12 +231,16 @@ jobs:
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
+          const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const allowedPendingMigrationPolicy = [completedPointEvent, foundation];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
-          const allowedPendingMigrations = pendingMigrations?.filter((name) => name === foundation) ?? null;
-          const unexpectedPendingMigrations = pendingMigrations?.filter((name) => name !== foundation) ?? null;
+          const allowedPendingMigrations =
+            pendingMigrations?.filter((name) => allowedPendingMigrationPolicy.includes(name)) ?? null;
+          const unexpectedPendingMigrations =
+            pendingMigrations?.filter((name) => !allowedPendingMigrationPolicy.includes(name)) ?? null;
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
           const identity = {
             database: report.database?.database,
@@ -266,7 +275,7 @@ jobs:
                 pendingMigrations,
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
-                allowedPendingMigrationPolicy: [foundation],
+                allowedPendingMigrationPolicy,
                 failedChecks,
                 checks,
               },

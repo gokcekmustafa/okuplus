@@ -20,7 +20,13 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("pendingMigrations,");
     expect(workflow).toContain("allowedPendingMigrations,");
     expect(workflow).toContain("unexpectedPendingMigrations,");
-    expect(workflow).toContain("allowedPendingMigrationPolicy: [foundation]");
+    expect(workflow).toContain(
+      "const allowedPendingMigrationPolicy = [completedPointEvent, foundation]",
+    );
+    expect(workflow).toContain("20260907160000_add_training_session_completed_point_event");
+    expect(workflow).toContain("pendingMigrations.length <= allowedPendingMigrationPolicy.length");
+    expect(workflow).toContain("!allowedPendingMigrationPolicy.includes(name)");
+    expect(workflow).toContain("unexpectedPendingMigrations.length === 0");
     expect(workflow).toContain("pendingMigrationsShape: pendingMigrations !== null");
     expect(workflow).toContain("pendingMigrations=${formatMigrationList(");
     expect(workflow).toContain("unexpectedPendingMigrations=${formatMigrationList(");
