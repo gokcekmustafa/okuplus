@@ -23,6 +23,8 @@ import { billingRoutes } from "./modules/billing/index.js";
 import { gamificationStudentRoutes } from "./modules/gamification/index.js";
 import { onboardingRoutes } from "./modules/onboarding/index.js";
 import { studentLearningRoutes } from "./modules/student-learning/index.js";
+import { baselineStudentRoutes } from "./modules/baseline/index.js";
+import { lessonStudentRoutes } from "./modules/lessons/index.js";
 import { healthRoutes } from "./modules/health/routes.js";
 import { mediaAdminRoutes } from "./modules/media/index.js";
 import { progressStudentRoutes } from "./modules/progress/index.js";
@@ -124,6 +126,8 @@ export async function buildApp(
   await app.register(gamificationStudentRoutes, { authProvider });
   await app.register(onboardingRoutes, { authProvider });
   await app.register(studentLearningRoutes, { authProvider });
+  await app.register(baselineStudentRoutes, { authProvider });
+  await app.register(lessonStudentRoutes, { authProvider });
   await app.register(trainingStudentRoutes, { authProvider });
   await app.register(staticPlugin);
   return app;

@@ -401,6 +401,10 @@ export const createAttemptSchema = z.object({
   answer: z.any(),
   clientAttemptId: z.string().trim().min(1, "İstemci deneme kimliği gerekli"),
   timeSpentMs: z.number().int().min(0, "Geçen süre 0 veya daha büyük olmalı").optional(),
+  exposureStartedAt: z.string().datetime({ offset: true }).optional(),
+  answerStartedAt: z.string().datetime({ offset: true }).optional(),
+  hintUsed: z.boolean().optional(),
+  isFinal: z.boolean().optional(),
 });
 
 /** Cevap yanıtı. */
@@ -413,6 +417,16 @@ export const attemptResponseSchema = z.object({
   rawScore: z.number().nullable(),
   timeSpentMs: z.number().nullable(),
   responseOrder: z.number().int(),
+  retryCount: z.number().int().nonnegative(),
+  hintUsed: z.boolean(),
+  firstAttemptCorrect: z.boolean().nullable(),
+  finalResult: z.boolean().nullable(),
+  correctAnswer: z.any().nullable().optional(),
+  exposureStartedAt: z.string().nullable(),
+  answerStartedAt: z.string().nullable(),
+  submittedAt: z.string().nullable(),
+  interactionDurationMs: z.number().int().nonnegative().nullable(),
+  answerDurationMs: z.number().int().nonnegative().nullable(),
   feedback: z.any().nullable(),
   revealedAnswer: z.any().nullable(),
   answeredAt: z.string(),

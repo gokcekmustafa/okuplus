@@ -420,8 +420,7 @@ function showDashboard(me) {
   if (bottomNav) bottomNav.classList.toggle("hidden", isPlatform);
   var gamif = $("topbar-gamification");
   if (gamif) gamif.classList.toggle("hidden", isPlatform);
-  // Dashboard günlük özetinden toplam GP ve seriyi güncelliyor; ayrı bir
-  // gamification çağrısı yalnızca özet için yapılmıyor.
+  if (!isPlatform) void loadTopbarGamification();
 
   if (isPlatform) {
     void loadTenants();
@@ -476,6 +475,26 @@ async function loadContextsAndRender() {
   } catch (_e) {
     void _e;
     sel.classList.add("hidden");
+  }
+}
+
+async function loadTopbarGamification() {
+  const scope = insightScope();
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/gamification", {
+        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+      }),
+    );
+    if (scope !== insightScope()) return;
+    observeInsightAwards(data);
+    const gp = $("topbar-gp");
+    const streak = $("topbar-streak");
+    if (gp) gp.textContent = String(data.totalPoints ?? 0);
+    if (streak) streak.textContent = String(data.currentDays ?? 0);
+  } catch {
+    // Optional dashboard context; it must not block the learning flow.
   }
 }
 
@@ -536,7 +555,7 @@ function renderTrainingHome(data) {
   const progressFill = $("daily-training-progress-fill");
   const gp = $("daily-training-gp");
   const streak = $("daily-training-streak");
-  const topbarPoints = $("topbar-xp");
+  const topbarPoints = $("topbar-gp");
   const topbarStreak = $("topbar-streak");
   if (status) {
     status.textContent = isCompleted
@@ -1619,7 +1638,7 @@ window.startDailyTraining = async function () {
       isFirstTrainingDay: data.firstDay,
       placementHandoff: data.placementHandoff,
     });
-    $("exercise-xp").textContent = "⭐ — GP";
+    $("exercise-gp").textContent = "⭐ — GP";
     if (!item) {
       if (data.status !== "COMPLETED")
         throw new Error("Günlük antrenmanda bekleyen egzersiz bulunamadı");
@@ -1916,6 +1935,157 @@ function setupOnboardingEvents() {
 }
 void setupOnboardingEvents();
 
+// ---------- Ders deneyimi ----------
+
+function lessonApi(path, options) {
+  options = options || {};
+  const tokens = getStoredTokens();
+  return fetch(
+    "/student/lessons" + path,
+    Object.assign({}, options, {
+      headers: Object.assign(
+        {},
+        authHeaders(tokens.accessToken, tokens.tenantId),
+        options.method && options.method !== "GET" ? csrfHeaders() : {},
+        options.headers || {},
+      ),
+    }),
+  );
+}
+
+function renderLessonDetail(lesson) {
+  const detail = $("lesson-detail");
+  if (!detail) return;
+  if (!lesson) {
+    detail.innerHTML = '<p class="muted">Bir ders seçtiğinde burada başlayacağız.</p>';
+    return;
+  }
+  const completed = Boolean(lesson.completion?.completed);
+  detail.innerHTML = `
+    <p class="insight-eyebrow">DERS</p>
+    <h3>${escapeHtml(lesson.title)}</h3>
+    <p class="lesson-objective"><strong>Bugünkü amacın:</strong> ${escapeHtml(lesson.objective)}</p>
+    <section><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
+    <section><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
+    <section><h4>Şimdi sen dene</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
+    <div class="lesson-flow" aria-label="Ders akışı">
+      <span class="badge badge-info">Ders</span><span aria-hidden="true">→</span>
+      <span class="badge badge-info">Örnek</span><span aria-hidden="true">→</span>
+      <span class="badge badge-success">Egzersiz</span><span aria-hidden="true">→</span>
+      <span class="badge badge-neutral">Sonuç</span>
+    </div>
+    <div class="lesson-actions">
+      <button type="button" class="btn btn-primary" data-lesson-start>${completed ? "Egzersizi tekrar aç" : "Egzersize geç"}</button>
+      <button type="button" class="btn btn-secondary" data-lesson-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : escapeHtml(lesson.completionLabel)}</button>
+    </div>
+    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`;
+}
+
+function renderLessonList(items) {
+  const list = $("lesson-list");
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML =
+      '<p class="muted">Şu an yayınlanmış ders bulunmuyor. Egzersizlerin hazır olduğunda burada görünecek.</p>';
+    renderLessonDetail(null);
+    return;
+  }
+  if (!selectedLessonId || !items.some((lesson) => lesson.id === selectedLessonId)) {
+    selectedLessonId = items[0].id;
+  }
+  list.innerHTML = items
+    .map(
+      (lesson) =>
+        `<button type="button" class="lesson-list-item ${lesson.id === selectedLessonId ? "active" : ""}" data-lesson-id="${escapeHtml(lesson.id)}" aria-pressed="${lesson.id === selectedLessonId}"><strong>${escapeHtml(lesson.title)}</strong><span>${escapeHtml(lesson.skill?.name || "Gelişim çalışması")}</span><small>${lesson.completion?.completed ? "Tamamlandı" : "Hazır"}</small></button>`,
+    )
+    .join("");
+  renderLessonDetail(items.find((item) => item.id === selectedLessonId) || items[0]);
+}
+
+async function loadLessons() {
+  const status = $("lessons-status");
+  const error = $("lessons-error");
+  if (!status) return;
+  status.textContent = "Derslerin yükleniyor…";
+  error?.classList.add("hidden");
+  try {
+    const data = await parseResponse(await lessonApi(""));
+    lessonData = Array.isArray(data?.items) ? data.items : [];
+    if (!lessonData.some((item) => item.id === selectedLessonId)) selectedLessonId = null;
+    renderLessonList(lessonData);
+    status.textContent = lessonData.length ? "Kısa bir adımla başlayabilirsin." : "";
+  } catch (err) {
+    status.textContent = "";
+    if (error) {
+      error.textContent = err.message || "Dersler yüklenemedi.";
+      error.classList.remove("hidden");
+    }
+  }
+}
+
+async function startSelectedLesson() {
+  const lesson = lessonData.find((item) => item.id === selectedLessonId);
+  if (!lesson) return;
+  const status = $("lesson-detail-status");
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/exercises/start", {
+        method: "POST",
+        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        body: JSON.stringify({
+          templateVersionId: lesson.exerciseTemplateVersionId,
+          clientSessionId: `lesson-${lesson.id}-${Date.now()}`,
+        }),
+      }),
+    );
+    exerciseSession = data;
+    exerciseRequestedSessionId = data.id;
+    rememberExerciseSession(data.id);
+    navigate("exercise");
+    void loadExercisePage();
+  } catch (err) {
+    if (status) status.textContent = err.message || "Egzersiz başlatılamadı.";
+  }
+}
+
+async function completeSelectedLesson() {
+  const lesson = lessonData.find((item) => item.id === selectedLessonId);
+  if (!lesson || lesson.completion?.completed) return;
+  const status = $("lesson-detail-status");
+  try {
+    const updated = await parseResponse(
+      await lessonApi(`/${encodeURIComponent(lesson.id)}/complete`, {
+        method: "POST",
+        body: "{}",
+      }),
+    );
+    const index = lessonData.findIndex((item) => item.id === lesson.id);
+    if (index >= 0) lessonData[index] = updated;
+    renderLessonList(lessonData);
+    const updatedStatus = $("lesson-detail-status");
+    if (updatedStatus) {
+      updatedStatus.textContent = "Ders tamamlandı. Şimdi egzersizle pekiştirebilirsin.";
+    }
+  } catch (err) {
+    if (status) status.textContent = err.message || "Ders tamamlanamadı.";
+  }
+}
+
+function setupLessonEvents() {
+  $("lessons-refresh")?.addEventListener("click", () => void loadLessons());
+  $("lesson-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-lesson-id]");
+    if (!button) return;
+    selectedLessonId = button.dataset.lessonId;
+    renderLessonList(lessonData);
+  });
+  $("lesson-detail")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
+    if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
+  });
+}
+
 // ---------- Navigasyon ----------
 
 const PAGES = [
@@ -1933,6 +2103,7 @@ const PAGES = [
   "questions",
   "templates",
   "exercise",
+  "lessons",
   "skills",
   "levels",
   "assignments",
@@ -2002,6 +2173,8 @@ function navigate(page) {
     void populateTemplateFilters();
   } else if (page === "exercise") {
     void loadExercisePage();
+  } else if (page === "lessons") {
+    void loadLessons();
   } else if (page === "skills") {
     void loadSkills();
   } else if (page === "levels") {
@@ -5962,6 +6135,8 @@ let questionMediaData = [];
 let questionVersionMediaData = [];
 let currentExerciseQuestionIndex = 0;
 let exerciseAttempts = new Map();
+let exerciseQuestionTelemetry = new Map();
+let exerciseRetryingQuestionVersionId = null;
 let exerciseAwaitingNext = false;
 let exerciseBusy = false;
 let exerciseLoading = false;
@@ -5972,6 +6147,8 @@ let exerciseRequestedSessionId = null;
 let exerciseScope = null;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
+let lessonData = [];
+let selectedLessonId = null;
 
 let skillPage = 1;
 const SKILL_PAGE_SIZE = 50;
@@ -8154,6 +8331,8 @@ function resetExerciseState() {
   exerciseSession = null;
   exerciseQuestions = [];
   exerciseAttempts.clear();
+  exerciseQuestionTelemetry.clear();
+  exerciseRetryingQuestionVersionId = null;
   exerciseAwaitingNext = false;
   exerciseRequest = null;
   exerciseGamification = null;
@@ -8195,12 +8374,12 @@ async function refreshExerciseGamification() {
   if (next) observeInsightAwards(next);
   const g = exerciseGamification;
   const pointsLabel = "GP";
-  $("exercise-xp").textContent = g
+  $("exercise-gp").textContent = g
     ? "⭐ " + g.totalPoints + " " + pointsLabel
     : "⭐ — " + pointsLabel;
   $("exercise-streak").textContent = g ? "🔥 " + g.currentDays : "🔥 —";
   if (g) {
-    $("topbar-xp").textContent = String(g.totalPoints);
+    $("topbar-gp").textContent = String(g.totalPoints);
     $("topbar-streak").textContent = String(g.currentDays);
   }
   return g;
@@ -8213,6 +8392,21 @@ async function fetchStudentExercise(id) {
       headers: authHeaders(t.accessToken, t.tenantId),
     }),
   );
+}
+function latestExerciseAttempt(attempts, questionVersionId, clientAttemptId) {
+  const matching = (attempts || []).filter(
+    (attempt) => attempt.questionVersionId === questionVersionId,
+  );
+  if (clientAttemptId) {
+    const exact = matching.find((attempt) => attempt.clientAttemptId === clientAttemptId);
+    if (exact) return exact;
+  }
+  return matching.reduce((latest, attempt) => {
+    if (!latest) return attempt;
+    const latestOrder = Number(latest.responseOrder) || 0;
+    const attemptOrder = Number(attempt.responseOrder) || 0;
+    return attemptOrder >= latestOrder ? attempt : latest;
+  }, null);
 }
 function restoreExerciseAttempts(session) {
   const previous = exerciseAttempts;
@@ -8266,7 +8460,7 @@ async function loadExercisePage() {
         dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
       if (dailySession) dailyTrainingSummary = dailySession;
-      if (dailySession) $("exercise-xp").textContent = "⭐ — GP";
+      if (dailySession) $("exercise-gp").textContent = "⭐ — GP";
       let savedId = null;
       try {
         savedId = sessionStorage.getItem(exerciseStorageKey());
@@ -8735,6 +8929,13 @@ function renderExerciseQuestion() {
       container.dataset.questionVersionId = q.questionVersionId;
       container.dataset.questionType = type;
       container.innerHTML = html;
+      if (!exerciseQuestionTelemetry.has(q.questionVersionId)) {
+        exerciseQuestionTelemetry.set(q.questionVersionId, {
+          exposureStartedAt: new Date().toISOString(),
+          answerStartedAt: null,
+          hintUsed: false,
+        });
+      }
       syncExerciseDisclosures(container);
       if (isStudentLocal) {
         const cards = [...container.querySelectorAll("label.answer-card")];
@@ -8778,7 +8979,9 @@ function renderExerciseQuestion() {
       button.disabled = exerciseLoading;
       button.textContent = "Cevabı kontrol et";
       const previous = exerciseAttempts.get(q.questionVersionId);
-      if (previous) showExerciseFeedback(previous);
+      const isRetrying = exerciseRetryingQuestionVersionId === q.questionVersionId;
+      if (previous && !isRetrying) showExerciseFeedback(previous);
+      if (isRetrying) exerciseRetryingQuestionVersionId = null;
     } catch (err) {
       const message = isDailyTrainingExercise()
         ? formatDailyTrainingError(err)
@@ -8957,6 +9160,20 @@ async function handleExerciseSubmitAttempt() {
   btn.textContent = "Gönderiliyor…";
   lockExerciseInputs(true);
   const sessionId = exerciseSession.id;
+  const previousAttempt = exerciseAttempts.get(questionVersionId);
+  const telemetry = exerciseQuestionTelemetry.get(questionVersionId) || {
+    exposureStartedAt: new Date().toISOString(),
+    answerStartedAt: null,
+    hintUsed: false,
+  };
+  const answerStartedAt = new Date().toISOString();
+  telemetry.answerStartedAt = answerStartedAt;
+  telemetry.hintUsed =
+    telemetry.hintUsed ||
+    Array.from(container.querySelectorAll("details.exercise-hint")).some((details) => details.open);
+  exerciseQuestionTelemetry.set(questionVersionId, telemetry);
+  const retrying =
+    previousAttempt?.isCorrect === false && Number(previousAttempt.responseOrder) === 1;
   // Reuse the exact logical request after an uncertain network failure.
   const retry =
     exerciseRequest?.sessionId === sessionId &&
@@ -8967,6 +9184,10 @@ async function handleExerciseSubmitAttempt() {
       questionVersionId,
       answer,
       clientAttemptId: crypto.randomUUID(),
+      exposureStartedAt: telemetry.exposureStartedAt,
+      answerStartedAt,
+      hintUsed: telemetry.hintUsed,
+      isFinal: retrying,
     };
   const answerTimingId = "oku-exercise-answer-" + exerciseRequest.clientAttemptId;
   const answerTimingStart = answerTimingId + "-start";
@@ -8977,18 +9198,37 @@ async function handleExerciseSubmitAttempt() {
     let data;
     if (retry && isPlatformUser === false) {
       const session = await fetchStudentExercise(sessionId);
-      data = session.attempts.find((a) => a.questionVersionId === questionVersionId);
+      data = latestExerciseAttempt(
+        session.attempts,
+        questionVersionId,
+        exerciseRequest?.clientAttemptId,
+      );
     }
     if (!data) {
-      const { clientAttemptId, answer: submittedAnswer } = exerciseRequest;
+      const {
+        clientAttemptId,
+        answer: submittedAnswer,
+        exposureStartedAt,
+        answerStartedAt: submittedAnswerStartedAt,
+        hintUsed: submittedHintUsed,
+        isFinal: submittedIsFinal,
+      } = exerciseRequest;
       const response = await exerciseApi(`/questions/${questionVersionId}/attempts`, {
         method: "POST",
-        body: JSON.stringify({ sessionId, answer: submittedAnswer, clientAttemptId }),
+        body: JSON.stringify({
+          sessionId,
+          answer: submittedAnswer,
+          clientAttemptId,
+          exposureStartedAt,
+          answerStartedAt: submittedAnswerStartedAt,
+          hintUsed: submittedHintUsed,
+          isFinal: submittedIsFinal,
+        }),
       });
       // A replay can return 409: reconcile from the server, never manufacture success.
       if (response.status === 409 && isPlatformUser === false) {
         const session = await fetchStudentExercise(sessionId);
-        data = session.attempts.find((a) => a.questionVersionId === questionVersionId);
+        data = latestExerciseAttempt(session.attempts, questionVersionId, clientAttemptId);
         if (!data) await parseResponse(response);
       } else data = await parseResponse(response);
     }
@@ -11016,6 +11256,7 @@ async function init() {
   setupQuestionEvents();
   setupTemplateEvents();
   setupExerciseEvents();
+  setupLessonEvents();
   setupPremiumExperienceEvents();
   setupSkillEvents();
   setupLevelEvents();
@@ -11044,6 +11285,8 @@ function resetInsights() {
   for (const id of [
     "progress-summary",
     "progress-path",
+    "development-comparison",
+    "development-journey-summary",
     "progress-skills",
     "progress-study",
     "progress-history",
@@ -11064,7 +11307,7 @@ function resetInsights() {
     "gamification-current-days",
     "gamification-longest-days",
     "gamification-badge-count",
-    "topbar-xp",
+    "topbar-gp",
     "topbar-streak",
   ])
     if ($(id)) $(id).textContent = "—";
@@ -11150,21 +11393,89 @@ function findDevelopmentSkill(items, aliases, label) {
     });
   });
 }
-function renderProgressList(items) {
+function findTrainingSkill(skills, family, competency) {
+  return (skills || []).find((item) => item.family === family || item.competency === competency);
+}
+function renderProgressList(items, trainingSkills) {
   $("progress-skills").innerHTML = DEVELOPMENT_SKILL_CARDS.map((card) => {
-    const progress = findDevelopmentSkill(items, card.aliases, card.label);
+    const trainingProgress = findTrainingSkill(
+      trainingSkills,
+      card.aliases[1] || card.aliases[0],
+      card.aliases[0],
+    );
+    const progress = trainingProgress || findDevelopmentSkill(items, card.aliases, card.label);
     const state = developmentSkillState(progress);
     const label = card.label + " gelişimi";
-    const averageTime = Number.isFinite(progress?.avgTimeMs)
-      ? `<div class="skill-time">Ortalama süre: ${escapeHtml(formatAvgTime(progress.avgTimeMs))}</div>`
+    const sessionCount = trainingProgress?.sessionCount ?? progress?.sessionCount;
+    const attemptCount = trainingProgress?.scoredAttemptCount ?? progress?.attemptCount;
+    const exposureCount = trainingProgress?.exposureCount;
+    const averageResponseTimeMs = trainingProgress?.averageResponseTimeMs ?? progress?.avgTimeMs;
+    const lastActivityAt = trainingProgress?.lastActivityAt;
+    const responseTimeFact = Number.isFinite(averageResponseTimeMs)
+      ? `<div><dt>Ortalama süre</dt><dd>${escapeHtml(formatAvgTime(averageResponseTimeMs))}</dd></div>`
       : "";
     return `<article class="insight-panel skill-progress-card" data-skill-code="${escapeHtml(card.aliases[0])}">
       <div class="skill-title"><span aria-hidden="true">${card.icon}</span><h4>${card.label}</h4><strong class="skill-stage">${state.label}</strong></div>
       <p class="muted skill-state-detail">${state.detail}</p>
       ${insightBar(state.value, label)}
-      ${progress ? `<dl class="insight-facts"><div><dt>Oturum</dt><dd class="skill-sessions">${progress.sessionCount}</dd></div><div><dt>Cevap</dt><dd class="skill-attempts">${progress.attemptCount}</dd></div><div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div></dl>${averageTime}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
+      ${progress ? `<dl class="insight-facts"><div><dt>Egzersiz</dt><dd class="skill-sessions">${sessionCount ?? 0}</dd></div><div><dt>Puanlanan cevap</dt><dd class="skill-attempts">${attemptCount ?? 0}</dd></div>${exposureCount !== undefined ? `<div><dt>Farklı çalışma</dt><dd>${exposureCount}</dd></div>` : `<div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount ?? 0}</dd></div>`}${responseTimeFact}</dl>${lastActivityAt ? `<time class="muted skill-last-activity">Son çalışma: ${escapeHtml(insightDate(lastActivityAt))}</time>` : ""}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
     </article>`;
   }).join("");
+}
+function developmentJourneySummary(skills) {
+  const supported = (skills || []).find(
+    (skill) =>
+      Number.isFinite(skill?.recentAccuracy) &&
+      (skill.trend === "DEVELOPING" || skill.trend === "STABLE" || skill.masteryState === "STABLE"),
+  );
+  if (!supported) return "Her çalışma, gelişim yolculuğunda yeni bir adım.";
+  if (supported.trend === "DEVELOPING") {
+    return `Son çalışmalarında ${supported.label} becerinde ilerleme gösteriyorsun.`;
+  }
+  return `${supported.label} becerinde istikrarlı ilerleme gösteriyorsun.`;
+}
+function renderDevelopmentJourneySummary(skills) {
+  const summary = $("development-journey-summary");
+  if (summary) summary.textContent = developmentJourneySummary(skills);
+}
+function developmentComparisonValue(value) {
+  return typeof value === "number" && Number.isFinite(value) ? formatAccuracy(value) : "—";
+}
+function developmentComparisonChange(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const points = value * 100;
+  const sign = points > 0 ? "+" : "";
+  return `${sign}${points.toFixed(1).replace(".", ",")} puan`;
+}
+function renderDevelopmentComparison(items) {
+  const container = $("development-comparison");
+  if (!container) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    container.innerHTML = '<p class="muted">Başlangıç ölçümü henüz bulunmuyor.</p>';
+    return;
+  }
+  const trendLabels = {
+    DEVELOPING: "Gelişiyor",
+    STABLE: "Stabil",
+    NEEDS_REVIEW: "Tekrar gerekli",
+  };
+  container.innerHTML = `
+    <div class="development-comparison-scroll">
+      <table class="development-comparison-table">
+        <thead><tr><th scope="col">Beceri</th><th scope="col">Başlangıç</th><th scope="col">Şimdi</th><th scope="col">Gelişim</th><th scope="col">Trend</th></tr></thead>
+        <tbody>${items
+          .map(
+            (item) => `<tr>
+              <th scope="row">${escapeHtml(item.label || "Beceri")}</th>
+              <td>${developmentComparisonValue(item.baselineScore)}</td>
+              <td>${developmentComparisonValue(item.currentAccuracy)}</td>
+              <td>${developmentComparisonChange(item.change)}</td>
+              <td>${escapeHtml(trendLabels[item.trend] || "—")}</td>
+            </tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+    </div>`;
 }
 function developmentTargetText(target) {
   const current = Number(target.currentValue) || 0;
@@ -11273,6 +11584,8 @@ async function loadProgress() {
   for (const id of [
     "progress-summary",
     "progress-path",
+    "development-comparison",
+    "development-journey-summary",
     "progress-skills",
     "progress-study",
     "progress-history",
@@ -11293,7 +11606,7 @@ async function loadProgress() {
   );
   const summary = progress?.summary;
   $("progress-summary").innerHTML =
-    insightMetric("⭐", "Toplam GP", gamma?.totalPoints ?? "—", "insight-gold", "progress-xp") +
+    insightMetric("⭐", "Toplam GP", gamma?.totalPoints ?? "—", "insight-gold", "progress-gp") +
     insightMetric(
       "🔥",
       "Seri (gün)",
@@ -11315,8 +11628,10 @@ async function loadProgress() {
       "insight-purple",
       "progress-accuracy",
     );
+  renderDevelopmentJourneySummary(progress?.training?.skills);
+  renderDevelopmentComparison(progress?.development);
   if (progress) {
-    renderProgressList(progress.items);
+    renderProgressList(progress.items, progress.training?.skills);
     $("progress-study").innerHTML =
       `<dl class="insight-facts"><div><dt>Cevap</dt><dd id="progress-attempts">${summary.attemptCount}</dd></div><div><dt>Doğru</dt><dd id="progress-correct">${summary.correctCount}</dd></div><div><dt>Puanlanan</dt><dd>${summary.scoredCount}</dd></div></dl><p class="muted">Tamamlanan oturumların tüm cevapları. Doğruluk yalnızca puanlanan cevaplar üzerinden hesaplanır.</p>`;
   }
@@ -11365,7 +11680,7 @@ const INSIGHT_SOURCE_LABELS = {
 };
 function observeInsightAwards(data) {
   if (!insightsIdentity || isPlatformUser) return new Set();
-  $("topbar-xp").textContent = String(data.totalPoints ?? "—");
+  $("topbar-gp").textContent = String(data.totalPoints ?? "—");
   $("topbar-streak").textContent = String(data.currentDays ?? "—");
   const key = "oku.badges.seen." + insightsIdentity;
   let previous = null;

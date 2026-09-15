@@ -19,6 +19,7 @@ import {
   loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
+import { capturePlacementBaseline } from "../baseline/service.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -701,7 +702,7 @@ export async function completeExerciseSession(
   });
 
   if (session.assessmentId) {
-    await prisma.assessmentResult.create({
+    const assessmentResult = await prisma.assessmentResult.create({
       data: {
         tenantId: session.tenantId,
         studentId: session.studentId,
@@ -710,7 +711,16 @@ export async function completeExerciseSession(
         score: averageScore,
         metrics: scoreSummary as Prisma.InputJsonValue,
       },
+      select: { id: true },
     });
+    if (placementScoring) {
+      await capturePlacementBaseline({
+        tenantId: session.tenantId,
+        studentId: session.studentId,
+        assessmentResultId: assessmentResult.id,
+        skillSubscores: placementScoring.aggregate.skillSubscores,
+      });
+    }
   }
 
   // Placement is an assessment, not a training activity: it must not award

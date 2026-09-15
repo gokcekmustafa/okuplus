@@ -416,6 +416,8 @@ model User {
   pointEvents              PointEvent[]
   studentStreaks           StudentStreak[]
   assessmentResults        AssessmentResult[]
+  baselines                StudentBaseline[]
+  lessonProgress           StudentLessonProgress[]
   createdContents          Content[]                 @relation("ContentCreatedBy")
   createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
   reviewedContentVersions  ContentVersion[]          @relation("ContentVersionReviewedBy")
@@ -518,6 +520,8 @@ model Tenant {
   studentBadges            StudentBadge[]
   studentStreaks           StudentStreak[]
   assessmentResults        AssessmentResult[]
+  baselines                 StudentBaseline[]
+  lessonProgress            StudentLessonProgress[]
   consents                 Consent[]
   auditLogs                AuditLog[]
   attempts                 Attempt[]
@@ -803,6 +807,7 @@ model ContentVersion {
   questionVersions         QuestionVersion[]                 @relation("QuestionVersionContentVersion")
   templateContents        ExerciseTemplateVersionContent[]
   sessionContents         SessionContentVersion[]
+  lessonProgress           StudentLessonProgress[]
 
   @@unique([contentId, version])
   @@index([contentId, status])
@@ -1120,6 +1125,17 @@ model Attempt {
   calibratedAt       DateTime?
   calibrationVersion Int             @default(1)
 
+  // Server-validated learning telemetry. These fields do not affect scoring.
+  exposureStartedAt    DateTime?
+  answerStartedAt      DateTime?
+  submittedAt          DateTime?
+  interactionDurationMs Int?
+  answerDurationMs      Int?
+  retryCount            Int             @default(0)
+  hintUsed              Boolean         @default(false)
+  firstAttemptCorrect   Boolean?
+  finalResult           Boolean?
+
   @@unique([sessionId, clientAttemptId])
   @@index([sessionId])
   @@index([questionVersionId])
@@ -1266,8 +1282,43 @@ model AssessmentResult {
   metrics       Json?
   completedAt   DateTime   @default(now())
 
+  baselines StudentBaseline[]
+
   @@index([studentId, tenantId, completedAt])
   @@index([assessmentId])
+}
+
+/// Immutable placement baseline; re-baselining is a separate product flow.
+model StudentBaseline {
+  id                       String           @id @default(dbgenerated("uuidv7()"))
+  tenantId                 String
+  tenant                   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId                String
+  student                  User             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sourceAssessmentResultId String
+  sourceAssessmentResult   AssessmentResult @relation(fields: [sourceAssessmentResultId], references: [id], onDelete: Restrict)
+  snapshot                 Json
+  capturedAt               DateTime         @default(now())
+  createdAt                DateTime         @default(now())
+
+  @@unique([tenantId, studentId])
+  @@index([studentId, tenantId, capturedAt])
+}
+
+/// Lesson completion is idempotent per immutable published ContentVersion.
+model StudentLessonProgress {
+  id               String        @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student          User          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  contentVersionId String
+  contentVersion   ContentVersion @relation(fields: [contentVersionId], references: [id], onDelete: Restrict)
+  completedAt      DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+
+  @@unique([tenantId, studentId, contentVersionId])
+  @@index([studentId, tenantId, completedAt])
 }
 
 // ============ GAMIFICATION ============

@@ -32,6 +32,8 @@ function harness() {
     escapeHtml: (value: string) => value.replaceAll("<", "&lt;"),
     exerciseSession: { id: "session", status: "IN_PROGRESS" },
     exerciseAttempts: new Map(),
+    exerciseQuestionTelemetry: new Map(),
+    exerciseRetryingQuestionVersionId: null,
     exerciseGamification: null,
     exerciseAwaitingNext: false,
     exerciseBusy: false,
