@@ -176,6 +176,10 @@
             <span class="nav-icon" aria-hidden="true">✏️</span>
             <span class="nav-label">Alıştırmalar</span>
           </button>
+          <button class="nav-item" data-page="lessons" data-student type="button">
+            <span class="nav-icon" aria-hidden="true">📖</span>
+            <span class="nav-label">Dersler</span>
+          </button>
           <button class="nav-item" data-page="assessments" type="button">
             <span class="nav-icon" aria-hidden="true">📊</span>
             <span class="nav-label">Ölçme &amp; Değerlendirme</span>
@@ -226,7 +230,7 @@
               aria-label="Puan ve seri"
             >
               <span class="gamification-badge" title="Toplam Gelişim Puanı"
-                ><span aria-hidden="true">⭐</span> <span id="topbar-xp">0</span> GP</span
+                ><span aria-hidden="true">⭐</span> <span id="topbar-gp">0</span> GP</span
               >
               <span class="gamification-badge" title="Günlük seri"
                 ><span aria-hidden="true">🔥</span> <span id="topbar-streak">0</span></span
@@ -3836,7 +3840,7 @@
                 <div style="flex: 1">
                   <div style="display: flex; justify-content: space-between; font-size: 12px">
                     <span id="exercise-progress-text" class="muted">Soru yükleniyor</span
-                    ><span id="exercise-xp" class="gamification-badge" style="font-size: 11px"
+                    ><span id="exercise-gp" class="gamification-badge" style="font-size: 11px"
                       >⭐ — GP</span
                     >
                   </div>
@@ -3998,6 +4002,28 @@
             >
               <h3 style="margin: 0 0 12px">Sonuç</h3>
               <div id="exercise-result-body" class="detail-grid"></div>
+            </div>
+          </section>
+
+          <section id="page-lessons" class="page-view hidden insight-page" data-student>
+            <header class="insight-heading">
+              <div>
+                <p class="insight-eyebrow">ÖĞREN, DENE, UYGULA</p>
+                <h2>Dersler</h2>
+                <p>Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.</p>
+              </div>
+              <button type="button" class="btn btn-secondary" id="lessons-refresh">Yenile</button>
+            </header>
+            <p id="lessons-status" role="status" aria-live="polite"></p>
+            <div id="lessons-error" class="error hidden" role="alert"></div>
+            <div class="lesson-layout">
+              <section class="insight-panel" aria-labelledby="lesson-list-title">
+                <h3 id="lesson-list-title">Sana uygun dersler</h3>
+                <div id="lesson-list" class="lesson-list"></div>
+              </section>
+              <article id="lesson-detail" class="insight-panel lesson-detail" aria-live="polite">
+                <p class="muted">Bir ders seçtiğinde burada başlayacağız.</p>
+              </article>
             </div>
           </section>
 

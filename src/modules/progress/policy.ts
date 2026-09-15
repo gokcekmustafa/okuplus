@@ -4,7 +4,9 @@ export type ProgressAttempt = {
 };
 
 export function summarizeProgressAttempts(attempts: readonly ProgressAttempt[]) {
-  const scoredAttempts = attempts.filter((attempt) => attempt.rawScore !== null);
+  const scoredAttempts = attempts.filter(
+    (attempt) => typeof attempt.rawScore === "number" && Number.isFinite(attempt.rawScore),
+  );
   return {
     attemptCount: attempts.length,
     scoredCount: scoredAttempts.length,

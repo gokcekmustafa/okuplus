@@ -5,6 +5,7 @@ import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import { createAttempt, formatAttemptServerTiming } from "./service.js";
 import { createAttemptSchema } from "./schemas.js";
+import { assertStudentActor } from "../student-learning/policy.js";
 
 export async function questionStudentRoutes(
   app: FastifyInstance,
@@ -14,6 +15,12 @@ export async function questionStudentRoutes(
     "/student/questions/:questionVersionId/attempts",
     { preHandler: [requireAuth(opts.authProvider)] },
     async (request, reply) => {
+      const actor = {
+        userId: request.authUser!.id,
+        tenantId: request.tenantContext?.tenantId ?? null,
+        platformRole: request.authUser!.platformRole ?? null,
+      };
+      assertStudentActor(actor);
       const questionVersionId = (request.params as { questionVersionId?: string })
         .questionVersionId;
       if (!questionVersionId?.trim()) throw validationError("Soru sürümü kimliği gerekli");
@@ -21,11 +28,7 @@ export async function questionStudentRoutes(
       const result = await createAttempt(
         questionVersionId,
         createAttemptSchema.parse(request.body),
-        {
-          userId: request.authUser!.id,
-          tenantId: request.tenantContext?.tenantId ?? null,
-          platformRole: request.authUser!.platformRole ?? null,
-        },
+        actor,
         { timings },
       );
       const serverTiming = formatAttemptServerTiming(timings);

@@ -41,6 +41,8 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
           isCorrect: true,
           rawScore: true,
           timeSpentMs: true,
+          interactionDurationMs: true,
+          answerDurationMs: true,
           answeredAt: true,
           questionVersion: {
             select: {
@@ -94,6 +96,8 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
         isCorrect: true,
         rawScore: true,
         timeSpentMs: true,
+        interactionDurationMs: true,
+        answerDurationMs: true,
         answeredAt: true,
       },
     });
@@ -128,9 +132,11 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
         (attempt) =>
           typeof attempt.rawScore === "number" &&
           Number.isFinite(attempt.rawScore) &&
-          attempt.timeSpentMs !== null,
+          (attempt.answerDurationMs !== null ||
+            attempt.interactionDurationMs !== null ||
+            attempt.timeSpentMs !== null),
       )
-      .map((a) => a.timeSpentMs!);
+      .map((a) => a.answerDurationMs ?? a.interactionDurationMs ?? a.timeSpentMs!);
     const avgTimeMs =
       timeValues.length > 0
         ? Math.round(timeValues.reduce((sum, t) => sum + t, 0) / timeValues.length)

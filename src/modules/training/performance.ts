@@ -78,6 +78,8 @@ type TrainingSessionRow = {
     rawScore: number | null;
     isCorrect: boolean | null;
     timeSpentMs: number | null;
+    interactionDurationMs: number | null;
+    answerDurationMs: number | null;
     answeredAt: Date;
   }>;
 };
@@ -130,7 +132,14 @@ export async function loadTrainingPerformance(
       },
       attempts: {
         orderBy: [{ answeredAt: "asc" }, { id: "asc" }],
-        select: { rawScore: true, isCorrect: true, timeSpentMs: true, answeredAt: true },
+        select: {
+          rawScore: true,
+          isCorrect: true,
+          timeSpentMs: true,
+          interactionDurationMs: true,
+          answerDurationMs: true,
+          answeredAt: true,
+        },
       },
     },
   })) as TrainingSessionRow[];
@@ -156,7 +165,13 @@ export async function loadTrainingPerformance(
       difficulty,
       exposureId: row.trainingSessionItem?.templateVersionId ?? row.templateVersionId,
       status: row.status,
-      attempts,
+      attempts: attempts.map((attempt) => ({
+        ...attempt,
+        // Prefer server-derived telemetry. Legacy clients may only have the
+        // older client-reported timeSpentMs value.
+        timeSpentMs:
+          attempt.answerDurationMs ?? attempt.interactionDurationMs ?? attempt.timeSpentMs,
+      })),
       lastActivityAt: sessionActivityAt(row),
     });
   }

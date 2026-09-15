@@ -35,6 +35,7 @@ import {
   type CorrectAnswer,
   type Option,
 } from "./schemas.js";
+import { validateAttemptTelemetry } from "./telemetry.js";
 
 const ATTEMPT_RESULT_SELECT = {
   id: true,
@@ -45,6 +46,15 @@ const ATTEMPT_RESULT_SELECT = {
   rawScore: true,
   timeSpentMs: true,
   responseOrder: true,
+  retryCount: true,
+  hintUsed: true,
+  firstAttemptCorrect: true,
+  finalResult: true,
+  exposureStartedAt: true,
+  answerStartedAt: true,
+  submittedAt: true,
+  interactionDurationMs: true,
+  answerDurationMs: true,
   feedback: true,
   answeredAt: true,
   createdAt: true,
@@ -743,7 +753,16 @@ export async function createAttempt(
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
   options: { timings?: AttemptTimingBreakdown } = {},
 ): Promise<AttemptResponse> {
-  const { sessionId, answer, clientAttemptId, timeSpentMs } = input;
+  const {
+    sessionId,
+    answer,
+    clientAttemptId,
+    timeSpentMs,
+    exposureStartedAt,
+    answerStartedAt,
+    hintUsed,
+    isFinal,
+  } = input;
   const timings = options.timings;
   const totalStartedAt = performance.now();
   const validationStartedAt = performance.now();
@@ -782,6 +801,7 @@ export async function createAttempt(
         context: true,
         sessionType: true,
         status: true,
+        startedAt: true,
         assessmentId: true,
         templateVersion: {
           select: {
@@ -876,6 +896,7 @@ export async function createAttempt(
   try {
     const persistenceStartedAt = performance.now();
     const attempt = await prisma.$transaction(async (tx) => {
+      let previousAttempts: Array<{ isCorrect: boolean | null }> = [];
       let responseOrder = 1 as 1 | 2;
       if (isStudentTrainingAttempt) {
         await tx.$queryRaw`
@@ -889,7 +910,7 @@ export async function createAttempt(
         });
         if (existingForClient) return existingForClient;
 
-        const previousAttempts = await tx.attempt.findMany({
+        previousAttempts = await tx.attempt.findMany({
           where: { sessionId, questionVersionId },
           select: { isCorrect: true },
           orderBy: [{ responseOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
@@ -919,7 +940,13 @@ export async function createAttempt(
               explanation: version.explanation ?? null,
             }
           : feedback;
-
+      const telemetry = validateAttemptTelemetry(
+        { exposureStartedAt, answerStartedAt, hintUsed, isFinal },
+        session.startedAt,
+        new Date(),
+        responseOrder,
+        isCorrect,
+      );
       // Admin/back-office attempt imports are not end-user B2C practice usage.
       // Only an authenticated personal-context student attempt consumes the
       // personal daily question allowance.
@@ -959,6 +986,16 @@ export async function createAttempt(
           responseOrder,
           feedback: (finalWrongFeedback ?? null) as
             Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+          exposureStartedAt: telemetry.exposureStartedAt,
+          answerStartedAt: telemetry.answerStartedAt,
+          submittedAt: telemetry.submittedAt,
+          interactionDurationMs: telemetry.interactionDurationMs,
+          answerDurationMs: telemetry.answerDurationMs,
+          retryCount: Math.max(0, responseOrder - 1),
+          hintUsed: telemetry.hintUsed,
+          firstAttemptCorrect:
+            responseOrder === 1 ? isCorrect : (previousAttempts[0]?.isCorrect ?? null),
+          finalResult: telemetry.finalResult,
         },
         select: {
           id: true,
@@ -986,6 +1023,18 @@ export async function createAttempt(
       rawScore: attempt.rawScore,
       timeSpentMs: attempt.timeSpentMs,
       responseOrder: attempt.responseOrder,
+      retryCount: attempt.retryCount,
+      hintUsed: attempt.hintUsed,
+      firstAttemptCorrect: attempt.firstAttemptCorrect,
+      finalResult: attempt.finalResult,
+      exposureStartedAt: attempt.exposureStartedAt?.toISOString() ?? null,
+      answerStartedAt: attempt.answerStartedAt?.toISOString() ?? null,
+      submittedAt: attempt.submittedAt?.toISOString() ?? null,
+      interactionDurationMs: attempt.interactionDurationMs,
+      answerDurationMs: attempt.answerDurationMs,
+      ...(attempt.responseOrder > 1 && attempt.isCorrect === false
+        ? { correctAnswer: version.correctAnswer }
+        : {}),
       feedback: attempt.feedback,
       revealedAnswer:
         isObjectJson(attempt.feedback) && "revealedAnswer" in attempt.feedback
@@ -1058,6 +1107,18 @@ export async function createAttempt(
               rawScore: existing.rawScore,
               timeSpentMs: existing.timeSpentMs,
               responseOrder: existing.responseOrder,
+              retryCount: existing.retryCount,
+              hintUsed: existing.hintUsed,
+              firstAttemptCorrect: existing.firstAttemptCorrect,
+              finalResult: existing.finalResult,
+              exposureStartedAt: existing.exposureStartedAt?.toISOString() ?? null,
+              answerStartedAt: existing.answerStartedAt?.toISOString() ?? null,
+              submittedAt: existing.submittedAt?.toISOString() ?? null,
+              interactionDurationMs: existing.interactionDurationMs,
+              answerDurationMs: existing.answerDurationMs,
+              ...(existing.responseOrder > 1 && existing.isCorrect === false
+                ? { correctAnswer: version.correctAnswer }
+                : {}),
               feedback: existing.feedback,
               revealedAnswer:
                 isObjectJson(existing.feedback) && "revealedAnswer" in existing.feedback
