@@ -1,0 +1,273 @@
+name: Staging database migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Staging branch/ref to migrate
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-database-migration
+  cancel-in-progress: false
+
+jobs:
+  staging-migration:
+    name: Apply Prisma migrations to staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+      EXPECTED_STAGING_FINGERPRINT: 18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38
+    steps:
+      - name: Verify staging ref
+        shell: bash
+        env:
+          TARGET_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_REF" = "staging"
+
+      - name: Checkout selected staging ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Verify staging database identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APP_ENV" = "staging"
+          test "$NODE_ENV" = "test"
+          test "$DB_FINGERPRINT_ENVIRONMENT" = "STAGING"
+          test -n "$DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test "$DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT" = "$EXPECTED_STAGING_FINGERPRINT"
+
+          fingerprint_output="$RUNNER_TEMP/staging-fingerprint-before.json"
+          fingerprint_error="$RUNNER_TEMP/staging-fingerprint-before.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging database fingerprint command failed" >&2
+            exit 1
+          fi
+
+          EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            FINGERPRINT_OUTPUT="$fingerprint_output" \
+            npx tsx -e '
+          import { readFileSync, writeFileSync } from "node:fs";
+          import {
+            assertCatalogEnvironmentSafety,
+            assertLiveCatalogTargetIdentity,
+            parseCatalogTargetUrl,
+            targetFingerprint,
+          } from "./src/curriculum/catalog-target-verification.ts";
+
+          const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
+          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+          const pending = report.migrations?.pending;
+          const failed = report.migrations?.failed;
+          const foundation = "20260914100000_add_learning_experience_foundation";
+          const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
+          const identity = {
+            database: report.database?.database,
+            db_user: report.database?.currentUser,
+          };
+          assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+          assertLiveCatalogTargetIdentity(target, identity);
+          const actual = targetFingerprint(target, identity);
+
+          if (
+            report.target?.environment !== "STAGING" ||
+            actual !== expected ||
+            !/^[a-f0-9]{64}$/u.test(actual) ||
+            !Array.isArray(pending) ||
+            !Array.isArray(failed) ||
+            failed.length !== 0 ||
+            report.migrations.appliedCount > report.migrations.repositoryCount ||
+            pending.some((name) => name !== foundation) ||
+            pending.length > 1
+          ) {
+            throw new Error("staging identity or migration precondition failed");
+          }
+
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-preflight.json`,
+            JSON.stringify(
+              {
+                environment: "STAGING",
+                fingerprint: actual,
+                migrationStatus: report.status,
+                migrationHistoryCount: report.migrations.appliedCount,
+                pendingMigrations: pending,
+                failedMigrations: failed.length,
+                rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
+              },
+              null,
+              2,
+            ),
+          );
+          console.log("staging fingerprint=PASS");
+          '
+
+      - name: Apply staging Prisma migrations
+        id: apply
+        run: npx prisma migrate deploy
+
+      - name: Verify staging migration and schema
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          migration_status="$RUNNER_TEMP/staging-migrate-status.txt"
+          if ! npx prisma migrate status --schema=prisma/schema.prisma >"$migration_status" 2>&1; then
+            echo "staging migration status check failed" >&2
+            exit 1
+          fi
+
+          schema_diff="$RUNNER_TEMP/staging-schema-diff.txt"
+          set +e
+          npx prisma migrate diff \
+            --exit-code \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma >"$schema_diff" 2>&1
+          schema_diff_exit=$?
+          set -e
+          if test "$schema_diff_exit" -eq 2; then
+            echo "staging schema drift detected" >&2
+            exit 1
+          fi
+          if test "$schema_diff_exit" -ne 0; then
+            echo "staging schema drift check failed" >&2
+            exit 1
+          fi
+
+          fingerprint_output="$RUNNER_TEMP/staging-fingerprint-after.json"
+          fingerprint_error="$RUNNER_TEMP/staging-fingerprint-after.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging post-migration fingerprint command failed" >&2
+            exit 1
+          fi
+
+          EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            FINGERPRINT_OUTPUT="$fingerprint_output" \
+            npx tsx -e '
+          import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+          import {
+            assertCatalogEnvironmentSafety,
+            assertLiveCatalogTargetIdentity,
+            parseCatalogTargetUrl,
+            targetFingerprint,
+          } from "./src/curriculum/catalog-target-verification.ts";
+
+          const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
+          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+          const pending = report.migrations?.pending;
+          const failed = report.migrations?.failed;
+          const foundation = "20260914100000_add_learning_experience_foundation";
+          const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
+          const identity = {
+            database: report.database?.database,
+            db_user: report.database?.currentUser,
+          };
+          assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+          assertLiveCatalogTargetIdentity(target, identity);
+          const actual = targetFingerprint(target, identity);
+          const appliedMigrationNames = readdirSync("prisma/migrations", { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name)
+            .sort();
+
+          if (
+            report.status !== "PASS" ||
+            report.target?.environment !== "STAGING" ||
+            actual !== expected ||
+            !/^[a-f0-9]{64}$/u.test(actual) ||
+            !Array.isArray(pending) ||
+            pending.length !== 0 ||
+            !Array.isArray(failed) ||
+            failed.length !== 0 ||
+            report.migrations.appliedCount !== report.migrations.repositoryCount ||
+            !appliedMigrationNames.includes(foundation)
+          ) {
+            throw new Error("staging migration or schema validation failed");
+          }
+
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-verification.json`,
+            JSON.stringify(
+              {
+                environment: "STAGING",
+                fingerprint: actual,
+                migrationStatus: report.status,
+                migrationHistoryCount: report.migrations.appliedCount,
+                appliedMigrationNames,
+                failedMigrations: failed.length,
+                rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
+                schema: "PASS",
+                schemaDrift: false,
+                result: "PASS",
+              },
+              null,
+              2,
+            ),
+          );
+          console.log("staging migration=PASS schema=PASS schemaDrift=FALSE");
+          '
+
+      - name: Publish sanitized staging migration summary
+        if: always()
+        shell: bash
+        env:
+          APPLY_OUTCOME: ${{ steps.apply.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { existsSync, readFileSync } from "node:fs";
+
+          const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null);
+          const preflight = readJson(`${process.env.RUNNER_TEMP}/staging-migration-preflight.json`);
+          const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
+          const safe = verification ?? preflight;
+          const applied = verification?.appliedMigrationNames ?? [];
+
+          console.log("## Staging database migration");
+          console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
+          console.log(`- targetFingerprint: ${safe?.fingerprint ?? "NOT_AVAILABLE"}`);
+          console.log(`- migrationHistoryCount: ${safe?.migrationHistoryCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- migrationStatus: ${verification?.migrationStatus ?? preflight?.migrationStatus ?? "NOT_RUN"}`);
+          console.log(`- appliedMigrationNames: ${applied.length ? applied.join(", ") : "NOT_VERIFIED"}`);
+          console.log(`- failedMigrations: ${verification?.failedMigrations ?? preflight?.failedMigrations ?? "NOT_VERIFIED"}`);
+          console.log(`- rolledBackMigrations: ${verification?.rolledBackMigrations ?? preflight?.rolledBackMigrations ?? "NOT_VERIFIED"}`);
+          console.log(`- schema: ${verification?.schema ?? "NOT_VERIFIED"}`);
+          console.log(`- schemaDrift: ${verification?.schemaDrift === false ? "false" : "NOT_VERIFIED"}`);
+          console.log(`- migrateDeploy: ${process.env.APPLY_OUTCOME === "success" ? "PASS" : process.env.APPLY_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- verification: ${process.env.VERIFY_OUTCOME === "success" ? "PASS" : process.env.VERIFY_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- result: ${verification?.result ?? "FAIL_OR_NOT_RUN"}`);
+          NODE
