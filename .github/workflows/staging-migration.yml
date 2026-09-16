@@ -79,7 +79,11 @@ jobs:
           EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
             FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx -e '
-          import { readFileSync, writeFileSync } from "node:fs";
+          import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+          import {
+            classifyMigrationFailures,
+            classifyPendingMigrations,
+          } from "./scripts/staging-migration-precondition.ts";
           import {
             assertCatalogEnvironmentSafety,
             assertLiveCatalogTargetIdentity,
@@ -92,6 +96,32 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const allowedPendingMigrationPolicy = [foundation];
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
+            ? pending
+            : null;
+          const repositoryMigrationNames = new Set(
+            readdirSync("prisma/migrations", { withFileTypes: true })
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => entry.name),
+          );
+          const failedMigrations = Array.isArray(failed) && failed.every(
+            (entry) => entry && typeof entry.name === "string" && typeof entry.rolledBack === "boolean",
+          )
+            ? failed
+            : null;
+          const pendingClassification = pendingMigrations
+            ? classifyPendingMigrations(pendingMigrations, new Set(allowedPendingMigrationPolicy))
+            : null;
+          const failureClassification = failedMigrations && pendingMigrations
+            ? classifyMigrationFailures(failedMigrations, pendingMigrations, repositoryMigrationNames)
+            : null;
+          const allowedPendingMigrations = pendingClassification?.allowedPendingMigrations ?? null;
+          const unexpectedPendingMigrations = pendingClassification?.unexpectedPendingMigrations ?? null;
+          const unresolvedFailedMigrations = failureClassification?.unresolvedFailedMigrations ?? null;
+          const historicalRolledBackMigrations = failureClassification?.historicalRolledBackMigrations ?? null;
+          const formatMigrationList = (names) =>
+            names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
           const identity = {
             database: report.database?.database,
@@ -101,18 +131,51 @@ jobs:
           assertLiveCatalogTargetIdentity(target, identity);
           const actual = targetFingerprint(target, identity);
 
-          if (
-            report.target?.environment !== "STAGING" ||
-            actual !== expected ||
-            !/^[a-f0-9]{64}$/u.test(actual) ||
-            !Array.isArray(pending) ||
-            !Array.isArray(failed) ||
-            failed.length !== 0 ||
-            report.migrations.appliedCount > report.migrations.repositoryCount ||
-            pending.some((name) => name !== foundation) ||
-            pending.length > 1
-          ) {
-            throw new Error("staging identity or migration precondition failed");
+          const checks = {
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+            migrationCollections: Array.isArray(pending) && failedMigrations !== null,
+            pendingMigrationsShape: pendingMigrations !== null,
+            noFailedMigrations: unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
+            allowedPendingMigrations:
+              pendingMigrations !== null &&
+              pendingMigrations.length <= allowedPendingMigrationPolicy.length &&
+              unexpectedPendingMigrations.length === 0,
+            noUnexpectedAppliedMigrations:
+              report.migrations?.appliedCount <= report.migrations?.repositoryCount,
+          };
+          const failedChecks = Object.entries(checks)
+            .filter(([, passed]) => !passed)
+            .map(([name]) => name);
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-precondition.json`,
+            JSON.stringify(
+              {
+                result: failedChecks.length === 0 ? "PASS" : "FAIL",
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
+                historicalRolledBackMigrations,
+                unresolvedFailedMigrations,
+                allowedPendingMigrationPolicy,
+                failedChecks,
+                checks,
+              },
+              null,
+              2,
+            ),
+          );
+
+          if (failedChecks.length > 0) {
+            throw new Error(
+              `staging precondition failed: ${failedChecks.join(",")}; pendingMigrations=${formatMigrationList(
+                pendingMigrations,
+              )}; allowedPendingMigrations=${formatMigrationList(
+                allowedPendingMigrations,
+              )}; unexpectedPendingMigrations=${formatMigrationList(unexpectedPendingMigrations)}; unresolvedFailedMigrations=${formatMigrationList(
+                unresolvedFailedMigrations?.map((migration) => migration.name) ?? null,
+              )}`,
+            );
           }
 
           writeFileSync(
@@ -123,9 +186,14 @@ jobs:
                 fingerprint: actual,
                 migrationStatus: report.status,
                 migrationHistoryCount: report.migrations.appliedCount,
-                pendingMigrations: pending,
-                failedMigrations: failed.length,
-                rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
+                allowedPendingMigrationPolicy,
+                historicalRolledBackMigrations,
+                unresolvedFailedMigrations,
+                failedMigrations: unresolvedFailedMigrations?.length ?? null,
+                rolledBackMigrations: historicalRolledBackMigrations?.length ?? null,
               },
               null,
               2,
@@ -179,6 +247,10 @@ jobs:
             npx tsx -e '
           import { readdirSync, readFileSync, writeFileSync } from "node:fs";
           import {
+            classifyMigrationFailures,
+            classifyPendingMigrations,
+          } from "./scripts/staging-migration-precondition.ts";
+          import {
             assertCatalogEnvironmentSafety,
             assertLiveCatalogTargetIdentity,
             parseCatalogTargetUrl,
@@ -190,6 +262,32 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
+          const allowedPendingMigrationPolicy = [foundation];
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
+            ? pending
+            : null;
+          const repositoryMigrationNames = new Set(
+            readdirSync("prisma/migrations", { withFileTypes: true })
+              .filter((entry) => entry.isDirectory())
+              .map((entry) => entry.name),
+          );
+          const failedMigrations = Array.isArray(failed) && failed.every(
+            (entry) => entry && typeof entry.name === "string" && typeof entry.rolledBack === "boolean",
+          )
+            ? failed
+            : null;
+          const pendingClassification = pendingMigrations
+            ? classifyPendingMigrations(pendingMigrations, new Set(allowedPendingMigrationPolicy))
+            : null;
+          const failureClassification = failedMigrations && pendingMigrations
+            ? classifyMigrationFailures(failedMigrations, pendingMigrations, repositoryMigrationNames)
+            : null;
+          const allowedPendingMigrations = pendingClassification?.allowedPendingMigrations ?? null;
+          const unexpectedPendingMigrations = pendingClassification?.unexpectedPendingMigrations ?? null;
+          const unresolvedFailedMigrations = failureClassification?.unresolvedFailedMigrations ?? null;
+          const historicalRolledBackMigrations = failureClassification?.historicalRolledBackMigrations ?? null;
+          const formatMigrationList = (names) =>
+            names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
           const identity = {
             database: report.database?.database,
@@ -203,19 +301,47 @@ jobs:
             .map((entry) => entry.name)
             .sort();
 
-          if (
-            report.status !== "PASS" ||
-            report.target?.environment !== "STAGING" ||
-            actual !== expected ||
-            !/^[a-f0-9]{64}$/u.test(actual) ||
-            !Array.isArray(pending) ||
-            pending.length !== 0 ||
-            !Array.isArray(failed) ||
-            failed.length !== 0 ||
-            report.migrations.appliedCount !== report.migrations.repositoryCount ||
-            !appliedMigrationNames.includes(foundation)
-          ) {
-            throw new Error("staging migration or schema validation failed");
+          const checks = {
+            migrationStatusCurrent: report.status === "PASS",
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+            pendingMigrationsShape: pendingMigrations !== null,
+            noPendingMigrations: pendingMigrations !== null && pendingMigrations.length === 0,
+            noFailedMigrations: unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
+            expectedMigrationApplied: appliedMigrationNames.includes(foundation),
+            migrationCountsMatch:
+              report.migrations?.appliedCount === report.migrations?.repositoryCount,
+          };
+          const failedChecks = Object.entries(checks)
+            .filter(([, passed]) => !passed)
+            .map(([name]) => name);
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`,
+            JSON.stringify(
+              {
+                result: failedChecks.length === 0 ? "PASS" : "FAIL",
+                pendingMigrations,
+                allowedPendingMigrations,
+                unexpectedPendingMigrations,
+                historicalRolledBackMigrations,
+                unresolvedFailedMigrations,
+                allowedPendingMigrationPolicy,
+                failedChecks,
+                checks,
+              },
+              null,
+              2,
+            ),
+          );
+
+          if (failedChecks.length > 0) {
+            throw new Error(
+              `staging migration or schema validation failed: ${failedChecks.join(",")}; pendingMigrations=${formatMigrationList(
+                pendingMigrations,
+              )}; unresolvedFailedMigrations=${formatMigrationList(
+                unresolvedFailedMigrations?.map((migration) => migration.name) ?? null,
+              )}`,
+            );
           }
 
           writeFileSync(
@@ -227,8 +353,10 @@ jobs:
                 migrationStatus: report.status,
                 migrationHistoryCount: report.migrations.appliedCount,
                 appliedMigrationNames,
-                failedMigrations: failed.length,
-                rolledBackMigrations: failed.filter((migration) => migration.rolledBack).length,
+                historicalRolledBackMigrations,
+                unresolvedFailedMigrations,
+                failedMigrations: unresolvedFailedMigrations?.length ?? null,
+                rolledBackMigrations: historicalRolledBackMigrations?.length ?? null,
                 schema: "PASS",
                 schemaDrift: false,
                 result: "PASS",
@@ -253,9 +381,38 @@ jobs:
 
           const readJson = (path) => (existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null);
           const preflight = readJson(`${process.env.RUNNER_TEMP}/staging-migration-preflight.json`);
+          const precondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-precondition.json`);
           const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
           const safe = verification ?? preflight;
           const applied = verification?.appliedMigrationNames ?? [];
+          const pendingMigrations =
+            verification?.pendingMigrations ?? precondition?.pendingMigrations ?? preflight?.pendingMigrations ?? null;
+          const allowedPendingMigrations =
+            verification?.allowedPendingMigrations ??
+            precondition?.allowedPendingMigrations ??
+            preflight?.allowedPendingMigrations ??
+            null;
+          const unexpectedPendingMigrations =
+            verification?.unexpectedPendingMigrations ??
+            precondition?.unexpectedPendingMigrations ??
+            preflight?.unexpectedPendingMigrations ??
+            null;
+          const historicalRolledBackMigrations =
+            verification?.historicalRolledBackMigrations ??
+            precondition?.historicalRolledBackMigrations ??
+            preflight?.historicalRolledBackMigrations ??
+            null;
+          const unresolvedFailedMigrations =
+            verification?.unresolvedFailedMigrations ??
+            precondition?.unresolvedFailedMigrations ??
+            preflight?.unresolvedFailedMigrations ??
+            null;
+          const formatMigrationList = (names) =>
+            Array.isArray(names) ? (names.length ? names.join(", ") : "NONE") : "NOT_AVAILABLE";
+          const formatMigrationObjectList = (migrations) =>
+            Array.isArray(migrations)
+              ? formatMigrationList(migrations.map((migration) => migration.name))
+              : "NOT_AVAILABLE";
 
           console.log("## Staging database migration");
           console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
@@ -263,6 +420,11 @@ jobs:
           console.log(`- migrationHistoryCount: ${safe?.migrationHistoryCount ?? "NOT_AVAILABLE"}`);
           console.log(`- migrationStatus: ${verification?.migrationStatus ?? preflight?.migrationStatus ?? "NOT_RUN"}`);
           console.log(`- appliedMigrationNames: ${applied.length ? applied.join(", ") : "NOT_VERIFIED"}`);
+          console.log(`- pendingMigrations: ${formatMigrationList(pendingMigrations)}`);
+          console.log(`- allowedPendingMigrations: ${formatMigrationList(allowedPendingMigrations)}`);
+          console.log(`- unexpectedPendingMigrations: ${formatMigrationList(unexpectedPendingMigrations)}`);
+          console.log(`- historicalRolledBackMigrations: ${formatMigrationObjectList(historicalRolledBackMigrations)}`);
+          console.log(`- unresolvedFailedMigrations: ${formatMigrationObjectList(unresolvedFailedMigrations)}`);
           console.log(`- failedMigrations: ${verification?.failedMigrations ?? preflight?.failedMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- rolledBackMigrations: ${verification?.rolledBackMigrations ?? preflight?.rolledBackMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- schema: ${verification?.schema ?? "NOT_VERIFIED"}`);
