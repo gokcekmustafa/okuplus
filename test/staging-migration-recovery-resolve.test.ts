@@ -47,6 +47,8 @@ describe("staging migration recovery resolve workflow", () => {
   it("enforces the enum/history precheck and emits only sanitized metadata", () => {
     expect(workflow).toContain("PointEventType");
     expect(workflow).toContain("TRAINING_SESSION_COMPLETED");
+    expect(workflow).toContain('WHERE n.nspname = ${"public"} AND t.typname = ${"PointEventType"}');
+    expect(workflow).not.toContain("WHERE n.nspname = 'public' AND t.typname = 'PointEventType'");
     expect(workflow).toContain('public."_prisma_migrations"');
     expect(workflow).toContain("databaseUrlMatchesFingerprintTarget");
     expect(workflow).toContain("safeToResolveApplied: true");
