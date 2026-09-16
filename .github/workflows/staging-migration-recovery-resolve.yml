@@ -422,11 +422,66 @@ jobs:
 
           const recoveryTargetMigration = "20260907160000_add_training_session_completed_point_event";
           const recoveryOutputPath = `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`;
+          const sanitizeRuntimeMessage = (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            return message
+              .replace(/(?:postgres(?:ql)?):\/\/\S+/giu, "[REDACTED_DATABASE_URL]")
+              .replace(/(?:https?|file):\/\/\S+/giu, "[REDACTED_URL]")
+              .replace(/(?:password|passwd|pwd|secret|token|cookie|authorization|database_url)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+              .replace(/\b(?:[a-z0-9-]+\.)+neon\.tech\b/giu, "[REDACTED_HOST]")
+              .replace(/\s+/gu, " ")
+              .trim()
+              .slice(0, 400);
+          };
+          const safeErrorCode = (error) => {
+            const code = error && typeof error.code === "string" ? error.code : null;
+            return code && /^(?:P\d{4}|ERR_[A-Z0-9_]+)$/u.test(code) ? code : null;
+          };
+          const safeErrorType = (error) => {
+            const type = error?.constructor?.name;
+            return typeof type === "string" && /^[A-Za-z][A-Za-z0-9]*$/u.test(type) ? type : "UnknownError";
+          };
+          const writeFailure = (failure) => {
+            writeFileSync(
+              recoveryOutputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration: recoveryTargetMigration,
+                  migrateDeploy: "NOT_RUN",
+                  ...failure,
+                },
+                null,
+                2,
+              ),
+            );
+          };
+          const runtimeFailure = (operation, error) => {
+            writeFailure({
+              failureClass: "RUNTIME",
+              failedChecks: ["postcheckRuntimeError"],
+              runtimeFailure: {
+                operation,
+                errorType: safeErrorType(error),
+                errorCode: safeErrorCode(error),
+                message: sanitizeRuntimeMessage(error),
+              },
+            });
+            throw new Error("staging resolve postcheck runtime error");
+          };
           async function main() {
           const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
           const targetMigration = "20260907160000_add_training_session_completed_point_event";
           const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
-          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+          let report;
+          let precheck;
+          try {
+            report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+            precheck = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`, "utf8"));
+          } catch (error) {
+            runtimeFailure("postcheckInputJson", error);
+          }
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string") ? pending : null;
@@ -448,15 +503,36 @@ jobs:
               Number(process.env.MIGRATE_STATUS_EXIT) === 0 ||
               (Number(process.env.MIGRATE_STATUS_EXIT) === 1 &&
                 pendingMigrations?.every((name) => name === nextKnownMigration) === true),
+            enumTypeExists: precheck?.enum?.typeExists === true,
+            enumLabelPresent: precheck?.enum?.labelPresent === true,
           };
-          const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          let prisma;
           try {
-            const migrationRows = await prisma.$queryRaw`
-              SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
-              FROM public."_prisma_migrations"
-              WHERE migration_name = ${targetMigration}
-            `;
+            prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          } catch (error) {
+            runtimeFailure("prismaClientInit", error);
+          }
+          try {
+            let migrationRows;
+            try {
+              migrationRows = await prisma.$queryRaw`
+                SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
+                FROM public."_prisma_migrations"
+                WHERE migration_name = ${targetMigration}
+              `;
+            } catch (error) {
+              runtimeFailure("prismaMigrationsQuery", error);
+            }
             const migration = migrationRows.length === 1 ? migrationRows[0] : null;
+            const historyAfter = migration
+              ? {
+                  state: migration.finished_at !== null && migration.rolled_back_at === null ? "APPLIED" : "NOT_APPLIED",
+                  recordCount: migrationRows.length,
+                  appliedStepsCount: migration.applied_steps_count,
+                  finishedAt: migration.finished_at,
+                  rolledBackAt: migration.rolled_back_at,
+                }
+              : null;
             Object.assign(checks, {
               targetMigrationRecordUnique: migration !== null,
               targetMigrationApplied: migration?.finished_at !== null && migration?.rolled_back_at === null,
@@ -465,27 +541,30 @@ jobs:
               .filter(([, passed]) => !passed)
               .map(([name]) => name);
             if (failedChecks.length > 0) {
-              writeFileSync(
-                `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`,
-                JSON.stringify({ result: "FAIL", environment: "STAGING", targetMigration, pendingMigrations, failedMigrations, failedChecks, migrateStatusExit: Number(process.env.MIGRATE_STATUS_EXIT), migrateDeploy: "NOT_RUN" }, null, 2),
-              );
-              throw new Error("staging resolve postcheck failed");
+              writeFailure({
+                failureClass: "VALIDATION",
+                targetFingerprint: report.targetIdentityFingerprint,
+                pendingMigrations,
+                failedMigrations,
+                enum: { typeName: "PointEventType", typeExists: checks.enumTypeExists, labelPresent: checks.enumLabelPresent },
+                historyAfter,
+                checks,
+                failedChecks,
+                migrateStatusExit: Number(process.env.MIGRATE_STATUS_EXIT),
+              });
+              throw new Error("staging resolve postcheck validation failed");
             }
             writeFileSync(
               `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`,
               JSON.stringify(
                 {
                   result: "PASS",
+                  failureClass: "NONE",
                   environment: "STAGING",
                   targetFingerprint: report.targetIdentityFingerprint,
                   targetMigration,
-                  historyAfter: {
-                    state: "APPLIED",
-                    recordCount: migrationRows.length,
-                    appliedStepsCount: migration.applied_steps_count,
-                    finishedAt: migration.finished_at,
-                    rolledBackAt: migration.rolled_back_at,
-                  },
+                  enum: { typeName: "PointEventType", typeExists: checks.enumTypeExists, labelPresent: checks.enumLabelPresent },
+                  historyAfter,
                   pendingMigrations,
                   failedMigrations,
                   checks,
@@ -497,24 +576,28 @@ jobs:
               ),
             );
           } finally {
-            await prisma.$disconnect();
+            try {
+              await prisma.$disconnect();
+            } catch (error) {
+              runtimeFailure("prismaDisconnect", error);
+            }
           }
           }
-          main().catch(() => {
-            writeFileSync(
-              recoveryOutputPath,
-              JSON.stringify(
-                {
-                  result: "FAIL",
-                  environment: "STAGING",
-                  targetMigration: recoveryTargetMigration,
-                  failedChecks: ["postcheckRuntimeError"],
-                  migrateDeploy: "NOT_RUN",
-                },
-                null,
-                2,
-              ),
-            );
+          main().catch((error) => {
+            if (error instanceof Error && ["staging resolve postcheck validation failed", "staging resolve postcheck runtime error"].includes(error.message)) {
+              process.exitCode = 1;
+              return;
+            }
+            writeFailure({
+              failureClass: "RUNTIME",
+              failedChecks: ["postcheckRuntimeError"],
+              runtimeFailure: {
+                operation: "uncaughtPostcheck",
+                errorType: safeErrorType(error),
+                errorCode: safeErrorCode(error),
+                message: sanitizeRuntimeMessage(error),
+              },
+            });
             process.exitCode = 1;
           });
           ' >"$RUNNER_TEMP/staging-resolve-postcheck.log" 2>&1
@@ -576,6 +659,8 @@ jobs:
           console.log(`- unexpectedPendingBefore: ${formatList(precheck?.unexpectedPendingMigrations)}`);
           console.log(`- resolve: ${process.env.RESOLVE_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- postcheck: ${postcheck?.result ?? process.env.POSTCHECK_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- postcheckFailureClass: ${postcheck?.failureClass ?? "NONE"}`);
+          console.log(`- postcheckFailedChecks: ${formatList(postcheck?.failedChecks)}`);
           if (runtimeFailure) {
             console.log(`- runtimeFailure.operation: ${runtimeFailure.operation ?? "UNKNOWN"}`);
             console.log(`- runtimeFailure.errorType: ${runtimeFailure.errorType ?? "UnknownError"}`);
@@ -585,6 +670,11 @@ jobs:
             console.log("- runtimeFailure: NONE");
           }
           console.log(`- historyAfter: ${postcheck?.historyAfter?.state ?? "NOT_AVAILABLE"}`);
+          console.log(`- appliedStepsAfter: ${postcheck?.historyAfter?.appliedStepsCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- finishedAtAfter: ${postcheck?.historyAfter?.finishedAt === null ? "NULL" : postcheck?.historyAfter?.finishedAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- rolledBackAtAfter: ${postcheck?.historyAfter?.rolledBackAt === null ? "NULL" : postcheck?.historyAfter?.rolledBackAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- enumTypeExistsAfter: ${postcheck?.enum?.typeExists === true ? "YES" : postcheck?.enum?.typeExists === false ? "NO" : "NOT_AVAILABLE"}`);
+          console.log(`- enumLabelPresentAfter: ${postcheck?.enum?.labelPresent === true ? "YES" : postcheck?.enum?.labelPresent === false ? "NO" : "NOT_AVAILABLE"}`);
           console.log(`- pendingAfter: ${formatList(postcheck?.pendingMigrations)}`);
           console.log(`- failedAfter: ${formatList(postcheck?.failedMigrations?.map((entry) => entry.name))}`);
           console.log("- migrateDeploy: NOT_RUN");
