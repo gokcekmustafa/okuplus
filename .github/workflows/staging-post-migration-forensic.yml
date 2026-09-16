@@ -128,6 +128,7 @@ jobs:
                 environmentBinding: environmentBinding ? "PASS" : "FAIL",
                 fingerprintBinding: fingerprintBinding ? "PASS" : "FAIL",
                 identityFields: identityFields ? "PASS" : "FAIL",
+                observedTargetIdentityFingerprint: fingerprintFormat ? actual : null,
                 fingerprintConfirmed,
                 databaseIdentityAvailable,
               },
@@ -140,6 +141,9 @@ jobs:
           console.log(`environmentBinding: ${environmentBinding ? "PASS" : "FAIL"}`);
           console.log(`fingerprintBinding: ${fingerprintBinding ? "PASS" : "FAIL"}`);
           console.log(`identityFields: ${identityFields ? "PASS" : "FAIL"}`);
+          console.log(
+            `observedTargetIdentityFingerprint: ${fingerprintFormat ? actual : "INVALID"}`,
+          );
 
           if (!fingerprintConfirmed || !databaseIdentityAvailable) {
             throw new Error("staging fingerprint or identity guard failed");

@@ -33,6 +33,7 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).toContain("environmentBinding");
     expect(workflow).toContain("fingerprintBinding");
     expect(workflow).toContain("fingerprintErrorClass");
+    expect(workflow).toContain("observedTargetIdentityFingerprint");
   });
 
   it("collects read-only history and the full diff without mutation commands", () => {
