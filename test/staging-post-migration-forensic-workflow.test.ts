@@ -30,6 +30,11 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).toContain("npx tsx scripts/db-fingerprint.ts");
     expect(workflow).toContain("fingerprintConfirmed");
     expect(workflow).toContain("databaseIdentityMatch");
+    expect(workflow).toContain(
+      'parseCatalogTargetUrl(\n            process.env.DB_FINGERPRINT_DATABASE_URL,\n            "STAGING",\n          )',
+    );
+    expect(workflow).toContain("targetFingerprint(target, identity)");
+    expect(workflow).toContain("targetIdentityGuard");
     expect(workflow).toContain("environmentBinding");
     expect(workflow).toContain("fingerprintBinding");
     expect(workflow).toContain("fingerprintErrorClass");
