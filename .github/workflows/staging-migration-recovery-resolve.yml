@@ -134,7 +134,7 @@ jobs:
             );
             throw new Error("staging precheck runtime error");
           };
-          const safeFailure = (failedChecks, pendingMigrations = null) => {
+          const safeFailure = (failedChecks, pendingMigrations = null, targetFingerprintValue = null) => {
             writeFileSync(
               outputPath,
               JSON.stringify(
@@ -142,6 +142,10 @@ jobs:
                   result: "FAIL",
                   environment: "STAGING",
                   targetMigration,
+                  targetFingerprint:
+                    typeof targetFingerprintValue === "string" && /^[a-f0-9]{64}$/u.test(targetFingerprintValue)
+                      ? targetFingerprintValue
+                      : null,
                   pendingMigrations,
                   failedChecks,
                   safeToResolveApplied: false,
@@ -206,7 +210,7 @@ jobs:
           const initialFailedChecks = Object.entries(checks)
             .filter(([, passed]) => !passed)
             .map(([name]) => name);
-          if (initialFailedChecks.length > 0) safeFailure(initialFailedChecks, pendingMigrations);
+          if (initialFailedChecks.length > 0) safeFailure(initialFailedChecks, pendingMigrations, targetFingerprint);
 
           let prisma;
           try {
@@ -267,7 +271,7 @@ jobs:
             const failedChecks = Object.entries(checks)
               .filter(([, passed]) => !passed)
               .map(([name]) => name);
-            if (failedChecks.length > 0) safeFailure(failedChecks, pendingMigrations);
+            if (failedChecks.length > 0) safeFailure(failedChecks, pendingMigrations, targetFingerprint);
 
             writeFileSync(
               outputPath,
@@ -369,7 +373,7 @@ jobs:
                   : "PRECHECK_RUNTIME_ERROR";
               console.error(`staging recovery diagnostic; operation=moduleLoadOrEval; errorType=RuntimeError; errorCode=${reason}; message=guarded precheck failed before structured diagnostics`);
             }
-            NODE
+          NODE
             exit "$precheck_exit"
           fi
 
@@ -546,12 +550,24 @@ jobs:
           const formatList = (value) => Array.isArray(value) ? (value.length ? value.join(", ") : "NONE") : "NOT_AVAILABLE";
           const checks = postcheck?.checks ?? precheck?.checks ?? {};
           const runtimeFailure = precheck?.runtimeFailure ?? postcheck?.runtimeFailure ?? null;
+          const flag = (value) => value === true ? "PASS" : value === false ? "FAIL" : "NOT_AVAILABLE";
+          const confirmationBinding = process.env.RESOLVE_CONFIRM === "APPLY" ? "PASS" : "FAIL";
+          const fingerprintBinding =
+            process.env.DB_FINGERPRINT_ENVIRONMENT === "STAGING" &&
+            /^[a-f0-9]{64}$/u.test(process.env.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT ?? "")
+              ? "PASS"
+              : "FAIL";
+          const databaseBinding = process.env.DATABASE_URL && process.env.DB_FINGERPRINT_DATABASE_URL ? "PASS" : "FAIL";
 
           console.log("## Staging migration recovery resolve");
           console.log("- targetEnvironment: STAGING");
           console.log(`- targetFingerprint: ${postcheck?.targetFingerprint ?? precheck?.targetFingerprint ?? "NOT_AVAILABLE"}`);
           console.log("- targetMigration: 20260907160000_add_training_session_completed_point_event");
-          console.log(`- confirmation: ${process.env.RESOLVE_OUTCOME === "success" ? "ACCEPTED" : "NOT_ACCEPTED_OR_NOT_RUN"}`);
+          console.log(`- confirmation: ${confirmationBinding === "PASS" ? "ACCEPTED" : "NOT_ACCEPTED"}`);
+          console.log(`- confirmationBinding: ${confirmationBinding}`);
+          console.log(`- fingerprintBinding: ${fingerprintBinding}`);
+          console.log(`- databaseBinding: ${databaseBinding}`);
+          console.log(`- databaseIdentity: ${flag(checks.databaseIdentityMatchesFingerprint)}`);
           console.log(`- precheck: ${precheck?.result ?? "NOT_AVAILABLE"}`);
           console.log(`- enumTypeExists: ${precheck?.enum?.typeExists === true ? "YES" : precheck?.enum?.typeExists === false ? "NO" : "NOT_AVAILABLE"}`);
           console.log(`- enumLabelPresent: ${precheck?.enum?.labelPresent === true ? "YES" : precheck?.enum?.labelPresent === false ? "NO" : "NOT_AVAILABLE"}`);

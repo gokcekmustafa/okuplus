@@ -64,7 +64,12 @@ describe("staging migration recovery resolve workflow", () => {
     expect(workflow).toContain("diagnostics=staging-resolve-precheck.json");
     expect(workflow).toContain("guarded precheck failed before structured diagnostics");
     expect(workflow).toContain("runtimeFailure.errorCode");
+    expect(workflow).toContain("confirmationBinding");
+    expect(workflow).toContain("fingerprintBinding");
+    expect(workflow).toContain("databaseIdentity");
+    expect(workflow).toContain('process.env.RESOLVE_CONFIRM === "APPLY"');
     expect(workflow).not.toMatch(/console\.log\(.*error\.(?:message|stack)/iu);
+    expect(workflow).toMatch(/\n {10}NODE\n {12}exit "\$precheck_exit"/u);
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN|COOKIE)/iu);
     expect(workflow).not.toContain("raw");
   });
