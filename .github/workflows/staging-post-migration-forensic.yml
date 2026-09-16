@@ -263,18 +263,18 @@ jobs:
             return false;
           }
 
-          function objectFromLine(line) {
+          function objectFromLine(line, parentName = null) {
             let match = line.match(/^\s*(CREATE|DROP)\s+(?:UNIQUE\s+)?INDEX\s+"([^"]+)"/iu);
-            if (match) return { operation: match[1].toUpperCase(), objectType: "INDEX", objectName: match[2] };
+            if (match) return { operation: match[1].toUpperCase(), objectType: "INDEX", objectName: match[2], parentName };
 
             match = line.match(/^\s*(CREATE|DROP)\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"([^"]+)"/iu);
-            if (match) return { operation: match[1].toUpperCase(), objectType: "TABLE", objectName: match[2] };
+            if (match) return { operation: match[1].toUpperCase(), objectType: "TABLE", objectName: match[2], parentName };
 
             match = line.match(/^\s*(CREATE|DROP)\s+TYPE\s+"([^"]+)"/iu);
-            if (match) return { operation: match[1].toUpperCase(), objectType: "ENUM_OR_TYPE", objectName: match[2] };
+            if (match) return { operation: match[1].toUpperCase(), objectType: "ENUM_OR_TYPE", objectName: match[2], parentName };
 
             match = line.match(/^\s*ALTER\s+TYPE\s+"([^"]+)"/iu);
-            if (match) return { operation: "ALTER", objectType: "ENUM_OR_TYPE", objectName: match[1] };
+            if (match) return { operation: "ALTER", objectType: "ENUM_OR_TYPE", objectName: match[1], parentName };
 
             match = line.match(/^\s*ALTER\s+TABLE\s+"([^"]+)"\s+(ADD|DROP|ALTER)\s+COLUMN\s+"([^"]+)"/iu);
             if (match) {
@@ -317,9 +317,90 @@ jobs:
             }
 
             if (/^\s*(CREATE|ALTER|DROP)\b/iu.test(line)) {
-              return { operation: "OTHER", objectType: "OTHER", objectName: null };
+              return { operation: "OTHER", objectType: "OTHER", objectName: null, parentName };
             }
             return null;
+          }
+
+          function objectsFromDiff(lines) {
+            const objects = [];
+            let currentTable = null;
+            let currentGroup = null;
+            for (const line of lines) {
+              let match = line.match(/^\s*\[\*\]\s+Changed the `([^`]+)` table$/iu);
+              if (match) {
+                currentTable = match[1];
+                currentGroup = null;
+                objects.push({ operation: "CHANGE", objectType: "TABLE", objectName: currentTable });
+                continue;
+              }
+
+              if (/^\s*\[-\]\s+Removed enums$/iu.test(line)) {
+                currentTable = null;
+                currentGroup = "ENUM_OR_TYPE";
+                continue;
+              }
+
+              match = line.match(/^\s*-\s+([^`].*)$/u);
+              if (match && currentGroup === "ENUM_OR_TYPE") {
+                objects.push({
+                  operation: "REMOVE",
+                  objectType: currentGroup,
+                  objectName: match[1].trim(),
+                  parentName: null,
+                });
+                continue;
+              }
+
+              match = line.match(/^\s*\[-\]\s+Removed index on columns \(([^)]+)\)$/iu);
+              if (match) {
+                objects.push({
+                  operation: "REMOVE",
+                  objectType: "INDEX",
+                  objectName: `columns: ${match[1].trim()}`,
+                  parentName: currentTable,
+                });
+                continue;
+              }
+
+              match = line.match(/^\s*\[-\]\s+Removed column `([^`]+)`$/iu);
+              if (match) {
+                objects.push({
+                  operation: "REMOVE",
+                  objectType: "COLUMN",
+                  objectName: match[1],
+                  parentName: currentTable,
+                });
+                continue;
+              }
+
+              match = line.match(/^\s*\[\*\]\s+Altered column `([^`]+)`/iu);
+              if (match) {
+                objects.push({
+                  operation: "ALTER",
+                  objectType: "COLUMN",
+                  objectName: match[1],
+                  parentName: currentTable,
+                });
+                continue;
+              }
+
+              match = line.match(/^\s*\[\*\]\s+Renamed index `([^`]+)` to `([^`]+)`$/iu);
+              if (match) {
+                objects.push({
+                  operation: "RENAME",
+                  objectType: "INDEX",
+                  objectName: `${match[1]} -> ${match[2]}`,
+                  parentName: currentTable,
+                });
+                continue;
+              }
+
+              if (/^\s*\[\*\]\s+Changed the `[^`]+` table$/iu.test(line)) continue;
+              const sqlObject = objectFromLine(line, currentTable);
+              if (sqlObject) objects.push(sqlObject);
+            }
+            return objects;
           }
 
           function sanitizeLine(line) {
@@ -335,9 +416,7 @@ jobs:
             .split(/\r?\n/u)
             .filter((line) => line.trim().length > 0)
             .map(sanitizeLine);
-          const objects = sanitizedDiffLines
-            .map(objectFromLine)
-            .filter(Boolean)
+          const objects = objectsFromDiff(sanitizedDiffLines)
             .map((object) => ({
               ...object,
               expectedFromFoundation: foundationExpectation(
