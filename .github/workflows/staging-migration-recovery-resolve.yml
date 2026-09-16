@@ -234,7 +234,7 @@ jobs:
                 FROM pg_type t
                 JOIN pg_namespace n ON n.oid = t.typnamespace
                 LEFT JOIN pg_enum e ON e.enumtypid = t.oid
-                WHERE n.nspname = 'public' AND t.typname = 'PointEventType'
+                WHERE n.nspname = ${"public"} AND t.typname = ${"PointEventType"}
                 ORDER BY e.enumsortorder
               `;
             } catch (error) {
