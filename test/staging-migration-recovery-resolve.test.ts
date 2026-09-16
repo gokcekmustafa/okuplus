@@ -66,6 +66,19 @@ describe("staging migration recovery resolve workflow", () => {
     expect(workflow).toContain("diagnostics=staging-resolve-precheck.json");
     expect(workflow).toContain("guarded precheck failed before structured diagnostics");
     expect(workflow).toContain("runtimeFailure.errorCode");
+    expect(workflow).toContain('failureClass: "VALIDATION"');
+    expect(workflow).toContain('failureClass: "RUNTIME"');
+    expect(workflow).toContain("staging resolve postcheck validation failed");
+    expect(workflow).toContain(
+      '"staging resolve postcheck runtime error"].includes(error.message)',
+    );
+    expect(workflow).toContain('runtimeFailure("prismaMigrationsQuery", error)');
+    expect(workflow).toContain("historyAfter:");
+    expect(workflow).toContain("appliedStepsCount: migration.applied_steps_count");
+    expect(workflow).toContain('enum: { typeName: "PointEventType"');
+    expect(workflow).toContain("postcheckFailedChecks");
+    expect(workflow).toContain("enumLabelPresentAfter");
+    expect(workflow).not.toContain("main().catch(() =>");
     expect(workflow).toContain("confirmationBinding");
     expect(workflow).toContain("fingerprintBinding");
     expect(workflow).toContain("databaseIdentity");
