@@ -92,6 +92,48 @@ jobs:
           const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
           const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
           const outputPath = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+          const sanitizeRuntimeMessage = (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            return message
+              .replace(/(?:postgres(?:ql)?):\/\/\S+/giu, "[REDACTED_DATABASE_URL]")
+              .replace(/(?:https?|file):\/\/\S+/giu, "[REDACTED_URL]")
+              .replace(/(?:password|passwd|pwd|secret|token|cookie|authorization|database_url)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+              .replace(/\b(?:[a-z0-9-]+\.)+neon\.tech\b/giu, "[REDACTED_HOST]")
+              .replace(/\s+/gu, " ")
+              .trim()
+              .slice(0, 400);
+          };
+          const safeErrorCode = (error) => {
+            const code = error && typeof error.code === "string" ? error.code : null;
+            return code && /^(?:P\d{4}|ERR_[A-Z0-9_]+)$/u.test(code) ? code : null;
+          };
+          const safeErrorType = (error) => {
+            const type = error?.constructor?.name;
+            return typeof type === "string" && /^[A-Za-z][A-Za-z0-9]*$/u.test(type) ? type : "UnknownError";
+          };
+          const runtimeFailure = (operation, error) => {
+            writeFileSync(
+              outputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration,
+                  failedChecks: ["precheckRuntimeError"],
+                  runtimeFailure: {
+                    operation,
+                    errorType: safeErrorType(error),
+                    errorCode: safeErrorCode(error),
+                    message: sanitizeRuntimeMessage(error),
+                  },
+                  safeToResolveApplied: false,
+                },
+                null,
+                2,
+              ),
+            );
+            throw new Error("staging precheck runtime error");
+          };
           const safeFailure = (failedChecks, pendingMigrations = null) => {
             writeFileSync(
               outputPath,
@@ -166,27 +208,45 @@ jobs:
             .map(([name]) => name);
           if (initialFailedChecks.length > 0) safeFailure(initialFailedChecks, pendingMigrations);
 
-          const prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          let prisma;
           try {
-            const [identityRows, enumRows, migrationRows] = await Promise.all([
-              prisma.$queryRaw`
+            prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          } catch (error) {
+            runtimeFailure("prismaClientInit", error);
+          }
+          try {
+            let identityRows;
+            try {
+              identityRows = await prisma.$queryRaw`
                 SELECT current_database() AS database, current_user AS current_user
-              `,
-              prisma.$queryRaw`
+              `;
+            } catch (error) {
+              runtimeFailure("databaseIdentityQuery", error);
+            }
+            let enumRows;
+            try {
+              enumRows = await prisma.$queryRaw`
                 SELECT t.typname AS type_name, e.enumlabel AS enum_label
                 FROM pg_type t
                 JOIN pg_namespace n ON n.oid = t.typnamespace
                 LEFT JOIN pg_enum e ON e.enumtypid = t.oid
                 WHERE n.nspname = 'public' AND t.typname = 'PointEventType'
                 ORDER BY e.enumsortorder
-              `,
-              prisma.$queryRaw`
+              `;
+            } catch (error) {
+              runtimeFailure("pointEventTypeEnumQuery", error);
+            }
+            let migrationRows;
+            try {
+              migrationRows = await prisma.$queryRaw`
                 SELECT migration_name, applied_steps_count, started_at, finished_at,
                        rolled_back_at, logs IS NOT NULL AS logs_present
                 FROM public."_prisma_migrations"
                 WHERE migration_name = ${targetMigration}
-              `,
-            ]);
+              `;
+            } catch (error) {
+              runtimeFailure("prismaMigrationsQuery", error);
+            }
             const identity = identityRows[0];
             const enumTypeExists = enumRows.length > 0;
             const enumLabelPresent = enumRows.some((row) => row.enum_label === "TRAINING_SESSION_COMPLETED");
@@ -238,13 +298,14 @@ jobs:
             );
           } catch (error) {
             if (error instanceof Error && error.message === "staging resolve precondition failed") throw error;
-            safeFailure(["readOnlyStagingPrecheck"]);
+            if (error instanceof Error && error.message === "staging precheck runtime error") throw error;
+            runtimeFailure("readOnlyPrecheck", error);
           } finally {
             await prisma.$disconnect();
           }
           }
           main().catch((error) => {
-            if (error instanceof Error && error.message === "staging resolve precondition failed") {
+            if (error instanceof Error && ["staging resolve precondition failed", "staging precheck runtime error"].includes(error.message)) {
               process.exitCode = 1;
               return;
             }
@@ -256,6 +317,12 @@ jobs:
                   environment: "STAGING",
                   targetMigration: recoveryTargetMigration,
                   failedChecks: ["precheckRuntimeError"],
+                  runtimeFailure: {
+                    operation: "moduleLoadOrEval",
+                    errorType: "UnknownError",
+                    errorCode: null,
+                    message: "runtime failed before the guarded precheck handler",
+                  },
                   safeToResolveApplied: false,
                 },
                 null,
@@ -278,7 +345,31 @@ jobs:
             elif grep -Eqi "PrismaClient|P1001|P1000|Can't reach database" "$precheck_log"; then
               reason="READ_ONLY_PRISMA_PRECHECK_FAILED"
             fi
-            echo "staging recovery precheck failed; reason=$reason; exitCode=$precheck_exit" >&2
+            echo "staging recovery precheck failed; reason=$reason; exitCode=$precheck_exit; diagnostics=staging-resolve-precheck.json" >&2
+            node --input-type=module <<'NODE'
+            import { existsSync, readFileSync } from "node:fs";
+
+            const path = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+            if (existsSync(path)) {
+              try {
+                const report = JSON.parse(readFileSync(path, "utf8"));
+                const failure = report.runtimeFailure;
+                if (failure) {
+                  console.error(`staging recovery diagnostic; operation=${failure.operation ?? "UNKNOWN"}; errorType=${failure.errorType ?? "UnknownError"}; errorCode=${failure.errorCode ?? "NONE"}; message=${failure.message ?? "NOT_AVAILABLE"}`);
+                }
+              } catch {
+                console.error("staging recovery diagnostic unavailable; reason=SANITIZED_METADATA_PARSE_FAILED");
+              }
+            } else if (existsSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.log`)) {
+              const output = readFileSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.log`, "utf8");
+              const reason = /ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/iu.test(output)
+                ? "MODULE_LOAD_FAILED"
+                : /Transform failed|top-level await/iu.test(output)
+                  ? "TSX_EVAL_RUNTIME_ERROR"
+                  : "PRECHECK_RUNTIME_ERROR";
+              console.error(`staging recovery diagnostic; operation=moduleLoadOrEval; errorType=RuntimeError; errorCode=${reason}; message=guarded precheck failed before structured diagnostics`);
+            }
+            NODE
             exit "$precheck_exit"
           fi
 
@@ -454,6 +545,7 @@ jobs:
           const postcheck = readJson(`${temp}/staging-resolve-postcheck.json`);
           const formatList = (value) => Array.isArray(value) ? (value.length ? value.join(", ") : "NONE") : "NOT_AVAILABLE";
           const checks = postcheck?.checks ?? precheck?.checks ?? {};
+          const runtimeFailure = precheck?.runtimeFailure ?? postcheck?.runtimeFailure ?? null;
 
           console.log("## Staging migration recovery resolve");
           console.log("- targetEnvironment: STAGING");
@@ -468,6 +560,14 @@ jobs:
           console.log(`- unexpectedPendingBefore: ${formatList(precheck?.unexpectedPendingMigrations)}`);
           console.log(`- resolve: ${process.env.RESOLVE_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- postcheck: ${postcheck?.result ?? process.env.POSTCHECK_OUTCOME ?? "NOT_RUN"}`);
+          if (runtimeFailure) {
+            console.log(`- runtimeFailure.operation: ${runtimeFailure.operation ?? "UNKNOWN"}`);
+            console.log(`- runtimeFailure.errorType: ${runtimeFailure.errorType ?? "UnknownError"}`);
+            console.log(`- runtimeFailure.errorCode: ${runtimeFailure.errorCode ?? "NONE"}`);
+            console.log(`- runtimeFailure.message: ${runtimeFailure.message ?? "NOT_AVAILABLE"}`);
+          } else {
+            console.log("- runtimeFailure: NONE");
+          }
           console.log(`- historyAfter: ${postcheck?.historyAfter?.state ?? "NOT_AVAILABLE"}`);
           console.log(`- pendingAfter: ${formatList(postcheck?.pendingMigrations)}`);
           console.log(`- failedAfter: ${formatList(postcheck?.failedMigrations?.map((entry) => entry.name))}`);
