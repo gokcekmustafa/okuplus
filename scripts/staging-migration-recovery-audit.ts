@@ -12,6 +12,10 @@ type FingerprintReport = {
   target?: { environment?: string };
   database?: { database?: string; currentUser?: string };
   targetIdentityFingerprint?: unknown;
+  migrations?: {
+    pending?: unknown;
+    failed?: unknown;
+  };
 };
 
 type IdentityRow = {
@@ -25,12 +29,24 @@ type EnumRow = {
 };
 
 type MigrationRow = {
+  id: string;
   migration_name: string;
+  checksum: string;
   applied_steps_count: number;
   started_at: Date | null;
   finished_at: Date | null;
   rolled_back_at: Date | null;
   logs_present: boolean;
+};
+
+type MigrationStatus = {
+  exitCode: number;
+  state: "CURRENT" | "PENDING" | "ERROR";
+};
+
+type FingerprintFailedMigration = {
+  name: string;
+  rolledBack: boolean;
 };
 
 export type RecoveryAuditInput = {
@@ -42,7 +58,10 @@ export type RecoveryAuditInput = {
   database: string;
   databaseUser: string;
   enumValues: string[];
-  migration: MigrationRow | null;
+  migrationRows: MigrationRow[];
+  fingerprintPendingMigrations: string[];
+  fingerprintFailedMigrations: FingerprintFailedMigration[];
+  migrationStatus: MigrationStatus;
 };
 
 function migrationDate(value: Date | null): string | null {
@@ -50,22 +69,69 @@ function migrationDate(value: Date | null): string | null {
 }
 
 function migrationState(
-  row: MigrationRow | null,
+  rows: MigrationRow[],
 ): "APPLIED" | "FAILED_OR_INCOMPLETE" | "ROLLED_BACK" | "NOT_FOUND" {
-  if (!row) return "NOT_FOUND";
-  if (row.rolled_back_at) return "ROLLED_BACK";
-  if (row.finished_at) return "APPLIED";
-  return "FAILED_OR_INCOMPLETE";
+  if (rows.some((row) => row.finished_at !== null && row.rolled_back_at === null)) {
+    return "APPLIED";
+  }
+  if (rows.some((row) => row.finished_at === null && row.rolled_back_at === null)) {
+    return "FAILED_OR_INCOMPLETE";
+  }
+  if (rows.some((row) => row.rolled_back_at !== null)) return "ROLLED_BACK";
+  return "NOT_FOUND";
+}
+
+function serializeMigrationRow(row: MigrationRow) {
+  return {
+    id: row.id,
+    migrationName: row.migration_name,
+    checksum: row.checksum,
+    startedAt: migrationDate(row.started_at),
+    finishedAt: migrationDate(row.finished_at),
+    rolledBackAt: migrationDate(row.rolled_back_at),
+    appliedStepsCount: row.applied_steps_count,
+  };
 }
 
 export function buildRecoveryAudit(input: RecoveryAuditInput) {
   const enumTypeExists = input.enumValues.length > 0;
   const enumLabelPresent = input.enumValues.includes(TARGET_ENUM_LABEL);
-  const historyState = migrationState(input.migration);
+  const migrationRows = [...input.migrationRows].sort((left, right) => {
+    const startedAt =
+      (left.started_at?.getTime() ?? Number.NEGATIVE_INFINITY) -
+      (right.started_at?.getTime() ?? Number.NEGATIVE_INFINITY);
+    return startedAt || left.id.localeCompare(right.id);
+  });
+  const activeAppliedRows = migrationRows.filter(
+    (row) =>
+      row.migration_name === TARGET_MIGRATION &&
+      row.finished_at !== null &&
+      row.rolled_back_at === null,
+  );
+  const rolledBackRows = migrationRows.filter((row) => row.rolled_back_at !== null);
+  const unresolvedRows = migrationRows.filter(
+    (row) => row.finished_at === null && row.rolled_back_at === null,
+  );
+  const unexpectedFailedMigrations = input.fingerprintFailedMigrations.filter(
+    (migration) => migration.name !== TARGET_MIGRATION && !migration.rolledBack,
+  );
+  const historyState = migrationState(migrationRows);
   const migrationDefinitionOnlyEnumLabel = true;
   const schemaEffectCheck =
     enumTypeExists && enumLabelPresent && migrationDefinitionOnlyEnumLabel ? "PASS" : "FAIL";
   const safeToResolveApplied = schemaEffectCheck === "PASS" && historyState !== "APPLIED";
+  const safeToDeploy =
+    input.targetEnvironment === "STAGING" &&
+    input.fingerprintConfirmed &&
+    input.database === input.fingerprintDatabase &&
+    input.databaseUser === input.fingerprintUser &&
+    enumTypeExists &&
+    enumLabelPresent &&
+    activeAppliedRows.length === 1 &&
+    unresolvedRows.length === 0 &&
+    unexpectedFailedMigrations.length === 0 &&
+    (input.migrationStatus.state === "CURRENT" || input.migrationStatus.state === "PENDING");
+  const activeAppliedRow = activeAppliedRows[0] ?? null;
 
   return {
     status: "AUDIT_PASS" as const,
@@ -83,18 +149,29 @@ export function buildRecoveryAudit(input: RecoveryAuditInput) {
     },
     migration: {
       name: TARGET_MIGRATION,
-      exists: input.migration !== null,
+      exists: migrationRows.length > 0,
       state: historyState,
-      appliedStepsCount: input.migration?.applied_steps_count ?? null,
-      startedAt: migrationDate(input.migration?.started_at ?? null),
-      finishedAt: migrationDate(input.migration?.finished_at ?? null),
-      rolledBackAt: migrationDate(input.migration?.rolled_back_at ?? null),
-      logsPresent: input.migration?.logs_present ?? false,
+      recordCount: migrationRows.length,
+      appliedStepsCount:
+        activeAppliedRow?.applied_steps_count ?? migrationRows[0]?.applied_steps_count ?? null,
+      startedAt: migrationDate(
+        activeAppliedRow?.started_at ?? migrationRows[0]?.started_at ?? null,
+      ),
+      finishedAt: migrationDate(activeAppliedRow?.finished_at ?? null),
+      rolledBackAt: migrationDate(rolledBackRows[0]?.rolled_back_at ?? null),
+      logsPresent: migrationRows.some((row) => row.logs_present),
       errorStatus:
-        input.migration?.logs_present || historyState === "FAILED_OR_INCOMPLETE"
+        migrationRows.some((row) => row.logs_present) || historyState === "FAILED_OR_INCOMPLETE"
           ? "PRESENT"
           : "NONE",
     },
+    migrationRows: migrationRows.map(serializeMigrationRow),
+    activeAppliedMigration: activeAppliedRow ? serializeMigrationRow(activeAppliedRow) : null,
+    rolledBackMigrations: rolledBackRows.map(serializeMigrationRow),
+    unresolvedMigrationRows: unresolvedRows.map(serializeMigrationRow),
+    migrationStatus: input.migrationStatus,
+    pendingMigrations: input.fingerprintPendingMigrations,
+    unexpectedFailedMigrations,
     migrationDefinition: {
       statementCount: 1,
       effect: "POINT_EVENT_TYPE_ENUM_LABEL_ONLY",
@@ -102,6 +179,7 @@ export function buildRecoveryAudit(input: RecoveryAuditInput) {
     },
     schemaEffectCheck,
     safeToResolveApplied,
+    safeToDeploy,
     recoveryClass: safeToResolveApplied
       ? "ENUM_PRESENT_HISTORY_NOT_APPLIED"
       : historyState === "APPLIED"
@@ -144,6 +222,42 @@ async function fingerprintReport(): Promise<FingerprintReport> {
   return parsed as FingerprintReport;
 }
 
+function parseFingerprintMigrationNames(report: FingerprintReport): {
+  pending: string[];
+  failed: FingerprintFailedMigration[];
+} {
+  const pending = report.migrations?.pending;
+  const failed = report.migrations?.failed;
+  if (!Array.isArray(pending) || !pending.every((name) => typeof name === "string")) {
+    throw new Error("fingerprint pending migration metadata is invalid");
+  }
+  if (
+    !Array.isArray(failed) ||
+    !failed.every(
+      (entry) =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        "name" in entry &&
+        typeof entry.name === "string" &&
+        "rolledBack" in entry &&
+        typeof entry.rolledBack === "boolean",
+    )
+  ) {
+    throw new Error("fingerprint failed migration metadata is invalid");
+  }
+  return { pending, failed };
+}
+
+function migrationStatusFromEnvironment(): MigrationStatus {
+  const exitCodeText = requiredEnvironment("MIGRATE_STATUS_EXIT");
+  const state = requiredEnvironment("MIGRATE_STATUS_STATE");
+  if (!/^(?:0|[1-9]\d*)$/u.test(exitCodeText) || !["CURRENT", "PENDING", "ERROR"].includes(state)) {
+    throw new Error("staging migration status is invalid");
+  }
+  const exitCode = Number(exitCodeText);
+  return { exitCode, state: state as MigrationStatus["state"] };
+}
+
 async function main(): Promise<void> {
   if (requiredEnvironment("DB_FINGERPRINT_ENVIRONMENT").toUpperCase() !== "STAGING") {
     throw new Error("staging environment guard failed");
@@ -163,6 +277,8 @@ async function main(): Promise<void> {
   if (!fingerprintDatabase || !fingerprintUser) {
     throw new Error("fingerprint database identity is incomplete");
   }
+  const fingerprintMigrations = parseFingerprintMigrationNames(fingerprint);
+  const migrationStatus = migrationStatusFromEnvironment();
 
   stagingDatabaseUrl("DB_FINGERPRINT_DATABASE_URL");
   const databaseUrl = stagingDatabaseUrl("DATABASE_URL");
@@ -183,10 +299,11 @@ async function main(): Promise<void> {
         ORDER BY e.enumsortorder
       `,
       prisma.$queryRaw<MigrationRow[]>`
-        SELECT migration_name, applied_steps_count, started_at, finished_at,
+        SELECT id, migration_name, checksum, applied_steps_count, started_at, finished_at,
                rolled_back_at, (logs IS NOT NULL) AS logs_present
         FROM public._prisma_migrations
         WHERE migration_name = ${TARGET_MIGRATION}
+        ORDER BY started_at ASC, id ASC
       `,
     ]);
 
@@ -202,7 +319,10 @@ async function main(): Promise<void> {
       database: identity.database,
       databaseUser: identity.current_user,
       enumValues: enumRows.map((row) => row.enum_value),
-      migration: migrationRows[0] ?? null,
+      migrationRows,
+      fingerprintPendingMigrations: fingerprintMigrations.pending,
+      fingerprintFailedMigrations: fingerprintMigrations.failed,
+      migrationStatus,
     });
 
     if (!result.databaseIdentityMatch) {
