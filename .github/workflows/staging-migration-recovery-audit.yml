@@ -67,6 +67,41 @@ jobs:
             exit 1
           fi
 
+          echo "fingerprint_output=$fingerprint_output" >> "$GITHUB_ENV"
+
+      - name: Verify staging migration status (read-only)
+        id: migration-status
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_status="$RUNNER_TEMP/staging-migration-status.log"
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma >"$migration_status" 2>&1
+          migration_status_exit=$?
+          set -e
+
+          migration_status_state=ERROR
+          if test "$migration_status_exit" -eq 0; then
+            migration_status_state=CURRENT
+          elif test "$migration_status_exit" -eq 1 && \
+            grep -Eqi 'not yet (been )?applied|pending migration|not up to date' "$migration_status"; then
+            migration_status_state=PENDING
+          fi
+
+          echo "exit_code=$migration_status_exit" >> "$GITHUB_OUTPUT"
+          echo "state=$migration_status_state" >> "$GITHUB_OUTPUT"
+          if test "$migration_status_state" = ERROR; then
+            echo "staging migration status failed; exitCode=$migration_status_exit" >&2
+            exit 1
+          fi
+
+      - name: Build sanitized staging recovery audit
+        shell: bash
+        env:
+          MIGRATE_STATUS_EXIT: ${{ steps.migration-status.outputs.exit_code }}
+          MIGRATE_STATUS_STATE: ${{ steps.migration-status.outputs.state }}
+        run: |
+          set -euo pipefail
           FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx scripts/staging-migration-recovery-audit.ts \
             >"$RUNNER_TEMP/staging-migration-recovery-audit.json"
@@ -95,6 +130,11 @@ jobs:
             "fingerprintConfirmed",
             "enum",
             "migration",
+            "migrationRows",
+            "activeAppliedMigration",
+            "rolledBackMigrations",
+            "migrationStatus",
+            "safeToDeploy",
             "migrationDefinition",
             "schemaEffectCheck",
             "safeToResolveApplied",
@@ -119,16 +159,29 @@ jobs:
           console.log(`- migration: ${report.migration.name}`);
           console.log(`- migrationHistoryState: ${report.migration.state}`);
           console.log(`- migrationRecordExists: ${report.migration.exists ? "YES" : "NO"}`);
-          console.log(`- appliedStepsCount: ${report.migration.appliedStepsCount ?? "NOT_AVAILABLE"}`);
-          console.log(`- startedAt: ${report.migration.startedAt ?? "NOT_AVAILABLE"}`);
-          console.log(`- finishedAt: ${report.migration.finishedAt ?? "NOT_AVAILABLE"}`);
-          console.log(`- rolledBackAt: ${report.migration.rolledBackAt ?? "NOT_AVAILABLE"}`);
+          console.log(`- migrationRecordCount: ${report.migration.recordCount}`);
+          for (const [index, row] of report.migrationRows.entries()) {
+            console.log(`- sibling.${index + 1}: id=${row.id}; migration=${row.migrationName}; checksum=${row.checksum}; startedAt=${row.startedAt ?? "NOT_AVAILABLE"}; finishedAt=${row.finishedAt ?? "NULL"}; rolledBackAt=${row.rolledBackAt ?? "NULL"}; appliedStepsCount=${row.appliedStepsCount}`);
+          }
+          console.log(`- activeAppliedMigration: ${report.activeAppliedMigration ? "YES" : "NO"}`);
+          if (report.activeAppliedMigration) {
+            console.log(`- activeAppliedRow: id=${report.activeAppliedMigration.id}; checksum=${report.activeAppliedMigration.checksum}; startedAt=${report.activeAppliedMigration.startedAt ?? "NOT_AVAILABLE"}; finishedAt=${report.activeAppliedMigration.finishedAt ?? "NULL"}; rolledBackAt=${report.activeAppliedMigration.rolledBackAt ?? "NULL"}; appliedStepsCount=${report.activeAppliedMigration.appliedStepsCount}`);
+          }
+          console.log(`- rolledBackMigrationCount: ${report.rolledBackMigrations.length}`);
+          console.log(`- activeAppliedFinishedAt: ${report.activeAppliedMigration?.finishedAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- activeAppliedRolledBackAt: ${report.activeAppliedMigration?.rolledBackAt === null ? "NULL" : "NOT_AVAILABLE"}`);
+          console.log(`- activeAppliedStepsCount: ${report.activeAppliedMigration?.appliedStepsCount ?? "NOT_AVAILABLE"}`);
           console.log(`- logsPresent: ${report.migration.logsPresent ? "YES" : "NO"}`);
           console.log(`- errorStatus: ${report.migration.errorStatus}`);
+          console.log(`- migrationStatus: ${report.migrationStatus.state}`);
+          console.log(`- migrationStatusExitCode: ${report.migrationStatus.exitCode}`);
+          console.log(`- pendingMigrations: ${report.pendingMigrations.length ? report.pendingMigrations.join(", ") : "NONE"}`);
+          console.log(`- unexpectedFailedMigrations: ${report.unexpectedFailedMigrations.length ? report.unexpectedFailedMigrations.map((entry) => entry.name).join(", ") : "NONE"}`);
           console.log(`- migrationDefinition: ${report.migrationDefinition.effect}`);
           console.log(`- otherSchemaEffects: ${report.migrationDefinition.otherSchemaEffects}`);
           console.log(`- schemaEffectCheck: ${report.schemaEffectCheck}`);
           console.log(`- safeToResolveApplied: ${report.safeToResolveApplied ? "YES" : "NO"}`);
+          console.log(`- safeToDeploy: ${report.safeToDeploy ? "YES" : "NO"}`);
           console.log(`- recoveryClass: ${report.recoveryClass}`);
           console.log(`- writeOperations: ${report.writeOperations}`);
           console.log(`- productionTouched: ${report.productionTouched}`);
