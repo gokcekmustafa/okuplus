@@ -30,6 +30,9 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).toContain("npx tsx scripts/db-fingerprint.ts");
     expect(workflow).toContain("fingerprintConfirmed");
     expect(workflow).toContain("databaseIdentityMatch");
+    expect(workflow).toContain("environmentBinding");
+    expect(workflow).toContain("fingerprintBinding");
+    expect(workflow).toContain("fingerprintErrorClass");
   });
 
   it("collects read-only history and the full diff without mutation commands", () => {
