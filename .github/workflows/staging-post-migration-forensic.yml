@@ -1,0 +1,472 @@
+name: Staging post-migration forensic
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Staging source ref to inspect
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-post-migration-forensic
+  cancel-in-progress: false
+
+jobs:
+  forensic:
+    name: Collect read-only staging schema state
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+      EXPECTED_STAGING_FINGERPRINT: 18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38
+    steps:
+      - name: Verify staging ref
+        shell: bash
+        env:
+          TARGET_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_REF" = "staging"
+
+      - name: Checkout selected staging ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Verify staging fingerprint and identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APP_ENV" = "staging"
+          test "$NODE_ENV" = "test"
+          test "$DB_FINGERPRINT_ENVIRONMENT" = "STAGING"
+          test -n "$DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test "$DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT" = "$EXPECTED_STAGING_FINGERPRINT"
+
+          fingerprint_output="$RUNNER_TEMP/staging-post-migration-fingerprint.json"
+          fingerprint_error="$RUNNER_TEMP/staging-post-migration-fingerprint.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging fingerprint command failed" >&2
+            exit 1
+          fi
+
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
+            EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const output = process.env.FINGERPRINT_OUTPUT;
+          const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
+          const report = JSON.parse(readFileSync(output, "utf8"));
+          const actual = report.targetIdentityFingerprint;
+          const fingerprintConfirmed =
+            report.target?.environment === "STAGING" &&
+            actual === expected &&
+            /^[a-f0-9]{64}$/u.test(actual);
+          const databaseIdentityAvailable =
+            typeof report.database?.database === "string" &&
+            typeof report.database?.currentUser === "string";
+
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-post-migration-fingerprint-check.json`,
+            JSON.stringify(
+              {
+                targetEnvironment: "STAGING",
+                fingerprintConfirmed,
+                databaseIdentityAvailable,
+              },
+              null,
+              2,
+            ),
+          );
+
+          if (!fingerprintConfirmed || !databaseIdentityAvailable) {
+            throw new Error("staging fingerprint or identity guard failed");
+          }
+          NODE
+
+      - name: Collect read-only staging status, history, and schema diff
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status_output="$RUNNER_TEMP/staging-migrate-status.txt"
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma >"$status_output" 2>&1
+          status_exit=$?
+          set -e
+
+          diff_output="$RUNNER_TEMP/staging-schema-diff.txt"
+          diff_error="$RUNNER_TEMP/staging-schema-diff.err"
+          set +e
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma >"$diff_output" 2>"$diff_error"
+          diff_exit=$?
+          set -e
+
+          STATUS_OUTPUT="$status_output" \
+            STATUS_EXIT="$status_exit" \
+            DIFF_OUTPUT="$diff_output" \
+            DIFF_EXIT="$diff_exit" \
+            FINGERPRINT_OUTPUT="$RUNNER_TEMP/staging-post-migration-fingerprint.json" \
+            node --input-type=module <<'NODE'
+          import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+          import { PrismaClient } from "@prisma/client";
+
+          const foundation = "20260914100000_add_learning_experience_foundation";
+          const target = "20260907160000_add_training_session_completed_point_event";
+          const foundationTables = new Set(["StudentBaseline", "StudentLessonProgress"]);
+          const attemptColumns = new Set([
+            "exposureStartedAt",
+            "answerStartedAt",
+            "submittedAt",
+            "interactionDurationMs",
+            "answerDurationMs",
+            "retryCount",
+            "hintUsed",
+            "firstAttemptCorrect",
+            "finalResult",
+          ]);
+          const foundationIndexPrefixes = ["StudentBaseline_", "StudentLessonProgress_"];
+          const foundationPolicyNames = new Set([
+            "student_baseline_isolation",
+            "student_lesson_progress_isolation",
+          ]);
+
+          const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+          const statusText = readFileSync(process.env.STATUS_OUTPUT, "utf8");
+          const statusExit = Number(process.env.STATUS_EXIT);
+          const diffText = readFileSync(process.env.DIFF_OUTPUT, "utf8");
+          const diffExit = Number(process.env.DIFF_EXIT);
+
+          function migrationStatus(text, exitCode) {
+            if (/database schema is up to date/iu.test(text)) return "CURRENT";
+            if (/not yet been applied|following migration/iu.test(text)) return "PENDING";
+            return exitCode === 0 ? "CURRENT" : "ERROR";
+          }
+
+          function serializeDate(value) {
+            return value instanceof Date ? value.toISOString() : value;
+          }
+
+          function historyState(row) {
+            if (!row) return "NOT_FOUND";
+            if (row.finished_at && !row.rolled_back_at) return "ACTIVE_APPLIED";
+            if (row.rolled_back_at) return "ROLLED_BACK";
+            return "FAILED_OR_INCOMPLETE";
+          }
+
+          function foundationExpectation(objectType, objectName, parentName) {
+            if (objectType === "TABLE") return foundationTables.has(objectName);
+            if (objectType === "COLUMN") {
+              return parentName === "Attempt" && attemptColumns.has(objectName);
+            }
+            if (objectType === "INDEX" || objectType === "CONSTRAINT") {
+              return foundationIndexPrefixes.some((prefix) => objectName.startsWith(prefix));
+            }
+            if (objectType === "POLICY") return foundationPolicyNames.has(objectName);
+            if (objectType === "RLS") return foundationTables.has(parentName);
+            return false;
+          }
+
+          function objectFromLine(line) {
+            let match = line.match(/^\s*(CREATE|DROP)\s+(?:UNIQUE\s+)?INDEX\s+"([^"]+)"/iu);
+            if (match) return { operation: match[1].toUpperCase(), objectType: "INDEX", objectName: match[2] };
+
+            match = line.match(/^\s*(CREATE|DROP)\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"([^"]+)"/iu);
+            if (match) return { operation: match[1].toUpperCase(), objectType: "TABLE", objectName: match[2] };
+
+            match = line.match(/^\s*(CREATE|DROP)\s+TYPE\s+"([^"]+)"/iu);
+            if (match) return { operation: match[1].toUpperCase(), objectType: "ENUM_OR_TYPE", objectName: match[2] };
+
+            match = line.match(/^\s*ALTER\s+TYPE\s+"([^"]+)"/iu);
+            if (match) return { operation: "ALTER", objectType: "ENUM_OR_TYPE", objectName: match[1] };
+
+            match = line.match(/^\s*ALTER\s+TABLE\s+"([^"]+)"\s+(ADD|DROP|ALTER)\s+COLUMN\s+"([^"]+)"/iu);
+            if (match) {
+              return {
+                operation: match[2].toUpperCase(),
+                objectType: "COLUMN",
+                objectName: match[3],
+                parentName: match[1],
+              };
+            }
+
+            match = line.match(/^\s*ALTER\s+TABLE\s+"([^"]+)"\s+(ADD|DROP)\s+CONSTRAINT\s+"([^"]+)"/iu);
+            if (match) {
+              return {
+                operation: match[2].toUpperCase(),
+                objectType: "CONSTRAINT",
+                objectName: match[3],
+                parentName: match[1],
+              };
+            }
+
+            match = line.match(/^\s*(CREATE|DROP)\s+POLICY\s+"([^"]+)"\s+ON\s+"([^"]+)"/iu);
+            if (match) {
+              return {
+                operation: match[1].toUpperCase(),
+                objectType: "POLICY",
+                objectName: match[2],
+                parentName: match[3],
+              };
+            }
+
+            match = line.match(/^\s*ALTER\s+TABLE\s+"([^"]+)"\s+(ENABLE|DISABLE|FORCE)\s+ROW\s+LEVEL\s+SECURITY/iu);
+            if (match) {
+              return {
+                operation: match[2].toUpperCase(),
+                objectType: "RLS",
+                objectName: match[1],
+                parentName: match[1],
+              };
+            }
+
+            if (/^\s*(CREATE|ALTER|DROP)\b/iu.test(line)) {
+              return { operation: "OTHER", objectType: "OTHER", objectName: null };
+            }
+            return null;
+          }
+
+          function sanitizeLine(line) {
+            if (/postgres(?:ql)?:\/\/|database_url|password|token|secret|cookie|authorization/iu.test(line)) {
+              return "[REDACTED_SENSITIVE_LINE]";
+            }
+            return line
+              .replace(/'(?:''|[^'])*'/gu, "'[REDACTED_LITERAL]'")
+              .replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/gu, "[REDACTED_TOKEN]");
+          }
+
+          const sanitizedDiffLines = diffText
+            .split(/\r?\n/u)
+            .filter((line) => line.trim().length > 0)
+            .map(sanitizeLine);
+          const objects = sanitizedDiffLines
+            .map(objectFromLine)
+            .filter(Boolean)
+            .map((object) => ({
+              ...object,
+              expectedFromFoundation: foundationExpectation(
+                object.objectType,
+                object.objectName,
+                object.parentName,
+              ),
+              classification: foundationExpectation(
+                object.objectType,
+                object.objectName,
+                object.parentName,
+              )
+                ? "EXPECTED_BY_FOUNDATION"
+                : "NOT_EXPLAINED_BY_FOUNDATION",
+            }));
+
+          const prisma = new PrismaClient();
+          let databaseIdentityMatch = false;
+          let enumTypeExists = false;
+          let enumLabelPresent = false;
+          let historyRows = [];
+          let queryErrorType = null;
+          try {
+            const fingerprint = readJson(process.env.FINGERPRINT_OUTPUT);
+            const [identityRows, enumRows, rows] = await Promise.all([
+              prisma.$queryRaw`SELECT current_database() AS database, current_user AS current_user`,
+              prisma.$queryRaw`
+                SELECT t.typname AS type_name, e.enumlabel AS enum_value
+                FROM pg_type AS t
+                JOIN pg_namespace AS n ON n.oid = t.typnamespace
+                JOIN pg_enum AS e ON e.enumtypid = t.oid
+                WHERE n.nspname = 'public' AND t.typname = ${"PointEventType"}
+                ORDER BY e.enumsortorder
+              `,
+              prisma.$queryRaw`
+                SELECT id, migration_name, checksum, started_at, finished_at,
+                       rolled_back_at, applied_steps_count,
+                       (logs IS NOT NULL) AS logs_present
+                FROM public."_prisma_migrations"
+                WHERE migration_name IN (${foundation}, ${target})
+                ORDER BY started_at ASC, id ASC
+              `,
+            ]);
+
+            const identity = identityRows[0];
+            databaseIdentityMatch =
+              Boolean(identity) &&
+              identity.database === fingerprint.database.database &&
+              identity.current_user === fingerprint.database.currentUser;
+            enumTypeExists = enumRows.length > 0;
+            enumLabelPresent = enumRows.some(
+              (row) => row.enum_value === "TRAINING_SESSION_COMPLETED",
+            );
+            historyRows = rows.map((row) => ({
+              id: row.id,
+              migrationName: row.migration_name,
+              checksum: row.checksum,
+              startedAt: serializeDate(row.started_at),
+              finishedAt: serializeDate(row.finished_at),
+              rolledBackAt: serializeDate(row.rolled_back_at),
+              appliedStepsCount: row.applied_steps_count,
+              logs: row.logs_present ? "PRESENT" : "NONE",
+              historyState: historyState(row),
+            }));
+          } catch (error) {
+            queryErrorType = error instanceof Error ? error.constructor.name : "UNKNOWN";
+          } finally {
+            await prisma.$disconnect();
+          }
+
+          const foundationRows = historyRows.filter((row) => row.migrationName === foundation);
+          const targetRows = historyRows.filter((row) => row.migrationName === target);
+          const activeApplied = (rows) => rows.find((row) => row.historyState === "ACTIVE_APPLIED") ?? null;
+          const foundationApplied = activeApplied(foundationRows) !== null;
+          const targetApplied = activeApplied(targetRows) !== null;
+          const diffAvailable = sanitizedDiffLines.length > 0;
+          const diffExplainedByFoundation = !diffAvailable
+            ? "YES"
+            : objects.length > 0 && objects.every((object) => object.expectedFromFoundation)
+              ? "YES"
+              : objects.length > 0
+                ? "PARTIAL"
+                : "UNKNOWN";
+          const realUnexpectedDrift = !diffAvailable
+            ? "NO"
+            : objects.length > 0 && objects.every((object) => object.expectedFromFoundation)
+              ? "NO"
+              : "UNKNOWN";
+          const fingerprintCheck = readJson(
+            `${process.env.RUNNER_TEMP}/staging-post-migration-fingerprint-check.json`,
+          );
+          const migrateStatus = migrationStatus(statusText, statusExit);
+          const safeToContinue =
+            fingerprintCheck.fingerprintConfirmed &&
+            fingerprintCheck.databaseIdentityAvailable &&
+            databaseIdentityMatch &&
+            migrateStatus === "CURRENT" &&
+            foundationApplied &&
+            targetApplied &&
+            diffExplainedByFoundation === "YES" &&
+            queryErrorType === null &&
+            diffExit === 0;
+
+          mkdirSync(`${process.env.RUNNER_TEMP}/staging-post-migration-forensic`, { recursive: true });
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-post-migration-forensic-summary.json`,
+            JSON.stringify(
+              {
+                targetEnvironment: "STAGING",
+                fingerprintStatus: fingerprintCheck.fingerprintConfirmed ? "PASS" : "FAIL",
+                databaseIdentityStatus: databaseIdentityMatch ? "PASS" : "FAIL",
+                migrateStatus,
+                migrateStatusExit: statusExit,
+                foundation: {
+                  migrationName: foundation,
+                  rows: foundationRows,
+                  activeApplied: foundationApplied,
+                },
+                target: {
+                  migrationName: target,
+                  rows: targetRows,
+                  activeApplied: targetApplied,
+                  enumTypeExists,
+                  enumLabelPresent,
+                },
+                schemaDiff: {
+                  commandExitCode: diffExit,
+                  lineCount: sanitizedDiffLines.length,
+                  sanitizedDiffLines,
+                  objects,
+                  diffExplainedByFoundation,
+                  realUnexpectedDrift,
+                },
+                queryErrorType,
+                safeToContinue: safeToContinue ? "YES" : "NO",
+                readOnly: "YES",
+              },
+              null,
+              2,
+            ),
+          );
+
+          if (queryErrorType !== null || diffExit !== 0) process.exitCode = 1;
+          NODE
+
+      - name: Publish sanitized forensic summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          summary="$RUNNER_TEMP/staging-post-migration-forensic-summary.json"
+          if test -f "$summary"; then
+            SUMMARY_FILE="$summary" node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+          const report = JSON.parse(readFileSync(process.env.SUMMARY_FILE, "utf8"));
+          const json = (value) => JSON.stringify(value);
+          console.log("## Staging post-migration forensic");
+          console.log("");
+          console.log(`- targetEnvironment: ${report.targetEnvironment}`);
+          console.log(`- fingerprintStatus: ${report.fingerprintStatus}`);
+          console.log(`- databaseIdentityStatus: ${report.databaseIdentityStatus}`);
+          console.log(`- migrateStatus: ${report.migrateStatus}`);
+          console.log(`- foundationHistory: ${json(report.foundation)}`);
+          console.log(`- targetHistory: ${json(report.target)}`);
+          console.log(`- schemaDiffExitCode: ${report.schemaDiff.commandExitCode}`);
+          console.log(`- schemaDiffLineCount: ${report.schemaDiff.lineCount}`);
+          console.log(`- diffExplainedByFoundation: ${report.schemaDiff.diffExplainedByFoundation}`);
+          console.log(`- realUnexpectedDrift: ${report.schemaDiff.realUnexpectedDrift}`);
+          console.log(`- safeToContinue: ${report.safeToContinue}`);
+          console.log("");
+          console.log("### Object-level differences");
+          console.log("");
+          console.log("| Operation | Type | Object | Parent | Foundation | Classification |");
+          console.log("| --- | --- | --- | --- | --- | --- |");
+          for (const object of report.schemaDiff.objects) {
+            console.log(
+              `| ${object.operation} | ${object.objectType} | ${object.objectName ?? "UNKNOWN"} | ${object.parentName ?? "—"} | ${object.expectedFromFoundation ? "YES" : "NO"} | ${object.classification} |`,
+            );
+          }
+          if (report.schemaDiff.objects.length === 0) console.log("| — | — | NONE | — | — | — |");
+          console.log("");
+          console.log("### Sanitized diff");
+          console.log("");
+          for (const line of report.schemaDiff.sanitizedDiffLines) console.log(`    ${line}`);
+          NODE
+          else
+            echo "## Staging post-migration forensic" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- result: NOT_AVAILABLE" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload sanitized forensic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-post-migration-forensic-summary
+          path: ${{ runner.temp }}/staging-post-migration-forensic-summary.json
+          if-no-files-found: warn
