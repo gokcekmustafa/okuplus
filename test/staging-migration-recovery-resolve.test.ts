@@ -56,6 +56,15 @@ describe("staging migration recovery resolve workflow", () => {
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("migrationStatusAcceptable");
     expect(workflow).toContain("TSX_EVAL_TOP_LEVEL_AWAIT_UNSUPPORTED");
+    expect(workflow).toContain("runtimeFailure");
+    expect(workflow).toContain("databaseIdentityQuery");
+    expect(workflow).toContain("pointEventTypeEnumQuery");
+    expect(workflow).toContain("prismaMigrationsQuery");
+    expect(workflow).toContain("[REDACTED_DATABASE_URL]");
+    expect(workflow).toContain("diagnostics=staging-resolve-precheck.json");
+    expect(workflow).toContain("guarded precheck failed before structured diagnostics");
+    expect(workflow).toContain("runtimeFailure.errorCode");
+    expect(workflow).not.toMatch(/console\.log\(.*error\.(?:message|stack)/iu);
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN|COOKIE)/iu);
     expect(workflow).not.toContain("raw");
   });
