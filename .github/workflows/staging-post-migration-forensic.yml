@@ -105,17 +105,42 @@ jobs:
             EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
             node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
+          import {
+            assertCatalogEnvironmentSafety,
+            assertLiveCatalogTargetIdentity,
+            parseCatalogTargetUrl,
+            targetFingerprint,
+          } from "./src/curriculum/catalog-target-verification.ts";
 
           const output = process.env.FINGERPRINT_OUTPUT;
           const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
           const report = JSON.parse(readFileSync(output, "utf8"));
-          const actual = report.targetIdentityFingerprint;
-          const environmentBinding = report.target?.environment === "STAGING";
-          const fingerprintFormat = /^[a-f0-9]{64}$/u.test(actual);
-          const fingerprintBinding = actual === expected && fingerprintFormat;
           const identityFields =
             typeof report.database?.database === "string" &&
             typeof report.database?.currentUser === "string";
+          const environmentBinding = report.target?.environment === "STAGING";
+          const target = parseCatalogTargetUrl(
+            process.env.DB_FINGERPRINT_DATABASE_URL,
+            "STAGING",
+          );
+          const identity = {
+            database: report.database?.database,
+            db_user: report.database?.currentUser,
+          };
+          let actual = null;
+          let targetIdentityGuard = "FAIL";
+          if (identityFields) {
+            try {
+              assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+              assertLiveCatalogTargetIdentity(target, identity);
+              actual = targetFingerprint(target, identity);
+              targetIdentityGuard = "PASS";
+            } catch {
+              targetIdentityGuard = "FAIL";
+            }
+          }
+          const fingerprintFormat = /^[a-f0-9]{64}$/u.test(actual ?? "");
+          const fingerprintBinding = actual === expected && fingerprintFormat;
           const fingerprintConfirmed = environmentBinding && fingerprintBinding;
           const databaseIdentityAvailable = identityFields;
 
@@ -126,6 +151,7 @@ jobs:
                 targetEnvironment: "STAGING",
                 fingerprintCommand: "PASS",
                 environmentBinding: environmentBinding ? "PASS" : "FAIL",
+                targetIdentityGuard,
                 fingerprintBinding: fingerprintBinding ? "PASS" : "FAIL",
                 identityFields: identityFields ? "PASS" : "FAIL",
                 observedTargetIdentityFingerprint: fingerprintFormat ? actual : null,
@@ -139,6 +165,7 @@ jobs:
 
           console.log(`fingerprintCommand: PASS`);
           console.log(`environmentBinding: ${environmentBinding ? "PASS" : "FAIL"}`);
+          console.log(`targetIdentityGuard: ${targetIdentityGuard}`);
           console.log(`fingerprintBinding: ${fingerprintBinding ? "PASS" : "FAIL"}`);
           console.log(`identityFields: ${identityFields ? "PASS" : "FAIL"}`);
           console.log(
