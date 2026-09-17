@@ -1,0 +1,188 @@
+name: Staging migration recovery audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-migration-recovery-audit
+  cancel-in-progress: false
+
+jobs:
+  staging-migration-recovery-audit:
+    name: Audit staging migration state (read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+    steps:
+      - name: Verify workflow ref
+        shell: bash
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_REF" = "refs/heads/staging"
+
+      - name: Checkout audit code from staging
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Verify staging fingerprint (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APP_ENV" = "staging"
+          test "$NODE_ENV" = "test"
+          test "$DB_FINGERPRINT_ENVIRONMENT" = "STAGING"
+          test -n "$DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test -n "$DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT"
+
+          fingerprint_output="$RUNNER_TEMP/staging-fingerprint.json"
+          fingerprint_error="$RUNNER_TEMP/staging-fingerprint.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging read-only fingerprint failed" >&2
+            exit 1
+          fi
+
+          echo "fingerprint_output=$fingerprint_output" >> "$GITHUB_ENV"
+
+      - name: Verify staging migration status (read-only)
+        id: migration-status
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_status="$RUNNER_TEMP/staging-migration-status.log"
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma >"$migration_status" 2>&1
+          migration_status_exit=$?
+          set -e
+
+          migration_status_state=ERROR
+          if test "$migration_status_exit" -eq 0; then
+            migration_status_state=CURRENT
+          elif test "$migration_status_exit" -eq 1 && \
+            grep -Eqi 'not yet (been )?applied|pending migration|not up to date' "$migration_status"; then
+            migration_status_state=PENDING
+          fi
+
+          echo "exit_code=$migration_status_exit" >> "$GITHUB_OUTPUT"
+          echo "state=$migration_status_state" >> "$GITHUB_OUTPUT"
+          if test "$migration_status_state" = ERROR; then
+            echo "staging migration status failed; exitCode=$migration_status_exit" >&2
+            exit 1
+          fi
+
+      - name: Build sanitized staging recovery audit
+        shell: bash
+        env:
+          MIGRATE_STATUS_EXIT: ${{ steps.migration-status.outputs.exit_code }}
+          MIGRATE_STATUS_STATE: ${{ steps.migration-status.outputs.state }}
+        run: |
+          set -euo pipefail
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
+            npx tsx scripts/staging-migration-recovery-audit.ts \
+            >"$RUNNER_TEMP/staging-migration-recovery-audit.json"
+
+      - name: Publish sanitized recovery audit summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          audit_output="$RUNNER_TEMP/staging-migration-recovery-audit.json"
+          if test ! -f "$audit_output"; then
+            echo "## Staging migration recovery audit" >> "$GITHUB_STEP_SUMMARY"
+            echo "- status: NOT_AVAILABLE" >> "$GITHUB_STEP_SUMMARY"
+            echo "- readOnlyAudit: FAIL" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          AUDIT_OUTPUT="$audit_output" node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(process.env.AUDIT_OUTPUT, "utf8"));
+          const required = [
+            "status",
+            "targetEnvironment",
+            "targetFingerprint",
+            "fingerprintConfirmed",
+            "enum",
+            "migration",
+            "migrationRows",
+            "activeAppliedMigration",
+            "rolledBackMigrations",
+            "migrationStatus",
+            "safeToDeploy",
+            "migrationDefinition",
+            "schemaEffectCheck",
+            "safeToResolveApplied",
+            "recoveryClass",
+            "writeOperations",
+            "productionTouched",
+          ];
+          for (const key of required) {
+            if (!(key in report)) throw new Error(`audit output missing ${key}`);
+          }
+
+          console.log("## Staging migration recovery audit");
+          console.log(`- status: ${report.status}`);
+          console.log(`- targetEnvironment: ${report.targetEnvironment}`);
+          console.log(`- targetFingerprint: ${report.targetFingerprint}`);
+          console.log(`- fingerprintConfirmed: ${report.fingerprintConfirmed ? "YES" : "NO"}`);
+          console.log(`- databaseIdentityMatch: ${report.databaseIdentityMatch ? "YES" : "NO"}`);
+          console.log(`- enumType: ${report.enum.typeName}`);
+          console.log(`- enumTypeExists: ${report.enum.typeExists ? "YES" : "NO"}`);
+          console.log(`- enumLabel: ${report.enum.label}`);
+          console.log(`- enumLabelPresent: ${report.enum.labelPresent ? "YES" : "NO"}`);
+          console.log(`- migration: ${report.migration.name}`);
+          console.log(`- migrationHistoryState: ${report.migration.state}`);
+          console.log(`- migrationRecordExists: ${report.migration.exists ? "YES" : "NO"}`);
+          console.log(`- migrationRecordCount: ${report.migration.recordCount}`);
+          for (const [index, row] of report.migrationRows.entries()) {
+            console.log(`- sibling.${index + 1}: id=${row.id}; migration=${row.migrationName}; checksum=${row.checksum}; startedAt=${row.startedAt ?? "NOT_AVAILABLE"}; finishedAt=${row.finishedAt ?? "NULL"}; rolledBackAt=${row.rolledBackAt ?? "NULL"}; appliedStepsCount=${row.appliedStepsCount}`);
+          }
+          console.log(`- activeAppliedMigration: ${report.activeAppliedMigration ? "YES" : "NO"}`);
+          if (report.activeAppliedMigration) {
+            console.log(`- activeAppliedRow: id=${report.activeAppliedMigration.id}; checksum=${report.activeAppliedMigration.checksum}; startedAt=${report.activeAppliedMigration.startedAt ?? "NOT_AVAILABLE"}; finishedAt=${report.activeAppliedMigration.finishedAt ?? "NULL"}; rolledBackAt=${report.activeAppliedMigration.rolledBackAt ?? "NULL"}; appliedStepsCount=${report.activeAppliedMigration.appliedStepsCount}`);
+          }
+          console.log(`- rolledBackMigrationCount: ${report.rolledBackMigrations.length}`);
+          console.log(`- activeAppliedFinishedAt: ${report.activeAppliedMigration?.finishedAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- activeAppliedRolledBackAt: ${report.activeAppliedMigration?.rolledBackAt === null ? "NULL" : "NOT_AVAILABLE"}`);
+          console.log(`- activeAppliedStepsCount: ${report.activeAppliedMigration?.appliedStepsCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- logsPresent: ${report.migration.logsPresent ? "YES" : "NO"}`);
+          console.log(`- errorStatus: ${report.migration.errorStatus}`);
+          console.log(`- migrationStatus: ${report.migrationStatus.state}`);
+          console.log(`- migrationStatusExitCode: ${report.migrationStatus.exitCode}`);
+          console.log(`- pendingMigrations: ${report.pendingMigrations.length ? report.pendingMigrations.join(", ") : "NONE"}`);
+          console.log(`- unexpectedFailedMigrations: ${report.unexpectedFailedMigrations.length ? report.unexpectedFailedMigrations.map((entry) => entry.name).join(", ") : "NONE"}`);
+          console.log(`- migrationDefinition: ${report.migrationDefinition.effect}`);
+          console.log(`- otherSchemaEffects: ${report.migrationDefinition.otherSchemaEffects}`);
+          console.log(`- schemaEffectCheck: ${report.schemaEffectCheck}`);
+          console.log(`- safeToResolveApplied: ${report.safeToResolveApplied ? "YES" : "NO"}`);
+          console.log(`- safeToDeploy: ${report.safeToDeploy ? "YES" : "NO"}`);
+          console.log(`- recoveryClass: ${report.recoveryClass}`);
+          console.log(`- writeOperations: ${report.writeOperations}`);
+          console.log(`- productionTouched: ${report.productionTouched}`);
+          NODE
