@@ -223,6 +223,19 @@ enum BadgeStatus {
   INACTIVE
 }
 
+enum AchievementCategory {
+  TRAINING
+  READING
+  COMPREHENSION
+  CONSISTENCY
+  MILESTONE
+}
+
+enum AchievementKind {
+  BADGE
+  TROPHY
+}
+
 enum PointEventType {
   EXERCISE_COMPLETED
   TRAINING_SESSION_COMPLETED
@@ -801,7 +814,7 @@ model ContentVersion {
   approvedAt       DateTime?
   metadata         Json?
   createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
 
   publishedContentPointer Content?                         @relation("CurrentVersion")
   questionVersions         QuestionVersion[]                 @relation("QuestionVersionContentVersion")
@@ -811,6 +824,7 @@ model ContentVersion {
 
   @@unique([contentId, version])
   @@index([contentId, status])
+  @@index([status, publishedAt])
 }
 
 model ContentSkill {
@@ -877,7 +891,7 @@ model QuestionVersion {
   approvedAt           DateTime?
   metadata             Json?
   createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  updatedAt            DateTime        @default(now()) @updatedAt
   partialCreditEnabled Boolean       @default(true)
   generationMetadata   Json?
 
@@ -887,6 +901,8 @@ model QuestionVersion {
 
   @@unique([questionId, version])
   @@index([questionId, status])
+  @@index([contentVersionId])
+  @@index([status, publishedAt])
 }
 
 // ============ EGZERSİZ ============
@@ -1324,17 +1340,22 @@ model StudentLessonProgress {
 // ============ GAMIFICATION ============
 
 model Badge {
-  id           String      @id @default(dbgenerated("uuidv7()"))
-  code         String      @unique
+  id           String              @id @default(dbgenerated("uuidv7()"))
+  code         String              @unique
   name         String
   description  String?
   icon         String?
   criteria     Json?
-  displayOrder Int         @default(0)
-  status       BadgeStatus @default(ACTIVE)
+  displayOrder Int                 @default(0)
+  status       BadgeStatus         @default(ACTIVE)
+  category     AchievementCategory @default(TRAINING)
+  kind         AchievementKind     @default(BADGE)
+  targetValue  Int?
   createdAt    DateTime    @default(now())
 
   awards StudentBadge[]
+
+  @@index([category, status, displayOrder])
 }
 
 model StudentBadge {
@@ -1525,7 +1546,7 @@ model EntitlementUsage {
   idempotencyKey String
   createdAt      DateTime @default(now())
 
-  @@unique([tenantId, userId, feature, usageDate, idempotencyKey])
+  @@unique([tenantId, userId, feature, usageDate, idempotencyKey], map: "EntitlementUsage_tenantId_userId_feature_usageDate_idempotencyK")
   @@index([tenantId, userId, feature, usageDate])
 }
 
@@ -1682,4 +1703,5 @@ model BillingWebhookEvent {
   @@index([providerCode, eventType, receivedAt])
   @@index([subscriptionReferenceCode, occurredAt])
   @@index([subscriptionId, occurredAt])
+  @@index([tenantId, receivedAt])
 }
