@@ -181,7 +181,7 @@ export async function evaluateBasicBadges(tenantId: string, studentId: string): 
 
   const [completedSession, correctCount, streak] = await Promise.all([
     prisma.exerciseSession.findFirst({
-      where: { tenantId, studentId, status: "COMPLETED" },
+      where: { tenantId, studentId, status: "COMPLETED", assessmentId: null },
       select: { id: true },
       orderBy: { completedAt: "asc" },
     }),

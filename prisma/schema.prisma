@@ -223,6 +223,19 @@ enum BadgeStatus {
   INACTIVE
 }
 
+enum AchievementCategory {
+  TRAINING
+  READING
+  COMPREHENSION
+  CONSISTENCY
+  MILESTONE
+}
+
+enum AchievementKind {
+  BADGE
+  TROPHY
+}
+
 enum PointEventType {
   EXERCISE_COMPLETED
   TRAINING_SESSION_COMPLETED
@@ -416,6 +429,8 @@ model User {
   pointEvents              PointEvent[]
   studentStreaks           StudentStreak[]
   assessmentResults        AssessmentResult[]
+  baselines                StudentBaseline[]
+  lessonProgress           StudentLessonProgress[]
   createdContents          Content[]                 @relation("ContentCreatedBy")
   createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
   reviewedContentVersions  ContentVersion[]          @relation("ContentVersionReviewedBy")
@@ -518,6 +533,8 @@ model Tenant {
   studentBadges            StudentBadge[]
   studentStreaks           StudentStreak[]
   assessmentResults        AssessmentResult[]
+  baselines                 StudentBaseline[]
+  lessonProgress            StudentLessonProgress[]
   consents                 Consent[]
   auditLogs                AuditLog[]
   attempts                 Attempt[]
@@ -797,15 +814,17 @@ model ContentVersion {
   approvedAt       DateTime?
   metadata         Json?
   createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  updatedAt        DateTime      @default(now()) @updatedAt
 
   publishedContentPointer Content?                         @relation("CurrentVersion")
   questionVersions         QuestionVersion[]                 @relation("QuestionVersionContentVersion")
   templateContents        ExerciseTemplateVersionContent[]
   sessionContents         SessionContentVersion[]
+  lessonProgress           StudentLessonProgress[]
 
   @@unique([contentId, version])
   @@index([contentId, status])
+  @@index([status, publishedAt])
 }
 
 model ContentSkill {
@@ -872,7 +891,7 @@ model QuestionVersion {
   approvedAt           DateTime?
   metadata             Json?
   createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  updatedAt            DateTime        @default(now()) @updatedAt
   partialCreditEnabled Boolean       @default(true)
   generationMetadata   Json?
 
@@ -882,6 +901,8 @@ model QuestionVersion {
 
   @@unique([questionId, version])
   @@index([questionId, status])
+  @@index([contentVersionId])
+  @@index([status, publishedAt])
 }
 
 // ============ EGZERSİZ ============
@@ -1120,6 +1141,17 @@ model Attempt {
   calibratedAt       DateTime?
   calibrationVersion Int             @default(1)
 
+  // Server-validated learning telemetry. These fields do not affect scoring.
+  exposureStartedAt    DateTime?
+  answerStartedAt      DateTime?
+  submittedAt          DateTime?
+  interactionDurationMs Int?
+  answerDurationMs      Int?
+  retryCount            Int             @default(0)
+  hintUsed              Boolean         @default(false)
+  firstAttemptCorrect   Boolean?
+  finalResult           Boolean?
+
   @@unique([sessionId, clientAttemptId])
   @@index([sessionId])
   @@index([questionVersionId])
@@ -1266,24 +1298,64 @@ model AssessmentResult {
   metrics       Json?
   completedAt   DateTime   @default(now())
 
+  baselines StudentBaseline[]
+
   @@index([studentId, tenantId, completedAt])
   @@index([assessmentId])
+}
+
+/// Immutable placement baseline; re-baselining is a separate product flow.
+model StudentBaseline {
+  id                       String           @id @default(dbgenerated("uuidv7()"))
+  tenantId                 String
+  tenant                   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId                String
+  student                  User             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  sourceAssessmentResultId String
+  sourceAssessmentResult   AssessmentResult @relation(fields: [sourceAssessmentResultId], references: [id], onDelete: Restrict)
+  snapshot                 Json
+  capturedAt               DateTime         @default(now())
+  createdAt                DateTime         @default(now())
+
+  @@unique([tenantId, studentId])
+  @@index([studentId, tenantId, capturedAt])
+}
+
+/// Lesson completion is idempotent per immutable published ContentVersion.
+model StudentLessonProgress {
+  id               String        @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student          User          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  contentVersionId String
+  contentVersion   ContentVersion @relation(fields: [contentVersionId], references: [id], onDelete: Restrict)
+  completedAt      DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+
+  @@unique([tenantId, studentId, contentVersionId])
+  @@index([studentId, tenantId, completedAt])
 }
 
 // ============ GAMIFICATION ============
 
 model Badge {
-  id           String      @id @default(dbgenerated("uuidv7()"))
-  code         String      @unique
+  id           String              @id @default(dbgenerated("uuidv7()"))
+  code         String              @unique
   name         String
   description  String?
   icon         String?
   criteria     Json?
-  displayOrder Int         @default(0)
-  status       BadgeStatus @default(ACTIVE)
+  displayOrder Int                 @default(0)
+  status       BadgeStatus         @default(ACTIVE)
+  category     AchievementCategory @default(TRAINING)
+  kind         AchievementKind     @default(BADGE)
+  targetValue  Int?
   createdAt    DateTime    @default(now())
 
   awards StudentBadge[]
+
+  @@index([category, status, displayOrder])
 }
 
 model StudentBadge {
@@ -1474,7 +1546,7 @@ model EntitlementUsage {
   idempotencyKey String
   createdAt      DateTime @default(now())
 
-  @@unique([tenantId, userId, feature, usageDate, idempotencyKey])
+  @@unique([tenantId, userId, feature, usageDate, idempotencyKey], map: "EntitlementUsage_tenantId_userId_feature_usageDate_idempotencyK")
   @@index([tenantId, userId, feature, usageDate])
 }
 
@@ -1631,4 +1703,5 @@ model BillingWebhookEvent {
   @@index([providerCode, eventType, receivedAt])
   @@index([subscriptionReferenceCode, occurredAt])
   @@index([subscriptionId, occurredAt])
+  @@index([tenantId, receivedAt])
 }

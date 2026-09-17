@@ -7,6 +7,8 @@ import {
   type TrainingProgressSkill,
 } from "../training/performance.js";
 import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "../student-learning/policy.js";
+import { getStudentBaseline } from "../baseline/service.js";
+import { compareBaselineToCurrent } from "../development/compare.js";
 
 export interface StudentProgressItem {
   skillId: string;
@@ -45,6 +47,15 @@ export interface StudentProgressListResult {
     accuracy: number | null;
     skills: TrainingProgressSkill[];
   };
+  baseline: {
+    id: string;
+    sourceAssessmentResultId: string;
+    source: "PLACEMENT";
+    version: 1;
+    capturedAt: Date;
+    skills: Array<{ competency: string; score: number | null; scoredCount: number }>;
+  } | null;
+  development: ReturnType<typeof compareBaselineToCurrent>;
 }
 
 export async function listStudentProgress(actor: {
@@ -90,18 +101,22 @@ export async function listStudentProgress(actor: {
   const trainingPerformancePromise = actor.tenantId
     ? loadTrainingPerformance({ userId: actor.userId, tenantId: actor.tenantId })
     : Promise.resolve(emptyTrainingPerformanceSnapshot());
-  const [sessionCount, attemptCount, scoredGroups, trainingPerformance] = await Promise.all([
-    prisma.exerciseSession.count({ where: sessionScope }),
-    prisma.attempt.count({ where: { session: sessionScope } }),
-    prisma.attempt.groupBy({
-      by: ["isCorrect"],
-      where: { session: sessionScope, rawScore: { not: null } },
-      _count: true,
-    }),
-    trainingPerformancePromise,
-  ]);
+  const baselinePromise = actor.tenantId ? getStudentBaseline(actor) : Promise.resolve(null);
+  const [sessionCount, attemptCount, scoredGroups, trainingPerformance, baseline] =
+    await Promise.all([
+      prisma.exerciseSession.count({ where: sessionScope }),
+      prisma.attempt.count({ where: { session: sessionScope } }),
+      prisma.attempt.groupBy({
+        by: ["isCorrect"],
+        where: { session: sessionScope, rawScore: { not: null } },
+        _count: true,
+      }),
+      trainingPerformancePromise,
+      baselinePromise,
+    ]);
   const scoredCount = scoredGroups.reduce((sum, row) => sum + row._count, 0);
   const correctCount = scoredGroups.find((row) => row.isCorrect === true)?._count ?? 0;
+  const training = toTrainingProgressSummary(trainingPerformance);
   return {
     items: rows.map((r) => ({
       skillId: r.skillId,
@@ -128,7 +143,9 @@ export async function listStudentProgress(actor: {
       scoredCount,
       accuracy: scoredCount ? correctCount / scoredCount : null,
     },
-    training: toTrainingProgressSummary(trainingPerformance),
+    training,
+    baseline,
+    development: compareBaselineToCurrent(baseline?.skills ?? null, training.skills),
   };
 }
 
