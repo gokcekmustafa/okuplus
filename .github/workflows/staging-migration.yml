@@ -96,7 +96,8 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
-          const allowedPendingMigrationPolicy = [foundation];
+          const reconciliation = "20260917120000_reconcile_release_0_6_schema";
+          const allowedPendingMigrationPolicy = [foundation, reconciliation];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
@@ -262,7 +263,8 @@ jobs:
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
           const foundation = "20260914100000_add_learning_experience_foundation";
-          const allowedPendingMigrationPolicy = [foundation];
+          const reconciliation = "20260917120000_reconcile_release_0_6_schema";
+          const allowedPendingMigrationPolicy = [foundation, reconciliation];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
