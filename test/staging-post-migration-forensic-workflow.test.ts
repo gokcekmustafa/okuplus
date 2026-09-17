@@ -54,6 +54,9 @@ describe("staging post-migration forensic workflow", () => {
     );
     expect(workflow).toContain("staging-post-migration-forensic-summary.json");
     expect(workflow).toContain("actions/upload-artifact@v4");
+    expect(workflow).toContain("function objectsFromDiff(lines)");
+    expect(workflow).toContain("Removed index on columns");
+    expect(workflow).toContain("Renamed index");
   });
 
   it("does not publish raw credentials or database connection details", () => {
