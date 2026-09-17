@@ -4,6 +4,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import { evaluateMigrationHealth, type MigrationRecord } from "./staging-migration-precondition.js";
 
 const ENVIRONMENTS = new Set(["LOCAL", "TEST", "STAGING", "PRODUCTION"]);
 
@@ -17,9 +18,14 @@ type DbIdentity = {
 };
 
 type MigrationRow = {
+  id: string;
   migration_name: string;
+  checksum: string;
+  started_at: Date | null;
   finished_at: Date | null;
   rolled_back_at: Date | null;
+  applied_steps_count: number;
+  logs: string | null;
 };
 
 type ColumnRow = {
@@ -118,9 +124,17 @@ async function main(): Promise<void> {
           version() AS server_version
       `,
       prisma.$queryRaw<MigrationRow[]>`
-        SELECT migration_name, finished_at, rolled_back_at
-        FROM _prisma_migrations
-        ORDER BY started_at
+        SELECT
+          id,
+          migration_name,
+          checksum,
+          started_at,
+          finished_at,
+          rolled_back_at,
+          applied_steps_count,
+          logs
+        FROM public."_prisma_migrations"
+        ORDER BY started_at ASC, id ASC
       `,
       prisma.$queryRaw<ColumnRow[]>`
         SELECT table_schema, table_name, column_name, ordinal_position,
@@ -134,11 +148,26 @@ async function main(): Promise<void> {
     const identity = identityRows[0];
     if (!identity) fail("database identity okunamadı");
 
-    const applied = migrationRows.filter((row) => row.finished_at && !row.rolled_back_at);
-    const failed = migrationRows.filter((row) => !row.finished_at || row.rolled_back_at);
-    const appliedNames = new Set(applied.map((row) => row.migration_name));
-    const pending = repository.migrationNames.filter((name) => !appliedNames.has(name));
-    const lastApplied = applied.at(-1)?.migration_name ?? null;
+    const migrationRecords: MigrationRecord[] = migrationRows.map((row) => ({
+      id: row.id,
+      migrationName: row.migration_name,
+      checksum: row.checksum,
+      startedAt: row.started_at?.toISOString() ?? null,
+      finishedAt: row.finished_at?.toISOString() ?? null,
+      rolledBackAt: row.rolled_back_at?.toISOString() ?? null,
+      appliedStepsCount: row.applied_steps_count,
+      logs: row.logs ? "PRESENT" : "NONE",
+    }));
+    const migrationHealth = evaluateMigrationHealth(migrationRecords, repository.migrationNames);
+    const applied = migrationRecords.filter(
+      (row) => row.finishedAt !== null && row.rolledBackAt === null,
+    );
+    const failed = migrationHealth.unresolvedFailedMigrationNames.map((name) => ({
+      name,
+      rolledBack: migrationHealth.unresolvedRolledBackMigrationNames.includes(name),
+    }));
+    const pending = migrationHealth.missingFromDb;
+    const lastApplied = applied.at(-1)?.migrationName ?? null;
     const liveSchemaHash = sha256(stableJson(columnRows));
     const fingerprintInput = {
       environment,
@@ -158,7 +187,13 @@ async function main(): Promise<void> {
     console.log(
       JSON.stringify(
         {
-          status: failed.length === 0 && pending.length === 0 ? "PASS" : "REVIEW_REQUIRED",
+          status:
+            migrationHealth.unresolvedFailedMigrationNames.length === 0 &&
+            migrationHealth.missingFromDb.length === 0 &&
+            migrationHealth.unexpectedActiveMigrationNames.length === 0 &&
+            migrationHealth.duplicateActiveNames.length === 0
+              ? "PASS"
+              : "REVIEW_REQUIRED",
           target: {
             environment,
             host: parsedUrl.hostname,
@@ -182,14 +217,29 @@ async function main(): Promise<void> {
             migrationManifestHash: repository.migrationManifestHash,
           },
           migrations: {
+            allRowsCount: migrationRecords.length,
             repositoryCount: repository.migrationNames.length,
             appliedCount: applied.length,
+            activeAppliedCount: applied.length,
+            rolledBackCount: migrationHealth.rolledBackMigrationNames.length,
+            unresolvedFailedCount: migrationHealth.unresolvedFailedMigrationNames.length,
             pending,
-            failed: failed.map((row) => ({
-              name: row.migration_name,
-              rolledBack: Boolean(row.rolled_back_at),
-            })),
+            failed,
             lastApplied,
+            rows: migrationRecords,
+            repositoryMigrationNames: migrationHealth.repositoryMigrationNames,
+            activeAppliedMigrationNames: migrationHealth.activeAppliedMigrationNames,
+            rolledBackMigrationNames: migrationHealth.rolledBackMigrationNames,
+            unresolvedFailedMigrationNames: migrationHealth.unresolvedFailedMigrationNames,
+            incompleteMigrationNames: migrationHealth.incompleteMigrationNames,
+            historicalRolledBackMigrationNames: migrationHealth.historicalRolledBackMigrationNames,
+            unresolvedRolledBackMigrationNames: migrationHealth.unresolvedRolledBackMigrationNames,
+            missingFromDb: migrationHealth.missingFromDb,
+            extraActiveInDb: migrationHealth.extraActiveInDb,
+            approvedHistoricalActiveMigrationNames:
+              migrationHealth.approvedHistoricalActiveMigrationNames,
+            unexpectedActiveMigrationNames: migrationHealth.unexpectedActiveMigrationNames,
+            duplicateActiveNames: migrationHealth.duplicateActiveNames,
           },
           fingerprint: sha256(stableJson(fingerprintInput)),
           productionWrite: "NO",

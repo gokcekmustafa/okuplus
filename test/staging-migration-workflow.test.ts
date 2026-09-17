@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   classifyMigrationFailures,
   classifyPendingMigrations,
+  evaluateMigrationGate,
+  evaluateMigrationHealth,
+  isMigrationRecord,
+  type MigrationRecord,
 } from "../scripts/staging-migration-precondition.js";
 
 const workflow = readFileSync(
@@ -16,10 +20,12 @@ describe("staging migration workflow contract", () => {
   const reconciliationMigration = "20260917120000_reconcile_release_0_6_schema";
 
   it("ignores a rolled-back sibling when an active applied sibling exists", () => {
+    const activeAppliedMigrationNames = new Set([targetMigration, foundationMigration]);
     const result = classifyMigrationFailures(
       [{ name: targetMigration, rolledBack: true }],
       [foundationMigration],
       new Set([targetMigration, foundationMigration]),
+      activeAppliedMigrationNames,
     );
 
     expect(result.historicalRolledBackMigrations).toEqual([
@@ -77,6 +83,187 @@ describe("staging migration workflow contract", () => {
     expect(result.unexpectedPendingMigrations).toEqual(["20260915120000_unexpected"]);
   });
 
+  const migrationRow = (
+    migrationName: string,
+    overrides: Partial<MigrationRecord> = {},
+  ): MigrationRecord => ({
+    id: `${migrationName}-id`,
+    migrationName,
+    checksum: `${migrationName}-checksum`,
+    startedAt: "2026-09-17T10:00:00.000Z",
+    finishedAt: "2026-09-17T10:00:01.000Z",
+    rolledBackAt: null,
+    appliedStepsCount: 1,
+    logs: "NONE",
+    ...overrides,
+  });
+
+  const postMigrationGate = (
+    health: ReturnType<typeof evaluateMigrationHealth>,
+    schemaDiffClean = true,
+  ) =>
+    evaluateMigrationGate({
+      health,
+      pendingMigrations: health.missingFromDb,
+      allowedPendingMigrations: [],
+      requireNoPending: true,
+      fingerprintPass: true,
+      identityPass: true,
+      prismaStatusCurrent: true,
+      schemaDiffClean,
+    });
+
+  it("passes for the normal 20 migration active set", () => {
+    const repositoryNames = Array.from({ length: 20 }, (_, index) => `migration-${index + 1}`);
+    const health = evaluateMigrationHealth(
+      repositoryNames.map((name) => migrationRow(name)),
+      repositoryNames,
+    );
+
+    expect(postMigrationGate(health).pass).toBe(true);
+    expect(health.missingFromDb).toEqual([]);
+    expect(health.extraActiveInDb).toEqual([]);
+  });
+
+  it("passes for a historical rolled-back row with an active applied sibling", () => {
+    const health = evaluateMigrationHealth(
+      [
+        migrationRow(targetMigration, {
+          id: "rolled-back",
+          finishedAt: null,
+          rolledBackAt: "2026-09-17T10:00:02.000Z",
+          appliedStepsCount: 0,
+          logs: "PRESENT",
+        }),
+        migrationRow(targetMigration, { id: "active-applied", appliedStepsCount: 0 }),
+      ],
+      [targetMigration],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(true);
+    expect(health.historicalRolledBackMigrationNames).toEqual([targetMigration]);
+    expect(health.unresolvedFailedMigrationNames).toEqual([]);
+    expect(health.duplicateActiveNames).toEqual([]);
+  });
+
+  it("fails for a rolled-back row without an active sibling", () => {
+    const health = evaluateMigrationHealth(
+      [
+        migrationRow(targetMigration, {
+          finishedAt: null,
+          rolledBackAt: "2026-09-17T10:00:02.000Z",
+        }),
+      ],
+      [targetMigration],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(false);
+    expect(health.unresolvedFailedMigrationNames).toEqual([targetMigration]);
+  });
+
+  it("fails for an unresolved incomplete migration", () => {
+    const health = evaluateMigrationHealth(
+      [migrationRow(targetMigration, { finishedAt: null })],
+      [targetMigration],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(false);
+    expect(health.incompleteMigrationNames).toEqual([targetMigration]);
+  });
+
+  it("allows an expected pending migration during precondition", () => {
+    const health = evaluateMigrationHealth([], [foundationMigration]);
+    const result = evaluateMigrationGate({
+      health,
+      pendingMigrations: health.missingFromDb,
+      allowedPendingMigrations: [foundationMigration],
+      requireNoPending: false,
+      fingerprintPass: true,
+      identityPass: true,
+      prismaStatusCurrent: true,
+      schemaDiffClean: true,
+    });
+
+    expect(result.pass).toBe(true);
+  });
+
+  it("rejects an unexpected pending migration", () => {
+    const unexpected = "20260915120000_unexpected";
+    const health = evaluateMigrationHealth([], [unexpected]);
+    const result = evaluateMigrationGate({
+      health,
+      pendingMigrations: health.missingFromDb,
+      allowedPendingMigrations: [foundationMigration],
+      requireNoPending: false,
+      fingerprintPass: true,
+      identityPass: true,
+      prismaStatusCurrent: true,
+      schemaDiffClean: true,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.unexpectedPendingMigrations).toEqual([unexpected]);
+  });
+
+  it("rejects a missing migration after deploy", () => {
+    const health = evaluateMigrationHealth([], [foundationMigration]);
+
+    expect(postMigrationGate(health).pass).toBe(false);
+    expect(postMigrationGate(health).failedChecks).toContain("noPendingMigrations");
+  });
+
+  it("rejects an unexpected active migration", () => {
+    const health = evaluateMigrationHealth(
+      [migrationRow("20260907170000_add_gp_achievement_metadata")],
+      [],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(false);
+    expect(health.extraActiveInDb).toEqual(["20260907170000_add_gp_achievement_metadata"]);
+  });
+
+  it("accepts an explicitly approved historical active migration", () => {
+    const historical = "20260907170000_add_gp_achievement_metadata";
+    const health = evaluateMigrationHealth(
+      [migrationRow(targetMigration), migrationRow(historical)],
+      [targetMigration],
+      [historical],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(true);
+    expect(health.extraActiveInDb).toEqual([historical]);
+    expect(health.approvedHistoricalActiveMigrationNames).toEqual([historical]);
+    expect(health.unexpectedActiveMigrationNames).toEqual([]);
+  });
+
+  it("rejects duplicate active migration names", () => {
+    const health = evaluateMigrationHealth(
+      [
+        migrationRow(targetMigration, { id: "active-1" }),
+        migrationRow(targetMigration, { id: "active-2" }),
+      ],
+      [targetMigration],
+    );
+
+    expect(postMigrationGate(health).pass).toBe(false);
+    expect(health.duplicateActiveNames).toEqual([targetMigration]);
+  });
+
+  it("rejects a non-zero schema diff", () => {
+    const health = evaluateMigrationHealth([migrationRow(targetMigration)], [targetMigration]);
+
+    expect(postMigrationGate(health, false).pass).toBe(false);
+    expect(postMigrationGate(health, false).failedChecks).toContain("schemaDiffClean");
+  });
+
+  it("fails closed for malformed migration output rows", () => {
+    expect(isMigrationRecord(migrationRow(targetMigration))).toBe(true);
+    expect(isMigrationRecord({ ...migrationRow(targetMigration), logs: "raw secret" })).toBe(false);
+    expect(isMigrationRecord({ ...migrationRow(targetMigration), appliedStepsCount: "1" })).toBe(
+      false,
+    );
+  });
+
   it("is manual-only, staging-bound, and checks the approved target", () => {
     expect(workflow).toMatch(/on:\s*\n\s+workflow_dispatch:/u);
     expect(workflow).toContain("environment: staging");
@@ -113,9 +300,11 @@ describe("staging migration workflow contract", () => {
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN)/iu);
     expect(workflow).toContain("20260914100000_add_learning_experience_foundation");
     expect(workflow).toContain("20260917120000_reconcile_release_0_6_schema");
-    expect(workflow).toContain("classifyMigrationFailures");
     expect(workflow).toContain("classifyPendingMigrations");
-    expect(workflow).toContain("noFailedMigrations: unresolvedFailedMigrations !== null");
+    expect(workflow).toContain("evaluateMigrationHealth");
+    expect(workflow).toContain("evaluateMigrationGate");
+    expect(workflow).toContain("isMigrationRecord");
+    expect(workflow).not.toContain("migrationCountsMatch");
     expect(workflow).toContain("historicalRolledBackMigrations");
     expect(workflow).toContain("unresolvedFailedMigrations");
     expect(workflow).toContain("schemaDrift: false");
