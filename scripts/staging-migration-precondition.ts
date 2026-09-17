@@ -14,6 +14,11 @@ export type MigrationRecord = {
   logs: "PRESENT" | "NONE";
 };
 
+export type ApprovedHistoricalMigration = {
+  name: string;
+  checksum: string;
+};
+
 export type MigrationHealth = {
   repositoryMigrationNames: string[];
   activeAppliedMigrationNames: string[];
@@ -80,11 +85,13 @@ export function isMigrationRecord(value: unknown): value is MigrationRecord {
 export function evaluateMigrationHealth(
   rows: readonly MigrationRecord[],
   repositoryMigrationNames: readonly string[],
-  approvedHistoricalMigrationNames: readonly string[] = [],
+  approvedHistoricalMigrations: readonly ApprovedHistoricalMigration[] = [],
 ): MigrationHealth {
   const repositoryNames = uniqueSorted(repositoryMigrationNames);
   const repositoryNameSet = new Set(repositoryNames);
-  const approvedHistoricalNames = new Set(approvedHistoricalMigrationNames);
+  const approvedHistoricalChecksums = new Map(
+    approvedHistoricalMigrations.map((migration) => [migration.name, migration.checksum]),
+  );
   const activeAppliedRows = rows.filter(
     (row) => row.finishedAt !== null && row.rolledBackAt === null,
   );
@@ -113,11 +120,17 @@ export function evaluateMigrationHealth(
   );
   const missingFromDb = repositoryNames.filter((name) => !activeAppliedNameSet.has(name));
   const extraActiveInDb = activeAppliedNames.filter((name) => !repositoryNameSet.has(name));
-  const approvedHistoricalActiveNames = extraActiveInDb.filter((name) =>
-    approvedHistoricalNames.has(name),
-  );
+  const approvedHistoricalActiveNames = extraActiveInDb.filter((name) => {
+    const expectedChecksum = approvedHistoricalChecksums.get(name);
+    const activeRowsForName = activeAppliedRows.filter((row) => row.migrationName === name);
+    return (
+      expectedChecksum !== undefined &&
+      activeRowsForName.length > 0 &&
+      activeRowsForName.every((row) => row.checksum === expectedChecksum)
+    );
+  });
   const unexpectedActiveNames = extraActiveInDb.filter(
-    (name) => !approvedHistoricalNames.has(name),
+    (name) => !approvedHistoricalActiveNames.includes(name),
   );
 
   return {
