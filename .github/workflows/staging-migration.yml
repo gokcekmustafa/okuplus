@@ -101,7 +101,12 @@ jobs:
           const foundation = "20260914100000_add_learning_experience_foundation";
           const reconciliation = "20260917120000_reconcile_release_0_6_schema";
           const allowedPendingMigrationPolicy = [foundation, reconciliation];
-          const approvedHistoricalMigrationPolicy = [];
+          const approvedHistoricalMigrationPolicy = [
+            {
+              name: "20260907170000_add_gp_achievement_metadata",
+              checksum: "541bcf696c4b08d337c80f0bbfc2462ad749d92336225398653aca8eb32fce3b",
+            },
+          ];
           const repositoryMigrationNames = new Set(
             readdirSync("prisma/migrations", { withFileTypes: true })
               .filter((entry) => entry.isDirectory())
@@ -309,7 +314,12 @@ jobs:
           const foundation = "20260914100000_add_learning_experience_foundation";
           const reconciliation = "20260917120000_reconcile_release_0_6_schema";
           const allowedPendingMigrationPolicy = [foundation, reconciliation];
-          const approvedHistoricalMigrationPolicy = [];
+          const approvedHistoricalMigrationPolicy = [
+            {
+              name: "20260907170000_add_gp_achievement_metadata",
+              checksum: "541bcf696c4b08d337c80f0bbfc2462ad749d92336225398653aca8eb32fce3b",
+            },
+          ];
           const repositoryMigrationNames = new Set(
             readdirSync("prisma/migrations", { withFileTypes: true })
               .filter((entry) => entry.isDirectory())

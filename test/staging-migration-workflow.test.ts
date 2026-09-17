@@ -73,6 +73,17 @@ describe("staging migration workflow contract", () => {
     expect(result.unexpectedPendingMigrations).toEqual([]);
   });
 
+  it("does not allow the approved historical migration as pending", () => {
+    const historical = "20260907170000_add_gp_achievement_metadata";
+    const result = classifyPendingMigrations(
+      [historical],
+      new Set([foundationMigration, reconciliationMigration]),
+    );
+
+    expect(result.allowedPendingMigrations).toEqual([]);
+    expect(result.unexpectedPendingMigrations).toEqual([historical]);
+  });
+
   it("rejects unexpected pending migrations", () => {
     const result = classifyPendingMigrations(
       ["20260915120000_unexpected"],
@@ -227,13 +238,55 @@ describe("staging migration workflow contract", () => {
     const health = evaluateMigrationHealth(
       [migrationRow(targetMigration), migrationRow(historical)],
       [targetMigration],
-      [historical],
+      [{ name: historical, checksum: `${historical}-checksum` }],
     );
 
     expect(postMigrationGate(health).pass).toBe(true);
     expect(health.extraActiveInDb).toEqual([historical]);
     expect(health.approvedHistoricalActiveMigrationNames).toEqual([historical]);
     expect(health.unexpectedActiveMigrationNames).toEqual([]);
+  });
+
+  it("rejects an approved historical migration with a different checksum", () => {
+    const historical = "20260907170000_add_gp_achievement_metadata";
+    const health = evaluateMigrationHealth(
+      [migrationRow(historical, { checksum: "different-checksum" })],
+      [],
+      [{ name: historical, checksum: `${historical}-checksum` }],
+    );
+
+    expect(health.approvedHistoricalActiveMigrationNames).toEqual([]);
+    expect(health.unexpectedActiveMigrationNames).toEqual([historical]);
+  });
+
+  it("fails for an approved historical migration that is rolled back without an active sibling", () => {
+    const historical = "20260907170000_add_gp_achievement_metadata";
+    const health = evaluateMigrationHealth(
+      [
+        migrationRow(historical, {
+          finishedAt: null,
+          rolledBackAt: "2026-09-17T10:00:02.000Z",
+          appliedStepsCount: 0,
+        }),
+      ],
+      [],
+      [{ name: historical, checksum: `${historical}-checksum` }],
+    );
+
+    expect(health.approvedHistoricalActiveMigrationNames).toEqual([]);
+    expect(health.unresolvedFailedMigrationNames).toEqual([historical]);
+  });
+
+  it("fails for duplicate active approved historical rows", () => {
+    const historical = "20260907170000_add_gp_achievement_metadata";
+    const health = evaluateMigrationHealth(
+      [migrationRow(historical, { id: "active-1" }), migrationRow(historical, { id: "active-2" })],
+      [],
+      [{ name: historical, checksum: `${historical}-checksum` }],
+    );
+
+    expect(health.approvedHistoricalActiveMigrationNames).toEqual([historical]);
+    expect(health.duplicateActiveNames).toEqual([historical]);
   });
 
   it("rejects duplicate active migration names", () => {
@@ -281,6 +334,8 @@ describe("staging migration workflow contract", () => {
     expect(workflow).toContain("18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38");
     expect(workflow).not.toMatch(/^\s+push:/mu);
     expect(workflow).not.toMatch(/^\s+pull_request:/mu);
+    expect(workflow).toContain("20260907170000_add_gp_achievement_metadata");
+    expect(workflow).toContain("541bcf696c4b08d337c80f0bbfc2462ad749d92336225398653aca8eb32fce3b");
   });
 
   it("uses only the official migration commands and sanitized summary", () => {
