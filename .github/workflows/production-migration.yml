@@ -84,8 +84,10 @@ jobs:
 
           if git grep -n -i -E 'DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE([[:space:]]|;)|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP' -- \
             prisma/migrations/20260905090000_add_exercise_template_version_config/migration.sql \
-            prisma/migrations/20260907150000_add_training_session_models/migration.sql; then
-            echo "FAIL: destructive SQL found in the Release 0.4 migrations"
+            prisma/migrations/20260907150000_add_training_session_models/migration.sql \
+            prisma/migrations/20260914100000_add_learning_experience_foundation/migration.sql \
+            prisma/migrations/20260917120000_reconcile_release_0_6_schema/migration.sql; then
+            echo "FAIL: destructive SQL found in the production candidate migrations"
             exit 1
           fi
           echo "MIGRATION_SQL_SAFETY=PASS"
