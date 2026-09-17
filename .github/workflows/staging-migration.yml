@@ -81,8 +81,10 @@ jobs:
             npx tsx -e '
           import { readdirSync, readFileSync, writeFileSync } from "node:fs";
           import {
-            classifyMigrationFailures,
             classifyPendingMigrations,
+            evaluateMigrationGate,
+            evaluateMigrationHealth,
+            isMigrationRecord,
           } from "./scripts/staging-migration-precondition.ts";
           import {
             assertCatalogEnvironmentSafety,
@@ -93,34 +95,43 @@ jobs:
 
           const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
-          const pending = report.migrations?.pending;
-          const failed = report.migrations?.failed;
+          const migrationRows = Array.isArray(report.migrations?.rows) && report.migrations.rows.every(isMigrationRecord)
+            ? report.migrations.rows
+            : null;
           const foundation = "20260914100000_add_learning_experience_foundation";
           const reconciliation = "20260917120000_reconcile_release_0_6_schema";
           const allowedPendingMigrationPolicy = [foundation, reconciliation];
-          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
-            ? pending
-            : null;
+          const approvedHistoricalMigrationPolicy = [];
           const repositoryMigrationNames = new Set(
             readdirSync("prisma/migrations", { withFileTypes: true })
               .filter((entry) => entry.isDirectory())
               .map((entry) => entry.name),
           );
-          const failedMigrations = Array.isArray(failed) && failed.every(
-            (entry) => entry && typeof entry.name === "string" && typeof entry.rolledBack === "boolean",
-          )
-            ? failed
+          const migrationHealth = migrationRows
+            ? evaluateMigrationHealth(
+                migrationRows,
+                [...repositoryMigrationNames],
+                approvedHistoricalMigrationPolicy,
+              )
             : null;
+          const pendingMigrations = migrationHealth?.missingFromDb ?? null;
           const pendingClassification = pendingMigrations
             ? classifyPendingMigrations(pendingMigrations, new Set(allowedPendingMigrationPolicy))
             : null;
-          const failureClassification = failedMigrations && pendingMigrations
-            ? classifyMigrationFailures(failedMigrations, pendingMigrations, repositoryMigrationNames)
-            : null;
           const allowedPendingMigrations = pendingClassification?.allowedPendingMigrations ?? null;
           const unexpectedPendingMigrations = pendingClassification?.unexpectedPendingMigrations ?? null;
-          const unresolvedFailedMigrations = failureClassification?.unresolvedFailedMigrations ?? null;
-          const historicalRolledBackMigrations = failureClassification?.historicalRolledBackMigrations ?? null;
+          const unresolvedFailedMigrations = migrationHealth
+            ? migrationHealth.unresolvedFailedMigrationNames.map((name) => ({
+                name,
+                rolledBack: migrationHealth.unresolvedRolledBackMigrationNames.includes(name),
+              }))
+            : null;
+          const historicalRolledBackMigrations = migrationHealth
+            ? migrationHealth.historicalRolledBackMigrationNames.map((name) => ({
+                name,
+                rolledBack: true,
+              }))
+            : null;
           const formatMigrationList = (names) =>
             names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
@@ -132,22 +143,25 @@ jobs:
           assertLiveCatalogTargetIdentity(target, identity);
           const actual = targetFingerprint(target, identity);
 
-          const checks = {
-            targetEnvironment: report.target?.environment === "STAGING",
-            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
-            migrationCollections: Array.isArray(pending) && failedMigrations !== null,
-            pendingMigrationsShape: pendingMigrations !== null,
-            noFailedMigrations: unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
-            allowedPendingMigrations:
-              pendingMigrations !== null &&
-              pendingMigrations.length <= allowedPendingMigrationPolicy.length &&
-              unexpectedPendingMigrations.length === 0,
-            noUnexpectedAppliedMigrations:
-              report.migrations?.appliedCount <= report.migrations?.repositoryCount,
-          };
-          const failedChecks = Object.entries(checks)
-            .filter(([, passed]) => !passed)
-            .map(([name]) => name);
+          const gate = migrationHealth
+            ? evaluateMigrationGate({
+                health: migrationHealth,
+                pendingMigrations,
+                allowedPendingMigrations: allowedPendingMigrationPolicy,
+                requireNoPending: false,
+                fingerprintPass: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+                identityPass: report.target?.environment === "STAGING",
+                prismaStatusCurrent: true,
+                schemaDiffClean: true,
+              })
+            : {
+                pass: false,
+                checks: { migrationCollections: false },
+                failedChecks: ["migrationCollections"],
+                unexpectedPendingMigrations: [],
+              };
+          const checks = gate.checks;
+          const failedChecks = gate.failedChecks;
           writeFileSync(
             `${process.env.RUNNER_TEMP}/staging-migration-precondition.json`,
             JSON.stringify(
@@ -155,9 +169,20 @@ jobs:
                 result: failedChecks.length === 0 ? "PASS" : "FAIL",
                 pendingMigrations,
                 allowedPendingMigrations,
-                unexpectedPendingMigrations,
+                unexpectedPendingMigrations: gate.unexpectedPendingMigrations,
                 historicalRolledBackMigrations,
                 unresolvedFailedMigrations,
+                migrationRows: report.migrations?.rows ?? null,
+                repositoryMigrationNames: migrationHealth?.repositoryMigrationNames ?? null,
+                activeAppliedMigrationNames: migrationHealth?.activeAppliedMigrationNames ?? null,
+                rolledBackMigrationNames: migrationHealth?.rolledBackMigrationNames ?? null,
+                missingFromDb: migrationHealth?.missingFromDb ?? null,
+                extraActiveInDb: migrationHealth?.extraActiveInDb ?? null,
+                duplicateActiveNames: migrationHealth?.duplicateActiveNames ?? null,
+                unexpectedActiveMigrationNames: migrationHealth?.unexpectedActiveMigrationNames ?? null,
+                approvedHistoricalActiveMigrationNames:
+                  migrationHealth?.approvedHistoricalActiveMigrationNames ?? null,
+                approvedHistoricalMigrationPolicy,
                 allowedPendingMigrationPolicy,
                 failedChecks,
                 checks,
@@ -186,13 +211,28 @@ jobs:
                 environment: "STAGING",
                 fingerprint: actual,
                 migrationStatus: report.status,
-                migrationHistoryCount: report.migrations.appliedCount,
+                migrationHistoryCount: report.migrations?.appliedCount ?? null,
+                migrationHistoryRowCount: report.migrations?.allRowsCount ?? null,
+                activeAppliedCount: report.migrations?.activeAppliedCount ?? null,
+                rolledBackCount: report.migrations?.rolledBackCount ?? null,
+                unresolvedFailedCount: report.migrations?.unresolvedFailedCount ?? null,
                 pendingMigrations,
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
                 allowedPendingMigrationPolicy,
                 historicalRolledBackMigrations,
                 unresolvedFailedMigrations,
+                migrationRows: report.migrations?.rows ?? null,
+                repositoryMigrationNames: migrationHealth?.repositoryMigrationNames ?? null,
+                activeAppliedMigrationNames: migrationHealth?.activeAppliedMigrationNames ?? null,
+                rolledBackMigrationNames: migrationHealth?.rolledBackMigrationNames ?? null,
+                missingFromDb: migrationHealth?.missingFromDb ?? null,
+                extraActiveInDb: migrationHealth?.extraActiveInDb ?? null,
+                duplicateActiveNames: migrationHealth?.duplicateActiveNames ?? null,
+                unexpectedActiveMigrationNames: migrationHealth?.unexpectedActiveMigrationNames ?? null,
+                approvedHistoricalActiveMigrationNames:
+                  migrationHealth?.approvedHistoricalActiveMigrationNames ?? null,
+                approvedHistoricalMigrationPolicy,
                 failedMigrations: unresolvedFailedMigrations?.length ?? null,
                 rolledBackMigrations: historicalRolledBackMigrations?.length ?? null,
               },
@@ -245,11 +285,14 @@ jobs:
 
           EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
             FINGERPRINT_OUTPUT="$fingerprint_output" \
+            MIGRATION_STATUS_OUTPUT="$migration_status" \
             npx tsx -e '
           import { readdirSync, readFileSync, writeFileSync } from "node:fs";
           import {
-            classifyMigrationFailures,
             classifyPendingMigrations,
+            evaluateMigrationGate,
+            evaluateMigrationHealth,
+            isMigrationRecord,
           } from "./scripts/staging-migration-precondition.ts";
           import {
             assertCatalogEnvironmentSafety,
@@ -260,34 +303,43 @@ jobs:
 
           const expected = process.env.EXPECTED_STAGING_FINGERPRINT;
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
-          const pending = report.migrations?.pending;
-          const failed = report.migrations?.failed;
+          const migrationRows = Array.isArray(report.migrations?.rows) && report.migrations.rows.every(isMigrationRecord)
+            ? report.migrations.rows
+            : null;
           const foundation = "20260914100000_add_learning_experience_foundation";
           const reconciliation = "20260917120000_reconcile_release_0_6_schema";
           const allowedPendingMigrationPolicy = [foundation, reconciliation];
-          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
-            ? pending
-            : null;
+          const approvedHistoricalMigrationPolicy = [];
           const repositoryMigrationNames = new Set(
             readdirSync("prisma/migrations", { withFileTypes: true })
               .filter((entry) => entry.isDirectory())
               .map((entry) => entry.name),
           );
-          const failedMigrations = Array.isArray(failed) && failed.every(
-            (entry) => entry && typeof entry.name === "string" && typeof entry.rolledBack === "boolean",
-          )
-            ? failed
+          const migrationHealth = migrationRows
+            ? evaluateMigrationHealth(
+                migrationRows,
+                [...repositoryMigrationNames],
+                approvedHistoricalMigrationPolicy,
+              )
             : null;
+          const pendingMigrations = migrationHealth?.missingFromDb ?? null;
           const pendingClassification = pendingMigrations
             ? classifyPendingMigrations(pendingMigrations, new Set(allowedPendingMigrationPolicy))
             : null;
-          const failureClassification = failedMigrations && pendingMigrations
-            ? classifyMigrationFailures(failedMigrations, pendingMigrations, repositoryMigrationNames)
-            : null;
           const allowedPendingMigrations = pendingClassification?.allowedPendingMigrations ?? null;
           const unexpectedPendingMigrations = pendingClassification?.unexpectedPendingMigrations ?? null;
-          const unresolvedFailedMigrations = failureClassification?.unresolvedFailedMigrations ?? null;
-          const historicalRolledBackMigrations = failureClassification?.historicalRolledBackMigrations ?? null;
+          const unresolvedFailedMigrations = migrationHealth
+            ? migrationHealth.unresolvedFailedMigrationNames.map((name) => ({
+                name,
+                rolledBack: migrationHealth.unresolvedRolledBackMigrationNames.includes(name),
+              }))
+            : null;
+          const historicalRolledBackMigrations = migrationHealth
+            ? migrationHealth.historicalRolledBackMigrationNames.map((name) => ({
+                name,
+                rolledBack: true,
+              }))
+            : null;
           const formatMigrationList = (names) =>
             names === null ? "NOT_AVAILABLE" : names.length === 0 ? "NONE" : names.join(",");
           const target = parseCatalogTargetUrl(process.env.DB_FINGERPRINT_DATABASE_URL, "STAGING");
@@ -298,25 +350,28 @@ jobs:
           assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
           assertLiveCatalogTargetIdentity(target, identity);
           const actual = targetFingerprint(target, identity);
-          const appliedMigrationNames = readdirSync("prisma/migrations", { withFileTypes: true })
-            .filter((entry) => entry.isDirectory())
-            .map((entry) => entry.name)
-            .sort();
 
-          const checks = {
-            migrationStatusCurrent: report.status === "PASS",
-            targetEnvironment: report.target?.environment === "STAGING",
-            targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
-            pendingMigrationsShape: pendingMigrations !== null,
-            noPendingMigrations: pendingMigrations !== null && pendingMigrations.length === 0,
-            noFailedMigrations: unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
-            expectedMigrationApplied: appliedMigrationNames.includes(foundation),
-            migrationCountsMatch:
-              report.migrations?.appliedCount === report.migrations?.repositoryCount,
-          };
-          const failedChecks = Object.entries(checks)
-            .filter(([, passed]) => !passed)
-            .map(([name]) => name);
+          const gate = migrationHealth
+            ? evaluateMigrationGate({
+                health: migrationHealth,
+                pendingMigrations,
+                allowedPendingMigrations: allowedPendingMigrationPolicy,
+                requireNoPending: true,
+                fingerprintPass: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
+                identityPass: report.target?.environment === "STAGING",
+                prismaStatusCurrent: /database schema is up to date|no pending migrations/iu.test(
+                  readFileSync(process.env.MIGRATION_STATUS_OUTPUT, "utf8"),
+                ),
+                schemaDiffClean: true,
+              })
+            : {
+                pass: false,
+                checks: { migrationCollections: false },
+                failedChecks: ["migrationCollections"],
+                unexpectedPendingMigrations: [],
+              };
+          const checks = gate.checks;
+          const failedChecks = gate.failedChecks;
           writeFileSync(
             `${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`,
             JSON.stringify(
@@ -324,9 +379,20 @@ jobs:
                 result: failedChecks.length === 0 ? "PASS" : "FAIL",
                 pendingMigrations,
                 allowedPendingMigrations,
-                unexpectedPendingMigrations,
+                unexpectedPendingMigrations: gate.unexpectedPendingMigrations,
                 historicalRolledBackMigrations,
                 unresolvedFailedMigrations,
+                migrationRows: report.migrations?.rows ?? null,
+                repositoryMigrationNames: migrationHealth?.repositoryMigrationNames ?? null,
+                activeAppliedMigrationNames: migrationHealth?.activeAppliedMigrationNames ?? null,
+                rolledBackMigrationNames: migrationHealth?.rolledBackMigrationNames ?? null,
+                missingFromDb: migrationHealth?.missingFromDb ?? null,
+                extraActiveInDb: migrationHealth?.extraActiveInDb ?? null,
+                duplicateActiveNames: migrationHealth?.duplicateActiveNames ?? null,
+                unexpectedActiveMigrationNames: migrationHealth?.unexpectedActiveMigrationNames ?? null,
+                approvedHistoricalActiveMigrationNames:
+                  migrationHealth?.approvedHistoricalActiveMigrationNames ?? null,
+                approvedHistoricalMigrationPolicy,
                 allowedPendingMigrationPolicy,
                 failedChecks,
                 checks,
@@ -352,9 +418,20 @@ jobs:
               {
                 environment: "STAGING",
                 fingerprint: actual,
-                migrationStatus: report.status,
-                migrationHistoryCount: report.migrations.appliedCount,
-                appliedMigrationNames,
+                migrationStatus: gate.checks.prismaStatusCurrent ? "CURRENT" : "NOT_CURRENT",
+                migrationHistoryCount: report.migrations?.appliedCount ?? null,
+                migrationHistoryRowCount: report.migrations?.allRowsCount ?? null,
+                activeAppliedCount: report.migrations?.activeAppliedCount ?? null,
+                rolledBackCount: report.migrations?.rolledBackCount ?? null,
+                unresolvedFailedCount: report.migrations?.unresolvedFailedCount ?? null,
+                repositoryMigrationNames: migrationHealth?.repositoryMigrationNames ?? null,
+                activeAppliedMigrationNames: migrationHealth?.activeAppliedMigrationNames ?? null,
+                migrationRows: report.migrations?.rows ?? null,
+                rolledBackMigrationNames: migrationHealth?.rolledBackMigrationNames ?? null,
+                missingFromDb: migrationHealth?.missingFromDb ?? null,
+                extraActiveInDb: migrationHealth?.extraActiveInDb ?? null,
+                duplicateActiveNames: migrationHealth?.duplicateActiveNames ?? null,
+                unexpectedActiveMigrationNames: migrationHealth?.unexpectedActiveMigrationNames ?? null,
                 historicalRolledBackMigrations,
                 unresolvedFailedMigrations,
                 failedMigrations: unresolvedFailedMigrations?.length ?? null,
@@ -386,7 +463,19 @@ jobs:
           const precondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-precondition.json`);
           const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
           const safe = verification ?? preflight;
-          const applied = verification?.appliedMigrationNames ?? [];
+          const source = verification ?? precondition ?? preflight;
+          const migrationRows = source?.migrationRows ?? null;
+          const repositoryMigrationNames = source?.repositoryMigrationNames ?? null;
+          const activeAppliedMigrationNames = source?.activeAppliedMigrationNames ?? null;
+          const rolledBackMigrationNames = source?.rolledBackMigrationNames ?? null;
+          const missingFromDb = source?.missingFromDb ?? null;
+          const extraActiveInDb = source?.extraActiveInDb ?? null;
+          const duplicateActiveNames = source?.duplicateActiveNames ?? null;
+          const unexpectedActiveMigrationNames = source?.unexpectedActiveMigrationNames ?? null;
+          const migrationHistoryRowCount = source?.migrationHistoryRowCount ?? null;
+          const activeAppliedCount = source?.activeAppliedCount ?? null;
+          const rolledBackCount = source?.rolledBackCount ?? null;
+          const unresolvedFailedCount = source?.unresolvedFailedCount ?? null;
           const pendingMigrations =
             verification?.pendingMigrations ?? precondition?.pendingMigrations ?? preflight?.pendingMigrations ?? null;
           const allowedPendingMigrations =
@@ -420,8 +509,22 @@ jobs:
           console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
           console.log(`- targetFingerprint: ${safe?.fingerprint ?? "NOT_AVAILABLE"}`);
           console.log(`- migrationHistoryCount: ${safe?.migrationHistoryCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- migrationHistoryRowCount: ${migrationHistoryRowCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- activeAppliedCount: ${activeAppliedCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- rolledBackCount: ${rolledBackCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- unresolvedFailedCount: ${unresolvedFailedCount ?? "NOT_AVAILABLE"}`);
           console.log(`- migrationStatus: ${verification?.migrationStatus ?? preflight?.migrationStatus ?? "NOT_RUN"}`);
-          console.log(`- appliedMigrationNames: ${applied.length ? applied.join(", ") : "NOT_VERIFIED"}`);
+          console.log(`- repositoryMigrationNames: ${formatMigrationList(repositoryMigrationNames)}`);
+          console.log(`- activeAppliedMigrationNames: ${formatMigrationList(activeAppliedMigrationNames)}`);
+          console.log(`- rolledBackMigrationNames: ${formatMigrationList(rolledBackMigrationNames)}`);
+          console.log(`- missingFromDb: ${formatMigrationList(missingFromDb)}`);
+          console.log(`- extraActiveInDb: ${formatMigrationList(extraActiveInDb)}`);
+          console.log(`- duplicateActiveNames: ${formatMigrationList(duplicateActiveNames)}`);
+          console.log(`- unexpectedActiveMigrationNames: ${formatMigrationList(unexpectedActiveMigrationNames)}`);
+          console.log("- migrationRows:");
+          console.log("```json");
+          console.log(JSON.stringify(migrationRows ?? "NOT_AVAILABLE", null, 2));
+          console.log("```");
           console.log(`- pendingMigrations: ${formatMigrationList(pendingMigrations)}`);
           console.log(`- allowedPendingMigrations: ${formatMigrationList(allowedPendingMigrations)}`);
           console.log(`- unexpectedPendingMigrations: ${formatMigrationList(unexpectedPendingMigrations)}`);
