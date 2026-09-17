@@ -13,6 +13,7 @@ const workflow = readFileSync(
 describe("staging migration workflow contract", () => {
   const targetMigration = "20260907160000_add_training_session_completed_point_event";
   const foundationMigration = "20260914100000_add_learning_experience_foundation";
+  const reconciliationMigration = "20260917120000_reconcile_release_0_6_schema";
 
   it("ignores a rolled-back sibling when an active applied sibling exists", () => {
     const result = classifyMigrationFailures(
@@ -46,10 +47,30 @@ describe("staging migration workflow contract", () => {
     expect(result.unexpectedPendingMigrations).toEqual([]);
   });
 
+  it("allows the Release 0.6 reconciliation migration", () => {
+    const result = classifyPendingMigrations(
+      [reconciliationMigration],
+      new Set([foundationMigration, reconciliationMigration]),
+    );
+
+    expect(result.allowedPendingMigrations).toEqual([reconciliationMigration]);
+    expect(result.unexpectedPendingMigrations).toEqual([]);
+  });
+
+  it("allows foundation and reconciliation migrations together", () => {
+    const result = classifyPendingMigrations(
+      [foundationMigration, reconciliationMigration],
+      new Set([foundationMigration, reconciliationMigration]),
+    );
+
+    expect(result.allowedPendingMigrations).toEqual([foundationMigration, reconciliationMigration]);
+    expect(result.unexpectedPendingMigrations).toEqual([]);
+  });
+
   it("rejects unexpected pending migrations", () => {
     const result = classifyPendingMigrations(
       ["20260915120000_unexpected"],
-      new Set([foundationMigration]),
+      new Set([foundationMigration, reconciliationMigration]),
     );
 
     expect(result.allowedPendingMigrations).toEqual([]);
@@ -91,6 +112,7 @@ describe("staging migration workflow contract", () => {
     expect(workflow).not.toContain("set -x");
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN)/iu);
     expect(workflow).toContain("20260914100000_add_learning_experience_foundation");
+    expect(workflow).toContain("20260917120000_reconcile_release_0_6_schema");
     expect(workflow).toContain("classifyMigrationFailures");
     expect(workflow).toContain("classifyPendingMigrations");
     expect(workflow).toContain("noFailedMigrations: unresolvedFailedMigrations !== null");
