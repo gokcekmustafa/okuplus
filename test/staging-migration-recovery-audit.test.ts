@@ -6,6 +6,10 @@ const auditScript = readFileSync(
   new URL("../scripts/staging-migration-recovery-audit.ts", import.meta.url),
   "utf8",
 );
+const fingerprintScript = readFileSync(
+  new URL("../scripts/db-fingerprint.ts", import.meta.url),
+  "utf8",
+);
 const workflow = readFileSync(
   new URL("../.github/workflows/staging-migration-recovery-audit.yml", import.meta.url),
   "utf8",
@@ -167,5 +171,7 @@ describe("staging migration recovery audit", () => {
     expect(auditScript).not.toMatch(/\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE)\b/iu);
     expect(auditScript).not.toContain("process.env.DATABASE_URL");
     expect(auditScript).toContain('productionTouched: "NO"');
+    expect(fingerprintScript).toContain("targetIdentityFingerprint");
+    expect(fingerprintScript).toContain("targetIdentityFingerprint: targetIdentity");
   });
 });

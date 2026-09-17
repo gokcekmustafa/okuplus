@@ -4,6 +4,11 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+import {
+  providerForHost,
+  targetIdentityFingerprint,
+  type FingerprintEnvironment,
+} from "./db-fingerprint-contract.js";
 import { evaluateMigrationHealth, type MigrationRecord } from "./staging-migration-precondition.js";
 
 const ENVIRONMENTS = new Set(["LOCAL", "TEST", "STAGING", "PRODUCTION"]);
@@ -43,12 +48,12 @@ function fail(message: string): never {
   throw new Error(`DB fingerprint reddedildi: ${message}`);
 }
 
-function requiredEnvironment(): string {
+function requiredEnvironment(): FingerprintEnvironment {
   const value = process.env.DB_FINGERPRINT_ENVIRONMENT?.trim().toUpperCase();
   if (!value || !ENVIRONMENTS.has(value)) {
     fail("DB_FINGERPRINT_ENVIRONMENT=LOCAL|TEST|STAGING|PRODUCTION açıkça verilmelidir");
   }
-  return value;
+  return value as FingerprintEnvironment;
 }
 
 function targetUrl(): string {
@@ -183,6 +188,14 @@ async function main(): Promise<void> {
       migrationManifestHash: repository.migrationManifestHash,
       lastAppliedMigration: lastApplied,
     };
+    const targetIdentity = targetIdentityFingerprint({
+      environment,
+      provider: providerForHost(parsedUrl.hostname),
+      host: parsedUrl.hostname,
+      port: parsedUrl.port || "5432",
+      database: identity.database,
+      dbUser: identity.current_user,
+    });
 
     console.log(
       JSON.stringify(
@@ -241,6 +254,7 @@ async function main(): Promise<void> {
             unexpectedActiveMigrationNames: migrationHealth.unexpectedActiveMigrationNames,
             duplicateActiveNames: migrationHealth.duplicateActiveNames,
           },
+          targetIdentityFingerprint: targetIdentity,
           fingerprint: sha256(stableJson(fingerprintInput)),
           productionWrite: "NO",
         },
