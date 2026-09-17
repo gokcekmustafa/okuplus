@@ -997,19 +997,7 @@ export async function createAttempt(
             responseOrder === 1 ? isCorrect : (previousAttempts[0]?.isCorrect ?? null),
           finalResult: telemetry.finalResult,
         },
-        select: {
-          id: true,
-          questionVersionId: true,
-          questionId: true,
-          answer: true,
-          isCorrect: true,
-          rawScore: true,
-          timeSpentMs: true,
-          responseOrder: true,
-          feedback: true,
-          answeredAt: true,
-          createdAt: true,
-        },
+        select: ATTEMPT_RESULT_SELECT,
       });
     });
     if (timings) timings.persistenceMs = performance.now() - persistenceStartedAt;
@@ -1083,19 +1071,7 @@ export async function createAttempt(
         ) {
           const existing = await prisma.attempt.findUnique({
             where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
-            select: {
-              id: true,
-              questionVersionId: true,
-              questionId: true,
-              answer: true,
-              isCorrect: true,
-              rawScore: true,
-              timeSpentMs: true,
-              responseOrder: true,
-              feedback: true,
-              answeredAt: true,
-              createdAt: true,
-            },
+            select: ATTEMPT_RESULT_SELECT,
           });
           if (existing) {
             return {
