@@ -1,0 +1,140 @@
+name: Staging active migration set forensic
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Staging branch/ref to inspect
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-active-migration-set-forensic
+  cancel-in-progress: false
+
+jobs:
+  staging-active-migration-set-forensic:
+    name: Read active migration set from staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+      EXPECTED_STAGING_FINGERPRINT: 18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38
+    steps:
+      - name: Verify staging ref
+        shell: bash
+        env:
+          TARGET_REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          test "$TARGET_REF" = "staging"
+
+      - name: Checkout selected staging ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Fetch master metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin master:refs/remotes/origin/master
+
+      - name: Read staging active migration set
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APP_ENV" = "staging"
+          test "$NODE_ENV" = "test"
+          test "$DB_FINGERPRINT_ENVIRONMENT" = "STAGING"
+          test -n "$DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test "$DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT" = "$EXPECTED_STAGING_FINGERPRINT"
+
+          fingerprint_output="$RUNNER_TEMP/staging-active-migration-fingerprint.json"
+          fingerprint_error="$RUNNER_TEMP/staging-active-migration-fingerprint.err"
+          forensic_output="$RUNNER_TEMP/staging-active-migration-set.json"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging read-only fingerprint failed" >&2
+            exit 1
+          fi
+
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
+            FORENSIC_OUTPUT="$forensic_output" \
+            EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            npx tsx scripts/staging-active-migration-set-forensic.ts
+
+      - name: Publish sanitized active migration set summary
+        if: always()
+        shell: bash
+        env:
+          FORENSIC_OUTPUT: ${{ runner.temp }}/staging-active-migration-set.json
+        run: |
+          set -euo pipefail
+          if test ! -f "$FORENSIC_OUTPUT"; then
+            echo "## Staging active migration set forensic" >> "$GITHUB_STEP_SUMMARY"
+            echo "- readOnly: YES" >> "$GITHUB_STEP_SUMMARY"
+            echo "- result: NOT_AVAILABLE" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          SUMMARY_FILE="$FORENSIC_OUTPUT" node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(process.env.SUMMARY_FILE, "utf8"));
+          const list = (value) => JSON.stringify(Array.isArray(value) ? value : []);
+
+          console.log("## Staging active migration set forensic");
+          console.log("");
+          console.log(`- readOnly: ${report.readOnly}`);
+          console.log(`- targetEnvironment: ${report.targetEnvironment}`);
+          console.log(`- fingerprintStatus: ${report.fingerprintStatus}`);
+          console.log(`- databaseIdentityStatus: ${report.databaseIdentityStatus}`);
+          console.log(`- repositoryCount: ${report.repositoryCount}`);
+          console.log(`- activeAppliedCount: ${report.activeAppliedCount}`);
+          console.log(`- EXACT_ACTIVE_APPLIED_MIGRATIONS: ${list(report.activeAppliedNames)}`);
+          console.log(`- EXACT_EXTRA_ACTIVE_IN_DB: ${list(report.extraActiveInDb)}`);
+          console.log(`- EXACT_MISSING_FROM_DB: ${list(report.missingFromDb)}`);
+          console.log(`- EXACT_DUPLICATE_ACTIVE_NAMES: ${list(report.duplicateActiveNames)}`);
+          console.log(`- EXACT_UNRESOLVED_FAILED_NAMES: ${list(report.unresolvedFailedNames)}`);
+          console.log("");
+          console.log("### Extra active migration metadata");
+          console.log("");
+          if (report.extraActiveDetails.length === 0) {
+            console.log("NONE");
+          } else {
+            for (const detail of report.extraActiveDetails) console.log(`- ${JSON.stringify(detail)}`);
+          }
+          NODE
+
+      - name: Upload sanitized active migration set artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-active-migration-set
+          path: ${{ runner.temp }}/staging-active-migration-set.json
+          if-no-files-found: warn
