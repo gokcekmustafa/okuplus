@@ -30,6 +30,8 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('"/student/progress"');
     expect(script).toContain('"/student/history?page=1&pageSize=5"');
     expect(script).toContain('productionStateChanged: "NO"');
+    expect(script).toContain("pageErrorMessages");
+    expect(script).toContain("sanitizePageError");
     expect(script).not.toContain("/student/questions/");
     expect(script).not.toContain("/complete");
     expect(script).not.toContain("prisma");
