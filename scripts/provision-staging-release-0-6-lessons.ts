@@ -11,7 +11,7 @@ const SYNTHETIC_REVIEWER_EMAIL = "okuplus.release06.staging.reviewer@synthetic.i
 const OPERATOR_PATH = "/internal/staging/super-admin/session";
 const OPERATOR_ID = "01a08604-8779-7791-b409-3c2b1def2623";
 
-type LessonSpec = {
+export type LessonSpec = {
   key: string;
   family: string;
   skillCode: string;
@@ -283,6 +283,38 @@ type Template = {
 
 type ResumableVersion = { id: string; status: string };
 
+export type PublishedLessonVersionSnapshot = {
+  title: string;
+  body: string;
+  license: string | null;
+  changelog: string | null;
+  metadata: unknown;
+};
+
+export function publishedLessonNeedsRebind(metadata: unknown, templateVersionId: string): boolean {
+  return parseLessonMetadata(metadata)?.exerciseTemplateVersionId !== templateVersionId;
+}
+
+export function buildPublishedLessonReplacementInput(
+  snapshot: PublishedLessonVersionSnapshot,
+  spec: LessonSpec,
+  templateVersionId: string,
+): {
+  title: string;
+  body: string;
+  license: string;
+  changelog: string;
+  metadata: LessonMetadata;
+} {
+  return {
+    title: snapshot.title,
+    body: snapshot.body,
+    license: snapshot.license ?? "OKU+ INTERNAL PILOT",
+    changelog: "Release 0.6 template binding reconciliation",
+    metadata: expectedMetadata(spec, templateVersionId),
+  };
+}
+
 export function selectResumableVersion(
   current: ResumableVersion | null,
   versions: ResumableVersion[],
@@ -380,12 +412,12 @@ async function ensurePublishedLesson(
   reviewer: Session,
   spec: LessonSpec,
   templateVersionId: string,
-): Promise<"CREATED" | "NOOP" | "RESUMED"> {
+): Promise<"CREATED" | "NOOP" | "RESUMED" | "REPAIRED"> {
   const title = `Release 0.6 · ${spec.title}`;
   const existing = await findExactContent(origin, operator, title);
   let contentId: string;
   let versionId: string;
-  let action: "CREATED" | "NOOP" | "RESUMED" = "CREATED";
+  let action: "CREATED" | "NOOP" | "RESUMED" | "REPAIRED" = "CREATED";
 
   if (!existing) {
     const content = await api<{ id: string }>(origin, "/admin/contents", {
@@ -427,34 +459,80 @@ async function ensurePublishedLesson(
       currentVersion: { id: string; status: string } | null;
     }>(origin, `/admin/contents/${contentId}`, { headers: operator.headers });
     const current = detail.currentVersion;
-    const versions = current
-      ? []
-      : await api<Array<{ id: string; status: string }>>(
-          origin,
-          `/admin/contents/${contentId}/versions`,
-          { headers: operator.headers },
-        );
-    versionId = selectResumableVersion(current, versions, spec.key).id;
     if (current?.status === "PUBLISHED" && detail.status === "PUBLISHED") {
-      const version = await api<{ metadata: unknown }>(
+      const currentVersion = await api<PublishedLessonVersionSnapshot & { status: string }>(
         origin,
-        `/admin/content-versions/${versionId}`,
+        `/admin/content-versions/${current.id}`,
         { headers: operator.headers },
       );
-      const metadata = parseLessonMetadata(version.metadata);
-      if (metadata?.exerciseTemplateVersionId !== templateVersionId) {
-        fail(`${spec.key} mevcut published lesson yanlış template version kullanıyor`);
+      if (!publishedLessonNeedsRebind(currentVersion.metadata, templateVersionId)) {
+        return "NOOP";
       }
-      return "NOOP";
+
+      const versions = await api<Array<{ id: string; status: string }>>(
+        origin,
+        `/admin/contents/${contentId}/versions`,
+        { headers: operator.headers },
+      );
+      const otherPublishedVersions = versions.filter(
+        (version) => version.status === "PUBLISHED" && version.id !== current.id,
+      );
+      if (otherPublishedVersions.length > 0) {
+        fail(`${spec.key} published lesson current version durumu belirsiz`);
+      }
+
+      const resumableCandidates = await Promise.all(
+        versions
+          .filter((version) => ["DRAFT", "REVIEW", "APPROVED"].includes(version.status))
+          .map(async (version) => ({
+            version,
+            detail: await api<PublishedLessonVersionSnapshot & { status: string }>(
+              origin,
+              `/admin/content-versions/${version.id}`,
+              { headers: operator.headers },
+            ),
+          })),
+      );
+      const matchingCandidates = resumableCandidates.filter(
+        ({ detail: candidate }) =>
+          !publishedLessonNeedsRebind(candidate.metadata, templateVersionId),
+      );
+      if (matchingCandidates.length > 1) {
+        fail(`${spec.key} published lesson için birden fazla onarılabilir sürüm bulundu`);
+      }
+      if (matchingCandidates.length === 1) {
+        versionId = matchingCandidates[0]!.version.id;
+        action = "RESUMED";
+      } else {
+        const replacement = await api<{ id: string }>(
+          origin,
+          `/admin/contents/${contentId}/versions`,
+          {
+            method: "POST",
+            headers: operator.headers,
+            body: body(
+              buildPublishedLessonReplacementInput(currentVersion, spec, templateVersionId),
+            ),
+          },
+        );
+        versionId = replacement.id;
+        action = "REPAIRED";
+      }
+    } else {
+      const versions = await api<Array<{ id: string; status: string }>>(
+        origin,
+        `/admin/contents/${contentId}/versions`,
+        { headers: operator.headers },
+      );
+      versionId = selectResumableVersion(current, versions, spec.key).id;
+      action = "RESUMED";
     }
-    action = "RESUMED";
     const version = await api<{ metadata: unknown }>(
       origin,
       `/admin/content-versions/${versionId}`,
       { headers: operator.headers },
     );
-    const metadata = parseLessonMetadata(version.metadata);
-    if (!metadata || metadata.exerciseTemplateVersionId !== templateVersionId) {
+    if (publishedLessonNeedsRebind(version.metadata, templateVersionId)) {
       fail(`${spec.key} mevcut partial lesson metadata contract ile eşleşmiyor`);
     }
   }

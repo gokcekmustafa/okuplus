@@ -805,22 +805,66 @@ export async function publishContentVersion(
   actor: ContentMutationActor,
 ): Promise<ContentVersionDetail> {
   const result = await withTenantContext(actor, async (tx) => {
+    const target = await tx.contentVersion.findUnique({
+      where: { id },
+      select: { contentId: true },
+    });
+    if (!target) throw notFoundError("İçerik sürümü bulunamadı");
+
+    // Parent row'u kilitlemek, aynı içeriğin iki eşzamanlı publish isteğinin
+    // aynı APPROVED snapshot'ını görüp ikisinin de başarılı olmasını engeller.
+    // PUBLISHED sürümler immutable kaldığı için bu kilit yalnız pointer/lifecycle
+    // geçişinin atomikliğini korur.
+    const lockedContent = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "Content"
+      WHERE "id" = ${target.contentId}
+        AND "deletedAt" IS NULL
+      FOR UPDATE
+    `;
+    if (lockedContent.length === 0) throw notFoundError("İçerik sürümü bulunamadı");
+
     const existing = await tx.contentVersion.findUnique({
       where: { id },
       select: {
         id: true,
         contentId: true,
         status: true,
-        content: { select: { id: true, tenantId: true, status: true } },
+        content: {
+          select: {
+            id: true,
+            tenantId: true,
+            status: true,
+            currentVersionId: true,
+            currentVersion: { select: { id: true, status: true } },
+          },
+        },
       },
     });
     if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
     if (existing.status === "PUBLISHED") throw validationError("Sürüm zaten yayınlanmış");
     assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
-    if (existing.content.status !== "APPROVED") {
+    const parentAlreadyPublished = existing.content.status === "PUBLISHED";
+    if (existing.content.status !== "APPROVED" && !parentAlreadyPublished) {
       throw validationError(
         "İçerik sürümü yayınlanmadan önce parent içerik APPROVED durumunda olmalıdır",
       );
+    }
+    if (
+      parentAlreadyPublished &&
+      (existing.content.currentVersionId === null ||
+        existing.content.currentVersion?.id !== existing.content.currentVersionId ||
+        existing.content.currentVersion.status !== "PUBLISHED")
+    ) {
+      throw validationError("Yayınlanmış içerik current sürümüyle tutarlı değil");
+    }
+    if (!parentAlreadyPublished) {
+      const publishedCount = await tx.contentVersion.count({
+        where: { contentId: existing.contentId, status: "PUBLISHED" },
+      });
+      if (publishedCount > 0) {
+        throw validationError("Yayınlanmış içerik current sürümüyle tutarlı değil");
+      }
     }
     await tx.contentVersion.update({
       where: { id },
