@@ -133,6 +133,7 @@ const VERSION_DETAIL_SELECT = {
   license: true,
   changelog: true,
   readabilityScore: true,
+  metadata: true,
 } satisfies Prisma.ContentVersionSelect;
 
 export interface ContentListItem {
@@ -220,6 +221,7 @@ export interface ContentVersionDetail extends ContentVersionSummary {
   license: string | null;
   changelog: string | null;
   readabilityScore: number | null;
+  metadata: Prisma.JsonValue | null;
 }
 
 export interface ContentAuditEntry {
@@ -648,6 +650,7 @@ export async function createContentVersion(
         wordCount: computeWordCount(input.body),
         license: input.license ?? null,
         changelog: input.changelog ?? null,
+        metadata: toMetadataInput(input.metadata),
         status: "DRAFT",
         createdById: actor.userId,
       },
@@ -698,6 +701,7 @@ export async function updateContentVersion(
     }
     if (input.license !== undefined) data.license = input.license;
     if (input.changelog !== undefined) data.changelog = input.changelog;
+    if (input.metadata !== undefined) data.metadata = toMetadataInput(input.metadata);
     if (Object.keys(data).length === 0) return;
     await tx.contentVersion.update({ where: { id }, data });
     await writeLifecycleAudit(
@@ -1416,6 +1420,7 @@ function toContentVersionDetail(row: {
   license: string | null;
   changelog: string | null;
   readabilityScore: number | null;
+  metadata: Prisma.JsonValue | null;
 }): ContentVersionDetail {
   return {
     ...toContentVersionSummary(row),
@@ -1423,6 +1428,7 @@ function toContentVersionDetail(row: {
     license: row.license,
     changelog: row.changelog,
     readabilityScore: row.readabilityScore,
+    metadata: row.metadata,
   };
 }
 

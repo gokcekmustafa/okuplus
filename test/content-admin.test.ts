@@ -870,6 +870,38 @@ describe("content admin", () => {
     expect(content.currentVersionNumber).toBe(1);
   });
 
+  it("ContentVersion lesson metadata lifecycle boyunca korunur", async () => {
+    const created = await createContentViaApi({
+      type: "PASSAGE",
+      title: "Release 0.6 metadata contract",
+      difficulty: 0.25,
+    });
+    const metadata = {
+      lessonType: "LEARNING_LESSON",
+      contractVersion: 1,
+      skillCode: "RC_MAIN_IDEA",
+      objective: "Ana düşünceyi bulmak",
+      explanation: "Ayrıntıları ortak mesajla karşılaştır.",
+      workedExample: "Örnek metindeki tekrarları karşılaştır.",
+      guidedPractice: "Şimdi ortak mesajı seç.",
+      exerciseTemplateVersionId: "template-version-release-0-6",
+      completionLabel: "Dersi tamamladım",
+    };
+    const version = await createVersionViaApi(created.id, {
+      body: "Release 0.6 metadata test metni.",
+      metadata,
+    });
+
+    expect(version.metadata).toEqual(metadata);
+    const readBack = await app.inject({
+      method: "GET",
+      url: `/admin/content-versions/${version.id}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(readBack.statusCode).toBe(200);
+    expect(readBack.json().data.metadata).toEqual(metadata);
+  });
+
   it("Yayınlanmış sürüm yeniden yayınlanamaz: 400", async () => {
     const created = await createContentViaApi({
       type: "PASSAGE",
