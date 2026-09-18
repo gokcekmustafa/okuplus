@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  evaluateCurrentMigrationHealth,
   graphIsExact,
   planVersionRecovery,
   runtimeCandidateIsEligible,
@@ -71,6 +72,67 @@ const partialPublished = makeVersion(1, "PUBLISHED", null);
 const validDraft = makeVersion(2, "DRAFT");
 
 describe("runtime exercise provisioner identity", () => {
+  it("treats a rolled-back sibling with an active applied record as healthy", () => {
+    const result = evaluateCurrentMigrationHealth(
+      ["20260907160000_target"],
+      [
+        {
+          migration_name: "20260907160000_target",
+          finished_at: null,
+          rolled_back_at: new Date("2026-09-16T08:02:10.212Z"),
+        },
+        {
+          migration_name: "20260907160000_target",
+          finished_at: new Date("2026-09-16T08:05:00.000Z"),
+          rolled_back_at: null,
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      activeAppliedNames: ["20260907160000_target"],
+      pendingMigrations: [],
+      unresolvedFailedMigrations: [],
+      healthy: true,
+    });
+  });
+
+  it("fails closed for a rolled-back-only migration or an unresolved failure", () => {
+    expect(
+      evaluateCurrentMigrationHealth(
+        ["20260907160000_target"],
+        [
+          {
+            migration_name: "20260907160000_target",
+            finished_at: null,
+            rolled_back_at: new Date("2026-09-16T08:02:10.212Z"),
+          },
+        ],
+      ),
+    ).toMatchObject({
+      pendingMigrations: ["20260907160000_target"],
+      unresolvedFailedMigrations: [],
+      healthy: false,
+    });
+
+    expect(
+      evaluateCurrentMigrationHealth(
+        [],
+        [
+          {
+            migration_name: "unexpected",
+            finished_at: null,
+            rolled_back_at: null,
+          },
+        ],
+      ),
+    ).toMatchObject({
+      pendingMigrations: [],
+      unresolvedFailedMigrations: ["unexpected"],
+      healthy: false,
+    });
+  });
+
   it("uses the parent stableFixtureIdentity and version contract fields", async () => {
     const source = await readFile(provisionerPath, "utf8");
 
