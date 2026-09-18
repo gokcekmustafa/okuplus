@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, validationError } from "../../lib/errors.js";
+import { configuredStagingE2EPremiumEmails } from "../../config/env.js";
 import {
   calendarDateKey,
   calendarDayBounds,
@@ -226,11 +227,13 @@ async function hasStagingE2EPremiumEntitlement(
   actor: EntitlementActor,
   client: EntitlementDb,
 ): Promise<boolean> {
-  const configuredEmail = process.env.STAGING_E2E_PREMIUM_EMAIL?.trim().toLowerCase();
+  const configuredEmails = configuredStagingE2EPremiumEmails({
+    emailList: process.env.STAGING_E2E_PREMIUM_EMAILS,
+    legacyEmail: process.env.STAGING_E2E_PREMIUM_EMAIL,
+  });
   if (
     process.env.APP_ENV !== "staging" ||
-    !configuredEmail ||
-    !/^[^@\s]+@[^@\s]+\.invalid$/u.test(configuredEmail) ||
+    configuredEmails.length === 0 ||
     actor.platformRole !== null
   ) {
     return false;
@@ -242,7 +245,7 @@ async function hasStagingE2EPremiumEntitlement(
   return (
     user?.status === "ACTIVE" &&
     user.deletedAt === null &&
-    user.email?.trim().toLowerCase() === configuredEmail
+    configuredEmails.includes(user.email?.trim().toLowerCase() ?? "")
   );
 }
 

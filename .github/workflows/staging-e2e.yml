@@ -2,6 +2,12 @@ name: Staging authenticated E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      student_email:
+        description: "Optional .invalid synthetic student email; defaults to vars.STAGING_STUDENT_EMAIL"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -15,8 +21,7 @@ jobs:
       APP_ENV: staging
       NODE_ENV: test
       BASE_URL: ${{ vars.BASE_URL }}
-      STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
-      STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
+      STAGING_STUDENT_EMAIL: ${{ inputs.student_email || vars.STAGING_STUDENT_EMAIL }}
       STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
       E2E_ARTIFACT_DIR: .e2e-output
     steps:
@@ -51,8 +56,8 @@ jobs:
           }
           if (!process.env.STAGING_STUDENT_EMAIL?.trim()) throw new Error("STAGING_STUDENT_EMAIL is not configured");
           if (!process.env.STAGING_STUDENT_PASSWORD) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
-          if (process.env.STAGING_E2E_PREMIUM_EMAIL?.trim().toLowerCase() !== process.env.STAGING_STUDENT_EMAIL.trim().toLowerCase()) {
-            throw new Error("staging synthetic entitlement identity is not aligned");
+          if (!/^[^@\s]+@[^@\s]+\.invalid$/u.test(process.env.STAGING_STUDENT_EMAIL.trim().toLowerCase())) {
+            throw new Error("STAGING_STUDENT_EMAIL must be a .invalid synthetic email");
           }
           console.log("staging configuration=present");
           NODE
