@@ -37,6 +37,9 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("!hadRetryPending");
     expect(runnerSource).toContain("questionAttempts.length === 1");
     expect(runnerSource).toContain("-retry");
+    expect(runnerSource).toContain("!candidate.attemptedQuestionIds.has(entry.questionVersionId)");
+    expect(runnerSource).toContain("!entry.attemptedQuestionIds.has(question.questionVersionId)");
+    expect(runnerSource).toContain("ilk yanlış cevap UI doğrulaması için yeni fixture gerekir");
   });
 
   it("waits for the requested question and retries a promoted daily item", () => {
