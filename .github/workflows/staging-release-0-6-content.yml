@@ -7,6 +7,10 @@ on:
         description: "Type PUBLISH to authorize the staging-only official lifecycle"
         required: true
         type: string
+      confirm_hint_repair:
+        description: "Type APPLY to repair missing staging runtime hints through the official question lifecycle"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ jobs:
       STAGING_OPERATOR_AUTH_SECRET: ${{ secrets.STAGING_OPERATOR_AUTH_SECRET }}
       STAGING_SYNTHETIC_REVIEWER_PASSWORD: ${{ secrets.STAGING_SYNTHETIC_REVIEWER_PASSWORD }}
       RELEASE_0_6_CONTENT_CONFIRM: ${{ inputs.confirm_publish }}
+      STAGING_RUNTIME_HINT_REPAIR_CONFIRM: ${{ inputs.confirm_hint_repair }}
     steps:
       - name: Checkout selected staging ref
         uses: actions/checkout@v4
@@ -46,6 +51,12 @@ jobs:
 
       - name: Provision synthetic content reviewer
         run: npx tsx scripts/provision-staging-synthetic-content-reviewer.ts --apply
+
+      - name: Repair missing runtime hints through official question lifecycle
+        run: npx tsx scripts/provision-staging-runtime-question-hints.ts --apply
+
+      - name: Reconcile staging runtime graphs
+        run: npx tsx scripts/provision-staging-runtime-exercise-graphs.ts --apply
 
       - name: Publish six lessons through official lifecycle
         run: npx tsx scripts/provision-staging-release-0-6-lessons.ts --apply
