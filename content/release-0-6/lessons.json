@@ -1,0 +1,74 @@
+[
+  {
+    "key": "attention-burst",
+    "family": "ATTENTION_BURST",
+    "skillCode": "FAST_ATTENTION",
+    "title": "Dikkati metne sabitle",
+    "body": "Bir metni hızlı okurken önce bütün kelimelere aynı ağırlığı vermek yerine anahtar sözcükleri fark etmek gerekir. Başlık, ilk cümle ve tekrar eden ifadeler dikkatin nereye yönelmesi gerektiğini gösterir.",
+    "objective": "Kısa bir metinde dikkat edilmesi gereken anahtar ifadeleri hızlıca fark etmek.",
+    "explanation": "Önce başlığa ve ilk cümleye bak. Ardından tekrar eden ya da anlamı değiştiren sözcükleri işaretle. Böylece metnin önemli noktalarına daha az sürede odaklanırsın.",
+    "workedExample": "“Arılar çiçekten çiçeğe konarak polen taşır.” cümlesinde dikkat edilmesi gereken ifadeler “arılar”, “çiçekten çiçeğe” ve “polen taşır” sözleridir; bunlar eylemi ve aktörü birlikte gösterir.",
+    "guidedPractice": "Kısa metni okumadan önce başlığa bak ve sana konuyu haber veren iki sözcüğü seç.",
+    "completionLabel": "Dikkat dersini tamamladım"
+  },
+  {
+    "key": "rapid-recognition",
+    "family": "RAPID_RECOGNITION",
+    "skillCode": "FAST_RECOGNITION",
+    "title": "Bilgiyi hızlı tanı",
+    "body": "Hızlı okumada her cümleyi yeniden çözmek yerine tanıdığın yapı ve sözcükleri bir bütün olarak görmeye çalışırsın. Bu, gözün metin üzerinde gereksiz duraklamalarını azaltır.",
+    "objective": "Tanıdık ifade ve bilgi kümelerini tek tek sözcükler yerine anlamlı bütünler olarak görmek.",
+    "explanation": "Bir ifadeyi daha önce gördüğün anlamlı bir öbek olarak tanıdığında okuma akışın hızlanır. Öbeğin her kelimesine ayrı ayrı dönmek yerine cümlenin görevini yakala.",
+    "workedExample": "“yağmurdan sonra gökkuşağı” söz öbeğini üç ayrı kelime olarak değil, tek bir görüntüyü anlatan anlamlı bir bütün olarak tanıyabilirsin.",
+    "guidedPractice": "Cümlede birlikte anlam taşıyan iki ya da üç sözcüğü tek bakışta bir öbek olarak fark et.",
+    "completionLabel": "Hızlı tanıma dersini tamamladım"
+  },
+  {
+    "key": "phrase-chunking",
+    "family": "PHRASE_CHUNKING",
+    "skillCode": "FAST_CHUNKING",
+    "title": "Cümleyi anlam öbeklerine ayır",
+    "body": "Uzun bir cümleyi kelime kelime okumak çalışma belleğini gereksiz yere yorar. Cümleyi anlam taşıyan küçük öbeklere ayırmak, ilişkileri daha hızlı kurmana yardım eder.",
+    "objective": "Bir cümledeki anlam öbeklerini ayırarak okuma akışını düzenlemek.",
+    "explanation": "Özne, eylem ve eylemin nesnesi çoğu cümlede ayrı anlam öbekleri oluşturur. Noktalama işaretleri ve bağlaçlar da öbek sınırlarını fark etmene yardımcı olur.",
+    "workedExample": "“Sessiz kütüphanede / araştırmacılar / eski haritaları inceliyordu.” cümlesinde yer, özne ve eylem öbeklerini ayırmak anlamı kolaylaştırır.",
+    "guidedPractice": "Bir cümledeki sözcükleri tek tek değil, birlikte anlam taşıyan iki veya üç öbek halinde gör.",
+    "completionLabel": "Anlam öbekleri dersini tamamladım"
+  },
+  {
+    "key": "main-idea",
+    "family": "MAIN_IDEA",
+    "skillCode": "RC_MAIN_IDEA",
+    "title": "Ana düşünceyi bul",
+    "body": "Bir paragrafın ana düşüncesi, yazarın bütün cümlelerle vermek istediği temel mesajdır. Ayrıntılar bu mesajı açıklar, örnekler veya destekler.",
+    "objective": "Paragrafın ayrıntılarından yola çıkarak yazarın temel mesajını belirlemek.",
+    "explanation": "Kendine “Bu paragraf en çok neyi anlatıyor?” diye sor. Tek bir örneği ana düşünce sanma; örneklerin ortak yönünü ve sonuç cümlesini karşılaştır.",
+    "workedExample": "Bir paragraf farklı şehirlerdeki bisiklet yollarını anlatıyorsa ana düşünce tek bir şehrin yolu değil, bisiklet yollarının şehir yaşamına katkısı olabilir.",
+    "guidedPractice": "Paragraftaki iki ayrıntıyı birleştir ve ikisini de kapsayan tek bir cümle kur.",
+    "completionLabel": "Ana düşünce dersini tamamladım"
+  },
+  {
+    "key": "detail-evidence",
+    "family": "DETAIL_EVIDENCE",
+    "skillCode": "RC_DETAIL",
+    "title": "Ayrıntıyı kanıtla eşleştir",
+    "body": "Bir sorunun doğru yanıtını seçerken yalnızca metinde geçen bir sözcüğü aramak yeterli değildir. Yanıtın metindeki hangi cümleyle desteklendiğini gösterebilmelisin.",
+    "objective": "Bir bilgiyi metindeki doğrudan kanıtıyla eşleştirmek.",
+    "explanation": "Önce sorunun istediği bilgi türünü belirle. Sonra metinde bu bilgiyi açıkça veren cümleyi bul ve seçenekle karşılaştır. Metinde olmayan bir sonucu ekleme.",
+    "workedExample": "Metin “fidanlar ilkbaharda dikildi” diyorsa “dikim mevsimi ilkbahardı” seçeneği doğrudan kanıtlanır; “fidanlar hızlı büyüdü” seçeneği ise metinde desteklenmiyorsa seçilmez.",
+    "guidedPractice": "Bir seçeneği seçmeden önce onu destekleyen cümleyi metinde parmağınla ya da gözünle göster.",
+    "completionLabel": "Kanıt bulma dersini tamamladım"
+  },
+  {
+    "key": "inference",
+    "family": "INFERENCE",
+    "skillCode": "RC_INFERENCE",
+    "title": "Metinden çıkarım yap",
+    "body": "Çıkarım, metinde doğrudan yazmayan fakat verilen bilgiler birlikte düşünüldüğünde güçlü biçimde ulaşılabilen sonuçtur. İyi çıkarım metne dayanır; kişisel tahmin eklemez.",
+    "objective": "İki veya daha fazla metin ipucunu birleştirerek desteklenen bir sonuç çıkarmak.",
+    "explanation": "Önce metindeki ipuçlarını yaz. Ardından bu ipuçlarının birlikte zorunlu ya da güçlü biçimde gösterdiği sonucu seç. Metnin dışında kalan bilgileri kanıt gibi kullanma.",
+    "workedExample": "“Deniz kenarında bulutlar koyulaştı ve insanlar şemsiyelerini açtı.” cümlelerinden yağmurun başladığı çıkarılabilir; fakat yağmurun ne kadar süreceği çıkarılamaz.",
+    "guidedPractice": "İki ipucunu birleştirerek yalnızca metnin desteklediği sonucu bir cümleyle ifade et.",
+    "completionLabel": "Çıkarım dersini tamamladım"
+  }
+]

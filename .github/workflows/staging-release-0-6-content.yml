@@ -1,0 +1,60 @@
+name: Release 0.6 staging lesson lifecycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_publish:
+        description: "Type PUBLISH to authorize the staging-only official lifecycle"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish-release-0-6-lessons:
+    name: Publish Release 0.6 lessons to staging
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      BASE_URL: ${{ vars.BASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+      STAGING_OPERATOR_AUTH_SECRET: ${{ secrets.STAGING_OPERATOR_AUTH_SECRET }}
+      STAGING_SYNTHETIC_REVIEWER_PASSWORD: ${{ secrets.STAGING_SYNTHETIC_REVIEWER_PASSWORD }}
+      RELEASE_0_6_CONTENT_CONFIRM: ${{ inputs.confirm_publish }}
+    steps:
+      - name: Checkout selected staging ref
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Publish six lessons through official lifecycle
+        run: npx tsx scripts/provision-staging-release-0-6-lessons.ts --apply
+
+      - name: Write sanitized summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Release 0.6 staging lesson lifecycle'
+            echo
+            echo '- environment: STAGING'
+            echo '- lifecycle: DRAFT → REVIEW → APPROVED → PUBLISHED'
+            echo '- database writes: official content lifecycle endpoints only'
+            echo '- production touched: NO'
+          } >> "$GITHUB_STEP_SUMMARY"

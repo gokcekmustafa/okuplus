@@ -131,6 +131,7 @@ export const createContentVersionSchema = z.object({
   body: bodySchema,
   license: licenseSchema,
   changelog: changelogSchema,
+  metadata: metadataSchema,
 });
 
 /** İçerik sürümü güncelleme gövdesi (yalnızca DRAFT/REVIEW; PUBLISHED immutable). */
@@ -139,6 +140,7 @@ export const updateContentVersionSchema = z.object({
   body: bodySchema.optional(),
   license: licenseSchema,
   changelog: changelogSchema,
+  metadata: metadataSchema,
 });
 
 /** İçeriğe beceri bağlama gövdesi (tam değiştirme). */
