@@ -251,7 +251,7 @@ describe("content admin", () => {
       ],
     });
 
-    app = await buildApp(loadEnv());
+    app = await buildApp(loadEnv({ RATE_LIMIT_MAX: "1000" }));
     await app.ready();
   });
 
