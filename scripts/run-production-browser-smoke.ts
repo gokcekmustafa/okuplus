@@ -22,6 +22,7 @@ type DomainReport = {
   logout: "PASS" | "FAIL";
   consoleErrors: number;
   pageErrors: number;
+  pageErrorMessages: string[];
   failedRequests: number;
   httpErrors: number;
   blockedMutations: number;
@@ -36,6 +37,14 @@ type SmokeReport = {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 240) : "Browser smoke failed";
+}
+
+function sanitizePageError(error: Error): string {
+  return `${error.name}: ${error.message}`
+    .replace(/https?:\/\/[^\s"'<>]+/giu, "[url]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[email]")
+    .replace(/\b(?:bearer|token|password|secret|cookie)\s*[:=]?\s+[^\s,;]+/giu, "$1=[redacted]")
+    .slice(0, 240);
 }
 
 function requireCredentials(): { email: string; password: string } {
@@ -74,6 +83,7 @@ async function runDomain(
     logout: "FAIL",
     consoleErrors: 0,
     pageErrors: 0,
+    pageErrorMessages: [],
     failedRequests: 0,
     httpErrors: 0,
     blockedMutations: 0,
@@ -85,8 +95,11 @@ async function runDomain(
     page.on("console", (message) => {
       if (message.type() === "error") report.consoleErrors += 1;
     });
-    page.on("pageerror", () => {
+    page.on("pageerror", (error) => {
       report.pageErrors += 1;
+      if (report.pageErrorMessages.length < 5) {
+        report.pageErrorMessages.push(sanitizePageError(error));
+      }
     });
     page.on("requestfailed", () => {
       report.failedRequests += 1;
