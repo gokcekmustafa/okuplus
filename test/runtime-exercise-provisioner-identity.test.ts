@@ -69,6 +69,10 @@ function makeVersion(
 
 const exactPublished = makeVersion(2);
 const partialPublished = makeVersion(1, "PUBLISHED", null);
+const stalePublished = {
+  ...makeVersion(1),
+  questions: [{ ...makeVersion(1).questions[0], questionVersionId: "old-question-version" }],
+};
 const validDraft = makeVersion(2, "DRAFT");
 
 describe("runtime exercise provisioner identity", () => {
@@ -169,6 +173,18 @@ describe("runtime exercise provisioner identity", () => {
     expect(result).toEqual({ kind: "CREATE", nextVersion: 2 });
     expect(partialPublished.status).toBe("PUBLISHED");
     expect(partialPublished.config).toBeNull();
+  });
+
+  it("creates a new version after a stale published runtime version", () => {
+    const result = planVersionRecovery(
+      template,
+      [stalePublished],
+      attentionSpec,
+      contentVersionIds,
+      questionVersionIds,
+    );
+
+    expect(result).toEqual({ kind: "CREATE", nextVersion: 2 });
   });
 
   it("resumes one existing DRAFT version", () => {

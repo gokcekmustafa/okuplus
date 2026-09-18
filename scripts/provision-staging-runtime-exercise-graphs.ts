@@ -657,6 +657,10 @@ function isKnownImmutablePartial(version: TemplateVersionDetail): boolean {
   return version.version === 1 && version.status === "PUBLISHED" && version.config === null;
 }
 
+function isPublishedRuntimeVersion(version: TemplateVersionDetail, spec: FamilySpec): boolean {
+  return version.status === "PUBLISHED" && configMatchesSpec(version.config, spec);
+}
+
 export function planVersionRecovery(
   template: TemplateDetail,
   versions: TemplateVersionDetail[],
@@ -682,7 +686,8 @@ export function planVersionRecovery(
     (version) =>
       !isKnownImmutablePartial(version) &&
       version.status !== "DRAFT" &&
-      !exactPublished.includes(version),
+      !exactPublished.includes(version) &&
+      !isPublishedRuntimeVersion(version, spec),
   );
   if (unsupportedVersions.length > 0) {
     fail(`${spec.family} için exact olmayan non-DRAFT version bulundu`);
