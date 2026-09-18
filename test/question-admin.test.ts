@@ -352,6 +352,47 @@ describe("question admin", () => {
     expect(v2.json().data.version).toBe(2);
   });
 
+  it("yayınlanmış parent altında onaylı yeni soru sürümü yayınlanır", async () => {
+    const question = await createQuestion("MULTIPLE_CHOICE", 92);
+    const firstVersion = question.versions[0];
+    const firstPublished = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${firstVersion.id}/publish`,
+      headers: await adminHeaders(),
+    });
+    expect(firstPublished.statusCode).toBe(200);
+
+    const nextVersion = await app.inject({
+      method: "POST",
+      url: `/admin/questions/${question.id}/versions`,
+      headers: await adminHeaders(),
+      payload: { hint: "Yeni ipucu" },
+    });
+    expect(nextVersion.statusCode).toBe(200);
+    const nextVersionId = nextVersion.json().data.id as string;
+    await prisma.questionVersion.update({
+      where: { id: nextVersionId },
+      data: { status: "APPROVED" },
+    });
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${nextVersionId}/publish`,
+      headers: await adminHeaders(),
+    });
+    expect(published.statusCode).toBe(200);
+
+    const versions = await app.inject({
+      method: "GET",
+      url: `/admin/questions/${question.id}/versions`,
+      headers: await adminHeaders(),
+    });
+    expect(versions.statusCode).toBe(200);
+    const versionRows = versions.json().data as Array<{ id: string; status: string }>;
+    expect(versionRows.find((version) => version.id === firstVersion.id)?.status).toBe("PUBLISHED");
+    expect(versionRows.find((version) => version.id === nextVersionId)?.status).toBe("PUBLISHED");
+  });
+
   it("sıralama transaction ile güncellenir, çakışma ve cross-tenant ilişki engellenir", async () => {
     const rows = (
       await app.inject({

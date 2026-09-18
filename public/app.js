@@ -8456,7 +8456,8 @@ async function loadExercisePage() {
       const persistedDaily = restoreDailyTrainingState();
       if (!dailyTrainingSessionId && persistedDaily?.id) dailyTrainingSessionId = persistedDaily.id;
       let dailySession = dailyTrainingSummary;
-      if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
+      if (!dailySession && dailyTrainingSessionId)
+        dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
       if (dailySession) dailyTrainingSummary = dailySession;
       if (dailySession) $("exercise-gp").textContent = "⭐ — GP";
