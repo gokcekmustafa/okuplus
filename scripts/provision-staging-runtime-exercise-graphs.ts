@@ -318,6 +318,45 @@ async function assertDatabaseSafety(prisma: PrismaClient, rawUrl: string): Promi
   return actual;
 }
 
+export type MigrationHistoryRow = {
+  migration_name: string;
+  finished_at: Date | null;
+  rolled_back_at: Date | null;
+};
+
+export type MigrationHealth = {
+  activeAppliedNames: string[];
+  pendingMigrations: string[];
+  unresolvedFailedMigrations: string[];
+  healthy: boolean;
+};
+
+export function evaluateCurrentMigrationHealth(
+  repositoryNames: string[],
+  rows: MigrationHistoryRow[],
+): MigrationHealth {
+  const activeAppliedNames = [
+    ...new Set(
+      rows
+        .filter((row) => row.finished_at !== null && row.rolled_back_at === null)
+        .map((row) => row.migration_name),
+    ),
+  ].sort();
+  const activeApplied = new Set(activeAppliedNames);
+  const pendingMigrations = repositoryNames.filter((name) => !activeApplied.has(name)).sort();
+  const unresolvedFailedMigrations = rows
+    .filter((row) => row.finished_at === null && row.rolled_back_at === null)
+    .map((row) => row.migration_name)
+    .sort();
+
+  return {
+    activeAppliedNames,
+    pendingMigrations,
+    unresolvedFailedMigrations,
+    healthy: pendingMigrations.length === 0 && unresolvedFailedMigrations.length === 0,
+  };
+}
+
 async function assertCurrentMigrations(prisma: PrismaClient): Promise<void> {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const migrationRoot = resolve(repoRoot, "prisma", "migrations");
@@ -325,21 +364,13 @@ async function assertCurrentMigrations(prisma: PrismaClient): Promise<void> {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
-  const rows = await prisma.$queryRaw<
-    Array<{ migration_name: string; finished_at: Date | null; rolled_back_at: Date | null }>
-  >(Prisma.sql`
+  const rows = await prisma.$queryRaw<MigrationHistoryRow[]>(Prisma.sql`
     SELECT migration_name, finished_at, rolled_back_at
     FROM public."_prisma_migrations"
     ORDER BY started_at
   `);
-  const applied = new Set(
-    rows
-      .filter((row) => row.finished_at !== null && row.rolled_back_at === null)
-      .map((row) => row.migration_name),
-  );
-  const failed = rows.filter((row) => row.rolled_back_at !== null || row.finished_at === null);
-  const pending = repositoryNames.filter((name) => !applied.has(name));
-  if (failed.length > 0 || pending.length > 0) {
+  const health = evaluateCurrentMigrationHealth(repositoryNames, rows);
+  if (!health.healthy) {
     fail("staging migration durumu CURRENT değil");
   }
 }
