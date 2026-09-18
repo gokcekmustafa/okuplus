@@ -58,6 +58,30 @@ export type HintRepairPlan = {
 
 type Session = { headers: Record<string, string> };
 
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+export type RequestDiagnostic = {
+  operation: string;
+  method: string;
+  path: string;
+  startedAt: string;
+  timeoutMs: number;
+  elapsedMs: number;
+  responseReceived: boolean;
+  status?: number;
+  fetchErrorName?: string;
+  fetchErrorMessage?: string;
+  fetchErrorCode?: string;
+  fetchErrorCause?: string;
+};
+
+type RequestDiagnosticsOptions = {
+  operation?: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  onDiagnostic?: (diagnostic: RequestDiagnostic) => void;
+};
+
 function fail(message: string): never {
   throw new Error(message);
 }
@@ -87,6 +111,35 @@ function safeErrorMessage(error: unknown): string {
     if (value) message = message.split(value).join("[redacted-secret]");
   }
   return message;
+}
+
+function safeDiagnosticMessage(error: unknown): string {
+  return safeErrorMessage(error)
+    .replace(/https?:\/\/[^\s"')]+/giu, "[redacted-url]")
+    .slice(0, 240);
+}
+
+function sanitizeRequestPath(path: string): string {
+  return path
+    .split("?", 1)[0]
+    .replace(
+      /\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?=\/|$)/giu,
+      "/:id",
+    );
+}
+
+function emitRequestDiagnostic(diagnostic: RequestDiagnostic): void {
+  console.log(JSON.stringify({ type: "staging_hint_repair_request", ...diagnostic }));
+}
+
+function errorCode(error: unknown): string | undefined {
+  const row = record(error);
+  const code = row?.code;
+  return typeof code === "string" && code.length <= 64 ? code : undefined;
+}
+
+function errorCause(error: unknown): unknown {
+  return error instanceof Error ? error.cause : undefined;
 }
 
 function baseUrl(): string {
@@ -184,23 +237,67 @@ function requestHeaders(
   return headers;
 }
 
-async function request(
+export async function requestWithDiagnostics(
   origin: string,
   path: string,
   session: Session | undefined,
   init: RequestInit = {},
+  options: RequestDiagnosticsOptions = {},
 ): Promise<{ response: Response; body: JsonRecord }> {
   const hasBody = init.body !== undefined && init.body !== null;
-  const response = await fetch(`${origin}${path}`, {
-    ...init,
-    headers: (() => {
-      const headers = requestHeaders(session, init.headers, hasBody);
-      headers.set("origin", origin);
-      return headers;
-    })(),
-  });
-  const parsed = (await response.json().catch(() => ({}))) as unknown;
-  return { response, body: record(parsed) ?? {} };
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const started = Date.now();
+  const startedAt = new Date(started).toISOString();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const diagnosticBase = {
+    operation: options.operation ?? `${method} ${sanitizeRequestPath(path)}`,
+    method,
+    path: sanitizeRequestPath(path),
+    startedAt,
+    timeoutMs,
+  };
+  const report = (
+    details: Omit<RequestDiagnostic, keyof typeof diagnosticBase | "elapsedMs">,
+  ): void => {
+    (options.onDiagnostic ?? emitRequestDiagnostic)({
+      ...diagnosticBase,
+      ...details,
+      elapsedMs: Date.now() - started,
+    });
+  };
+  try {
+    const response = await (options.fetchImpl ?? fetch)(`${origin}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: (() => {
+        const headers = requestHeaders(session, init.headers, hasBody);
+        headers.set("origin", origin);
+        return headers;
+      })(),
+    });
+    const parsed = (await response.json().catch(() => ({}))) as unknown;
+    report({ responseReceived: true, status: response.status });
+    return { response, body: record(parsed) ?? {} };
+  } catch (error) {
+    const timedOut = controller.signal.aborted;
+    const cause = errorCause(error);
+    report({
+      responseReceived: false,
+      fetchErrorName: timedOut
+        ? "TimeoutError"
+        : error instanceof Error
+          ? error.name
+          : "UnknownError",
+      fetchErrorMessage: timedOut ? "request timeout" : safeDiagnosticMessage(error),
+      fetchErrorCode: errorCode(error) ?? errorCode(cause),
+      fetchErrorCause: cause === undefined ? undefined : safeDiagnosticMessage(cause),
+    });
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function apiData(body: JsonRecord): JsonRecord {
@@ -213,8 +310,11 @@ async function requireApi(
   path: string,
   session: Session | undefined,
   init: RequestInit = {},
+  operation?: string,
 ): Promise<JsonRecord> {
-  const { response, body } = await request(origin, path, session, init);
+  const { response, body } = await requestWithDiagnostics(origin, path, session, init, {
+    operation,
+  });
   if (!response.ok) {
     const error = record(body.error);
     throw new Error(
@@ -225,21 +325,33 @@ async function requireApi(
 }
 
 async function startOperatorSession(origin: string): Promise<Session> {
-  const { response } = await request(origin, OPERATOR_SESSION_PATH, undefined, {
-    method: "POST",
-    headers: {
-      "x-auth-transport": "cookie",
-      "x-staging-operator-secret": required("STAGING_OPERATOR_AUTH_SECRET"),
+  const { response } = await requestWithDiagnostics(
+    origin,
+    OPERATOR_SESSION_PATH,
+    undefined,
+    {
+      method: "POST",
+      headers: {
+        "x-auth-transport": "cookie",
+        "x-staging-operator-secret": required("STAGING_OPERATOR_AUTH_SECRET"),
+      },
+      body: "{}",
     },
-    body: "{}",
-  });
+    { operation: "operator-session" },
+  );
   const cookies = cookieHeader(response.headers);
   if (!response.ok || !cookies) fail(`staging operator authentication HTTP ${response.status}`);
   const csrf = cookieValue(cookies, "__Host-oku_csrf");
   if (!csrf) fail("staging operator CSRF cookie alınamadı");
-  const me = await requireApi(origin, "/auth/me", undefined, {
-    headers: { cookie: cookies, "x-auth-transport": "cookie" },
-  });
+  const me = await requireApi(
+    origin,
+    "/auth/me",
+    undefined,
+    {
+      headers: { cookie: cookies, "x-auth-transport": "cookie" },
+    },
+    "operator-me",
+  );
   const user = record(me.user);
   if (user?.id !== OPERATOR_ID || user.platformRole !== "SUPER_ADMIN") {
     fail("staging operator SUPER_ADMIN olarak doğrulanamadı");
@@ -254,21 +366,33 @@ async function startOperatorSession(origin: string): Promise<Session> {
 }
 
 async function startReviewerSession(origin: string): Promise<Session> {
-  const { response } = await request(origin, "/auth/login", undefined, {
-    method: "POST",
-    headers: { "x-auth-transport": "cookie" },
-    body: JSON.stringify({
-      email: SYNTHETIC_REVIEWER_EMAIL,
-      password: required("STAGING_SYNTHETIC_REVIEWER_PASSWORD"),
-    }),
-  });
+  const { response } = await requestWithDiagnostics(
+    origin,
+    "/auth/login",
+    undefined,
+    {
+      method: "POST",
+      headers: { "x-auth-transport": "cookie" },
+      body: JSON.stringify({
+        email: SYNTHETIC_REVIEWER_EMAIL,
+        password: required("STAGING_SYNTHETIC_REVIEWER_PASSWORD"),
+      }),
+    },
+    { operation: "reviewer-login" },
+  );
   const cookies = cookieHeader(response.headers);
   if (!response.ok || !cookies) fail(`synthetic reviewer authentication HTTP ${response.status}`);
   const csrf = cookieValue(cookies, "__Host-oku_csrf");
   if (!csrf) fail("synthetic reviewer CSRF cookie alınamadı");
-  const me = await requireApi(origin, "/auth/me", undefined, {
-    headers: { cookie: cookies, "x-auth-transport": "cookie" },
-  });
+  const me = await requireApi(
+    origin,
+    "/auth/me",
+    undefined,
+    {
+      headers: { cookie: cookies, "x-auth-transport": "cookie" },
+    },
+    "reviewer-me",
+  );
   const user = record(me.user);
   if (user?.email !== SYNTHETIC_REVIEWER_EMAIL || user.platformRole !== "CONTENT_REVIEWER") {
     fail("synthetic reviewer CONTENT_REVIEWER olarak doğrulanamadı");
@@ -391,6 +515,7 @@ async function advanceVersion(
       `/admin/questions/versions/${encodeURIComponent(versionId)}/review`,
       operator,
       { method: "POST", body: jsonBody({}) },
+      "question-version-review",
     );
     status = "REVIEW";
   }
@@ -400,6 +525,7 @@ async function advanceVersion(
       `/admin/questions/versions/${encodeURIComponent(versionId)}/approve`,
       reviewer,
       { method: "POST", body: jsonBody({}) },
+      "question-version-approve",
     );
     status = "APPROVED";
   }
@@ -409,6 +535,7 @@ async function advanceVersion(
       `/admin/questions/versions/${encodeURIComponent(versionId)}/publish`,
       reviewer,
       { method: "POST", body: jsonBody({}) },
+      "question-version-publish",
     );
     return;
   }
@@ -449,6 +576,7 @@ async function applyPlan(
             difficulty: version.difficulty,
           }),
         },
+        "question-version-create",
       );
       const id = typeof created.id === "string" ? created.id : null;
       if (!id) fail(`${plan.questionId} için yeni QuestionVersion id dönmedi`);
@@ -462,6 +590,8 @@ async function applyPlan(
       origin,
       `/admin/question-versions/${encodeURIComponent(version.questionVersionId)}`,
       operator,
+      undefined,
+      "question-version-read",
     );
     if (final.status !== "PUBLISHED" || typeof final.hint !== "string" || !final.hint.trim()) {
       fail(`${plan.questionId} için hint QuestionVersion publish doğrulaması başarısız`);
