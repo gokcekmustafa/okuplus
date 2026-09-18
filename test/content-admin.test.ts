@@ -744,7 +744,12 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const firstVersion = await createVersionViaApi(created.id, { body: "İlk metin" });
-    await publishVersionViaApi(firstVersion.id);
+    const firstPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${firstVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(firstPublish.statusCode).toBe(200);
 
     const secondVersion = await createVersionViaApi(created.id, { body: "İkinci metin" });
     await prisma.contentVersion.update({
@@ -784,7 +789,12 @@ describe("content admin", () => {
       difficulty: 0.5,
     });
     const firstVersion = await createVersionViaApi(created.id, { body: "İlk metin" });
-    await publishVersionViaApi(firstVersion.id);
+    const firstPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${firstVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(firstPublish.statusCode).toBe(200);
     const secondVersion = await createVersionViaApi(created.id, { body: "İkinci metin" });
     await prisma.content.update({ where: { id: created.id }, data: { currentVersionId: null } });
     await prisma.contentVersion.update({
