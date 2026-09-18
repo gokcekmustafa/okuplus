@@ -227,7 +227,10 @@ async function requireApi(
 async function startOperatorSession(origin: string): Promise<Session> {
   const { response } = await request(origin, OPERATOR_SESSION_PATH, undefined, {
     method: "POST",
-    headers: { "x-staging-operator-secret": required("STAGING_OPERATOR_AUTH_SECRET") },
+    headers: {
+      "x-auth-transport": "cookie",
+      "x-staging-operator-secret": required("STAGING_OPERATOR_AUTH_SECRET"),
+    },
     body: "{}",
   });
   const cookies = cookieHeader(response.headers);
