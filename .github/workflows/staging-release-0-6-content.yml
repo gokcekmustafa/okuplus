@@ -21,6 +21,7 @@ jobs:
       DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
       DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
       DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       STAGING_OPERATOR_AUTH_SECRET: ${{ secrets.STAGING_OPERATOR_AUTH_SECRET }}
       STAGING_SYNTHETIC_REVIEWER_PASSWORD: ${{ secrets.STAGING_SYNTHETIC_REVIEWER_PASSWORD }}
       RELEASE_0_6_CONTENT_CONFIRM: ${{ inputs.confirm_publish }}
@@ -42,6 +43,9 @@ jobs:
 
       - name: Generate Prisma Client
         run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Provision synthetic content reviewer
+        run: npx tsx scripts/provision-staging-synthetic-content-reviewer.ts --apply
 
       - name: Publish six lessons through official lifecycle
         run: npx tsx scripts/provision-staging-release-0-6-lessons.ts --apply
