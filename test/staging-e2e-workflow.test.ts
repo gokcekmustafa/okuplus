@@ -8,11 +8,15 @@ const workflow = readFileSync(
 
 describe("staging authenticated E2E workflow contract", () => {
   it("is manual-only and binds staging credentials in the executing job", () => {
-    expect(workflow).toMatch(/on:\s*\n\s+workflow_dispatch:\s*\n/u);
+    expect(workflow).toMatch(/on:\s*\n\s+workflow_dispatch:/u);
+    expect(workflow).toContain("student_email:");
     expect(workflow).toContain("BASE_URL: ${{ vars.BASE_URL }}");
-    expect(workflow).toContain("STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}");
+    expect(workflow).toContain(
+      "STAGING_STUDENT_EMAIL: ${{ inputs.student_email || vars.STAGING_STUDENT_EMAIL }}",
+    );
     expect(workflow).toContain("STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}");
-    expect(workflow).toContain("STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}");
+    expect(workflow).not.toContain("staging synthetic entitlement identity is not aligned");
+    expect(workflow).not.toContain("STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}");
     expect(workflow).toContain(
       "!/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\\.vercel\\.app$/u.test(url.hostname)",
     );

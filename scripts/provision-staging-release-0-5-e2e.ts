@@ -34,10 +34,6 @@ function credentials(): { email: string; password: string } {
   if (!/^[^@\s]+@[^@\s]+\.invalid$/u.test(email)) {
     throw new Error("Synthetic staging student e-postası .invalid ile bitmeli");
   }
-  const configuredPremiumEmail = process.env.STAGING_E2E_PREMIUM_EMAIL?.trim().toLowerCase();
-  if (configuredPremiumEmail !== email) {
-    throw new Error("STAGING_E2E_PREMIUM_EMAIL synthetic öğrenci e-postasıyla eşleşmeli");
-  }
   return { email, password };
 }
 
