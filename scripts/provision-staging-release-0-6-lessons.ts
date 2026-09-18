@@ -168,10 +168,17 @@ function cookieValue(cookies: string, name: string): string | undefined {
 type Session = { headers: Record<string, string>; user: Record<string, unknown> };
 
 async function request(origin: string, path: string, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers ?? {});
-  headers.set("accept", "application/json");
+  const headers = buildRequestHeaders(init.headers, init.body !== undefined && init.body !== null);
   headers.set("origin", origin);
   return fetch(`${origin}${path}`, { ...init, headers });
+}
+
+export function buildRequestHeaders(init: HeadersInit | undefined, hasBody: boolean): Headers {
+  const headers = new Headers(init ?? {});
+  headers.set("accept", "application/json");
+  if (hasBody) headers.set("content-type", "application/json");
+  else headers.delete("content-type");
+  return headers;
 }
 
 async function api<T = unknown>(origin: string, path: string, init: RequestInit = {}): Promise<T> {
