@@ -1367,9 +1367,14 @@ async function probeInlineFeedback(
   candidate.retryQuestionIds = retryQuestionIds(sessionData);
   const question = candidate.questions.find(
     (entry) =>
-      entry.type === "MULTIPLE_CHOICE" && needsQuestionAttempt(candidate, entry.questionVersionId),
+      entry.type === "MULTIPLE_CHOICE" &&
+      !candidate.attemptedQuestionIds.has(entry.questionVersionId),
   );
-  if (!question) throw new Error("Inline feedback için yanıtsız MULTIPLE_CHOICE soru bulunamadı");
+  if (!question) {
+    throw new Error(
+      "Inline feedback için hiç denenmemiş MULTIPLE_CHOICE soru bulunamadı; ilk yanlış cevap UI doğrulaması için yeni fixture gerekir",
+    );
+  }
 
   // Use an isolated authenticated page for the interactive probe. The main
   // API page may retain a previous SPA exercise state while the daily planner
@@ -1918,7 +1923,7 @@ async function main(): Promise<void> {
       entry.questions.some(
         (question) =>
           question.type === "MULTIPLE_CHOICE" &&
-          needsQuestionAttempt(entry, question.questionVersionId),
+          !entry.attemptedQuestionIds.has(question.questionVersionId),
       ),
     );
 
