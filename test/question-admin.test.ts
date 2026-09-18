@@ -477,6 +477,53 @@ describe("question admin", () => {
     expect(published.json().data.status).toBe("PUBLISHED");
   });
 
+  it("yayınlanmış soruda APPROVED yeni sürüm yayınlanabilir ve eski sürüm immutable kalır", async () => {
+    const question = await createQuestion("MULTIPLE_CHOICE", 91);
+    const firstVersion = question.versions[0];
+    const reviewedFirst = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${firstVersion.id}/review`,
+      headers: await adminHeaders(),
+    });
+    expect(reviewedFirst.statusCode).toBe(200);
+    await approveAndPublishQuestionVersion(firstVersion.id);
+
+    const nextVersion = await app.inject({
+      method: "POST",
+      url: `/admin/questions/${question.id}/versions`,
+      headers: await adminHeaders(),
+      payload: { hint: "Yeni güvenli ipucu" },
+    });
+    expect(nextVersion.statusCode).toBe(200);
+    const nextVersionId = nextVersion.json().data.id as string;
+
+    const reviewed = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${nextVersionId}/review`,
+      headers: await adminHeaders(),
+    });
+    expect(reviewed.statusCode).toBe(200);
+    await approveQuestionVersion(nextVersionId);
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${nextVersionId}/publish`,
+      headers: await reviewerHeaders(),
+    });
+    expect(published.statusCode).toBe(200);
+    expect(published.json().data.status).toBe("PUBLISHED");
+
+    const versions = await app.inject({
+      method: "GET",
+      url: `/admin/questions/${question.id}/versions`,
+      headers: await adminHeaders(),
+    });
+    expect(versions.statusCode).toBe(200);
+    const versionRows = versions.json().data as Array<{ id: string; status: string }>;
+    expect(versionRows.find((version) => version.id === firstVersion.id)?.status).toBe("PUBLISHED");
+    expect(versionRows.find((version) => version.id === nextVersionId)?.status).toBe("PUBLISHED");
+  });
+
   it("sıralama transaction ile güncellenir, çakışma ve cross-tenant ilişki engellenir", async () => {
     const rows = (
       await app.inject({
