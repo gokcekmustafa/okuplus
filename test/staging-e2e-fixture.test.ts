@@ -115,4 +115,17 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(reportIndex).toBeGreaterThan(-1);
     expect(cleanupIndex).toBeGreaterThan(reportIndex);
   });
+
+  it("covers Release 0.6 teaching, baseline, insight, security, and telemetry paths", () => {
+    expect(runnerSource).toContain("async function runRelease06Coverage");
+    expect(runnerSource).toContain('"/student/lessons"');
+    expect(runnerSource).toContain('"/student/baseline"');
+    expect(runnerSource).toContain('"/student/progress"');
+    expect(runnerSource).toContain('"/student/history?page=1&pageSize=5"');
+    expect(runnerSource).toContain("Unauthenticated protected path");
+    expect(runnerSource).toContain("baselineSnapshot");
+    expect(runnerSource).toContain("exposureStartedAt");
+    expect(runnerSource).toContain("__wrongAnswerRetryObserved");
+    expect(runnerSource).toContain("concurrentCompletions");
+  });
 });

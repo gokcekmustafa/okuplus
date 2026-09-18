@@ -18,6 +18,7 @@ jobs:
       STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
       STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
       STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
+      E2E_ARTIFACT_DIR: .e2e-output
     steps:
       - name: Checkout staging
         uses: actions/checkout@v4
@@ -32,6 +33,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --include=dev
+
+      - name: Prepare sanitized E2E output directory
+        shell: bash
+        run: mkdir -p .e2e-output
 
       - name: Validate staging configuration
         shell: bash
@@ -156,6 +161,16 @@ jobs:
             adaptiveSelection: result.adaptiveSelection ?? "NOT_RUN",
             publishedContent: result.publishedContent ?? "NOT_RUN",
             finalState: result.finalState ?? "NOT_RUN",
+            teaching: result.teaching ?? "NOT_RUN",
+            baseline: result.baseline ?? "NOT_RUN",
+            development: result.development ?? "NOT_RUN",
+            trend: result.trend ?? "NOT_RUN",
+            history: result.history ?? "NOT_RUN",
+            concurrency: result.concurrency ?? "NOT_RUN",
+            telemetry: result.telemetry ?? "NOT_RUN",
+            dataIntegrity: result.dataIntegrity ?? "NOT_RUN",
+            security: result.security ?? "NOT_RUN",
+            wrongAnswerRetry: result.wrongAnswerRetry ?? "NOT_RUN",
             quotaLimit: result.quotaLimit ?? null,
             quotaUsedAtStart: result.quotaUsedAtStart ?? null,
             quotaRemainingAtStart: result.quotaRemainingAtStart ?? null,
@@ -171,7 +186,7 @@ jobs:
                 ? result.error.slice(0, 200)
                 : Array.isArray(result.bugs) && typeof result.bugs[0] === "string"
                   ? result.bugs[0].slice(0, 200)
-                  : "e2e failed",
+                  : null,
             items,
             productionTouched: "NO",
           };
@@ -183,7 +198,7 @@ jobs:
           console.log(`consoleErrors=${safe.consoleErrors}`);
           console.log(`networkErrors=${safe.networkErrors}`);
           console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
-          console.log(`e2e.error=${safe.error}`);
+          if (safe.error) console.log(`e2e.error=${safe.error}`);
           if (Number(process.env.E2E_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
           NODE
           rm -f .e2e-output/e2e.raw .e2e-output/e2e.stderr
@@ -220,5 +235,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: staging-e2e-summary
-          path: .e2e-output/*-summary.json
-          if-no-files-found: ignore
+          path: |
+            .e2e-output/staging-provision-summary.json
+            .e2e-output/staging-e2e-summary.json
+            .e2e-output/e2e-failure.png
+          if-no-files-found: warn
+          retention-days: 14

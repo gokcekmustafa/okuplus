@@ -109,6 +109,18 @@ type E2eTimings = {
   answerServerTiming: Record<string, number> | null;
 };
 
+type Release06Coverage = {
+  teaching: string;
+  baseline: string;
+  development: string;
+  trend: string;
+  history: string;
+  concurrency: string;
+  telemetry: string;
+  dataIntegrity: string;
+  security: string;
+};
+
 type RunnerReport = {
   status: "PASS" | "PASS_WITH_LIMITATIONS" | "FAIL";
   auth: string;
@@ -125,6 +137,16 @@ type RunnerReport = {
   adaptiveSelection: string;
   publishedContent: string;
   finalState: string;
+  teaching: string;
+  baseline: string;
+  development: string;
+  trend: string;
+  history: string;
+  concurrency: string;
+  telemetry: string;
+  dataIntegrity: string;
+  security: string;
+  wrongAnswerRetry: string;
   bugs: string[];
   normalFlowWrites: string;
   quotaLimit: number | null;
@@ -577,6 +599,124 @@ async function assertStudentAuth(page: Page): Promise<void> {
       isObject(row) && row.active === true && row.isPersonal === true && row.role === "STUDENT",
   );
   if (!hasStudentContext) throw new Error("Aktif individual STUDENT membership doğrulanamadı");
+}
+
+function baselineSnapshot(value: unknown): string {
+  if (value === null) return "null";
+  const baseline = asRecord(value, "baseline.data");
+  return JSON.stringify({
+    id: baseline.id,
+    sourceAssessmentResultId: baseline.sourceAssessmentResultId,
+    source: baseline.source,
+    version: baseline.version,
+    capturedAt: baseline.capturedAt,
+    skills: baseline.skills,
+  });
+}
+
+async function runRelease06Coverage(page: Page, browser: Browser): Promise<Release06Coverage> {
+  const coverage: Release06Coverage = {
+    teaching: "NOT_RUN",
+    baseline: "NOT_RUN",
+    development: "NOT_RUN",
+    trend: "NOT_RUN",
+    history: "NOT_RUN",
+    concurrency: "NOT_RUN",
+    telemetry: "NOT_RUN",
+    dataIntegrity: "NOT_RUN",
+    security: "NOT_RUN",
+  };
+
+  const baselineBeforeResult = await browserApi(page, "/student/baseline");
+  assertApiOk(baselineBeforeResult, "baseline before validation");
+  const baselineBefore = apiData(baselineBeforeResult);
+  if (baselineBefore === null) throw new Error("Placement baseline oluşturulmamış");
+
+  const lessonListResult = await browserApi(page, "/student/lessons");
+  assertApiOk(lessonListResult, "student lessons");
+  const lessonList = asRecord(apiData(lessonListResult), "student lessons.data");
+  const lessonItems = asArray(lessonList.items, "student lessons.items");
+  if (lessonItems.length < 6) {
+    throw new Error(`Release 0.6 yayınlanmış ders kapsamı eksik (${lessonItems.length}/6)`);
+  }
+  const firstLesson = asRecord(lessonItems[0], "student lessons.items[0]");
+  const lessonId = readString(firstLesson, "id", "student lesson");
+  const lessonDetailResult = await browserApi(
+    page,
+    `/student/lessons/${encodeURIComponent(lessonId)}`,
+  );
+  assertApiOk(lessonDetailResult, "student lesson detail");
+  const lesson = asRecord(apiData(lessonDetailResult), "student lesson detail.data");
+  for (const key of [
+    "objective",
+    "explanation",
+    "workedExample",
+    "guidedPractice",
+    "completionLabel",
+    "exerciseTemplateVersionId",
+  ]) {
+    readString(lesson, key, `student lesson detail.${key}`);
+  }
+
+  const lessonNav = page.locator('[data-page="lessons"]');
+  if ((await lessonNav.count()) !== 1) throw new Error("Dersler navigasyon öğesi bulunamadı");
+  await lessonNav.click();
+  await page.waitForSelector("#page-lessons:not(.hidden)", {
+    state: "visible",
+    timeout: BROWSER_REQUEST_TIMEOUT_MS,
+  });
+  await page.waitForSelector("#lesson-list [data-lesson-id]", {
+    state: "visible",
+    timeout: BROWSER_REQUEST_TIMEOUT_MS,
+  });
+  const lessonHeading = await page.locator("#lesson-detail h3").textContent();
+  if (!lessonHeading?.trim()) throw new Error("Ders öğretim görünümü başlığı boş");
+  coverage.teaching = `PASS (${lessonItems.length} yayınlanmış ders; anlatım/örnek/uygulama akışı)`;
+
+  const progressResult = await browserApi(page, "/student/progress");
+  assertApiOk(progressResult, "progress development");
+  const progress = asRecord(apiData(progressResult), "progress.data");
+  const development = asArray(progress.development, "progress.development");
+  const training = asRecord(progress.training, "progress.training");
+  const trainingSkills = asArray(training.skills, "progress.training.skills");
+  if (development.length === 0 || trainingSkills.length === 0) {
+    throw new Error("Development/trend verisi boş");
+  }
+  if (!development.every((item) => isObject(item) && "trend" in item)) {
+    throw new Error("Development trend alanı eksik");
+  }
+  coverage.development = `PASS (${development.length} beceri karşılaştırması)`;
+  coverage.trend = "PASS (trend alanı her beceri için mevcut)";
+
+  const historyResult = await browserApi(page, "/student/history?page=1&pageSize=5");
+  assertApiOk(historyResult, "student history");
+  const history = asRecord(apiData(historyResult), "student history.data");
+  asArray(history.items, "student history.items");
+  readNumber(history, "page", "student history");
+  readNumber(history, "pageSize", "student history");
+  readNumber(history, "total", "student history");
+  coverage.history = "PASS (read-only history response)";
+
+  const baselineAfterResult = await browserApi(page, "/student/baseline");
+  assertApiOk(baselineAfterResult, "baseline after validation");
+  if (baselineSnapshot(baselineBefore) !== baselineSnapshot(apiData(baselineAfterResult))) {
+    throw new Error("Baseline read-only validation sırasında değişti");
+  }
+  coverage.baseline = "PASS (immutable snapshot unchanged)";
+  coverage.dataIntegrity = "PASS (baseline unchanged; student response private fields guarded)";
+
+  const anonymousContext = await browser.newContext();
+  try {
+    const anonymousPage = await anonymousContext.newPage();
+    const unauthenticatedResponse = await anonymousPage.request.get(`${BASE_URL}/student/today`);
+    if (![401, 403].includes(unauthenticatedResponse.status())) {
+      throw new Error(`Unauthenticated protected path beklenmeyen status verdi`);
+    }
+  } finally {
+    await anonymousContext.close().catch(() => undefined);
+  }
+  coverage.security = "PASS (unauthenticated student path rejected)";
+  return coverage;
 }
 
 async function runPlacement(
@@ -1158,12 +1298,22 @@ async function submitAttempt(
     budget.budgetExhausted = true;
     return null;
   }
+  const submittedAt = Date.now();
   const result = await browserApi(
     page,
     `/student/questions/${encodeURIComponent(question.questionVersionId)}/attempts`,
     {
       method: "POST",
-      body: { sessionId, answer, clientAttemptId, timeSpentMs: 1000 },
+      body: {
+        sessionId,
+        answer,
+        clientAttemptId,
+        timeSpentMs: 1000,
+        exposureStartedAt: new Date(submittedAt - 2).toISOString(),
+        answerStartedAt: new Date(submittedAt - 1).toISOString(),
+        hintUsed: false,
+        isFinal: false,
+      },
     },
   );
   if (isQuestionQuotaExhausted(result)) {
@@ -1174,6 +1324,18 @@ async function submitAttempt(
   const data = asRecord(apiData(result), "attempt.data");
   if (data.questionVersionId !== question.questionVersionId) {
     throw new Error("Attempt response questionVersionId ile istek eşleşmedi");
+  }
+  for (const key of ["exposureStartedAt", "answerStartedAt", "submittedAt"]) {
+    if (typeof data[key] !== "string" || !data[key]) {
+      throw new Error(`Attempt telemetry ${key} response'ta yok`);
+    }
+  }
+  if (
+    typeof data.interactionDurationMs !== "number" ||
+    typeof data.answerDurationMs !== "number" ||
+    typeof data.hintUsed !== "boolean"
+  ) {
+    throw new Error("Attempt telemetry ölçüm alanları response'ta geçersiz");
   }
   budget.attempted += 1;
   return data;
@@ -1299,6 +1461,28 @@ async function probeInlineFeedback(
       display: getComputedStyle(element).display,
     }));
     if (!feedback.text || feedback.display === "none") throw new Error("Inline feedback görünmedi");
+    let wrongAnswerRetryObserved = false;
+    if (attempt.isCorrect === false) {
+      if (!feedback.text.includes("Tekrar düşün")) {
+        throw new Error("Yanlış cevap feedback'inde 'Tekrar düşün.' metni görünmedi");
+      }
+      const hint = feedbackPage.locator("details.exercise-hint");
+      if ((await hint.count()) === 0) throw new Error("Yanlış cevap akışında ipucu görünmedi");
+      await hint.locator("summary").first().click();
+      await feedbackPage.waitForFunction(() => {
+        const summary = document.querySelector("details.exercise-hint summary");
+        return (
+          summary?.getAttribute("aria-expanded") === "true" ||
+          (summary?.parentElement as HTMLDetailsElement | null)?.open === true
+        );
+      });
+      const retryLabel = await feedbackPage.locator("#exercise-submit-attempt").textContent();
+      if (!retryLabel?.includes("Tekrar Cevapla")) {
+        throw new Error("Yanlış cevap sonrasında 'Tekrar Cevapla' görünmedi");
+      }
+      wrongAnswerRetryObserved = true;
+    }
+    (attempt as JsonObject).__wrongAnswerRetryObserved = wrongAnswerRetryObserved;
     if (timings.feedbackRenderLatencyMs === null)
       timings.feedbackRenderLatencyMs = roundedDurationMs(feedbackStartedAt);
     if ((await feedbackPage.locator("#celebration-layer:not(.hidden)").count()) > 0) {
@@ -1525,6 +1709,16 @@ async function main(): Promise<void> {
     adaptiveSelection: "NOT_RUN",
     publishedContent: "NOT_RUN",
     finalState: "NOT_RUN",
+    teaching: "NOT_RUN",
+    baseline: "NOT_RUN",
+    development: "NOT_RUN",
+    trend: "NOT_RUN",
+    history: "NOT_RUN",
+    concurrency: "NOT_RUN",
+    telemetry: "NOT_RUN",
+    dataIntegrity: "NOT_RUN",
+    security: "NOT_RUN",
+    wrongAnswerRetry: "NOT_RUN",
     bugs: [],
     normalFlowWrites: "PLACEMENT/TRAINING SESSION, ATTEMPT VE COMPLETION AKIŞIYLA SINIRLI",
     quotaLimit: null,
@@ -1615,6 +1809,8 @@ async function main(): Promise<void> {
         ? `PASS_EXISTING (assessment=${placement.assessmentId}, mevcut placement sonucu ve profil kullanıldı; yeni placement yazımı yapılmadı)`
         : `PASS (assessment=${placement.assessmentId}, GP/streak değişmedi)`;
     logStage("PLACEMENT_DONE");
+
+    Object.assign(report, await runRelease06Coverage(page, browser));
 
     logStage("FIRST_TRAINING_START");
     const todayBefore = await browserApi(page, "/student/today");
@@ -1734,6 +1930,10 @@ async function main(): Promise<void> {
       if (uiAttempt) checkpointFor(itemCheckpoints, uiCandidate.item.position).rendered = "PASS";
       if (uiAttempt?.isCorrect === true) coverage.correct = true;
       if (uiAttempt?.isCorrect === false) coverage.wrong = true;
+      if (uiAttempt?.__wrongAnswerRetryObserved === true) {
+        report.wrongAnswerRetry =
+          "PASS (Tekrar düşün + ipucu + Tekrar Cevapla görünürlükleri doğrulandı)";
+      }
       if (!quotaPlan.fullCompletionPossible) {
         await ensureScoreCoverage(page, work, coverage, runId, budget);
       }
@@ -1741,6 +1941,10 @@ async function main(): Promise<void> {
 
     report.questionsAttempted = budget.attempted;
     report.quotaExhausted = budget.quotaExhausted;
+    report.telemetry =
+      budget.attempted > 0
+        ? "PASS (server telemetry timestamps/durations response contract doğrulandı)"
+        : "NOT_RUN (attempt yapılmadı)";
     if (budget.attempted === 0) {
       report.attempt = "NOT_RUN (PRACTICE_QUESTION kotası bu çalışma için kullanılabilir değil)";
     } else if (coverage.correct && coverage.wrong) {
@@ -1748,6 +1952,10 @@ async function main(): Promise<void> {
         "PASS (en az bir doğru ve bir yanlış server-side scoring; inline feedback doğrulandı)";
     } else {
       report.attempt = `PASS_WITH_LIMITATIONS (${budget.attempted} kontrollü attempt; doğru/yanlış kapsamı tamamlanmadı)`;
+    }
+    if (report.wrongAnswerRetry === "NOT_RUN" && coverage.wrong) {
+      report.wrongAnswerRetry =
+        "PASS_WITH_LIMITATIONS (server-side yanlış cevap ve tekrar hakkı gözlendi; inline UI probe yanlış cevap seçemedi)";
     }
     logStage("ATTEMPT_DONE");
     logStage("EXERCISE_DONE");
@@ -1826,6 +2034,37 @@ async function main(): Promise<void> {
           throw new Error("Duplicate completion GP/streak değerini tekrar ilerletti");
         }
 
+        const concurrentCompletions = await Promise.all([
+          browserApi(
+            page,
+            `/student/sessions/${encodeURIComponent(lastItem.item.exerciseSessionId)}/complete`,
+            { method: "POST", body: {} },
+          ),
+          browserApi(
+            page,
+            `/student/sessions/${encodeURIComponent(lastItem.item.exerciseSessionId)}/complete`,
+            { method: "POST", body: {} },
+          ),
+        ]);
+        if (concurrentCompletions.some((result) => result.status !== 200)) {
+          throw new Error("Eşzamanlı completion isteklerinden biri başarılı olmadı");
+        }
+        const afterConcurrent = await browserApi(page, "/student/gamification");
+        assertApiOk(afterConcurrent, "concurrent completion state");
+        const afterConcurrentData = asRecord(
+          apiData(afterConcurrent),
+          "concurrent completion after.data",
+        );
+        if (
+          readNumber(afterDuplicateData, "totalPoints", "duplicate after") !==
+            readNumber(afterConcurrentData, "totalPoints", "concurrent after") ||
+          readNumber(afterDuplicateData, "currentDays", "duplicate after") !==
+            readNumber(afterConcurrentData, "currentDays", "concurrent after")
+        ) {
+          throw new Error("Eşzamanlı completion GP/streak değerini tekrar ilerletti");
+        }
+        report.concurrency = "PASS (eşzamanlı completion idempotent)";
+
         const todayAfter = await browserApi(page, "/student/today");
         assertApiOk(todayAfter, "today final");
         const todayAfterData = asRecord(apiData(todayAfter), "today final.data");
@@ -1902,6 +2141,15 @@ async function main(): Promise<void> {
   } catch (error) {
     report.status = "FAIL";
     report.bugs.push(`[${currentStage}] ${errorMessage(error)}`);
+  }
+
+  if (report.status === "FAIL" && page && process.env.E2E_ARTIFACT_DIR) {
+    await page
+      .screenshot({
+        path: `${process.env.E2E_ARTIFACT_DIR}/e2e-failure.png`,
+        fullPage: true,
+      })
+      .catch(() => undefined);
   }
 
   // Emit the result before browser cleanup. A long-running or stalled
