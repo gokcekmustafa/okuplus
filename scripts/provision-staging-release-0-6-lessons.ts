@@ -281,6 +281,20 @@ type Template = {
   versions: Array<{ id: string; version: number; status: string }>;
 };
 
+type ResumableVersion = { id: string; status: string };
+
+export function selectResumableVersion(
+  current: ResumableVersion | null,
+  versions: ResumableVersion[],
+  lessonKey: string,
+): ResumableVersion {
+  if (current) return current;
+  if (versions.length !== 1 || versions[0]?.status === "PUBLISHED") {
+    fail(`${lessonKey} mevcut content'in current version'ı yok ve sürüm durumu belirsiz`);
+  }
+  return versions[0];
+}
+
 async function findPublishedTemplateVersions(
   origin: string,
   operator: Session,
@@ -413,9 +427,15 @@ async function ensurePublishedLesson(
       currentVersion: { id: string; status: string } | null;
     }>(origin, `/admin/contents/${contentId}`, { headers: operator.headers });
     const current = detail.currentVersion;
-    if (!current) fail(`${spec.key} mevcut content'in current version'ı yok`);
-    versionId = current.id;
-    if (current.status === "PUBLISHED" && detail.status === "PUBLISHED") {
+    const versions = current
+      ? []
+      : await api<Array<{ id: string; status: string }>>(
+          origin,
+          `/admin/contents/${contentId}/versions`,
+          { headers: operator.headers },
+        );
+    versionId = selectResumableVersion(current, versions, spec.key).id;
+    if (current?.status === "PUBLISHED" && detail.status === "PUBLISHED") {
       const version = await api<{ metadata: unknown }>(
         origin,
         `/admin/content-versions/${versionId}`,
