@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
 import {
+  buildPublishedLessonReplacementInput,
   buildRequestHeaders,
+  publishedLessonNeedsRebind,
   selectResumableVersion,
 } from "../scripts/provision-staging-release-0-6-lessons.js";
 
@@ -104,5 +106,39 @@ describe("Release 0.6 lesson authoring contract", () => {
     expect(() =>
       selectResumableVersion(null, [{ id: "version-1", status: "PUBLISHED" }], "attention-burst"),
     ).toThrow("belirsiz");
+  });
+
+  it("detects stale published template bindings and preserves published content on repair", () => {
+    const lesson = manifest[0]!;
+    const metadata = (exerciseTemplateVersionId: string) => ({
+      lessonType: "LEARNING_LESSON",
+      contractVersion: 1,
+      skillCode: lesson.skillCode,
+      objective: lesson.objective,
+      explanation: lesson.explanation,
+      workedExample: lesson.workedExample,
+      guidedPractice: lesson.guidedPractice,
+      exerciseTemplateVersionId,
+      completionLabel: lesson.completionLabel,
+    });
+    expect(publishedLessonNeedsRebind(metadata("old"), "new")).toBe(true);
+    expect(publishedLessonNeedsRebind(metadata("new"), "new")).toBe(false);
+
+    const replacement = buildPublishedLessonReplacementInput(
+      {
+        title: "Mevcut ders başlığı",
+        body: "Yayınlanmış ders gövdesi",
+        license: "CC BY",
+        changelog: "previous",
+        metadata: metadata("old"),
+      },
+      lesson,
+      "new-template",
+    );
+
+    expect(replacement.title).toBe("Mevcut ders başlığı");
+    expect(replacement.body).toBe("Yayınlanmış ders gövdesi");
+    expect(replacement.license).toBe("CC BY");
+    expect(replacement.metadata.exerciseTemplateVersionId).toBe("new-template");
   });
 });
