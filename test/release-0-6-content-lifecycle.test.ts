@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
-import { buildRequestHeaders } from "../scripts/provision-staging-release-0-6-lessons.js";
+import {
+  buildRequestHeaders,
+  selectResumableVersion,
+} from "../scripts/provision-staging-release-0-6-lessons.js";
 
 type LessonManifestEntry = {
   key: string;
@@ -88,5 +91,18 @@ describe("Release 0.6 lesson authoring contract", () => {
     const headers = buildRequestHeaders({ "x-auth-transport": "cookie" }, true);
 
     expect(headers.get("content-type")).toBe("application/json");
+  });
+
+  it("resumes a partially created content when its only draft version has no current pointer", () => {
+    expect(
+      selectResumableVersion(null, [{ id: "version-1", status: "DRAFT" }], "attention-burst"),
+    ).toEqual({ id: "version-1", status: "DRAFT" });
+  });
+
+  it("fails closed when a partial content has ambiguous or published versions", () => {
+    expect(() => selectResumableVersion(null, [], "attention-burst")).toThrow("belirsiz");
+    expect(() =>
+      selectResumableVersion(null, [{ id: "version-1", status: "PUBLISHED" }], "attention-burst"),
+    ).toThrow("belirsiz");
   });
 });
