@@ -467,29 +467,67 @@ export async function reviewContentVersion(id: string): Promise<ContentVersionDe
 }
 
 export async function publishContentVersion(id: string): Promise<ContentVersionDetail> {
-  const existing = await prisma.contentVersion.findUnique({
-    where: { id },
-    select: { id: true, contentId: true, status: true },
-  });
-  if (!existing) {
-    throw notFoundError("İçerik sürümü bulunamadı");
-  }
-  if (existing.status === "PUBLISHED") {
-    throw validationError("Sürüm zaten yayınlanmış");
-  }
-  if (existing.status === "ARCHIVED") {
-    throw validationError("Arşivlenmiş sürüm yayınlanamaz");
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    const target = await tx.contentVersion.findUnique({
+      where: { id },
+      select: { contentId: true },
+    });
+    if (!target) throw notFoundError("İçerik sürümü bulunamadı");
 
-  const content = await prisma.content.findFirst({
-    where: { id: existing.contentId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!content) {
-    throw notFoundError("İçerik bulunamadı");
-  }
+    // Serialize pointer/lifecycle changes for one parent content. This keeps
+    // the published version immutable while making concurrent publish calls
+    // observe the same parent state.
+    const lockedContent = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "Content"
+      WHERE "id" = ${target.contentId}
+        AND "deletedAt" IS NULL
+      FOR UPDATE
+    `;
+    if (lockedContent.length === 0) throw notFoundError("İçerik bulunamadı");
 
-  await prisma.$transaction(async (tx) => {
+    const existing = await tx.contentVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        contentId: true,
+        status: true,
+        content: {
+          select: {
+            id: true,
+            status: true,
+            currentVersionId: true,
+            currentVersion: { select: { id: true, status: true } },
+          },
+        },
+      },
+    });
+    if (!existing) throw notFoundError("İçerik sürümü bulunamadı");
+    if (existing.status === "PUBLISHED") {
+      throw validationError("Sürüm zaten yayınlanmış");
+    }
+    if (existing.status === "ARCHIVED") {
+      throw validationError("Arşivlenmiş sürüm yayınlanamaz");
+    }
+
+    const parentAlreadyPublished = existing.content.status === "PUBLISHED";
+    if (
+      parentAlreadyPublished &&
+      (existing.content.currentVersionId === null ||
+        existing.content.currentVersion?.id !== existing.content.currentVersionId ||
+        existing.content.currentVersion.status !== "PUBLISHED")
+    ) {
+      throw validationError("Yayınlanmış içerik current sürümüyle tutarlı değil");
+    }
+    if (!parentAlreadyPublished) {
+      const publishedCount = await tx.contentVersion.count({
+        where: { contentId: existing.contentId, status: "PUBLISHED" },
+      });
+      if (publishedCount > 0) {
+        throw validationError("Yayınlanmış içerik current sürümüyle tutarlı değil");
+      }
+    }
+
     await tx.contentVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
@@ -498,9 +536,10 @@ export async function publishContentVersion(id: string): Promise<ContentVersionD
       where: { id: existing.contentId },
       data: { currentVersionId: id, status: "PUBLISHED" },
     });
+    return { id };
   });
 
-  return getContentVersion(id);
+  return getContentVersion(result.id);
 }
 
 // ---------- Beceri bağlantıları ----------

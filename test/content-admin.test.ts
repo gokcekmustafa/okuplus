@@ -737,6 +737,80 @@ describe("content admin", () => {
     expect(content.currentVersionNumber).toBe(1);
   });
 
+  it("yayınlanmış parent altında onaylı yeni sürüm yayınlanır; eski sürüm immutable kalır", async () => {
+    const created = await createContentViaApi({
+      type: "PASSAGE",
+      title: "Yayınlanmış parent sürüm rotasyonu",
+      difficulty: 0.5,
+    });
+    const firstVersion = await createVersionViaApi(created.id, { body: "İlk metin" });
+    const firstPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${firstVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(firstPublish.statusCode).toBe(200);
+
+    const secondVersion = await createVersionViaApi(created.id, { body: "İkinci metin" });
+    await prisma.contentVersion.update({
+      where: { id: secondVersion.id },
+      data: { status: "APPROVED" },
+    });
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${secondVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(published.statusCode).toBe(200);
+
+    const firstRead = await app.inject({
+      method: "GET",
+      url: `/admin/content-versions/${firstVersion.id}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(firstRead.statusCode).toBe(200);
+    expect(firstRead.json().data.status).toBe("PUBLISHED");
+    expect(firstRead.json().data.body).toBe("İlk metin");
+
+    const contentRead = await app.inject({
+      method: "GET",
+      url: `/admin/contents/${created.id}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(contentRead.statusCode).toBe(200);
+    expect(contentRead.json().data.currentVersionId).toBe(secondVersion.id);
+  });
+
+  it("yayınlanmış parent tutarsızsa yeni sürümü fail-closed reddeder", async () => {
+    const created = await createContentViaApi({
+      type: "PASSAGE",
+      title: "Tutarsız current pointer",
+      difficulty: 0.5,
+    });
+    const firstVersion = await createVersionViaApi(created.id, { body: "İlk metin" });
+    const firstPublish = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${firstVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(firstPublish.statusCode).toBe(200);
+    const secondVersion = await createVersionViaApi(created.id, { body: "İkinci metin" });
+    await prisma.content.update({ where: { id: created.id }, data: { currentVersionId: null } });
+    await prisma.contentVersion.update({
+      where: { id: secondVersion.id },
+      data: { status: "APPROVED" },
+    });
+
+    const published = await app.inject({
+      method: "POST",
+      url: `/admin/content-versions/${secondVersion.id}/publish`,
+      headers: await superAdminHeaders(),
+    });
+    expect(published.statusCode).toBe(400);
+    expect(published.json().error.message).toContain("tutarlı değil");
+  });
+
   it("Yayınlanmış sürüm yeniden yayınlanamaz: 400", async () => {
     const created = await createContentViaApi({
       type: "PASSAGE",

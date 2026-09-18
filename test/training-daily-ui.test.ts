@@ -37,4 +37,10 @@ describe("daily training student flow", () => {
     expect(app).toContain("formatDailyTrainingError");
     expect(app).toContain("Oturumun sona ermiş olabilir");
   });
+
+  it("reuses the server-owned daily snapshot before refetching it", () => {
+    expect(app).toContain("const hasDailySnapshot = Boolean(dailyTrainingSummary)");
+    expect(app).toContain("const today = hasDailySnapshot");
+    expect(app).toContain("if (!dailySession && dailyTrainingSessionId)");
+  });
 });

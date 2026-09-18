@@ -453,19 +453,49 @@ export async function reviewQuestionVersion(id: string): Promise<QuestionVersion
 
 /** Yayınlanan sürüm immutable kalır; Question'ın yayın durumu aynı transaction'da güncellenir. */
 export async function publishQuestionVersion(id: string): Promise<QuestionVersionDetail> {
-  const existing = await prisma.questionVersion.findUnique({
-    where: { id },
-    select: { id: true, questionId: true, status: true },
-  });
-  if (!existing) throw notFoundError("Soru sürümü bulunamadı");
-  if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
-  if (existing.status === "ARCHIVED") throw validationError("Arşivlenmiş soru sürümü yayınlanamaz");
   await prisma.$transaction(async (tx) => {
+    const target = await tx.questionVersion.findUnique({
+      where: { id },
+      select: { questionId: true },
+    });
+    if (!target) throw notFoundError("Soru sürümü bulunamadı");
+
+    // A parent lock makes retries/concurrent publish calls re-read the
+    // immutable version state instead of racing on the same row.
+    const lockedQuestion = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "Question"
+      WHERE "id" = ${target.questionId}
+        AND "deletedAt" IS NULL
+      FOR UPDATE
+    `;
+    if (lockedQuestion.length === 0) throw notFoundError("Soru bulunamadı");
+
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        questionId: true,
+        status: true,
+        question: { select: { status: true } },
+      },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
+    if (existing.status === "ARCHIVED")
+      throw validationError("Arşivlenmiş soru sürümü yayınlanamaz");
+
+    const parentAlreadyPublished = existing.question.status === "PUBLISHED";
     await tx.questionVersion.update({
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
     });
-    await tx.question.update({ where: { id: existing.questionId }, data: { status: "PUBLISHED" } });
+    if (!parentAlreadyPublished) {
+      await tx.question.update({
+        where: { id: existing.questionId },
+        data: { status: "PUBLISHED" },
+      });
+    }
   });
   return getQuestionVersion(id);
 }
