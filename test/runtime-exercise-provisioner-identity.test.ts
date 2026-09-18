@@ -5,6 +5,7 @@ import {
   evaluateCurrentMigrationHealth,
   graphIsExact,
   planVersionRecovery,
+  recordPublishedFamilyMatch,
   runtimeCandidateIsEligible,
   versionConfig,
   type FamilySpec,
@@ -227,6 +228,19 @@ describe("runtime exercise provisioner identity", () => {
     expect(
       graphIsExact(template, exactPublished, attentionSpec, contentVersionIds, questionVersionIds),
     ).toBe(true);
+  });
+
+  it("counts immutable published versions once per template identity", () => {
+    const publishedFamilies = new Map<string, string[]>();
+    recordPublishedFamilyMatch(publishedFamilies, "ATTENTION_BURST:FAST_ATTENTION", "template-1");
+    recordPublishedFamilyMatch(publishedFamilies, "ATTENTION_BURST:FAST_ATTENTION", "template-1");
+    expect(publishedFamilies.get("ATTENTION_BURST:FAST_ATTENTION")).toEqual(["template-1"]);
+
+    recordPublishedFamilyMatch(publishedFamilies, "ATTENTION_BURST:FAST_ATTENTION", "template-2");
+    expect(publishedFamilies.get("ATTENTION_BURST:FAST_ATTENTION")).toEqual([
+      "template-1",
+      "template-2",
+    ]);
   });
 
   it("keeps the recovery lifecycle and binding order explicit", async () => {

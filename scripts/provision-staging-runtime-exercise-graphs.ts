@@ -628,6 +628,20 @@ export function runtimeCandidateIsEligible(
   );
 }
 
+/**
+ * A template may legitimately have more than one immutable PUBLISHED version.
+ * Inventory uniqueness is about template identity, not version count.
+ */
+export function recordPublishedFamilyMatch(
+  publishedFamilies: Map<string, string[]>,
+  key: string,
+  templateId: string,
+): void {
+  const matches = publishedFamilies.get(key) ?? [];
+  if (!matches.includes(templateId)) matches.push(templateId);
+  publishedFamilies.set(key, matches);
+}
+
 export function graphIsExact(
   template: TemplateDetail,
   detail: TemplateVersionDetail,
@@ -763,9 +777,7 @@ async function loadTemplateInventory(
         continue;
       }
       const key = `${config.family}:${config.competency}`;
-      const matches = publishedFamilies.get(key) ?? [];
-      matches.push(detail.id);
-      publishedFamilies.set(key, matches);
+      recordPublishedFamilyMatch(publishedFamilies, key, detail.id);
     }
   }
   return { runtimeByIdentity, publishedFamilies };
