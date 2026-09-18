@@ -35,7 +35,7 @@ describe("staging authenticated E2E workflow contract", () => {
       'const errorOutput = readFileSync(".e2e-output/e2e.stderr", "utf8");',
     );
     expect(workflow).toContain('const rootStart = text.lastIndexOf("\\n{\\n");');
-    expect(workflow).toContain("e2e.error=${safe.error}");
+    expect(workflow).toContain("if (safe.error) console.log(`e2e.error=${safe.error}`);");
     expect(workflow).toContain("staging-provision-summary.json");
     expect(workflow).toContain(
       "provisioning=${summary.status} account=${summary.account} error=${summary.error}",
@@ -44,6 +44,12 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("consoleErrors: result.consoleErrors ?? 0");
     expect(workflow).toContain("networkErrors: result.networkErrors ?? 0");
     expect(workflow).toContain("duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0");
+    expect(workflow).toContain('teaching: result.teaching ?? "NOT_RUN"');
+    expect(workflow).toContain('baseline: result.baseline ?? "NOT_RUN"');
+    expect(workflow).toContain('concurrency: result.concurrency ?? "NOT_RUN"');
+    expect(workflow).toContain("E2E_ARTIFACT_DIR: .e2e-output");
+    expect(workflow).toContain(".e2e-output/e2e-failure.png");
+    expect(workflow).toContain("if-no-files-found: warn");
     expect(workflow).not.toContain("prisma migrate");
     expect(workflow).not.toContain("vercel deploy");
     expect(workflow).not.toContain("vercel pull");
