@@ -918,7 +918,8 @@ export async function publishQuestionVersion(
     if (!existing) throw notFoundError("Soru sürümü bulunamadı");
     if (existing.status === "PUBLISHED") throw validationError("Soru sürümü zaten yayınlanmış");
     assertCanPublish({ actorRole: actor.platformRole, status: existing.status });
-    if (existing.question.status !== "APPROVED") {
+    const parentAlreadyPublished = existing.question.status === "PUBLISHED";
+    if (existing.question.status !== "APPROVED" && !parentAlreadyPublished) {
       throw validationError(
         "Soru sürümü yayınlanmadan önce parent soru APPROVED durumunda olmalıdır",
       );
@@ -927,7 +928,12 @@ export async function publishQuestionVersion(
       where: { id },
       data: { status: "PUBLISHED", publishedAt: new Date() },
     });
-    await tx.question.update({ where: { id: existing.questionId }, data: { status: "PUBLISHED" } });
+    if (!parentAlreadyPublished) {
+      await tx.question.update({
+        where: { id: existing.questionId },
+        data: { status: "PUBLISHED" },
+      });
+    }
     await writeLifecycleAudit(
       tx,
       buildLifecycleAuditEntry({
