@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
+import { buildRequestHeaders } from "../scripts/provision-staging-release-0-6-lessons.js";
 
 type LessonManifestEntry = {
   key: string;
@@ -71,5 +72,21 @@ describe("Release 0.6 lesson authoring contract", () => {
     expect(source).toContain("/publish");
     expect(source).not.toContain("$executeRaw");
     expect(source).not.toContain("$queryRawUnsafe");
+  });
+
+  it("does not send an empty JSON body for bodyless lifecycle POSTs", () => {
+    const headers = buildRequestHeaders(
+      { "content-type": "application/json", "x-auth-transport": "cookie" },
+      false,
+    );
+
+    expect(headers.get("content-type")).toBeNull();
+    expect(headers.get("x-auth-transport")).toBe("cookie");
+  });
+
+  it("keeps JSON content type for lifecycle requests with a body", () => {
+    const headers = buildRequestHeaders({ "x-auth-transport": "cookie" }, true);
+
+    expect(headers.get("content-type")).toBe("application/json");
   });
 });
