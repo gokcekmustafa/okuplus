@@ -11592,7 +11592,7 @@ async function loadProgress() {
     "development-trophies",
     "development-next-targets",
   ])
-    $(id).replaceChildren();
+    if ($(id)) $(id).replaceChildren();
   $("development-total-gp").textContent = "—";
   $("development-achievement-count").textContent = "Başarıların yükleniyor…";
   $("development-streak").textContent = "";
