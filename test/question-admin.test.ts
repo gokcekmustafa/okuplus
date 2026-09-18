@@ -480,6 +480,12 @@ describe("question admin", () => {
   it("yayınlanmış soruda APPROVED yeni sürüm yayınlanabilir ve eski sürüm immutable kalır", async () => {
     const question = await createQuestion("MULTIPLE_CHOICE", 91);
     const firstVersion = question.versions[0];
+    const reviewedFirst = await app.inject({
+      method: "POST",
+      url: `/admin/questions/versions/${firstVersion.id}/review`,
+      headers: await adminHeaders(),
+    });
+    expect(reviewedFirst.statusCode).toBe(200);
     await approveAndPublishQuestionVersion(firstVersion.id);
 
     const nextVersion = await app.inject({
