@@ -17,6 +17,9 @@
         <div class="brand">
           <h1>Oku+</h1>
           <p>Okuma becerileri platformuna giriş</p>
+          <p class="login-promise">
+            Kısa günlük çalışmalarla okuma becerilerini geliştir, ilerlemeni adım adım gör.
+          </p>
         </div>
         <div class="social-login" aria-label="Sosyal giriş seçenekleri">
           <button id="google-login-btn" type="button" class="btn btn-ghost btn-block" disabled>
@@ -398,6 +401,9 @@
                   </div>
                 </div>
                 <p id="onboarding-error" class="error hidden" role="alert"></p>
+                <button id="onboarding-retry" type="button" class="btn btn-secondary hidden">
+                  Başlangıcı yeniden yükle
+                </button>
                 <div class="onboarding-actions">
                   <button id="onboarding-prev" type="button" class="btn btn-ghost hidden">
                     Geri
@@ -499,6 +505,9 @@
                   aria-describedby="daily-training-status daily-training-progress-text"
                 >
                   Antrenmana Başla
+                </button>
+                <button id="refresh-today-training" type="button" class="btn btn-secondary">
+                  Yenile
                 </button>
                 <span id="daily-training-streak" class="muted" aria-live="polite"></span>
               </div>
