@@ -827,8 +827,20 @@ export async function getStudentSession(
                 select: {
                   id: true,
                   prompt: true,
+                  options: true,
+                  explanation: true,
+                  hint: true,
+                  correctAnswer: true,
+                  contentVersionId: true,
                   status: true,
-                  question: { select: { status: true, deletedAt: true } },
+                  question: {
+                    select: {
+                      contentId: true,
+                      type: true,
+                      status: true,
+                      deletedAt: true,
+                    },
+                  },
                 },
               },
             },
@@ -902,6 +914,28 @@ export async function getStudentSession(
   if (resolvedTrainingConfig?.status === "READY") {
     await loadTrainingRuntimeGraph(session.templateVersionId, actor);
   }
+  const questions = session.templateVersion.questions.map((entry) => {
+    const questionVersion = entry.questionVersion;
+    const correctAnswer = questionVersion.correctAnswer as {
+      blanks?: Array<{ blankId?: unknown }>;
+    };
+    return {
+      questionVersionId: questionVersion.id,
+      position: entry.position,
+      contentId: questionVersion.question.contentId,
+      contentVersionId: questionVersion.contentVersionId,
+      prompt: questionVersion.prompt,
+      type: questionVersion.question.type,
+      options: questionVersion.options,
+      explanation: questionVersion.explanation,
+      hint: questionVersion.hint,
+      blankIds: Array.isArray(correctAnswer?.blanks)
+        ? correctAnswer.blanks
+            .map((blank) => blank.blankId)
+            .filter((blankId): blankId is string => typeof blankId === "string")
+        : [],
+    };
+  });
   const trainingConfig =
     resolvedTrainingConfig?.status === "READY"
       ? toTrainingRuntimeConfig(resolvedTrainingConfig.config)
@@ -910,5 +944,6 @@ export async function getStudentSession(
   return {
     ...session,
     templateVersion: { ...templateVersion, training: trainingConfig },
+    questions,
   };
 }
