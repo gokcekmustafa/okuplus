@@ -13,7 +13,8 @@ import {
   buildTrainingFeedback,
   isTrainingConfigCandidate,
   isTrainingVersionConfig,
-  loadTrainingRuntimeGraph,
+  trainingRuntimeVersionSelect,
+  validateTrainingRuntimeGraphRow,
 } from "../training/runtime.js";
 import { decideTrainingAttempt } from "../training/retry-policy.js";
 import {
@@ -39,6 +40,7 @@ import { validateAttemptTelemetry } from "./telemetry.js";
 
 const ATTEMPT_RESULT_SELECT = {
   id: true,
+  clientAttemptId: true,
   questionVersionId: true,
   questionId: true,
   answer: true,
@@ -834,16 +836,7 @@ export async function createAttempt(
         startedAt: true,
         assessmentId: true,
         templateVersion: {
-          select: {
-            config: true,
-            status: true,
-            template: { select: { status: true, deletedAt: true } },
-            questions: {
-              where: { questionVersionId },
-              select: { templateVersionId: true },
-              take: 1,
-            },
-          },
+          select: trainingRuntimeVersionSelect,
         },
         trainingSessionItem: { select: { status: true } },
       },
@@ -896,20 +889,22 @@ export async function createAttempt(
     throw forbiddenError("Bu soru bu oturumun kapsamına ait değil");
   }
 
-  // Session'ın template'i bu soruyu içermeli
-  const link = session.templateVersion.questions[0];
-  if (!link) {
-    throw validationError("Bu soru bu oturumun şablonuna ait değil");
-  }
-
   if (session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)) {
     if (session.trainingSessionItem && session.trainingSessionItem.status !== "IN_PROGRESS") {
       throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
     }
-    const graph = await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+    const graph = validateTrainingRuntimeGraphRow(session.templateVersion, actor);
     if (!graph.questions.some((question) => question.questionVersionId === questionVersionId)) {
       throw validationError("Bu soru yayınlanmış egzersiz grafiğine ait değil");
     }
+  } else if (
+    !session.templateVersion.questions.some(
+      (question) => question.questionVersionId === questionVersionId,
+    )
+  ) {
+    // Non-training/legacy paths still need the same session membership check,
+    // but do not require the training graph contract.
+    throw validationError("Bu soru bu oturumun şablonuna ait değil");
   }
 
   // 3) scoreAttempt ile puanla (deterministik, yan etkisiz)
@@ -934,17 +929,25 @@ export async function createAttempt(
           FROM pg_advisory_xact_lock(hashtextextended(${`training-attempt:${sessionId}:${questionVersionId}`}, 0))
         `;
 
-        const existingForClient = await tx.attempt.findUnique({
-          where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
+        // Both checks are protected by the same advisory lock. Fetch the
+        // idempotency candidate and this question's history in one round trip
+        // without changing either decision or ordering semantics.
+        const matchingAttempts = await tx.attempt.findMany({
+          where: {
+            sessionId,
+            OR: [{ clientAttemptId }, { questionVersionId }],
+          },
           select: ATTEMPT_RESULT_SELECT,
-        });
-        if (existingForClient) return existingForClient;
-
-        previousAttempts = await tx.attempt.findMany({
-          where: { sessionId, questionVersionId },
-          select: { isCorrect: true },
           orderBy: [{ responseOrder: "asc" }, { createdAt: "asc" }, { id: "asc" }],
         });
+        const existingForClient = matchingAttempts.find(
+          (candidate) => candidate.clientAttemptId === clientAttemptId,
+        );
+        if (existingForClient) return existingForClient;
+
+        previousAttempts = matchingAttempts
+          .filter((candidate) => candidate.questionVersionId === questionVersionId)
+          .map((candidate) => ({ isCorrect: candidate.isCorrect }));
         const decision = decideTrainingAttempt(previousAttempts);
         if (!decision.allowed) {
           throw validationError(
