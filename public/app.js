@@ -602,7 +602,7 @@ function renderTrainingHome(data) {
         ? `🔥 ${dailyGoal?.currentStreak ?? data.currentStreak} günlük seri`
         : "";
   if (button) {
-    button.disabled = isCompleted;
+    button.disabled = isCompleted || button.dataset.todayLoaded !== "true";
     button.textContent = isCompleted
       ? "Bugün tamamlandı"
       : isInProgress
@@ -619,7 +619,17 @@ async function loadToday() {
   var stats = $("today-stats");
   var recent = $("today-recent");
   var recentList = $("dashboard-recent-list");
+  var card = $("today-card");
+  var startButton = $("start-daily-training");
+  var refreshButton = $("refresh-today-training");
   if (!na) return;
+  let loaded = false;
+  card?.setAttribute("aria-busy", "true");
+  if (startButton) {
+    startButton.dataset.todayLoaded = "false";
+    startButton.disabled = true;
+  }
+  if (refreshButton) refreshButton.disabled = true;
   $("today-training-error")?.classList.add("hidden");
   const scope = insightScope();
   try {
@@ -630,6 +640,8 @@ async function loadToday() {
     });
     var data = await parseResponse(res);
     if (scope !== insightScope()) return;
+    loaded = true;
+    if (startButton) startButton.dataset.todayLoaded = "true";
     renderTrainingHome(data);
     renderReviewCard(data.review);
     var label = data.nextAction ? data.nextAction.label : "—";
@@ -701,6 +713,10 @@ async function loadToday() {
       error.textContent = "Bugünkü antrenman yüklenemedi. Tekrar denemek için Yenile'ye bas.";
       error.classList.remove("hidden");
     }
+  } finally {
+    card?.setAttribute("aria-busy", "false");
+    if (refreshButton) refreshButton.disabled = false;
+    if (!loaded && startButton) startButton.disabled = true;
   }
 }
 
@@ -743,9 +759,12 @@ function renderDashboardProgress(data) {
 async function loadDashboardProgress() {
   const card = $("dashboard-progress-card");
   const note = $("dashboard-progress-note");
+  const retry = $("dashboard-progress-retry");
   if (!card) return;
   const scope = insightScope();
   card.setAttribute("aria-busy", "true");
+  retry?.classList.add("hidden");
+  if (retry) retry.disabled = true;
   try {
     const data = await insightApi("progress");
     if (scope !== insightScope()) return;
@@ -753,8 +772,12 @@ async function loadDashboardProgress() {
   } catch {
     if (scope !== insightScope()) return;
     if (note) note.textContent = "Gelişim özeti şu anda yüklenemedi. Yenile ile tekrar dene.";
+    retry?.classList.remove("hidden");
   } finally {
-    if (scope === insightScope()) card.setAttribute("aria-busy", "false");
+    if (scope === insightScope()) {
+      card.setAttribute("aria-busy", "false");
+      if (retry) retry.disabled = false;
+    }
   }
 }
 
@@ -1741,7 +1764,10 @@ function updateOnboardingStep() {
 
 async function loadOnboardingLevels() {
   var sel = $("onboard-level");
+  var retry = $("onboarding-level-retry");
   if (!sel || sel.options.length > 1) return;
+  retry?.classList.add("hidden");
+  if (retry) retry.disabled = true;
   try {
     var tokens = getStoredTokens();
     var res = await fetch("/student/onboarding/levels", {
@@ -1750,6 +1776,7 @@ async function loadOnboardingLevels() {
     var data = await parseResponse(res);
     var items = data.levels || data || [];
     sel.dataset.loadError = "false";
+    retry?.classList.add("hidden");
     sel.innerHTML =
       '<option value="">Seviye seçin…</option>' +
       items
@@ -1761,6 +1788,9 @@ async function loadOnboardingLevels() {
     void _e;
     sel.dataset.loadError = "true";
     sel.innerHTML = '<option value="">Seviyeler yüklenemedi — tekrar dene</option>';
+    retry?.classList.remove("hidden");
+  } finally {
+    if (retry) retry.disabled = false;
   }
 }
 
@@ -1841,6 +1871,18 @@ function setupOnboardingEvents() {
       } finally {
         retry.disabled = false;
         retry.removeAttribute("aria-busy");
+      }
+    });
+  var levelRetry = $("onboarding-level-retry");
+  if (levelRetry)
+    levelRetry.addEventListener("click", async function () {
+      levelRetry.disabled = true;
+      levelRetry.setAttribute("aria-busy", "true");
+      try {
+        await loadOnboardingLevels();
+      } finally {
+        levelRetry.disabled = false;
+        levelRetry.removeAttribute("aria-busy");
       }
     });
   if (next)
@@ -11691,6 +11733,7 @@ function setupProgressEvents() {
   $("progress-refresh").addEventListener("click", loadProgress);
   $("home-progress-link").addEventListener("click", () => navigate("progress"));
   $("dashboard-progress-link")?.addEventListener("click", () => navigate("progress"));
+  $("dashboard-progress-retry")?.addEventListener("click", () => void loadDashboardProgress());
   $("history-prev").addEventListener("click", () => loadInsightHistory(insightHistoryPage - 1));
   $("history-next").addEventListener("click", () => loadInsightHistory(insightHistoryPage + 1));
   $("page-progress").addEventListener("click", (event) => {
