@@ -94,6 +94,9 @@ const mainIdeaVersionSelect = {
   },
 } satisfies Prisma.ExerciseTemplateVersionSelect;
 
+/** Shared full graph projection for callers that already load a session. */
+export const trainingRuntimeVersionSelect = mainIdeaVersionSelect;
+
 export type MainIdeaVersionRow = Prisma.ExerciseTemplateVersionGetPayload<{
   select: typeof mainIdeaVersionSelect;
 }>;
@@ -163,28 +166,41 @@ export async function loadTrainingRuntimeGraph(
 ): Promise<MainIdeaRuntimeGraph> {
   const version = await prisma.exerciseTemplateVersion.findUnique({
     where: { id: templateVersionId },
-    select: { config: true },
+    select: mainIdeaVersionSelect,
   });
   if (!version) throw notFoundError("Egzersiz sürümü bulunamadı");
 
-  const resolved = resolveTrainingRuntimeConfig("TRAINING", version.config);
+  return validateTrainingRuntimeGraphRow(version, actor);
+}
+
+/**
+ * Validates an already-loaded published training graph without issuing
+ * another database query. Callers that already selected the full version
+ * graph can use this to preserve the same fail-closed checks while reusing
+ * the snapshot they have in hand.
+ */
+export function validateTrainingRuntimeGraphRow(
+  row: MainIdeaVersionRow,
+  actor: TrainingActor,
+): MainIdeaRuntimeGraph {
+  const resolved = resolveTrainingRuntimeConfig("TRAINING", row.config);
   if (resolved.status !== "READY") {
     throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
   }
 
   switch (resolved.config.family) {
     case ATTENTION_BURST_FAMILY:
-      return loadAttentionBurstRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, ATTENTION_BURST_SPEC);
     case RAPID_RECOGNITION_FAMILY:
-      return loadRapidRecognitionRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, RAPID_RECOGNITION_SPEC);
     case PHRASE_CHUNKING_FAMILY:
-      return loadPhraseChunkingRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, PHRASE_CHUNKING_SPEC);
     case DETAIL_EVIDENCE_FAMILY:
-      return loadDetailEvidenceRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, DETAIL_EVIDENCE_SPEC);
     case INFERENCE_FAMILY:
-      return loadInferenceRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, INFERENCE_SPEC);
     case MAIN_IDEA_FAMILY:
-      return loadMainIdeaRuntimeGraph(templateVersionId, actor);
+      return validateComprehensionRow(row, actor, MAIN_IDEA_SPEC);
   }
 
   throw validationError("Egzersiz ailesi desteklenmiyor");

@@ -8750,9 +8750,12 @@ async function handleExerciseCreate() {
 }
 async function loadExerciseQuestions() {
   if (!exerciseSession) return;
-  const data = await parseResponse(
-    await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`),
-  );
+  // The student session response already contains the sanitized question
+  // projection. Reuse it for the first render; keep the endpoint fallback so
+  // older deployments and admin-created sessions remain compatible.
+  const data = Array.isArray(exerciseSession.questions)
+    ? { questions: exerciseSession.questions }
+    : await parseResponse(await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`));
   exerciseQuestions = Array.isArray(data.questions) ? data.questions : [];
   exerciseQuestions.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const unanswered = exerciseQuestions.findIndex((q) => {
