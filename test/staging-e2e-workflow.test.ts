@@ -135,5 +135,7 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).toContain("STAGING_STUDENT_PASSWORD");
     expect(pilotSmokeRunner).toContain("wrongAnswerRetry");
     expect(pilotSmokeRunner).toContain("firstExerciseCompletion");
+    expect(pilotSmokeRunner).toContain('page.locator("#page-onboarding")');
+    expect(pilotSmokeRunner).not.toContain("onboarding navigation helper missing");
   });
 });

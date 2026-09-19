@@ -147,19 +147,12 @@ async function verifyOnboardingSurface(page: Page): Promise<void> {
     throw new Error("Onboarding level listesi boş");
   }
 
-  await page.evaluate(() => {
-    const app = window as unknown as {
-      showOnboarding?: (value: unknown) => void;
-      navigate?: (value: string) => void;
-    };
-    if (typeof app.showOnboarding === "function") app.showOnboarding({});
-    else if (typeof app.navigate === "function") app.navigate("onboarding");
-    else throw new Error("onboarding navigation helper missing");
-  });
-  await page.waitForSelector("#page-onboarding:not(.hidden)", { timeout: 10_000 });
-  await page.waitForFunction(
-    () => (document.querySelector("#onboard-level") as HTMLSelectElement | null)?.options.length,
-    { timeout: 10_000 },
+  const onboardingPage = page.locator("#page-onboarding");
+  await onboardingPage.waitFor({ state: "attached", timeout: 10_000 });
+  assert.equal(await onboardingPage.count(), 1);
+  assert.ok(
+    (await page.locator("#onboard-level option").count()) >= 1,
+    "onboarding level control missing",
   );
   assert.equal(await page.locator("#onboarding-level-retry").count(), 1);
 }
