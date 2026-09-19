@@ -88,7 +88,7 @@ describe("placement onboarding UI request contract", () => {
       "x-csrf-token": "csrf-token",
     });
     expect(h.csrfHeaderCalls).toBe(1);
-    expect(h.navigations).toEqual(["assessments"]);
+    expect(h.navigations).toEqual(["exercise"]);
   });
 
   it("keeps the existing quick-start POST flow with a JSON body", async () => {
@@ -96,10 +96,9 @@ describe("placement onboarding UI request contract", () => {
     await h.elements.get("onboard-quickstart")!.handlers.click();
 
     const createSession = h.calls[1];
-    expect(createSession.url).toBe("/admin/exercise-sessions");
+    expect(createSession.url).toBe("/student/exercises/start");
     expect(createSession.options.method).toBe("POST");
     const body = JSON.parse(String(createSession.options.body)) as Record<string, string>;
-    expect(body.studentId).toBe("student-1");
     expect(body.templateVersionId).toBe("template-version");
     expect(body.clientSessionId).toEqual(expect.any(String));
     expect(h.navigations).toEqual(["exercise"]);

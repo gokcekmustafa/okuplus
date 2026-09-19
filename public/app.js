@@ -527,6 +527,7 @@ async function maybeShowOnboarding() {
       return;
     }
     showOnboarding(data);
+    recordPilotTelemetry("ONBOARDING_STARTED");
   } catch (_e) {
     void _e;
     navigate("onboarding");
@@ -796,22 +797,171 @@ function isPremiumLimitError(error) {
 }
 
 function recordPremiumTelemetry(eventType) {
+  recordPilotTelemetry(eventType, {}, "premium-" + eventType);
+}
+
+function recordPilotTelemetry(eventType, context = {}, semanticKey = eventType) {
   if (isPlatformUser !== false) return;
   const tokens = getStoredTokens();
   if (!tokens.accessToken || !tokens.tenantId) return;
   let clientEventId;
   try {
-    clientEventId = `premium-${eventType}-${crypto.randomUUID()}`;
+    clientEventId = `pilot-${semanticKey}-${crypto.randomUUID()}`;
   } catch {
-    clientEventId = `premium-${eventType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    clientEventId = `pilot-${semanticKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
+  const payload = { eventType, clientEventId };
+  if (typeof context.sessionId === "string" && context.sessionId.trim())
+    payload.sessionId = context.sessionId;
+  if (typeof context.questionVersionId === "string" && context.questionVersionId.trim())
+    payload.questionVersionId = context.questionVersionId;
   void fetch("/student/pilot/events", {
     method: "POST",
     headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    body: JSON.stringify({ eventType, clientEventId }),
+    body: JSON.stringify(payload),
   }).catch(() => {
     // Telemetry is best effort and never blocks access or learning.
   });
+}
+
+let pilotReportMode = "feedback";
+
+const PILOT_FEEDBACK_CATEGORIES = [
+  ["GENERAL_SATISFACTION", "Genel deneyim"],
+  ["CONTENT_CLARITY", "Ders anlatımı"],
+  ["QUESTION_CLARITY", "Soru açıklığı"],
+  ["DIFFICULTY", "Zorluk seviyesi"],
+];
+
+const PILOT_BUG_CATEGORIES = [
+  ["BUG", "Beklenmeyen davranış"],
+  ["CONTENT_ISSUE", "İçerik sorunu"],
+  ["WRONG_ANSWER", "Cevap değerlendirmesi"],
+  ["UNCLEAR_QUESTION", "Anlaşılmayan soru"],
+  ["TECHNICAL_ERROR", "Teknik sorun"],
+];
+
+function pilotReportContext() {
+  const context = {};
+  if (typeof exerciseSession?.id === "string" && exerciseSession.id.trim())
+    context.sessionId = exerciseSession.id;
+  const questionVersionId = $("exercise-current-question")?.dataset.questionVersionId;
+  if (typeof questionVersionId === "string" && questionVersionId.trim())
+    context.questionVersionId = questionVersionId;
+  return context;
+}
+
+function closePilotReport() {
+  const dialog = $("pilot-report-dialog");
+  if (dialog?.open && typeof dialog.close === "function") dialog.close();
+  else dialog?.classList.add("hidden");
+}
+
+function openPilotReport(mode) {
+  pilotReportMode = mode === "bug" ? "bug" : "feedback";
+  const isBug = pilotReportMode === "bug";
+  const dialog = $("pilot-report-dialog");
+  const category = $("pilot-report-category");
+  const ratingWrap = $("pilot-report-rating-wrap");
+  const title = $("pilot-report-title");
+  const lead = $("pilot-report-lead");
+  const messageLabel = $("pilot-report-message-label");
+  const message = $("pilot-report-message");
+  const error = $("pilot-report-error");
+  const status = $("pilot-support-status");
+  if (!dialog || !category) return;
+  const categories = isBug ? PILOT_BUG_CATEGORIES : PILOT_FEEDBACK_CATEGORIES;
+  category.innerHTML = categories
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+  if (title) title.textContent = isBug ? "Bir sorun bildir" : "Geri bildirim gönder";
+  if (lead)
+    lead.textContent = isBug
+      ? "Kısa bir not yeterli. Şifre, token veya özel bilgilerini yazma."
+      : "Deneyimini birkaç kelimeyle paylaşabilirsin. Şifre, token veya özel bilgilerini yazma.";
+  if (messageLabel) messageLabel.textContent = isBug ? "Sorun neydi?" : "Mesajın";
+  if (message) {
+    message.value = "";
+    message.placeholder = isBug
+      ? "Ne olduğunu ve mümkünse hangi adımda olduğunu anlat…"
+      : "Ne olduğunu veya neyi daha iyi yapmak istediğini anlat…";
+  }
+  if (ratingWrap) ratingWrap.classList.toggle("hidden", isBug);
+  if (error) {
+    error.textContent = "";
+    error.classList.add("hidden");
+  }
+  if (status) status.textContent = "";
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.classList.remove("hidden");
+  message?.focus();
+}
+
+async function submitPilotReport(event) {
+  event.preventDefault();
+  const submit = $("pilot-report-submit");
+  const error = $("pilot-report-error");
+  const status = $("pilot-support-status");
+  const message = $("pilot-report-message")?.value.trim();
+  if (!message) return;
+  if (submit) {
+    submit.disabled = true;
+    submit.setAttribute("aria-busy", "true");
+    submit.textContent = "Gönderiliyor…";
+  }
+  if (error) error.classList.add("hidden");
+  const category = $("pilot-report-category")?.value;
+  const context = pilotReportContext();
+  const tokens = getStoredTokens();
+  try {
+    const isBug = pilotReportMode === "bug";
+    const body = isBug
+      ? {
+          clientBugId: `pilot-bug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          category,
+          description: message.slice(0, 2000),
+          ...context,
+        }
+      : {
+          clientFeedbackId: `pilot-feedback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          category,
+          rating: Number($("pilot-report-rating")?.value) || undefined,
+          message: message.slice(0, 1000),
+          ...context,
+        };
+    const endpoint = isBug ? "/student/pilot/bug-reports" : "/student/pilot/feedback";
+    await parseResponse(
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        body: JSON.stringify(body),
+      }),
+    );
+    closePilotReport();
+    if (status) status.textContent = "Mesajın pilot ekibine iletildi.";
+  } catch {
+    if (error) {
+      error.textContent = "Mesaj gönderilemedi. Biraz sonra tekrar dene.";
+      error.classList.remove("hidden");
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.removeAttribute("aria-busy");
+      submit.textContent = "Gönder";
+    }
+  }
+}
+
+function setupPilotExperienceEvents() {
+  $("pilot-support-open")?.addEventListener("click", () => openPilotReport("feedback"));
+  $("pilot-bug-open")?.addEventListener("click", () => openPilotReport("bug"));
+  $("pilot-report-close")?.addEventListener("click", closePilotReport);
+  $("pilot-report-cancel")?.addEventListener("click", closePilotReport);
+  $("pilot-report-dialog")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) closePilotReport();
+  });
+  $("pilot-report-form")?.addEventListener("submit", submitPilotReport);
 }
 
 function premiumFeatureLabel(feature) {
@@ -1688,6 +1838,7 @@ window.startDailyTraining = async function () {
     }
     rememberDailyTrainingState({ id: data.id, exerciseSessionId: item.exerciseSessionId });
     exerciseRequestedSessionId = item.exerciseSessionId;
+    recordPilotTelemetry("EXERCISE_STARTED", { sessionId: item.exerciseSessionId });
     navigate("exercise");
   } catch (error) {
     if (status) {
@@ -1931,6 +2082,7 @@ function setupOnboardingEvents() {
         $("onboarding-next").classList.add("hidden");
         $("onboarding-complete").classList.add("hidden");
         $("onboarding-step-num").textContent = "✓";
+        recordPilotTelemetry("ONBOARDING_COMPLETED");
       } catch (e) {
         errEl.textContent = e.message || "Tamamlanamadı";
         errEl.classList.remove("hidden");
@@ -1959,22 +2111,30 @@ function setupOnboardingEvents() {
         });
         var data = await parseResponse(res);
         if (!data.templateVersionId) throw new Error("Uygun egzersiz bulunamadı");
-        var meForSession = await fetchMe(tokens.accessToken, tokens.tenantId);
-        var createRes = await fetch("/admin/exercise-sessions", {
+        var createRes = await fetch("/student/exercises/start", {
           method: "POST",
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
+          headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
           body: JSON.stringify({
-            studentId: meForSession.user.id,
             templateVersionId: data.templateVersionId,
             clientSessionId: "onboard-" + Date.now(),
           }),
         });
-        await parseResponse(createRes);
+        var started = await parseResponse(createRes);
+        if (!started.sessionId) throw new Error("İlk çalışma başlatılamadı");
+        exerciseRequestedSessionId = started.sessionId;
+        if (typeof rememberExerciseSession === "function")
+          rememberExerciseSession(started.sessionId);
+        if (typeof recordPilotTelemetry === "function")
+          recordPilotTelemetry(
+            "EXERCISE_STARTED",
+            { sessionId: started.sessionId },
+            "first-training-started",
+          );
         navigate("exercise");
         // trigger exercise load if needed
         if (typeof loadExercisePage === "function") void loadExercisePage();
-      } catch (e) {
-        $("onboarding-error").textContent = e.message;
+      } catch {
+        $("onboarding-error").textContent = "İlk çalışman başlatılamadı. Tekrar deneyebilirsin.";
         $("onboarding-error").classList.remove("hidden");
       }
     });
@@ -1996,11 +2156,20 @@ function setupOnboardingEvents() {
           },
           body: JSON.stringify({}),
         });
-        await parseResponse(startRes);
-        navigate("assessments");
-        void loadAssessments();
-      } catch (e) {
-        $("onboarding-error").textContent = e.message;
+        var started = await parseResponse(startRes);
+        if (!started.sessionId) throw new Error("Seviye ölçümü başlatılamadı");
+        exerciseRequestedSessionId = started.sessionId;
+        if (typeof rememberExerciseSession === "function")
+          rememberExerciseSession(started.sessionId);
+        if (typeof recordPilotTelemetry === "function")
+          recordPilotTelemetry(
+            "ASSESSMENT_STARTED",
+            { sessionId: started.sessionId },
+            "placement-started",
+          );
+        navigate("exercise");
+      } catch {
+        $("onboarding-error").textContent = "Seviye ölçümü başlatılamadı. Tekrar deneyebilirsin.";
         $("onboarding-error").classList.remove("hidden");
       }
     });
@@ -2206,6 +2375,7 @@ function navigate(page) {
     if (active) item.setAttribute("aria-current", "page");
   }
   if (page === "dashboard") {
+    if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
     if (!isPlatformUser) {
       void loadToday();
       void loadLearningPath();
@@ -2256,6 +2426,8 @@ function navigate(page) {
   } else if (page === "assessments") {
     void loadAssessments();
   } else if (page === "progress") {
+    if (isPlatformUser === false)
+      recordPilotTelemetry("LEARNING_PATH_OPENED", {}, "progress-viewed");
     void loadProgress();
   } else if (page === "badges") {
     void loadGamification();
@@ -2713,6 +2885,7 @@ $("signup-form").addEventListener("submit", async (event) => {
     const session = await signup(displayName, email, password);
     setStoredSession(session);
     showDashboard(session);
+    recordPilotTelemetry("SIGNUP_COMPLETED");
   } catch (err) {
     $("signup-error").textContent = err.message || "Hesap oluşturulamadı.";
     $("signup-error").classList.remove("hidden");
@@ -8852,6 +9025,11 @@ function renderExerciseQuestion() {
   }
   const q = exerciseQuestions[currentExerciseQuestionIndex];
   if (!q) return;
+  if (isPlatformUser === false)
+    recordPilotTelemetry("QUESTION_VIEWED", {
+      sessionId: exerciseSession?.id,
+      questionVersionId: q.questionVersionId,
+    });
   renderStudentReading(exerciseSession, q);
   if (counter)
     counter.textContent = `Soru ${currentExerciseQuestionIndex + 1} / ${exerciseQuestions.length}`;
@@ -9249,6 +9427,8 @@ async function handleExerciseSubmitAttempt() {
   exerciseQuestionTelemetry.set(questionVersionId, telemetry);
   const retrying =
     previousAttempt?.isCorrect === false && Number(previousAttempt.responseOrder) === 1;
+  if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
+    recordPilotTelemetry("QUESTION_ATTEMPTED", { sessionId, questionVersionId });
   // Reuse the exact logical request after an uncertain network failure.
   const retry =
     exerciseRequest?.sessionId === sessionId &&
@@ -9313,6 +9493,8 @@ async function handleExerciseSubmitAttempt() {
       throw new Error("Geçersiz cevap yanıtı");
     exerciseAttempts.set(questionVersionId, data);
     exerciseRequest = null;
+    if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
+      recordPilotTelemetry("QUESTION_ANSWERED", { sessionId, questionVersionId });
     showExerciseFeedback(data);
     markExerciseTiming(answerTimingFeedback);
     measureExerciseTiming(
@@ -9386,6 +9568,19 @@ async function handleExerciseComplete() {
             }),
           );
     const daily = student && isDailyTrainingExercise();
+    if (student && typeof recordPilotTelemetry === "function") {
+      recordPilotTelemetry(
+        "EXERCISE_COMPLETED",
+        { sessionId: exerciseSession.id },
+        daily ? "training-completed" : "exercise-completed",
+      );
+      if (exerciseSession.assessmentId)
+        recordPilotTelemetry(
+          "ASSESSMENT_COMPLETED",
+          { sessionId: exerciseSession.id },
+          "placement-completed",
+        );
+    }
     if (student && !daily) {
       const isAssessment = Boolean(exerciseSession.assessmentId);
       const beforeBadges = new Set((exerciseGamification?.badges || []).map((badge) => badge.id));
@@ -11342,6 +11537,7 @@ async function init() {
   setupGamificationEvents();
   setupCelebrationEvents();
   setupAssessmentEvents();
+  setupPilotExperienceEvents();
 }
 init();
 

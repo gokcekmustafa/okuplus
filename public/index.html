@@ -4443,6 +4443,28 @@
                 </label>
               </div>
             </div>
+            <section
+              class="settings-card card pilot-support-card"
+              data-student
+              aria-labelledby="pilot-support-title"
+            >
+              <div>
+                <span class="eyebrow">PİLOT DESTEĞİ</span>
+                <h3 id="pilot-support-title">Bir yerde takıldın mı?</h3>
+                <p class="muted">
+                  Sorunu veya önerini teknik ayrıntılarla uğraşmadan bize iletebilirsin.
+                </p>
+              </div>
+              <div class="settings-actions pilot-support-actions">
+                <button id="pilot-support-open" type="button" class="btn btn-secondary">
+                  Destek isteği gönder
+                </button>
+                <button id="pilot-bug-open" type="button" class="btn btn-ghost">
+                  Bir sorun bildir
+                </button>
+              </div>
+              <p id="pilot-support-status" class="muted" role="status" aria-live="polite"></p>
+            </section>
           </section>
         </main>
         <nav id="student-bottom-nav" class="student-bottom-nav hidden" aria-label="Öğrenci menüsü">
@@ -4512,6 +4534,58 @@
         </nav>
       </div>
     </div>
+    <dialog
+      id="pilot-report-dialog"
+      class="premium-dialog pilot-report-dialog"
+      aria-labelledby="pilot-report-title"
+    >
+      <form id="pilot-report-form">
+        <div class="premium-dialog-head">
+          <div>
+            <span class="eyebrow">PİLOT DESTEĞİ</span>
+            <h3 id="pilot-report-title">Geri bildirim gönder</h3>
+          </div>
+          <button id="pilot-report-close" type="button" class="btn btn-icon" aria-label="Kapat">
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+        <div class="premium-dialog-body">
+          <p id="pilot-report-lead" class="muted">
+            Kısa bir not yeterli. Şifre, token veya özel bilgilerini yazma.
+          </p>
+          <label class="field">
+            <span>Konusu</span>
+            <select id="pilot-report-category"></select>
+          </label>
+          <label id="pilot-report-rating-wrap" class="field">
+            <span>Nasıl gidiyor? <small>(isteğe bağlı)</small></span>
+            <select id="pilot-report-rating">
+              <option value="">Puan vermek istemiyorum</option>
+              <option value="5">5 — Çok iyi</option>
+              <option value="4">4 — İyi</option>
+              <option value="3">3 — Orta</option>
+              <option value="2">2 — Zorlanıyorum</option>
+              <option value="1">1 — Yardıma ihtiyacım var</option>
+            </select>
+          </label>
+          <label class="field">
+            <span id="pilot-report-message-label">Mesajın</span>
+            <textarea
+              id="pilot-report-message"
+              rows="5"
+              maxlength="2000"
+              placeholder="Ne olduğunu veya neyi daha iyi yapmak istediğini anlat…"
+              required
+            ></textarea>
+          </label>
+          <p id="pilot-report-error" class="error hidden" role="alert"></p>
+        </div>
+        <div class="premium-dialog-actions">
+          <button id="pilot-report-cancel" type="button" class="btn btn-ghost">Vazgeç</button>
+          <button id="pilot-report-submit" type="submit" class="btn btn-primary">Gönder</button>
+        </div>
+      </form>
+    </dialog>
     <dialog
       id="premium-paywall-dialog"
       class="premium-dialog"
