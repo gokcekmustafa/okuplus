@@ -1,0 +1,232 @@
+name: Staging pilot smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      student_email:
+        description: "Optional clean .invalid synthetic student; defaults to staging pilot fixture"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  staging-pilot-smoke:
+    name: Run short authenticated staging pilot smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      BASE_URL: ${{ vars.BASE_URL }}
+      STAGING_STUDENT_EMAIL: ${{ inputs.student_email || vars.STAGING_PILOT_SMOKE_STUDENT_EMAIL || vars.STAGING_STUDENT_EMAIL }}
+      STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
+
+    steps:
+      - name: Checkout staging
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Validate staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const value = process.env.BASE_URL?.trim();
+          if (!value) throw new Error("BASE_URL is not configured");
+          const url = new URL(value);
+          if (url.protocol !== "https:" || !/^okuplus-[a-z0-9-]+-gokcekmustafas-projects\.vercel\.app$/u.test(url.hostname)) {
+            throw new Error("BASE_URL is not an approved staging deployment URL");
+          }
+          const email = process.env.STAGING_STUDENT_EMAIL?.trim().toLowerCase();
+          if (!email || !/^[^@\s]+@[^@\s]+\.invalid$/u.test(email)) {
+            throw new Error("STAGING_STUDENT_EMAIL must be a .invalid synthetic email");
+          }
+          if (!process.env.STAGING_STUDENT_PASSWORD) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
+          console.log("staging configuration=present");
+          console.log("student fixture=synthetic .invalid (value hidden)");
+          console.log("student password=protected secret (value hidden)");
+          NODE
+
+      - name: Check staging health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in /health /health/db /ready; do
+            status="$(curl --fail --silent --show-error --location --max-time 20 -o /dev/null -w '%{http_code}' "${BASE_URL}${path}")"
+            test "$status" = "200"
+            echo "${path}=200"
+          done
+
+      - name: Locate Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v chromium || command -v google-chrome || command -v chromium-browser || true)"
+          test -n "$browser"
+          printf 'CHROME_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
+          echo "browser=available"
+
+      - name: Provision official synthetic staging student
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(npx tsx scripts/provision-staging-release-0-5-e2e.ts 2>&1)"
+          exit_code=$?
+          set -e
+          PROVISION_EXIT_CODE="$exit_code" PROVISION_OUTPUT="$output" node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const raw = process.env.PROVISION_OUTPUT ?? "";
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? { status: "FAIL" };
+          const redact = (value) => String(value)
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
+            .slice(0, 200);
+          const summary = {
+            status: result.status === "PASS" ? "PASS" : "FAIL",
+            account: result.account === "CREATED" || result.account === "EXISTING" ? result.account : "UNKNOWN",
+            auth: result.auth === "PASS" ? "PASS" : "FAIL",
+            onboarding: result.onboarding === "PASS" ? "PASS" : "FAIL",
+            entitlement: result.entitlement === "PLAN_PREMIUM_STAGING_FIXTURE" ? "PASS" : "FAIL",
+            error: typeof result.message === "string" ? redact(result.message) : null,
+            productionTouched: "NO",
+          };
+          writeFileSync("staging-pilot-provision-summary.json", JSON.stringify(summary, null, 2));
+          console.log(`provisioning=${summary.status} account=${summary.account}`);
+          if (summary.error) console.log(`provisioning.error=${summary.error}`);
+          if (Number(process.env.PROVISION_EXIT_CODE) !== 0 || summary.status !== "PASS") process.exit(1);
+          NODE
+
+      - name: Run short authenticated browser smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          output="$(npx tsx scripts/browser-staging-pilot-smoke.ts 2>&1)"
+          exit_code=$?
+          set -e
+          SMOKE_EXIT_CODE="$exit_code" SMOKE_OUTPUT="$output" node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          const raw = process.env.SMOKE_OUTPUT ?? "";
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? { status: "FAIL" };
+          const redact = (value) => String(value)
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
+            .slice(0, 240);
+          const safe = {
+            status: result.status === "PASS" ? "PASS" : "FAIL",
+            auth: result.auth ?? "NOT_RUN",
+            authMe: result.authMe ?? "NOT_RUN",
+            onboarding: result.onboarding ?? "NOT_RUN",
+            placement: result.placement ?? "NOT_RUN",
+            baseline: result.baseline ?? "NOT_RUN",
+            firstTraining: result.firstTraining ?? "NOT_RUN",
+            exercise: result.exercise ?? "NOT_RUN",
+            wrongAnswerRetry: result.wrongAnswerRetry ?? "NOT_RUN",
+            firstExerciseCompletion: result.firstExerciseCompletion ?? "NOT_RUN",
+            mobile: Array.isArray(result.mobile) ? result.mobile : [],
+            support: result.support ?? "NOT_RUN",
+            bugReport: result.bugReport ?? "NOT_RUN",
+            consoleErrors: Number(result.consoleErrors ?? 0),
+            pageErrors: Number(result.pageErrors ?? 0),
+            networkErrors: Number(result.networkErrors ?? 0),
+            unexpectedHttpErrors: Number(result.unexpectedHttpErrors ?? 0),
+            duplicateAnswerRequests: Number(result.duplicateAnswerRequests ?? 0),
+            error: typeof result.message === "string" ? redact(result.message) : null,
+            productionTouched: "NO",
+            fullE2e: "NOT_RUN",
+          };
+          writeFileSync("staging-pilot-smoke-summary.json", JSON.stringify(safe, null, 2));
+          console.log(`pilotSmoke=${safe.status}`);
+          console.log(`mobile=${safe.mobile.join(",")}`);
+          console.log(`support=${safe.support} bugReport=${safe.bugReport}`);
+          console.log(`consoleErrors=${safe.consoleErrors} pageErrors=${safe.pageErrors}`);
+          console.log(`networkErrors=${safe.networkErrors} unexpectedHttpErrors=${safe.unexpectedHttpErrors}`);
+          console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
+          console.log("fullE2E=NOT_RUN");
+          if (safe.error) console.log(`pilotSmoke.error=${safe.error}`);
+          if (Number(process.env.SMOKE_EXIT_CODE) !== 0 || safe.status !== "PASS") process.exit(1);
+          NODE
+
+      - name: Verify secret redaction and staging-only output
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readdir, readFile } from "node:fs/promises";
+          const secret = process.env.STAGING_STUDENT_PASSWORD;
+          if (!secret) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
+          for (const name of await readdir(".", { withFileTypes: false })) {
+            if (!name.endsWith("summary.json")) continue;
+            const contents = await readFile(name, "utf8");
+            if (contents.includes(secret)) throw new Error(`secret found in ${name}`);
+          }
+          console.log("secret-redaction=PASS");
+          console.log("productionTouched=NO");
+          NODE
+
+      - name: Publish sanitized summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Fast staging pilot smoke"
+            echo "- health: /health /health/db /ready = 200"
+            echo "- Full E2E: NOT RUN"
+            echo "- production touched: NO"
+            for file in staging-pilot-provision-summary.json staging-pilot-smoke-summary.json; do
+              if test -f "$file"; then
+                SUMMARY_FILE="$file" node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(process.env.SUMMARY_FILE, "utf8"));
+          for (const [key, value] of Object.entries(result)) {
+            console.log(`- ${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
+          }
+          NODE
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload sanitized summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-pilot-smoke-summary
+          path: |
+            staging-pilot-provision-summary.json
+            staging-pilot-smoke-summary.json
+          if-no-files-found: warn
+          retention-days: 7
