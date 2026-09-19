@@ -5,6 +5,10 @@ const workflow = readFileSync(
   new URL("../.github/workflows/staging-e2e.yml", import.meta.url),
   "utf8",
 );
+const closureRunner = readFileSync(
+  new URL("../scripts/browser-staging-pilot-closure.ts", import.meta.url),
+  "utf8",
+);
 
 describe("staging authenticated E2E workflow contract", () => {
   it("is manual-only and binds staging credentials in the executing job", () => {
@@ -63,5 +67,13 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).not.toContain("vercel deploy");
     expect(workflow).not.toContain("vercel pull");
     expect(workflow).not.toContain("set -x");
+  });
+
+  it("uses unique login fields in the closure browser smoke", () => {
+    expect(closureRunner).toContain('page.locator("#login-email").fill(EMAIL)');
+    expect(closureRunner).toContain('page.locator("#login-password").fill(PASSWORD)');
+    expect(closureRunner).not.toContain('getByLabel("E-posta"');
+    expect(closureRunner).not.toContain('getByLabel("Şifre"');
+    expect(closureRunner).not.toContain("console.log(PASSWORD");
   });
 });

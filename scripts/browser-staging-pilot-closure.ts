@@ -30,8 +30,8 @@ async function waitForStudentApp(page: Page): Promise<void> {
 
 async function login(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.getByLabel("E-posta", { exact: true }).fill(EMAIL);
-  await page.getByLabel("Şifre", { exact: true }).fill(PASSWORD);
+  await page.locator("#login-email").fill(EMAIL);
+  await page.locator("#login-password").fill(PASSWORD);
   const response = page.waitForResponse(
     (candidate) =>
       candidate.url().endsWith("/auth/login") && candidate.request().method() === "POST",
