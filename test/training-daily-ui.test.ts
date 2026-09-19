@@ -7,10 +7,19 @@ const index = readFileSync("public/index.html", "utf8");
 describe("daily training student flow", () => {
   it("starts and resumes the server-owned daily session", () => {
     expect(index).toContain('id="start-daily-training"');
+    expect(index).toContain('id="refresh-today-training"');
+    expect(index).toContain('id="today-training-error"');
     expect(app).toContain('fetch("/student/training/daily/start"');
     expect(app).toContain('fetch("/student/training/daily/" + encodeURIComponent(id)');
     expect(app).toContain("rememberDailyTrainingState");
     expect(app).toContain("nextDailyTrainingItem");
+  });
+
+  it("keeps daily failures visible and retryable without technical error text", () => {
+    expect(app).toContain("formatDailyTrainingError");
+    expect(app).toContain('status.classList.remove("hidden")');
+    expect(app).toContain('$("refresh-today-training")?.addEventListener');
+    expect(app).not.toContain("status.textContent = error.message");
   });
 
   it("reuses the daily start snapshot before loading the first exercise", () => {
