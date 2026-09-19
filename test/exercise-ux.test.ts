@@ -60,6 +60,13 @@ function harness() {
 }
 
 describe("exercise UX state from production frontend", () => {
+  it("reuses the sanitized student-session question projection before the legacy fetch fallback", () => {
+    expect(source).toContain("Array.isArray(exerciseSession.questions)");
+    expect(source).toContain(
+      "await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`)",
+    );
+  });
+
   it("does not label a null score as wrong or award invented GP", () => {
     const h = harness();
     h.run('showExerciseFeedback({ id: "a", isCorrect: null, rawScore: null })');
