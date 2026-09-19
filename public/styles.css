@@ -852,6 +852,17 @@ body {
   font-size: 14px;
 }
 
+.brand .login-promise {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #dbe5f2;
+  border-radius: 12px;
+  background: #f7fbff;
+  color: #243655;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .field {
   display: block;
   margin-bottom: 16px;
@@ -906,6 +917,11 @@ body {
 
 .login-card .btn {
   min-height: 48px;
+}
+
+#onboarding-retry {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .error {
