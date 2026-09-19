@@ -9,6 +9,14 @@ const closureRunner = readFileSync(
   new URL("../scripts/browser-staging-pilot-closure.ts", import.meta.url),
   "utf8",
 );
+const pilotSmokeWorkflow = readFileSync(
+  new URL("../.github/workflows/staging-pilot-smoke.yml", import.meta.url),
+  "utf8",
+);
+const pilotSmokeRunner = readFileSync(
+  new URL("../scripts/browser-staging-pilot-smoke.ts", import.meta.url),
+  "utf8",
+);
 
 describe("staging authenticated E2E workflow contract", () => {
   it("is manual-only and binds staging credentials in the executing job", () => {
@@ -75,5 +83,52 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(closureRunner).not.toContain('getByLabel("E-posta"');
     expect(closureRunner).not.toContain('getByLabel("Şifre"');
     expect(closureRunner).not.toContain("console.log(PASSWORD");
+  });
+
+  it("defines a manual-only short smoke without invoking Full E2E", () => {
+    expect(pilotSmokeWorkflow).toMatch(/on:\s*\n\s+workflow_dispatch:/u);
+    expect(pilotSmokeWorkflow).toContain("ref: staging");
+    expect(pilotSmokeWorkflow).toContain("BASE_URL: ${{ vars.BASE_URL }}");
+    expect(pilotSmokeWorkflow).toContain(
+      "STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}",
+    );
+    expect(pilotSmokeWorkflow).toContain("npx tsx scripts/provision-staging-release-0-5-e2e.ts");
+    expect(pilotSmokeWorkflow).toContain("npx tsx scripts/browser-staging-pilot-smoke.ts");
+    expect(pilotSmokeWorkflow).not.toContain("browser-student-full-e2e.ts");
+    expect(pilotSmokeWorkflow).not.toContain("browser-staging-pilot-closure.ts");
+    expect(pilotSmokeWorkflow).not.toMatch(/^\s+push:/mu);
+    expect(pilotSmokeWorkflow).not.toMatch(/^\s+pull_request:/mu);
+    expect(pilotSmokeWorkflow).not.toContain("set -x");
+    expect(pilotSmokeWorkflow).not.toMatch(/vercel\s+(deploy|pull|alias)/u);
+    expect(pilotSmokeWorkflow).not.toContain("prisma migrate");
+    expect(pilotSmokeWorkflow).toContain("secret-redaction=PASS");
+    expect(pilotSmokeWorkflow).not.toMatch(/screenshot|trace|video/iu);
+  });
+
+  it("covers the short smoke contract and keeps credentials out of diagnostics", () => {
+    for (const marker of [
+      "/health",
+      "/health/db",
+      "/ready",
+      "/auth/me",
+      "onboarding-level-retry",
+      "placement completion",
+      "start-daily-training",
+      "exercise-submit-attempt",
+      "pilot-support-open",
+      "pilot-bug-open",
+      "320",
+      "375",
+      "430",
+      "duplicateAnswerRequests",
+      'productionTouched: "NO"',
+    ]) {
+      expect(pilotSmokeWorkflow + pilotSmokeRunner + closureRunner).toContain(marker);
+    }
+    expect(pilotSmokeRunner).not.toContain("console.log(PASSWORD");
+    expect(pilotSmokeRunner).not.toMatch(/screenshot|trace|video/iu);
+    expect(pilotSmokeRunner).toContain("STAGING_STUDENT_PASSWORD");
+    expect(pilotSmokeRunner).toContain("wrongAnswerRetry");
+    expect(pilotSmokeRunner).toContain("firstExerciseCompletion");
   });
 });

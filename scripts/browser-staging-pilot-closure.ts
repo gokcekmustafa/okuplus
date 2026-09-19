@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright-core";
 import { validateStagingBaseUrl } from "./browser-student-full-e2e-policy.js";
 
@@ -7,7 +9,7 @@ const EMAIL = process.env.STAGING_STUDENT_EMAIL?.trim().toLowerCase() ?? "";
 const PASSWORD = process.env.STAGING_STUDENT_PASSWORD ?? "";
 const CHROME_PATH =
   process.env.CHROME_PATH ?? "C:/Program Files/Google/Chrome/Application/chrome.exe";
-const VIEWPORTS = [
+export const VIEWPORTS = [
   { width: 320, height: 568 },
   { width: 375, height: 812 },
   { width: 430, height: 932 },
@@ -23,12 +25,12 @@ function requireConfig(): void {
   if (!PASSWORD) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
 }
 
-async function waitForStudentApp(page: Page): Promise<void> {
+export async function waitForStudentApp(page: Page): Promise<void> {
   await page.waitForSelector("#view-app:not(.hidden)", { timeout: 30000 });
   await page.waitForTimeout(500);
 }
 
-async function login(page: Page): Promise<void> {
+export async function login(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.locator("#login-email").fill(EMAIL);
   await page.locator("#login-password").fill(PASSWORD);
@@ -71,7 +73,7 @@ async function layoutMetrics(page: Page) {
   });
 }
 
-async function assertMobileSurface(
+export async function assertMobileSurface(
   page: Page,
   viewport: (typeof VIEWPORTS)[number],
 ): Promise<void> {
@@ -104,7 +106,7 @@ async function assertMobileSurface(
   assert.doesNotMatch(visibleTechnicalText, /stack trace|database_url|at object\.|node_modules/i);
 }
 
-async function verifySupportAndBugReport(page: Page): Promise<void> {
+export async function verifySupportAndBugReport(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Profil", exact: true }).click();
   await page.waitForSelector("#page-settings:not(.hidden)", { timeout: 10000 });
 
@@ -256,10 +258,12 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : "pilot closure smoke failed";
-  console.error(
-    JSON.stringify({ status: "FAIL", message: message.slice(0, 240), productionTouched: "NO" }),
-  );
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : "pilot closure smoke failed";
+    console.error(
+      JSON.stringify({ status: "FAIL", message: message.slice(0, 240), productionTouched: "NO" }),
+    );
+    process.exitCode = 1;
+  });
+}
