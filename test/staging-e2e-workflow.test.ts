@@ -28,6 +28,7 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain("npm ci --include=dev");
     expect(workflow).toContain("npx tsx scripts/provision-staging-release-0-5-e2e.ts");
     expect(workflow).toContain("npx tsx scripts/browser-student-full-e2e.ts");
+    expect(workflow).toContain("npx tsx scripts/browser-staging-pilot-closure.ts");
     expect(workflow).toContain("/health /health/db /ready");
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("staging-e2e-summary.json");
@@ -52,8 +53,11 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(workflow).toContain('teaching: result.teaching ?? "NOT_RUN"');
     expect(workflow).toContain('baseline: result.baseline ?? "NOT_RUN"');
     expect(workflow).toContain('concurrency: result.concurrency ?? "NOT_RUN"');
-    expect(workflow).toContain("E2E_ARTIFACT_DIR: .e2e-output");
-    expect(workflow).toContain(".e2e-output/e2e-failure.png");
+    expect(workflow).toContain("Verify E2E secret redaction");
+    expect(workflow).toContain("secret-redaction=PASS");
+    expect(workflow).not.toContain("E2E_ARTIFACT_DIR");
+    expect(workflow).not.toContain("e2e-failure.png");
+    expect(workflow).toContain("pilot-closure-summary.json");
     expect(workflow).toContain("if-no-files-found: warn");
     expect(workflow).not.toContain("prisma migrate");
     expect(workflow).not.toContain("vercel deploy");
