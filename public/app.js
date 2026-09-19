@@ -529,7 +529,14 @@ async function maybeShowOnboarding() {
     showOnboarding(data);
   } catch (_e) {
     void _e;
-    navigate("dashboard");
+    navigate("onboarding");
+    const error = $("onboarding-error");
+    const retry = $("onboarding-retry");
+    if (error) {
+      error.textContent = "Başlangıç bilgilerin yüklenemedi. Bağlantını kontrol edip tekrar dene.";
+      error.classList.remove("hidden");
+    }
+    retry?.classList.remove("hidden");
   }
 }
 
@@ -613,6 +620,7 @@ async function loadToday() {
   var recent = $("today-recent");
   var recentList = $("dashboard-recent-list");
   if (!na) return;
+  $("today-training-error")?.classList.add("hidden");
   const scope = insightScope();
   try {
     var tokens = getStoredTokens();
@@ -683,7 +691,16 @@ async function loadToday() {
     if (recentList) recentList.innerHTML = recentHtml;
   } catch (_e) {
     void _e;
-    if (na) na.textContent = "Bugün verisi yüklenemedi";
+    if (na) na.textContent = "Bugün verisi yüklenemedi. Yenile düğmesini deneyebilirsin.";
+    const status = $("daily-training-status");
+    const intro = $("daily-training-intro");
+    const error = $("today-training-error");
+    if (status) status.textContent = "Yüklenemedi";
+    if (intro) intro.textContent = "Bugünkü antrenmanı yüklerken bir sorun oldu.";
+    if (error) {
+      error.textContent = "Bugünkü antrenman yüklenemedi. Tekrar denemek için Yenile'ye bas.";
+      error.classList.remove("hidden");
+    }
   }
 }
 
@@ -1663,6 +1680,7 @@ window.startDailyTraining = async function () {
 };
 
 function showOnboarding(state) {
+  $("onboarding-retry")?.classList.add("hidden");
   if (state && state.profile) {
     if (state.profile.displayName) $("onboard-displayName").value = state.profile.displayName;
     if (state.profile.birthYear) $("onboard-birthYear").value = state.profile.birthYear;
@@ -1813,6 +1831,18 @@ function setupOnboardingEvents() {
   var next = $("onboarding-next");
   var prev = $("onboarding-prev");
   var complete = $("onboarding-complete");
+  var retry = $("onboarding-retry");
+  if (retry)
+    retry.addEventListener("click", async function () {
+      retry.disabled = true;
+      retry.setAttribute("aria-busy", "true");
+      try {
+        await maybeShowOnboarding();
+      } finally {
+        retry.disabled = false;
+        retry.removeAttribute("aria-busy");
+      }
+    });
   if (next)
     next.addEventListener("click", async function () {
       var errEl = $("onboarding-error");
@@ -9393,6 +9423,7 @@ async function handleExerciseComplete() {
 }
 function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
+  $("refresh-today-training")?.addEventListener("click", () => void loadToday());
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
   const createBtn = $("exercise-create-btn");
