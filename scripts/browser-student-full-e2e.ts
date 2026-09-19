@@ -1227,7 +1227,9 @@ async function waitForStudentAppReady(page: Page): Promise<void> {
     state: "visible",
     timeout: BROWSER_REQUEST_TIMEOUT_MS,
   });
-  await page.waitForLoadState("networkidle", {
+  // The SPA keeps authenticated/background requests open on staging. The
+  // dashboard selector above is the readiness signal; network idle is not.
+  await page.waitForLoadState("domcontentloaded", {
     timeout: BROWSER_REQUEST_TIMEOUT_MS,
   });
 }
@@ -1270,7 +1272,7 @@ async function probeExerciseRender(
   try {
     if (!reuseAuthenticatedPage)
       await renderPage.goto(`${BASE_URL}/`, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
         timeout: BROWSER_REQUEST_TIMEOUT_MS,
       });
     await renderPage.waitForSelector("#view-app:not(.hidden)", {
@@ -1382,7 +1384,7 @@ async function probeInlineFeedback(
   const feedbackPage = await page.context().newPage();
   try {
     await feedbackPage.goto(`${BASE_URL}/`, {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
       timeout: BROWSER_REQUEST_TIMEOUT_MS,
     });
     await feedbackPage.waitForSelector("#view-app:not(.hidden)", {

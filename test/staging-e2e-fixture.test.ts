@@ -82,7 +82,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain("await waitForStudentAppReady(page)");
     expect(runnerSource).toContain("const feedbackPage = await page.context().newPage()");
     expect(runnerSource).toContain("await waitForStudentAppReady(feedbackPage)");
-    expect(runnerSource).toContain('await page.waitForLoadState("networkidle"');
+    expect(runnerSource).toContain('await page.waitForLoadState("domcontentloaded"');
     expect(runnerSource).toContain("probeInlineFeedback(page, uiCandidate, budget");
     expect(runnerSource).toContain('"inline feedback session state"');
     expect(runnerSource).toContain("candidate.attemptedQuestionIds = attemptedIds(sessionData)");
@@ -104,7 +104,7 @@ describe("staging Release 0.5 E2E fixture", () => {
     expect(runnerSource).toContain('app.classList.contains("student-shell")');
     expect(runnerSource).toContain('"/student/onboarding"');
     expect(runnerSource).toContain('button.nav-item[data-page="dashboard"]');
-    expect(runnerSource).toContain('page.waitForLoadState("networkidle"');
+    expect(runnerSource).toContain('page.waitForLoadState("domcontentloaded"');
     expect(runnerSource).toContain("async function readBrowserExerciseState");
     expect(runnerSource).toContain("Browser exercise question yüklenemedi (expected=");
     expect(runnerSource).toContain("await waitForStudentAppReady(renderPage)");
