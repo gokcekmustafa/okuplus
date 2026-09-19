@@ -362,6 +362,13 @@
                       <option value="">Seviyenizi seçin…</option>
                     </select></label
                   >
+                  <button
+                    id="onboarding-level-retry"
+                    type="button"
+                    class="btn btn-ghost btn-sm hidden onboarding-level-retry"
+                  >
+                    Seviyeleri tekrar yükle
+                  </button>
                 </div>
                 <div id="onboarding-step-3" class="hidden">
                   <div class="onboarding-step-icon" aria-hidden="true">🛡️</div>
@@ -476,7 +483,9 @@
                 <div>
                   <p class="insight-eyebrow">GÜNLÜK RİTMİN</p>
                   <h2 id="training-home-title">Bugünkü Antrenmanın</h2>
-                  <p id="daily-training-intro" class="muted">Bugünkü antrenmanın hazır.</p>
+                  <p id="daily-training-intro" class="muted">
+                    Bugünkü antrenmanını kontrol ediyoruz…
+                  </p>
                 </div>
                 <span id="daily-training-status" class="training-status" role="status"
                   >Yükleniyor…</span
@@ -494,8 +503,8 @@
                 <span id="daily-training-progress-fill"></span>
               </div>
               <div class="training-progress-meta">
-                <strong id="daily-training-progress-text">0/6 egzersiz</strong>
-                <span id="daily-training-gp">Bugün kazanılan: 0 GP</span>
+                <strong id="daily-training-progress-text">Hazırlanıyor…</strong>
+                <span id="daily-training-gp">Bugün kazanılan: — GP</span>
               </div>
               <div class="training-home-actions">
                 <button
@@ -503,8 +512,9 @@
                   type="button"
                   class="btn btn-primary"
                   aria-describedby="daily-training-status daily-training-progress-text"
+                  disabled
                 >
-                  Antrenmana Başla
+                  Antrenman hazırlanıyor…
                 </button>
                 <button id="refresh-today-training" type="button" class="btn btn-secondary">
                   Yenile
@@ -573,6 +583,13 @@
               <p id="dashboard-progress-note" class="muted dashboard-progress-note">
                 İlerlemen yükleniyor…
               </p>
+              <button
+                id="dashboard-progress-retry"
+                type="button"
+                class="btn btn-ghost btn-sm hidden dashboard-progress-retry"
+              >
+                Gelişimi tekrar yükle
+              </button>
             </section>
 
             <section
