@@ -85,10 +85,14 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(closureRunner).not.toContain("console.log(PASSWORD");
   });
 
-  it("defines a manual-only short smoke without invoking Full E2E", () => {
+  it("defines a staging push/manual short smoke without invoking Full E2E", () => {
     expect(pilotSmokeWorkflow).toMatch(/on:\s*\n\s+workflow_dispatch:/u);
+    expect(pilotSmokeWorkflow).toMatch(/push:\s*\n\s+branches:\s*\n\s+- staging/u);
+    expect(pilotSmokeWorkflow).toContain("if: github.ref == 'refs/heads/staging'");
     expect(pilotSmokeWorkflow).toContain("ref: staging");
-    expect(pilotSmokeWorkflow).toContain("BASE_URL: ${{ vars.BASE_URL }}");
+    expect(pilotSmokeWorkflow).toContain(
+      "BASE_URL: https://okuplus-git-staging-gokcekmustafas-projects.vercel.app",
+    );
     expect(pilotSmokeWorkflow).toContain(
       "STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}",
     );
@@ -96,8 +100,9 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeWorkflow).toContain("npx tsx scripts/browser-staging-pilot-smoke.ts");
     expect(pilotSmokeWorkflow).not.toContain("browser-student-full-e2e.ts");
     expect(pilotSmokeWorkflow).not.toContain("browser-staging-pilot-closure.ts");
-    expect(pilotSmokeWorkflow).not.toMatch(/^\s+push:/mu);
     expect(pilotSmokeWorkflow).not.toMatch(/^\s+pull_request:/mu);
+    expect(pilotSmokeWorkflow).toContain("Fail closed outside stable staging");
+    expect(pilotSmokeWorkflow).not.toContain("secrets.PRODUCTION");
     expect(pilotSmokeWorkflow).not.toContain("set -x");
     expect(pilotSmokeWorkflow).not.toMatch(/vercel\s+(deploy|pull|alias)/u);
     expect(pilotSmokeWorkflow).not.toContain("prisma migrate");

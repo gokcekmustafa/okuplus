@@ -8,6 +8,9 @@ on:
         required: false
         type: string
         default: ""
+  push:
+    branches:
+      - staging
 
 permissions:
   contents: read
@@ -15,16 +18,34 @@ permissions:
 jobs:
   staging-pilot-smoke:
     name: Run short authenticated staging pilot smoke
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
       APP_ENV: staging
       NODE_ENV: test
-      BASE_URL: ${{ vars.BASE_URL }}
+      BASE_URL: https://okuplus-git-staging-gokcekmustafas-projects.vercel.app
       STAGING_STUDENT_EMAIL: ${{ inputs.student_email || vars.STAGING_PILOT_SMOKE_STUDENT_EMAIL || vars.STAGING_STUDENT_EMAIL }}
       STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
 
     steps:
+      - name: Fail closed outside stable staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/staging"
+          test "$BASE_URL" = "https://okuplus-git-staging-gokcekmustafas-projects.vercel.app"
+          if [[ "$BASE_URL" =~ (production|prod) ]]; then
+            echo "production URL rejected" >&2
+            exit 1
+          fi
+          if [[ -n "${PRODUCTION_BASE_URL:-}" || -n "${PRODUCTION_DATABASE_URL:-}" || -n "${PRODUCTION_STUDENT_PASSWORD:-}" ]]; then
+            echo "production configuration detected" >&2
+            exit 1
+          fi
+          echo "target=staging"
+          echo "productionTouched=NO"
+
       - name: Checkout staging
         uses: actions/checkout@v4
         with:
