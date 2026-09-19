@@ -565,6 +565,9 @@ body {
 .onboarding-actions #onboarding-complete {
   margin-left: auto;
 }
+.onboarding-level-retry {
+  margin-top: 8px;
+}
 .ready-actions {
   display: grid;
   gap: 10px;
@@ -2734,6 +2737,9 @@ body {
 .dashboard-progress-note {
   margin: 14px 0 0;
   font-size: 13px;
+}
+.dashboard-progress-retry {
+  margin-top: 10px;
 }
 .dashboard-recent-list {
   display: grid;
