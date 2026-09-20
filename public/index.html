@@ -16,10 +16,7 @@
       <div class="card login-card">
         <div class="brand">
           <h1>Oku+</h1>
-          <p>Okuma becerileri platformuna giriş</p>
-          <p class="login-promise">
-            Kısa günlük çalışmalarla okuma becerilerini geliştir, ilerlemeni adım adım gör.
-          </p>
+          <p>Her gün birkaç kısa adımla daha hızlı ve dikkatli oku.</p>
         </div>
         <div class="social-login" aria-label="Sosyal giriş seçenekleri">
           <button id="google-login-btn" type="button" class="btn btn-ghost btn-block" disabled>
@@ -65,6 +62,10 @@
           </button>
         </form>
         <form id="signup-form" class="hidden" novalidate>
+          <div class="auth-form-intro">
+            <h2>Öğrenme yolunu başlat</h2>
+            <p class="muted">Hedefini seç, seviyeni keşfet ve gelişimini kendi ritminde gör.</p>
+          </div>
           <label class="field">
             <span>Ad</span>
             <input
@@ -123,9 +124,9 @@
         </div>
 
         <nav class="sidebar-nav" aria-label="Ana menü">
-          <button class="nav-item" data-page="dashboard" type="button">
+          <button class="nav-item" data-page="dashboard" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true">⌂</span>
-            <span class="nav-label">Dashboard</span>
+            <span class="nav-label">Ana Sayfa</span>
           </button>
           <button class="nav-item" data-page="tenants" data-admin type="button">
             <span class="nav-icon" aria-hidden="true">🏢</span>
@@ -171,37 +172,37 @@
             <span class="nav-icon" aria-hidden="true">🪜</span>
             <span class="nav-label">Seviyeler</span>
           </button>
-          <button class="nav-item" data-page="assignments" type="button">
+          <button class="nav-item" data-page="assignments" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">📝</span>
             <span class="nav-label">Ödevler</span>
           </button>
-          <button class="nav-item" data-page="exercise" type="button">
+          <button class="nav-item" data-page="exercise" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true">✏️</span>
-            <span class="nav-label">Alıştırmalar</span>
+            <span class="nav-label">Antrenman</span>
           </button>
           <button class="nav-item" data-page="lessons" data-student type="button">
             <span class="nav-icon" aria-hidden="true">📖</span>
             <span class="nav-label">Dersler</span>
           </button>
-          <button class="nav-item" data-page="assessments" type="button">
+          <button class="nav-item" data-page="assessments" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">📊</span>
             <span class="nav-label">Ölçme &amp; Değerlendirme</span>
           </button>
-          <button class="nav-item" data-page="progress" type="button">
+          <button class="nav-item" data-page="progress" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true">📈</span>
             <span class="nav-label">Gelişim</span>
           </button>
-          <button class="nav-item" data-page="badges" data-student type="button">
+          <button class="nav-item" data-page="badges" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">🏅</span>
             <span class="nav-label">Rozetler &amp; Kupalar</span>
           </button>
-          <button class="nav-item" data-page="billing-account" data-student type="button">
+          <button class="nav-item" data-page="billing-account" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">💳</span>
             <span class="nav-label">Hesap ve Ödeme</span>
           </button>
-          <button class="nav-item" data-page="settings" type="button">
+          <button class="nav-item" data-page="settings" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true">⚙️</span>
-            <span class="nav-label">Ayarlar</span>
+            <span class="nav-label">Profil</span>
           </button>
         </nav>
       </aside>
@@ -233,10 +234,10 @@
               aria-label="Puan ve seri"
             >
               <span class="gamification-badge" title="Toplam Gelişim Puanı"
-                ><span aria-hidden="true">⭐</span> <span id="topbar-gp">0</span> GP</span
+                ><span aria-hidden="true">⭐</span> <span id="topbar-gp">—</span> GP</span
               >
               <span class="gamification-badge" title="Günlük seri"
-                ><span aria-hidden="true">🔥</span> <span id="topbar-streak">0</span></span
+                ><span aria-hidden="true">🔥</span> <span id="topbar-streak">—</span></span
               >
             </div>
           </div>
@@ -359,16 +360,16 @@
                   <label class="field"
                     ><span>Sınıf düzeyin *</span
                     ><select id="onboard-level">
-                      <option value="">Seviyenizi seçin…</option>
-                    </select></label
+                      <option value="">Seviyeni seçin…</option>
+                    </select>
+                    <button
+                      id="onboarding-level-retry"
+                      type="button"
+                      class="btn btn-ghost btn-sm hidden onboarding-retry"
+                    >
+                      Seviyeleri tekrar yükle
+                    </button></label
                   >
-                  <button
-                    id="onboarding-level-retry"
-                    type="button"
-                    class="btn btn-ghost btn-sm hidden onboarding-level-retry"
-                  >
-                    Seviyeleri tekrar yükle
-                  </button>
                 </div>
                 <div id="onboarding-step-3" class="hidden">
                   <div class="onboarding-step-icon" aria-hidden="true">🛡️</div>
@@ -408,8 +409,12 @@
                   </div>
                 </div>
                 <p id="onboarding-error" class="error hidden" role="alert"></p>
-                <button id="onboarding-retry" type="button" class="btn btn-secondary hidden">
-                  Başlangıcı yeniden yükle
+                <button
+                  id="onboarding-retry-load"
+                  type="button"
+                  class="btn btn-ghost btn-sm hidden onboarding-retry"
+                >
+                  Onboarding'i tekrar yükle
                 </button>
                 <div class="onboarding-actions">
                   <button id="onboarding-prev" type="button" class="btn btn-ghost hidden">
@@ -426,12 +431,12 @@
             </div>
           </section>
 
-          <!-- Dashboard -->
+          <!-- Ana Sayfa -->
           <section id="page-dashboard" class="page-view">
             <div class="page-head">
-              <h2>Bugün de gelişmeye hazır mısın?</h2>
+              <h2>Ana Sayfa</h2>
               <p class="muted">
-                <span id="welcome-name">—</span>, kısa ve düzenli adımlarla ilerlemeye devam et.
+                Hazırsan bugün de birlikte ilerleyelim, <span id="welcome-name">—</span>.
               </p>
             </div>
 
@@ -484,7 +489,7 @@
                   <p class="insight-eyebrow">GÜNLÜK RİTMİN</p>
                   <h2 id="training-home-title">Bugünkü Antrenmanın</h2>
                   <p id="daily-training-intro" class="muted">
-                    Bugünkü antrenmanını kontrol ediyoruz…
+                    Kısa bir çalışmayla bugün de ilerle.
                   </p>
                 </div>
                 <span id="daily-training-status" class="training-status" role="status"
@@ -503,7 +508,7 @@
                 <span id="daily-training-progress-fill"></span>
               </div>
               <div class="training-progress-meta">
-                <strong id="daily-training-progress-text">Hazırlanıyor…</strong>
+                <strong id="daily-training-progress-text">0 / 6 egzersiz</strong>
                 <span id="daily-training-gp">Bugün kazanılan: — GP</span>
               </div>
               <div class="training-home-actions">
@@ -512,16 +517,11 @@
                   type="button"
                   class="btn btn-primary"
                   aria-describedby="daily-training-status daily-training-progress-text"
-                  disabled
                 >
-                  Antrenman hazırlanıyor…
-                </button>
-                <button id="refresh-today-training" type="button" class="btn btn-secondary">
-                  Yenile
+                  Antrenmana Başla
                 </button>
                 <span id="daily-training-streak" class="muted" aria-live="polite"></span>
               </div>
-              <p id="daily-training-quota" class="training-quota muted" aria-live="polite"></p>
               <div class="training-focus-grid" aria-label="Bugünkü gelişim alanları">
                 <article class="training-focus-card">
                   <span aria-hidden="true">⚡</span>
@@ -540,73 +540,13 @@
                   <div><strong>Bugünkü Gelişim</strong><small>Kısa adımlarla ilerle</small></div>
                 </article>
               </div>
-              <div
-                id="today-next-action"
-                class="muted training-home-secondary"
-                aria-live="polite"
-              ></div>
+              <div id="today-next-action" class="muted training-home-secondary"></div>
               <div id="today-stats" class="visually-hidden"></div>
               <div id="today-recent" class="visually-hidden"></div>
               <p id="today-training-error" class="error hidden" role="alert"></p>
-            </section>
-
-            <section
-              id="dashboard-progress-card"
-              class="card dashboard-progress-card"
-              data-student
-              aria-labelledby="dashboard-progress-title"
-              aria-busy="true"
-            >
-              <div class="dashboard-card-heading">
-                <div>
-                  <p class="insight-eyebrow">GERÇEK VERİLERLE</p>
-                  <h3 id="dashboard-progress-title">Gelişim özeti</h3>
-                </div>
-                <button type="button" class="btn btn-secondary btn-sm" id="dashboard-progress-link">
-                  Tüm ilerlemeyi gör
-                </button>
-              </div>
-              <div class="dashboard-progress-grid" aria-live="polite">
-                <div class="dashboard-progress-stat">
-                  <span>Son performans</span><strong id="dashboard-last-performance">—</strong>
-                </div>
-                <div class="dashboard-progress-stat">
-                  <span>Genel doğruluk</span><strong id="dashboard-accuracy">—</strong>
-                </div>
-                <div class="dashboard-progress-stat">
-                  <span>Ortalama süre</span><strong id="dashboard-average-time">—</strong>
-                </div>
-                <div class="dashboard-progress-stat">
-                  <span>Tamamlanan oturum</span><strong id="dashboard-completed-sessions">—</strong>
-                </div>
-              </div>
-              <p id="dashboard-progress-note" class="muted dashboard-progress-note">
-                İlerlemen yükleniyor…
-              </p>
-              <button
-                id="dashboard-progress-retry"
-                type="button"
-                class="btn btn-ghost btn-sm hidden dashboard-progress-retry"
-              >
-                Gelişimi tekrar yükle
+              <button id="today-training-retry" type="button" class="btn btn-ghost btn-sm hidden">
+                Bugünkü antrenmanı yeniden yükle
               </button>
-            </section>
-
-            <section
-              id="dashboard-recent-card"
-              class="card dashboard-recent-card"
-              data-student
-              aria-labelledby="dashboard-recent-title"
-            >
-              <div class="dashboard-card-heading">
-                <div>
-                  <p class="insight-eyebrow">SON ADIMLARIN</p>
-                  <h3 id="dashboard-recent-title">Son aktivitelerin</h3>
-                </div>
-              </div>
-              <div id="dashboard-recent-list" class="dashboard-recent-list" aria-live="polite">
-                <p class="muted">Aktivitelerin yükleniyor…</p>
-              </div>
             </section>
 
             <section
@@ -653,9 +593,9 @@
             >
               <div class="review-card-head">
                 <div>
-                  <h3 id="review-card-title">Tekrar zamanı</h3>
+                  <h3 id="review-card-title">Tekrar Zamanı</h3>
                   <p id="review-card-status" class="muted">
-                    Önceki çalışmalarından kısa bir tekrar.
+                    Bunu daha önce çalıştın. Bir kez daha deneyelim.
                   </p>
                 </div>
                 <span class="review-card-icon" aria-hidden="true">↺</span>
@@ -683,7 +623,11 @@
                 class="learning-path"
                 role="list"
                 aria-label="Öğrenme yolu"
+                aria-busy="true"
               ></div>
+              <button id="learning-path-retry" type="button" class="btn btn-ghost btn-sm hidden">
+                Öğrenme yolunu yeniden yükle
+              </button>
             </div>
 
             <div class="placeholder-note card" data-admin>
@@ -701,7 +645,7 @@
                 </p>
               </div>
               <button id="premium-info-back" type="button" class="btn btn-ghost">
-                Dashboard'a dön
+                Ana Sayfa'ya dön
               </button>
             </header>
             <div class="premium-info-grid">
@@ -2097,7 +2041,7 @@
                   <input
                     id="content-search"
                     type="search"
-                    placeholder="Başlık ara…"
+                    placeholder="Başlık, kimlik veya beceri ara…"
                     autocomplete="off"
                   />
                 </label>
@@ -2126,7 +2070,10 @@
                   <select id="content-status-filter">
                     <option value="">Tüm durumlar</option>
                     <option value="DRAFT">Taslak</option>
+                    <option value="REVIEW">İncelemede</option>
+                    <option value="APPROVED">Onaylandı</option>
                     <option value="PUBLISHED">Yayında</option>
+                    <option value="RETIRED">Emekli</option>
                     <option value="ARCHIVED">Arşivlenmiş</option>
                   </select>
                 </label>
@@ -2134,6 +2081,27 @@
                   <span class="visually-hidden">Beceri filtresi</span>
                   <select id="content-skill-filter">
                     <option value="">Tüm beceriler</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Oluşturan filtresi</span>
+                  <select id="content-author-filter">
+                    <option value="">Tüm oluşturanlar</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Sıralama</span>
+                  <select id="content-sort">
+                    <option value="updatedAt">Son güncelleme</option>
+                    <option value="createdAt">Oluşturulma</option>
+                    <option value="status">Durum</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Sıralama yönü</span>
+                  <select id="content-sort-direction" aria-label="Sıralama yönü">
+                    <option value="desc">Yeni → Eski</option>
+                    <option value="asc">Eski → Yeni</option>
                   </select>
                 </label>
               </div>
@@ -2152,15 +2120,19 @@
                       <th>Başlık</th>
                       <th>Kapsam</th>
                       <th>Tür</th>
-                      <th>Zorluk</th>
+                      <th>Beceri</th>
                       <th class="numeric">Sürüm</th>
                       <th>Durum</th>
+                      <th>Oluşturan</th>
+                      <th>Güncellenme</th>
+                      <th>Yayınlanma</th>
+                      <th>Son işlem</th>
                       <th>İşlemler</th>
                     </tr>
                   </thead>
                   <tbody id="content-list-body">
                     <tr>
-                      <td colspan="7" class="muted">Yükleniyor…</td>
+                      <td colspan="11" class="muted">Yükleniyor…</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2256,12 +2228,40 @@
                       <span>Durum</span>
                       <select id="content-form-status">
                         <option value="DRAFT">Taslak</option>
-                        <option value="PUBLISHED">Yayında</option>
-                        <option value="ARCHIVED">Arşivlenmiş</option>
                       </select>
                       <span class="field-hint"
-                        >"Yayında" seçilirse içeriğin yayınlanmış bir sürümü olmalıdır; önce sürüm
-                        oluşturup yayınlayın.</span
+                        >Yeni içerik güvenli başlangıç olarak Taslak oluşturulur. Yayınlama sürüm
+                        akışından yapılır.</span
+                      >
+                    </label>
+                    <label class="field">
+                      <span>Yetkinlik / beceri</span>
+                      <select id="content-form-skill">
+                        <option value="">Beceri seçin…</option>
+                      </select>
+                      <span class="field-hint">İçeriğin ölçtüğü ana beceriyi seçin.</span>
+                    </label>
+                    <label class="field">
+                      <span>İlk sürüm metni</span>
+                      <textarea
+                        id="content-form-body"
+                        rows="8"
+                        maxlength="100000"
+                        placeholder="İlk taslak metni (isteğe bağlı)…"
+                      ></textarea>
+                      <span class="field-hint"
+                        >Metin girerseniz içerikle birlikte ilk taslak sürüm oluşturulur.</span
+                      >
+                    </label>
+                    <label class="field">
+                      <span>Metadata (JSON)</span>
+                      <textarea
+                        id="content-form-metadata"
+                        rows="4"
+                        placeholder='Örn. {"kaynak":"editör notu"}'
+                      ></textarea>
+                      <span class="field-hint"
+                        >Yalnız yapılandırılmış metadata kullanın; gövdeyi buraya yazmayın.</span
                       >
                     </label>
                   </div>
@@ -2299,6 +2299,244 @@
                   </button>
                   <button id="content-detail-delete" type="button" class="btn btn-danger">
                     İçeriği Sil
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- İçerik üretimi / passage authoring çalışma alanı -->
+            <div id="content-authoring-modal" class="modal-backdrop hidden">
+              <div
+                class="modal modal-authoring"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="content-authoring-title"
+              >
+                <div class="modal-head">
+                  <div>
+                    <p class="eyebrow">Admin · İçerik Üretimi</p>
+                    <h3 id="content-authoring-title">İçerik Üretimi</h3>
+                  </div>
+                  <button
+                    id="content-authoring-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="İçerik üretimini kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <div class="modal-body">
+                  <div id="content-authoring-error" class="error-banner hidden" role="alert"></div>
+                  <div
+                    id="content-authoring-status"
+                    class="authoring-state"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    Hazırlanıyor…
+                  </div>
+                  <div id="content-authoring-meta" class="authoring-meta" aria-live="polite"></div>
+
+                  <div class="authoring-grid">
+                    <section
+                      class="card authoring-pane"
+                      aria-labelledby="authoring-passage-heading"
+                    >
+                      <div class="authoring-pane-head">
+                        <div>
+                          <p class="eyebrow">Passage</p>
+                          <h4 id="authoring-passage-heading">İçerik metni</h4>
+                        </div>
+                        <span id="content-authoring-version-state" class="badge badge-neutral"
+                          >—</span
+                        >
+                      </div>
+                      <form id="content-authoring-passage-form" novalidate>
+                        <label class="field">
+                          <span>Başlık *</span>
+                          <input
+                            id="content-authoring-title-input"
+                            type="text"
+                            maxlength="200"
+                            required
+                          />
+                        </label>
+                        <label class="field">
+                          <span>Sürüm</span>
+                          <select
+                            id="content-authoring-version-select"
+                            aria-label="Düzenlenecek içerik sürümü"
+                          >
+                            <option value="">Sürüm bulunamadı</option>
+                          </select>
+                        </label>
+                        <div class="form-grid">
+                          <label class="field">
+                            <span>Competency / beceri</span>
+                            <select id="content-authoring-skill" aria-label="İçeriğin ana becerisi">
+                              <option value="">Beceri seçin…</option>
+                            </select>
+                          </label>
+                          <label class="field">
+                            <span>Zorluk (0–1) *</span>
+                            <input
+                              id="content-authoring-difficulty"
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              required
+                            />
+                          </label>
+                        </div>
+                        <label class="field">
+                          <span>Passage / metin *</span>
+                          <textarea
+                            id="content-authoring-body"
+                            rows="14"
+                            maxlength="100000"
+                            required
+                          ></textarea>
+                          <span id="content-authoring-wordcount" class="field-hint muted"
+                            >0 kelime</span
+                          >
+                        </label>
+                        <label class="field">
+                          <span>Metadata (JSON)</span>
+                          <textarea
+                            id="content-authoring-metadata"
+                            rows="4"
+                            placeholder='Örn. {"kaynak":"editör notu"}'
+                            aria-describedby="content-authoring-metadata-hint"
+                          ></textarea>
+                          <span id="content-authoring-metadata-hint" class="field-hint"
+                            >Yapılandırılmış metadata; metin gövdesini buraya yazmayın.</span
+                          >
+                        </label>
+                        <div class="authoring-form-actions">
+                          <button id="content-authoring-save" type="submit" class="btn btn-primary">
+                            <span class="btn-label">Taslağı Kaydet</span>
+                            <span class="btn-spinner hidden" aria-hidden="true"></span>
+                          </button>
+                          <button
+                            id="content-authoring-new-version"
+                            type="button"
+                            class="btn btn-ghost"
+                          >
+                            Yeni Sürüm Oluştur
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+
+                    <section
+                      class="card authoring-pane"
+                      aria-labelledby="authoring-questions-heading"
+                    >
+                      <div class="authoring-pane-head">
+                        <div>
+                          <p class="eyebrow">Question Builder</p>
+                          <h4 id="authoring-questions-heading">Sorular</h4>
+                        </div>
+                        <button
+                          id="content-authoring-new-question"
+                          type="button"
+                          class="btn btn-primary btn-sm"
+                        >
+                          Yeni Soru
+                        </button>
+                      </div>
+                      <p class="field-hint muted">
+                        Sorular seçili ContentVersion'a bağlı ve mevcut lifecycle kurallarıyla
+                        yönetilir.
+                      </p>
+                      <div id="content-authoring-question-list" class="authoring-question-list">
+                        <p class="muted">Sorular yükleniyor…</p>
+                      </div>
+                      <div
+                        id="content-authoring-question-error"
+                        class="error-banner hidden"
+                        role="alert"
+                      ></div>
+                    </section>
+                  </div>
+
+                  <section
+                    class="card authoring-section"
+                    aria-labelledby="authoring-preview-heading"
+                  >
+                    <div class="authoring-section-head">
+                      <div>
+                        <p class="eyebrow">Read-only</p>
+                        <h4 id="authoring-preview-heading">Önizleme</h4>
+                      </div>
+                      <button
+                        id="content-authoring-preview-btn"
+                        type="button"
+                        class="btn btn-ghost"
+                      >
+                        Önizlemeyi Göster
+                      </button>
+                    </div>
+                    <div id="content-authoring-preview" class="authoring-preview hidden"></div>
+                  </section>
+
+                  <section
+                    class="card authoring-section"
+                    aria-labelledby="authoring-readiness-heading"
+                  >
+                    <div class="authoring-section-head">
+                      <div>
+                        <p class="eyebrow">Kontrol listesi</p>
+                        <h4 id="authoring-readiness-heading">Yayınlama hazırlığı</h4>
+                      </div>
+                      <span id="content-authoring-readiness-badge" class="badge badge-warning"
+                        >Kontrol ediliyor</span
+                      >
+                    </div>
+                    <div
+                      id="content-authoring-readiness"
+                      class="authoring-readiness"
+                      aria-live="polite"
+                    ></div>
+                    <p class="field-hint muted">
+                      Yayınlama yetkisi ve son lifecycle kararı backend tarafından doğrulanır.
+                    </p>
+                  </section>
+
+                  <section
+                    class="card authoring-section"
+                    aria-labelledby="authoring-lifecycle-heading"
+                  >
+                    <div class="authoring-section-head">
+                      <div>
+                        <p class="eyebrow">Lifecycle</p>
+                        <h4 id="authoring-lifecycle-heading">Sürüm durumu</h4>
+                      </div>
+                    </div>
+                    <div id="content-authoring-lifecycle" class="authoring-lifecycle"></div>
+                  </section>
+
+                  <section class="card authoring-section" aria-labelledby="authoring-audit-heading">
+                    <div class="authoring-section-head">
+                      <div>
+                        <p class="eyebrow">Audit / history</p>
+                        <h4 id="authoring-audit-heading">Denetim geçmişi</h4>
+                      </div>
+                    </div>
+                    <div id="content-authoring-audit" class="audit-list">
+                      <p class="muted">Denetim geçmişi yükleniyor…</p>
+                    </div>
+                    <p class="field-hint muted">
+                      Yalnız işlem, aktör, zaman, durum ve sürüm metadata'sı gösterilir; metin ve
+                      cevaplar gösterilmez.
+                    </p>
+                  </section>
+                </div>
+                <div class="modal-actions">
+                  <button id="content-authoring-close-action" type="button" class="btn btn-ghost">
+                    Kapat
                   </button>
                 </div>
               </div>
@@ -2414,7 +2652,7 @@
                   <input
                     id="question-search"
                     type="search"
-                    placeholder="Soru ara…"
+                    placeholder="Soru ID, metin veya içerik ara…"
                     autocomplete="off"
                   />
                 </label>
@@ -2446,8 +2684,26 @@
                   <select id="question-status-filter">
                     <option value="">Tüm durumlar</option>
                     <option value="DRAFT">Taslak</option>
+                    <option value="REVIEW">İncelemede</option>
+                    <option value="APPROVED">Onaylandı</option>
                     <option value="PUBLISHED">Yayında</option>
+                    <option value="RETIRED">Emekli</option>
                     <option value="ARCHIVED">Arşivlenmiş</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Zorluk filtresi</span>
+                  <select id="question-difficulty-filter">
+                    <option value="">Tüm zorluklar</option>
+                    <option value="easy">Kolay</option>
+                    <option value="medium">Orta</option>
+                    <option value="hard">Zor</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Yazar filtresi</span>
+                  <select id="question-author-filter">
+                    <option value="">Tüm yazarlar</option>
                   </select>
                 </label>
                 <label class="field inline-field">
@@ -2472,18 +2728,21 @@
                   <thead>
                     <tr>
                       <th>Soru</th>
-                      <th>İçerik</th>
+                      <th>İçerik / sürüm</th>
+                      <th>Yetkinlik</th>
                       <th>Tür</th>
-                      <th>Beceri</th>
                       <th>Zorluk</th>
-                      <th class="numeric">Sürüm</th>
                       <th>Durum</th>
+                      <th class="numeric">Sürüm</th>
+                      <th>Yazar</th>
+                      <th>Güncellenme</th>
+                      <th>Yayınlanma</th>
                       <th>İşlemler</th>
                     </tr>
                   </thead>
                   <tbody id="question-list-body">
                     <tr>
-                      <td colspan="8" class="muted">Yükleniyor…</td>
+                      <td colspan="11" class="muted">Yükleniyor…</td>
                     </tr>
                   </tbody>
                 </table>
@@ -2524,6 +2783,21 @@
                   </button>
                 </div>
                 <div id="question-detail-body" class="modal-body"></div>
+                <div id="question-audit-section" class="card" style="margin: 0 16px 12px">
+                  <div
+                    class="card-head"
+                    style="padding: 12px 16px; border-bottom: 1px solid var(--border)"
+                  >
+                    <h4 style="margin: 0">Denetim geçmişi</h4>
+                  </div>
+                  <div id="question-audit-list" class="stack" style="padding: 12px 16px">
+                    Yükleniyor…
+                  </div>
+                  <p class="field-hint muted" style="padding: 0 16px 12px; margin: 0">
+                    Bu görünüm yalnızca işlem, durum, sürüm, aktör ve zamanı gösterir; soru metni,
+                    seçenekler ve doğru cevap denetim kaydında gösterilmez.
+                  </p>
+                </div>
                 <div id="question-version-section" class="card" style="margin: 0 16px 12px">
                   <div
                     class="card-head"
@@ -2779,6 +3053,15 @@
                       <select id="question-form-content" required>
                         <option value="">İçerik seçin…</option>
                       </select>
+                    </label>
+                    <label class="field">
+                      <span>İçerik sürümü *</span>
+                      <select id="question-form-content-version" required>
+                        <option value="">Önce içerik seçin…</option>
+                      </select>
+                      <span class="field-hint"
+                        >Soru, seçtiğiniz içerik anlık görüntüsüne bağlanır.</span
+                      >
                     </label>
                     <label class="field">
                       <span>Soru Tipi *</span>
@@ -3846,12 +4129,10 @@
             </div>
           </div>
 
-          <section id="page-exercise" class="page-view hidden">
+          <section id="page-exercise" class="page-view hidden" data-student-primary>
             <div class="page-head">
-              <h2>Alıştırmalar</h2>
-              <p class="muted">
-                Yayınlanmış şablonlar üzerinden alıştırma oturumu başlatın ve soruları çözün
-              </p>
+              <h2>Antrenman</h2>
+              <p class="muted">Öğren, dene, geri bildirim al ve bir sonraki adımını gör.</p>
             </div>
             <div id="student-exercise-header" class="student-exercise-header hidden">
               <div style="display: flex; align-items: center; gap: 12px">
@@ -3883,6 +4164,19 @@
                 </div>
                 <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
               </div>
+            </div>
+            <div class="exercise-method" data-student aria-label="Antrenman akışı">
+              <span class="exercise-method-step active">Öğren</span>
+              <span class="exercise-method-arrow" aria-hidden="true">→</span>
+              <span class="exercise-method-step">Örnek</span>
+              <span class="exercise-method-arrow" aria-hidden="true">→</span>
+              <span class="exercise-method-step">Uygula</span>
+              <span class="exercise-method-arrow" aria-hidden="true">→</span>
+              <span class="exercise-method-step">Geri bildirim</span>
+              <span class="exercise-method-arrow" aria-hidden="true">→</span>
+              <span class="exercise-method-step">Tekrar</span>
+              <span class="exercise-method-arrow" aria-hidden="true">→</span>
+              <span class="exercise-method-step">Gelişimi gör</span>
             </div>
 
             <p id="exercise-load-status" role="status" aria-live="polite"></p>
@@ -4258,7 +4552,7 @@
             <header class="insight-heading">
               <div>
                 <p class="insight-eyebrow">KENDİ RİTMİNDE, ADIM ADIM</p>
-                <h2>Gelişimin</h2>
+                <h2>Gelişim Yolculuğun</h2>
                 <p>Gelişim Puanını, becerilerini ve sıradaki hedeflerini gör.</p>
               </div>
               <button type="button" class="btn btn-secondary" id="progress-refresh">Yenile</button>
@@ -4270,11 +4564,30 @@
               class="insight-metrics"
               id="progress-summary"
             ></section>
+            <p
+              id="development-journey-summary"
+              class="development-journey-summary"
+              aria-live="polite"
+            ></p>
             <section
               class="insight-panel insight-path"
               aria-label="Öğrenme yolu ilerlemesi"
               id="progress-path"
             ></section>
+            <section
+              class="insight-panel development-comparison-panel"
+              aria-labelledby="development-comparison-title"
+            >
+              <h3 id="development-comparison-title">Başlangıçtan bugüne</h3>
+              <p class="muted">
+                Yerleştirme ölçümün ile puanlanan son çalışmalarını karşılaştırıyoruz.
+              </p>
+              <div
+                id="development-comparison"
+                class="development-comparison"
+                aria-live="polite"
+              ></div>
+            </section>
             <section
               id="development-achievements"
               class="insight-panel development-achievements"
@@ -4404,7 +4717,8 @@
 
           <section id="page-settings" class="page-view hidden">
             <div class="page-head">
-              <h2>Ayarlar</h2>
+              <h2>Profil</h2>
+              <p class="muted">Hesabını, tercihlerini ve destek seçeneklerini yönet.</p>
             </div>
             <section
               class="card premium-account-card"
@@ -4443,6 +4757,28 @@
                 </label>
               </div>
             </div>
+            <section
+              class="settings-card card pilot-support-card"
+              data-student
+              aria-labelledby="pilot-support-title"
+            >
+              <div>
+                <span class="eyebrow">PİLOT DESTEĞİ</span>
+                <h3 id="pilot-support-title">Bir yerde takıldın mı?</h3>
+                <p class="muted">
+                  Sorunu veya önerini teknik ayrıntılarla uğraşmadan bize iletebilirsin.
+                </p>
+              </div>
+              <div class="settings-actions pilot-support-actions">
+                <button id="pilot-support-open" type="button" class="btn btn-secondary">
+                  Destek isteği gönder
+                </button>
+                <button id="pilot-bug-open" type="button" class="btn btn-ghost">
+                  Bir sorun bildir
+                </button>
+              </div>
+              <p id="pilot-support-status" class="muted" role="status" aria-live="polite"></p>
+            </section>
           </section>
         </main>
         <nav id="student-bottom-nav" class="student-bottom-nav hidden" aria-label="Öğrenci menüsü">
@@ -4459,46 +4795,28 @@
             type="button"
             class="bottom-nav-item"
             data-bottom-page="exercise"
-            aria-label="Alıştırma"
+            aria-label="Antrenman"
           >
             <span class="bottom-nav-icon" aria-hidden="true">✏️</span
-            ><span class="bottom-nav-label">Alıştırma</span>
+            ><span class="bottom-nav-label">Antrenman</span>
           </button>
           <button
             type="button"
             class="bottom-nav-item"
-            data-bottom-page="assignments"
-            aria-label="Ödevler"
+            data-bottom-page="lessons"
+            aria-label="Dersler"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">📝</span
-            ><span class="bottom-nav-label">Ödevler</span>
-          </button>
-          <button
-            type="button"
-            class="bottom-nav-item"
-            data-bottom-page="assessments"
-            aria-label="Değerlendirmeler"
-          >
-            <span class="bottom-nav-icon" aria-hidden="true">📊</span
-            ><span class="bottom-nav-label">Ölçme</span>
+            <span class="bottom-nav-icon" aria-hidden="true">📖</span
+            ><span class="bottom-nav-label">Dersler</span>
           </button>
           <button
             type="button"
             class="bottom-nav-item"
             data-bottom-page="progress"
-            aria-label="İlerleme"
+            aria-label="Gelişim"
           >
             <span class="bottom-nav-icon" aria-hidden="true">📈</span
-            ><span class="bottom-nav-label">İlerleme</span>
-          </button>
-          <button
-            type="button"
-            class="bottom-nav-item"
-            data-bottom-page="badges"
-            aria-label="Rozetler"
-          >
-            <span class="bottom-nav-icon" aria-hidden="true">🏅</span
-            ><span class="bottom-nav-label">Rozetler</span>
+            ><span class="bottom-nav-label">Gelişim</span>
           </button>
           <button
             type="button"
@@ -4512,6 +4830,58 @@
         </nav>
       </div>
     </div>
+    <dialog
+      id="pilot-report-dialog"
+      class="premium-dialog pilot-report-dialog"
+      aria-labelledby="pilot-report-title"
+    >
+      <form id="pilot-report-form">
+        <div class="premium-dialog-head">
+          <div>
+            <span class="eyebrow">PİLOT DESTEĞİ</span>
+            <h3 id="pilot-report-title">Geri bildirim gönder</h3>
+          </div>
+          <button id="pilot-report-close" type="button" class="btn btn-icon" aria-label="Kapat">
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+        <div class="premium-dialog-body">
+          <p id="pilot-report-lead" class="muted">
+            Kısa bir not yeterli. Şifre, token veya özel bilgilerini yazma.
+          </p>
+          <label class="field">
+            <span>Konusu</span>
+            <select id="pilot-report-category"></select>
+          </label>
+          <label id="pilot-report-rating-wrap" class="field">
+            <span>Nasıl gidiyor? <small>(isteğe bağlı)</small></span>
+            <select id="pilot-report-rating">
+              <option value="">Puan vermek istemiyorum</option>
+              <option value="5">5 — Çok iyi</option>
+              <option value="4">4 — İyi</option>
+              <option value="3">3 — Orta</option>
+              <option value="2">2 — Zorlanıyorum</option>
+              <option value="1">1 — Yardıma ihtiyacım var</option>
+            </select>
+          </label>
+          <label class="field">
+            <span id="pilot-report-message-label">Mesajın</span>
+            <textarea
+              id="pilot-report-message"
+              rows="5"
+              maxlength="2000"
+              placeholder="Ne olduğunu veya neyi daha iyi yapmak istediğini anlat…"
+              required
+            ></textarea>
+          </label>
+          <p id="pilot-report-error" class="error hidden" role="alert"></p>
+        </div>
+        <div class="premium-dialog-actions">
+          <button id="pilot-report-cancel" type="button" class="btn btn-ghost">Vazgeç</button>
+          <button id="pilot-report-submit" type="submit" class="btn btn-primary">Gönder</button>
+        </div>
+      </form>
+    </dialog>
     <dialog
       id="premium-paywall-dialog"
       class="premium-dialog"

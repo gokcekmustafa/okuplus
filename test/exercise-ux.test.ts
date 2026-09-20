@@ -10,7 +10,6 @@ const exerciseCode = source.slice(
 
 function harness() {
   const elements = new Map<string, ReturnType<typeof element>>();
-  const performanceEntries: Array<{ type: "mark" | "measure"; name: string }> = [];
   function element() {
     return {
       textContent: "",
@@ -35,38 +34,20 @@ function harness() {
     exerciseQuestionTelemetry: new Map(),
     exerciseRetryingQuestionVersionId: null,
     exerciseGamification: null,
+    dailyTrainingSummary: null,
+    exerciseReviewMode: false,
     exerciseAwaitingNext: false,
     exerciseBusy: false,
     exerciseLoading: false,
     exerciseQuestions: [{ questionVersionId: "q1" }],
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
-    performance: {
-      mark(name: string) {
-        performanceEntries.push({ type: "mark", name });
-      },
-      measure(name: string) {
-        performanceEntries.push({ type: "measure", name });
-      },
-    },
   });
   runInContext(exerciseCode, context);
-  return {
-    context,
-    get,
-    performanceEntries,
-    run: (code: string) => runInContext(code, context),
-  };
+  return { context, get, run: (code: string) => runInContext(code, context) };
 }
 
 describe("exercise UX state from production frontend", () => {
-  it("reuses the sanitized student-session question projection before the legacy fetch fallback", () => {
-    expect(source).toContain("Array.isArray(exerciseSession.questions)");
-    expect(source).toContain(
-      "await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`)",
-    );
-  });
-
   it("does not label a null score as wrong or award invented GP", () => {
     const h = harness();
     h.run('showExerciseFeedback({ id: "a", isCorrect: null, rawScore: null })');
@@ -74,6 +55,11 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Değerlendirme bekleniyor");
     expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("GP");
     expect(h.context.exerciseAwaitingNext).toBe(true);
+  });
+
+  it("loads the current daily child session even when the daily summary exists", () => {
+    expect(source).toContain("if (id) {");
+    expect(source).not.toContain("if (id && !dailyTrainingSummary) {");
   });
 
   it("shows only points linked to this actual attempt", () => {
@@ -88,6 +74,20 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("+7 GP");
     expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("+10 GP");
     expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("100 GP");
+  });
+
+  it("uses the product's Turkish inline feedback contract", () => {
+    const h = harness();
+    h.run(
+      'showExerciseFeedback({ id: "correct", questionVersionId: "q1", isCorrect: true, rawScore: 1 })',
+    );
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("✓ Güzel yakaladın.");
+
+    h.run(
+      'showExerciseFeedback({ id: "wrong", questionVersionId: "q1", isCorrect: false, rawScore: 0, feedback: "İpucu" })',
+    );
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Tekrar düşün.");
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("İpucu");
   });
 
   it("keeps answered but unscored items pending even when summary flag is false", () => {
@@ -120,6 +120,17 @@ describe("exercise UX state from production frontend", () => {
     expect(attempt.rawScore).toBeUndefined();
   });
 
+  it("keeps the latest retry when server history is not ordered", () => {
+    const h = harness();
+    h.run(
+      'restoreExerciseAttempts({ attempts: [{ id: "retry", questionVersionId: "q1", responseOrder: 2, isCorrect: true }, { id: "first", questionVersionId: "q1", responseOrder: 1, isCorrect: false }] })',
+    );
+    const attempt = h.context.exerciseAttempts.get("q1");
+    expect(attempt.id).toBe("retry");
+    expect(attempt.responseOrder).toBe(2);
+    expect(attempt.isCorrect).toBe(true);
+  });
+
   it("ignores reentrant submit and complete calls while a request is pending", async () => {
     const h = harness();
     h.context.exerciseBusy = true;
@@ -144,28 +155,5 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").className).toContain("pending");
     expect(h.get("exercise-submit-attempt").disabled).toBe(false);
     expect(h.context.exerciseBusy).toBe(false);
-  });
-
-  it("marks the authoritative response and feedback render separately", async () => {
-    const h = harness();
-    h.run(`
-      exerciseRequest = null;
-      crypto = { randomUUID: () => "request-id" };
-      $("exercise-current-question").dataset = { questionVersionId: "q1", questionType: "OPEN_ENDED" };
-      $("exercise-current-question").querySelector = () => ({ value: "My answer" });
-      exerciseApi = async () => ({});
-      parseResponse = async () => ({ id: "attempt", isCorrect: null, rawScore: null });
-      refreshExerciseGamification = async () => null;
-    `);
-    await h.run("handleExerciseSubmitAttempt()");
-    expect(h.performanceEntries).toEqual(
-      expect.arrayContaining([
-        { type: "mark", name: "oku-exercise-answer-request-id-start" },
-        { type: "mark", name: "oku-exercise-answer-request-id-response" },
-        { type: "measure", name: "oku-exercise-answer-response" },
-        { type: "mark", name: "oku-exercise-answer-request-id-feedback" },
-        { type: "measure", name: "oku-exercise-feedback-render" },
-      ]),
-    );
   });
 });

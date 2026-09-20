@@ -215,6 +215,18 @@ async function parseResponse(res) {
   return body?.data;
 }
 
+function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar dene.") {
+  if (error?.code === "UNAUTHORIZED" || error?.status === 401)
+    return "Oturumun sona ermiş olabilir. Tekrar giriş yapmayı dene.";
+  if (error?.code === "FORBIDDEN" || error?.status === 403)
+    return "Bu adıma şu anda erişilemiyor. Sayfayı yenileyip tekrar dene.";
+  if (error?.code === "VALIDATION_ERROR" || error?.status === 400)
+    return "Bilgileri kontrol edip tekrar dene.";
+  if (error?.status === 409) return "Bu işlem zaten kaydedilmiş olabilir. Biraz sonra tekrar dene.";
+  if (error?.status >= 500) return "Bir bağlantı sorunu oldu. Biraz sonra tekrar dene.";
+  return fallback;
+}
+
 // ---------- Auth API çağrıları ----------
 
 async function login(email, password) {
@@ -388,6 +400,8 @@ function showDashboard(me) {
   insightsIdentity = user.id + ":" + (tenantContext?.tenantId || "");
   const isPlatform = Boolean(user.platformRole);
   isPlatformUser = isPlatform;
+  currentUserId = user.id;
+  currentPlatformRole = user.platformRole ?? null;
 
   $("welcome-name").textContent = user.displayName;
   $("user-name").textContent = user.displayName;
@@ -413,6 +427,9 @@ function showDashboard(me) {
   for (const item of document.querySelectorAll("[data-student]")) {
     item.classList.toggle("hidden", isPlatform);
   }
+  for (const item of document.querySelectorAll("[data-student-secondary]")) {
+    item.classList.toggle("hidden", !isPlatform);
+  }
 
   // Student shell toggle
   $("view-app").classList.toggle("student-shell", !isPlatform);
@@ -429,7 +446,6 @@ function showDashboard(me) {
   if (isPlatform) {
     navigate("dashboard");
   } else {
-    navigate("onboarding");
     void maybeShowOnboarding();
   }
 }
@@ -481,20 +497,20 @@ async function loadContextsAndRender() {
 async function loadTopbarGamification() {
   const scope = insightScope();
   try {
-    const tokens = getStoredTokens();
-    const data = await parseResponse(
-      await fetch("/student/gamification", {
-        headers: authHeaders(tokens.accessToken, tokens.tenantId),
-      }),
-    );
+    var tokens = getStoredTokens();
+    var res = await fetch("/student/gamification", {
+      headers: authHeaders(tokens.accessToken, tokens.tenantId),
+    });
+    var data = await parseResponse(res);
     if (scope !== insightScope()) return;
     observeInsightAwards(data);
-    const gp = $("topbar-gp");
-    const streak = $("topbar-streak");
-    if (gp) gp.textContent = String(data.totalPoints ?? 0);
-    if (streak) streak.textContent = String(data.currentDays ?? 0);
-  } catch {
-    // Optional dashboard context; it must not block the learning flow.
+    var gpEl = $("topbar-gp");
+    var streakEl = $("topbar-streak");
+    if (gpEl) gpEl.textContent = String(data.totalPoints ?? "—");
+    if (streakEl) streakEl.textContent = String(data.currentDays ?? "—");
+  } catch (_e) {
+    void _e;
+    // ignore for non-student or not yet onboarded
   }
 }
 
@@ -505,7 +521,8 @@ async function switchContext(tenantId) {
   try {
     var me = await fetchMe(tokens.accessToken, tenantId || null);
     showDashboard(me);
-  } catch {
+  } catch (_e) {
+    void _e;
     clearStoredSession();
     showLogin();
   }
@@ -524,19 +541,33 @@ async function maybeShowOnboarding() {
     var data = await parseResponse(res);
     if (data.completed) {
       navigate("dashboard");
+      void loadToday();
+      void loadLearningPath();
       return;
     }
     showOnboarding(data);
+    recordPilotTelemetry("ONBOARDING_STARTED");
   } catch (_e) {
     void _e;
-    navigate("onboarding");
-    const error = $("onboarding-error");
-    const retry = $("onboarding-retry");
-    if (error) {
-      error.textContent = "Başlangıç bilgilerin yüklenemedi. Bağlantını kontrol edip tekrar dene.";
-      error.classList.remove("hidden");
-    }
-    retry?.classList.remove("hidden");
+    showOnboarding({});
+    showOnboardingError(
+      "Başlangıç bilgilerin yüklenemedi. Bağlantını kontrol edip tekrar dene.",
+      true,
+    );
+  }
+}
+
+function showOnboardingError(message, retryable) {
+  var error = $("onboarding-error");
+  if (error) {
+    error.textContent = message || "";
+    if (message) error.classList.remove("hidden");
+    else error.classList.add("hidden");
+  }
+  var retry = $("onboarding-retry-load");
+  if (retry) {
+    if (retryable) retry.classList.remove("hidden");
+    else retry.classList.add("hidden");
   }
 }
 
@@ -550,7 +581,7 @@ function renderTrainingHome(data) {
     total,
     Math.max(0, Number(dailyGoal?.completedItems ?? daily?.completedItems) || 0),
   );
-  const goalStatus = dailyGoal?.status ?? daily?.status ?? null;
+  const goalStatus = dailyGoal?.status ?? (daily?.status || null);
   const isCompleted = goalStatus === "COMPLETED" || completed >= total;
   const isInProgress = goalStatus === "IN_PROGRESS" || Boolean(daily && !isCompleted);
   const progress = Math.round((completed / total) * 100);
@@ -562,8 +593,6 @@ function renderTrainingHome(data) {
   const progressFill = $("daily-training-progress-fill");
   const gp = $("daily-training-gp");
   const streak = $("daily-training-streak");
-  const topbarPoints = $("topbar-gp");
-  const topbarStreak = $("topbar-streak");
   if (status) {
     status.textContent = isCompleted
       ? "Antrenman tamamlandı"
@@ -584,25 +613,22 @@ function renderTrainingHome(data) {
           ? "Harika! Seni tanıdık. Şimdi kısa ve kolay bir antrenmanla başlayalım."
           : firstDay
             ? "İlk antrenmanına başlayalım."
-            : "Bugünkü antrenmanın hazır.";
+            : "Kısa bir çalışmayla bugün de ilerle.";
   }
   if (progressText) progressText.textContent = `${completed} / ${total} egzersiz`;
   if (progressTrack) progressTrack.setAttribute("aria-valuemax", String(total));
   if (progressTrack) progressTrack.setAttribute("aria-valuenow", String(completed));
   if (progressFill) progressFill.style.width = `${progress}%`;
   const pointsToday = Number(data?.pointsToday ?? daily?.totalGP);
-  if (gp) gp.textContent = `Bugün kazanılan: ${Number.isFinite(pointsToday) ? pointsToday : 0} GP`;
-  if (topbarPoints && Number.isFinite(Number(data?.totalPoints)))
-    topbarPoints.textContent = String(data.totalPoints);
-  if (topbarStreak && Number.isFinite(Number(data?.currentStreak)))
-    topbarStreak.textContent = String(data.currentStreak);
+  if (gp)
+    gp.textContent = `Bugün kazanılan: ${Number.isFinite(pointsToday) ? pointsToday : "—"} GP`;
   if (streak)
     streak.textContent =
       Number(dailyGoal?.currentStreak ?? data?.currentStreak) > 0
         ? `🔥 ${dailyGoal?.currentStreak ?? data.currentStreak} günlük seri`
         : "";
   if (button) {
-    button.disabled = isCompleted || button.dataset.todayLoaded !== "true";
+    button.disabled = isCompleted;
     button.textContent = isCompleted
       ? "Bugün tamamlandı"
       : isInProgress
@@ -618,30 +644,29 @@ async function loadToday() {
   var na = $("today-next-action");
   var stats = $("today-stats");
   var recent = $("today-recent");
-  var recentList = $("dashboard-recent-list");
-  var card = $("today-card");
-  var startButton = $("start-daily-training");
-  var refreshButton = $("refresh-today-training");
+  var errorEl = $("today-training-error");
+  var retryEl = $("today-training-retry");
+  const recentActivityLabels = {
+    EXERCISE: "Alıştırma",
+    ASSIGNMENT: "Ödev",
+    ASSESSMENT: "Değerlendirme",
+  };
   if (!na) return;
-  let loaded = false;
-  card?.setAttribute("aria-busy", "true");
-  if (startButton) {
-    startButton.dataset.todayLoaded = "false";
-    startButton.disabled = true;
-  }
-  if (refreshButton) refreshButton.disabled = true;
-  $("today-training-error")?.classList.add("hidden");
+  const todayCard = $("today-card");
+  todayCard?.setAttribute("aria-busy", "true");
+  errorEl?.classList.add("hidden");
+  retryEl?.classList.add("hidden");
   const scope = insightScope();
   try {
     var tokens = getStoredTokens();
     var res = await fetch("/student/today", {
       headers: authHeaders(tokens.accessToken, tokens.tenantId),
-      signal: AbortSignal.timeout(15000),
     });
     var data = await parseResponse(res);
-    if (scope !== insightScope()) return;
-    loaded = true;
-    if (startButton) startButton.dataset.todayLoaded = "true";
+    if (scope !== insightScope()) {
+      todayCard?.setAttribute("aria-busy", "false");
+      return;
+    }
     renderTrainingHome(data);
     renderReviewCard(data.review);
     var label = data.nextAction ? data.nextAction.label : "—";
@@ -662,122 +687,51 @@ async function loadToday() {
         '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayAssessment(\'' +
         data.nextAction.id +
         "')\">Değerlendirmeye Başla</button>";
-    else if (data.nextAction && data.nextAction.type === "PERSONAL_EXERCISE")
+    else if (data.nextAction && data.nextAction.type === "PERSONAL_EXERCISE") {
+      const templateVersionId = encodeURIComponent(String(data.nextAction.id ?? "")).replaceAll(
+        "'",
+        "%27",
+      );
       btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayExercise()">Çalışmaya Başla</button>';
-    na.innerHTML =
-      '<span class="dashboard-next-label">Önerilen sonraki adım</span>' +
-      "<span>" +
-      escapeHtml(label + title) +
-      "</span> " +
-      btn;
+        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayExercise(\'' +
+        templateVersionId +
+        "')\">Çalışmaya Başla</button>";
+    }
+    na.innerHTML = escapeHtml(label + title) + " " + btn;
     stats.textContent =
       "Bugün tamamlanan: " +
       data.completedToday +
-      " · Streak: " +
+      " · Seri: " +
       data.currentStreak +
       " · Bugün kazanılan GP: " +
       (data.dailyTraining?.totalGP ?? data.pointsToday ?? 0);
-    const activityLabel = {
-      ASSIGNMENT: "Ödev",
-      ASSESSMENT: "Değerlendirme",
-      EXERCISE: "Alıştırma",
-    };
-    const activities = Array.isArray(data.recentActivity) ? data.recentActivity : [];
-    const recentHtml = activities.length
-      ? activities
+    if (data.recentActivity && data.recentActivity.length) {
+      recent.innerHTML =
+        '<div class="muted" style="font-size:12px;margin-bottom:4px">Son aktivite</div>' +
+        data.recentActivity
           .map(function (a) {
-            const type = activityLabel[a.type] || "Çalışma";
-            const date = a.completedAt ? insightDate(a.completedAt) : "Tamamlanıyor";
             return (
-              '<article class="dashboard-recent-item"><span aria-hidden="true">✓</span><div><strong>' +
-              escapeHtml(a.title || "Çalışma") +
-              "</strong><small>" +
-              escapeHtml(type + " · " + date) +
-              "</small></div></article>"
+              "<div>" +
+              escapeHtml(a.title) +
+              " (" +
+              escapeHtml(recentActivityLabels[a.type] || "Çalışma") +
+              ")</div>"
             );
           })
-          .join("")
-      : '<p class="muted">Henüz tamamlanan bir çalışman yok. İlk adımın hazır.</p>';
-    if (recent) recent.innerHTML = recentHtml;
-    if (recentList) recentList.innerHTML = recentHtml;
-  } catch (_e) {
-    void _e;
-    if (na) na.textContent = "Bugün verisi yüklenemedi. Yenile düğmesini deneyebilirsin.";
-    const status = $("daily-training-status");
-    const intro = $("daily-training-intro");
-    const error = $("today-training-error");
-    if (status) status.textContent = "Yüklenemedi";
-    if (intro) intro.textContent = "Bugünkü antrenmanı yüklerken bir sorun oldu.";
-    if (error) {
-      error.textContent = "Bugünkü antrenman yüklenemedi. Tekrar denemek için Yenile'ye bas.";
-      error.classList.remove("hidden");
+          .join("");
+    } else
+      recent.innerHTML = '<span class="muted" style="font-size:12px">Henüz aktivite yok</span>';
+    todayCard?.setAttribute("aria-busy", "false");
+  } catch (error) {
+    if (na) na.textContent = "";
+    if (stats) stats.textContent = "";
+    if (recent) recent.replaceChildren();
+    if (errorEl) {
+      errorEl.textContent = formatDailyTrainingError(error);
+      errorEl.classList.remove("hidden");
     }
-  } finally {
-    card?.setAttribute("aria-busy", "false");
-    if (refreshButton) refreshButton.disabled = false;
-    if (!loaded && startButton) startButton.disabled = true;
-  }
-}
-
-function formatDashboardDuration(value) {
-  const ms = Number(value);
-  if (typeof value !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
-  const seconds = ms / 1000;
-  return `${Number.isInteger(seconds) ? seconds : seconds.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} sn`;
-}
-
-function renderDashboardProgress(data) {
-  const summary = data?.summary || {};
-  const items = Array.isArray(data?.items) ? data.items : [];
-  const latest = items.find((item) => item?.lastAttemptAt) || items[0] || null;
-  const numericMetric = (value) =>
-    typeof value === "number" && Number.isFinite(value) ? value : null;
-  const accuracy = numericMetric(summary.accuracy);
-  const lastAccuracy = numericMetric(latest?.accuracy);
-  const averageTime =
-    items.find((item) => numericMetric(item?.avgTimeMs) !== null)?.avgTimeMs ?? null;
-  const set = (id, value) => {
-    const element = $(id);
-    if (element) element.textContent = value;
-  };
-  set("dashboard-last-performance", lastAccuracy === null ? "—" : formatAccuracy(lastAccuracy));
-  set("dashboard-accuracy", accuracy === null ? "—" : formatAccuracy(accuracy));
-  set("dashboard-average-time", formatDashboardDuration(averageTime));
-  set(
-    "dashboard-completed-sessions",
-    Number.isFinite(Number(summary.sessionCount)) ? String(summary.sessionCount) : "—",
-  );
-  const note = $("dashboard-progress-note");
-  if (note) {
-    note.textContent = items.length
-      ? "Doğruluk yalnızca puanlanan cevaplardan hesaplanır; ölçülemeyen değerler boş bırakılır."
-      : "İlk tamamlanan antrenmanından sonra gerçek gelişim verilerin burada görünecek.";
-  }
-}
-
-async function loadDashboardProgress() {
-  const card = $("dashboard-progress-card");
-  const note = $("dashboard-progress-note");
-  const retry = $("dashboard-progress-retry");
-  if (!card) return;
-  const scope = insightScope();
-  card.setAttribute("aria-busy", "true");
-  retry?.classList.add("hidden");
-  if (retry) retry.disabled = true;
-  try {
-    const data = await insightApi("progress");
-    if (scope !== insightScope()) return;
-    renderDashboardProgress(data);
-  } catch {
-    if (scope !== insightScope()) return;
-    if (note) note.textContent = "Gelişim özeti şu anda yüklenemedi. Yenile ile tekrar dene.";
-    retry?.classList.remove("hidden");
-  } finally {
-    if (scope === insightScope()) {
-      card.setAttribute("aria-busy", "false");
-      if (retry) retry.disabled = false;
-    }
+    retryEl?.classList.remove("hidden");
+    todayCard?.setAttribute("aria-busy", "false");
   }
 }
 
@@ -795,23 +749,170 @@ function isPremiumLimitError(error) {
   return error?.status === 403 && isPremiumLimitDetails(error.details);
 }
 
-function recordPremiumTelemetry(eventType) {
+function recordPilotTelemetry(eventType, context = {}, semanticKey = eventType) {
   if (isPlatformUser !== false) return;
   const tokens = getStoredTokens();
   if (!tokens.accessToken || !tokens.tenantId) return;
   let clientEventId;
   try {
-    clientEventId = `premium-${eventType}-${crypto.randomUUID()}`;
+    clientEventId = `pilot-${semanticKey}-${crypto.randomUUID()}`;
   } catch {
-    clientEventId = `premium-${eventType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    clientEventId = `pilot-${semanticKey}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
+  const payload = { eventType, clientEventId };
+  if (typeof context.sessionId === "string" && context.sessionId.trim())
+    payload.sessionId = context.sessionId;
+  if (typeof context.questionVersionId === "string" && context.questionVersionId.trim())
+    payload.questionVersionId = context.questionVersionId;
   void fetch("/student/pilot/events", {
     method: "POST",
     headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    body: JSON.stringify({ eventType, clientEventId }),
+    body: JSON.stringify(payload),
   }).catch(() => {
     // Telemetry is best effort and never blocks access or learning.
   });
+}
+
+function recordPremiumTelemetry(eventType) {
+  recordPilotTelemetry(eventType, {}, "premium-" + eventType);
+}
+
+let pilotReportMode = "feedback";
+
+const PILOT_FEEDBACK_CATEGORIES = [
+  ["GENERAL_SATISFACTION", "Genel deneyim"],
+  ["CONTENT_CLARITY", "Ders anlatımı"],
+  ["QUESTION_CLARITY", "Soru açıklığı"],
+  ["DIFFICULTY", "Zorluk seviyesi"],
+];
+
+const PILOT_BUG_CATEGORIES = [
+  ["BUG", "Beklenmeyen davranış"],
+  ["CONTENT_ISSUE", "İçerik sorunu"],
+  ["WRONG_ANSWER", "Cevap değerlendirmesi"],
+  ["UNCLEAR_QUESTION", "Anlaşılmayan soru"],
+  ["TECHNICAL_ERROR", "Teknik sorun"],
+];
+
+function pilotReportContext() {
+  const context = {};
+  if (typeof exerciseSession?.id === "string" && exerciseSession.id.trim())
+    context.sessionId = exerciseSession.id;
+  const questionVersionId = $("exercise-current-question")?.dataset.questionVersionId;
+  if (typeof questionVersionId === "string" && questionVersionId.trim())
+    context.questionVersionId = questionVersionId;
+  return context;
+}
+
+function closePilotReport() {
+  const dialog = $("pilot-report-dialog");
+  if (dialog?.open && typeof dialog.close === "function") dialog.close();
+  else dialog?.classList.add("hidden");
+}
+
+function openPilotReport(mode) {
+  pilotReportMode = mode === "bug" ? "bug" : "feedback";
+  const isBug = pilotReportMode === "bug";
+  const dialog = $("pilot-report-dialog");
+  const category = $("pilot-report-category");
+  const ratingWrap = $("pilot-report-rating-wrap");
+  const title = $("pilot-report-title");
+  const lead = $("pilot-report-lead");
+  const messageLabel = $("pilot-report-message-label");
+  const message = $("pilot-report-message");
+  const error = $("pilot-report-error");
+  if (!dialog || !category) return;
+  const categories = isBug ? PILOT_BUG_CATEGORIES : PILOT_FEEDBACK_CATEGORIES;
+  category.innerHTML = categories
+    .map(([value, label]) => `<option value="${value}">${label}</option>`)
+    .join("");
+  if (title) title.textContent = isBug ? "Bir sorun bildir" : "Geri bildirim gönder";
+  if (lead)
+    lead.textContent = isBug
+      ? "Kısa bir not yeterli. Şifre, token veya özel bilgilerini yazma."
+      : "Deneyimini birkaç kelimeyle paylaşabilirsin. Şifre, token veya özel bilgilerini yazma.";
+  if (messageLabel) messageLabel.textContent = isBug ? "Sorun neydi?" : "Mesajın";
+  if (message) {
+    message.value = "";
+    message.placeholder = isBug
+      ? "Ne olduğunu ve mümkünse hangi adımda olduğunu anlat…"
+      : "Ne olduğunu veya neyi daha iyi yapmak istediğini anlat…";
+  }
+  if (ratingWrap) ratingWrap.classList.toggle("hidden", isBug);
+  if (error) {
+    error.textContent = "";
+    error.classList.add("hidden");
+  }
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.classList.remove("hidden");
+  message?.focus();
+}
+
+async function submitPilotReport(event) {
+  event.preventDefault();
+  const submit = $("pilot-report-submit");
+  const error = $("pilot-report-error");
+  const status = $("pilot-support-status");
+  const message = $("pilot-report-message")?.value.trim();
+  if (!message) return;
+  if (submit) {
+    submit.disabled = true;
+    submit.setAttribute("aria-busy", "true");
+    submit.textContent = "Gönderiliyor…";
+  }
+  if (error) error.classList.add("hidden");
+  const category = $("pilot-report-category")?.value;
+  const context = pilotReportContext();
+  const tokens = getStoredTokens();
+  try {
+    const isBug = pilotReportMode === "bug";
+    const body = isBug
+      ? {
+          clientBugId: `pilot-bug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          category,
+          description: message.slice(0, 2000),
+          ...context,
+        }
+      : {
+          clientFeedbackId: `pilot-feedback-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          category,
+          rating: Number($("pilot-report-rating")?.value) || undefined,
+          message: message.slice(0, 1000),
+          ...context,
+        };
+    const endpoint = isBug ? "/student/pilot/bug-reports" : "/student/pilot/feedback";
+    await parseResponse(
+      await fetch(endpoint, {
+        method: "POST",
+        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        body: JSON.stringify(body),
+      }),
+    );
+    closePilotReport();
+    if (status) status.textContent = "Mesajın pilot ekibine iletildi.";
+  } catch {
+    if (error) {
+      error.textContent = "Mesaj gönderilemedi. Biraz sonra tekrar dene.";
+      error.classList.remove("hidden");
+    }
+  } finally {
+    if (submit) {
+      submit.disabled = false;
+      submit.removeAttribute("aria-busy");
+      submit.textContent = "Gönder";
+    }
+  }
+}
+
+function setupPilotExperienceEvents() {
+  $("pilot-support-open")?.addEventListener("click", () => openPilotReport("feedback"));
+  $("pilot-bug-open")?.addEventListener("click", () => openPilotReport("bug"));
+  $("pilot-report-close")?.addEventListener("click", closePilotReport);
+  $("pilot-report-cancel")?.addEventListener("click", closePilotReport);
+  $("pilot-report-dialog")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) closePilotReport();
+  });
+  $("pilot-report-form")?.addEventListener("submit", submitPilotReport);
 }
 
 function premiumFeatureLabel(feature) {
@@ -905,16 +1006,6 @@ async function loadEntitlements() {
       '</strong></div><div class="entitlement-usage-row"><span>Günlük soru</span><strong>' +
       escapeHtml(usageValue(questions)) +
       "</strong></div>";
-    const quota = $("daily-training-quota");
-    if (quota) {
-      if (questions.dailyLimit === null || questions.dailyLimit === undefined) {
-        quota.textContent = "Günlük soru hakkın sınırsız.";
-      } else if (Number(questions.remainingToday) <= 0) {
-        quota.textContent = "Günlük soru hakkın doldu; tamamlanmayan adımlar yarına kalabilir.";
-      } else {
-        quota.textContent = `Bugün ${questions.remainingToday} soru hakkın kaldı.`;
-      }
-    }
     $("entitlement-premium-note").textContent =
       plan.code === "PLAN_PREMIUM"
         ? "Premium etkin. Alıştırma ve soru kullanımı günlük sınır olmadan devam eder."
@@ -1374,13 +1465,20 @@ function renderReviewCard(review) {
     return;
   }
 
-  status.textContent = "Önceki çalışmalarından kısa bir tekrar.";
+  status.textContent = "Bunu daha önce çalıştın. Bir kez daha deneyelim.";
   items.innerHTML = review.items
     .slice(0, 3)
     .map(function (item) {
-      const priority = item.priority === "HIGH" ? "Öncelikli" : "Sıradaki tekrar";
+      const priority =
+        item.priority === "CRITICAL"
+          ? "Öncelikli"
+          : item.priority === "HIGH"
+            ? "Öncelikli"
+            : "Sıradaki tekrar";
       const reason =
-        item.reason === "LOW_ACCURACY" ? "Geliştirmek için seçildi" : "Uzun süredir bekliyor";
+        item.reason === "LOW_ACCURACY" || item.reason === "CONSECUTIVE_FAILURE"
+          ? "Geliştirmek için seçildi"
+          : "Daha iyi pekiştirmek için seçildi";
       return (
         '<article class="review-item">' +
         '<div class="review-item-copy"><strong>' +
@@ -1395,7 +1493,7 @@ function renderReviewCard(review) {
         escapeHtml(item.templateVersionId) +
         '" data-review-skill="' +
         escapeHtml(item.skillId) +
-        '">Tekrara başla</button></article>'
+        '">Tekrar Et</button></article>'
       );
     })
     .join("");
@@ -1415,6 +1513,7 @@ function renderReviewCard(review) {
           }),
         });
         const data = await parseResponse(response);
+        exerciseReviewMode = true;
         exerciseRequestedSessionId = data.sessionId;
         navigate("exercise");
       } catch (error) {
@@ -1429,8 +1528,12 @@ async function loadLearningPath() {
   var container = $("learning-path");
   var progEl = $("learning-path-progress");
   var levelEl = $("learning-path-level");
+  var retryEl = $("learning-path-retry");
   if (!container) return;
   const scope = insightScope();
+  container.setAttribute("aria-busy", "true");
+  retryEl?.classList.add("hidden");
+  container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolun yükleniyor…</p>';
   try {
     var tokens = getStoredTokens();
     var res = await fetch("/student/learning-path", {
@@ -1438,6 +1541,7 @@ async function loadLearningPath() {
     });
     var data = await parseResponse(res);
     if (scope !== insightScope()) return;
+    container.setAttribute("aria-busy", "false");
     renderHomeInsights(data);
     var nodes = data.nodes || [];
     if (progEl)
@@ -1468,9 +1572,9 @@ async function loadLearningPath() {
               : n.status === "active"
                 ? "▶"
                 : "○";
-        var label = learningPathLabel(n);
+        var label = n.label || n.code;
         var disabled = n.status === "locked" ? " disabled" : "";
-        var aria = label + " - " + learningPathStatusLabel(n.status);
+        var aria = label + " - " + n.status;
         return (
           '<button type="button" class="path-node ' +
           n.status +
@@ -1521,42 +1625,11 @@ async function loadLearningPath() {
     }
   } catch (_e) {
     void _e;
-    container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolu yüklenemedi</p>';
+    container.setAttribute("aria-busy", "false");
+    container.innerHTML =
+      '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
+    retryEl?.classList.remove("hidden");
   }
-}
-
-const LEARNING_PATH_LABELS = {
-  FAST_ATTENTION: "Dikkat",
-  ATTENTION_BURST: "Dikkat",
-  FAST_RECOGNITION: "Hızlı tanıma",
-  RAPID_RECOGNITION: "Hızlı tanıma",
-  FAST_CHUNKING: "İfade gruplama",
-  PHRASE_CHUNKING: "İfade gruplama",
-  RC_MAIN_IDEA: "Ana fikir",
-  MAIN_IDEA: "Ana fikir",
-  RC_DETAIL: "Detay",
-  DETAIL_EVIDENCE: "Detay ve kanıt",
-  RC_INFERENCE: "Çıkarım",
-  INFERENCE: "Çıkarım",
-  COMPREHENSION: "Okuduğunu anlama",
-};
-const LEARNING_PATH_STATUS_LABELS = {
-  active: "Sıradaki adım",
-  available: "Hazır",
-  completed: "Tamamlandı",
-  locked: "Kilitli",
-};
-
-function learningPathLabel(node) {
-  const raw = String(node?.label || node?.code || "").trim();
-  if (!raw) return "Yeni beceri";
-  const mapped = LEARNING_PATH_LABELS[raw.toUpperCase()];
-  if (mapped) return mapped;
-  return /^[A-Z0-9_-]+$/.test(raw) ? "Yeni beceri" : raw;
-}
-
-function learningPathStatusLabel(status) {
-  return LEARNING_PATH_STATUS_LABELS[String(status || "").toLowerCase()] || "Hazır";
 }
 
 window.resumeTodaySession = async function (id) {
@@ -1592,16 +1665,20 @@ window.startTodayAssessment = async function (id) {
     if (!isPremiumLimitError(e)) alert(e.message);
   }
 };
-window.startTodayExercise = async function () {
+window.startTodayExercise = async function (encodedTemplateVersionId) {
   var tokens = getStoredTokens();
+  exerciseReviewMode = false;
   try {
-    var r = await fetch("/student/training/main-idea/start", {
+    var templateVersionId = encodedTemplateVersionId
+      ? decodeURIComponent(encodedTemplateVersionId)
+      : "";
+    var r = await fetch("/student/exercises/start", {
       method: "POST",
       headers: {
         ...authHeaders(tokens.accessToken, tokens.tenantId),
         ...csrfHeaders(),
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify(templateVersionId ? { templateVersionId } : {}),
     });
     var data = await parseResponse(r);
     exerciseRequestedSessionId = data.sessionId;
@@ -1632,6 +1709,9 @@ function restoreDailyTrainingState() {
 function formatDailyTrainingError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
   if (status === 401) return "Oturumun sona ermiş olabilir. Lütfen tekrar giriş yap.";
+  if (status === 403 && isPremiumLimitError(error)) {
+    return error.message || "Günlük ücretsiz kullanım hakkın doldu.";
+  }
   if (status === 403) return "Bu antrenmana şu anda erişilemiyor. Sayfayı yenileyip tekrar dene.";
   if (status === 404 || status === 409)
     return "Bugünkü antrenman şu anda kullanılamıyor. Lütfen tekrar dene.";
@@ -1661,6 +1741,7 @@ window.startDailyTraining = async function () {
     status.classList.add("hidden");
   }
   try {
+    exerciseReviewMode = false;
     const tokens = getStoredTokens();
     const data = await parseResponse(
       await fetch("/student/training/daily/start", {
@@ -1688,6 +1769,11 @@ window.startDailyTraining = async function () {
     }
     rememberDailyTrainingState({ id: data.id, exerciseSessionId: item.exerciseSessionId });
     exerciseRequestedSessionId = item.exerciseSessionId;
+    recordPilotTelemetry(
+      "EXERCISE_STARTED",
+      { sessionId: item.exerciseSessionId },
+      "exercise-started",
+    );
     navigate("exercise");
   } catch (error) {
     if (status) {
@@ -1703,7 +1789,6 @@ window.startDailyTraining = async function () {
 };
 
 function showOnboarding(state) {
-  $("onboarding-retry")?.classList.add("hidden");
   if (state && state.profile) {
     if (state.profile.displayName) $("onboard-displayName").value = state.profile.displayName;
     if (state.profile.birthYear) $("onboard-birthYear").value = state.profile.birthYear;
@@ -1760,6 +1845,7 @@ function updateOnboardingStep() {
   $("onboarding-next").classList.toggle("hidden", onboardingStep === 3);
   $("onboarding-complete").classList.toggle("hidden", onboardingStep !== 3);
   $("onboarding-error").classList.add("hidden");
+  $("onboarding-retry-load")?.classList.add("hidden");
 }
 
 async function loadOnboardingLevels() {
@@ -1767,7 +1853,6 @@ async function loadOnboardingLevels() {
   var retry = $("onboarding-level-retry");
   if (!sel || sel.options.length > 1) return;
   retry?.classList.add("hidden");
-  if (retry) retry.disabled = true;
   try {
     var tokens = getStoredTokens();
     var res = await fetch("/student/onboarding/levels", {
@@ -1776,7 +1861,6 @@ async function loadOnboardingLevels() {
     var data = await parseResponse(res);
     var items = data.levels || data || [];
     sel.dataset.loadError = "false";
-    retry?.classList.add("hidden");
     sel.innerHTML =
       '<option value="">Seviye seçin…</option>' +
       items
@@ -1784,13 +1868,12 @@ async function loadOnboardingLevels() {
           return '<option value="' + l.id + '">' + escapeHtml(l.name) + "</option>";
         })
         .join("");
+    retry?.classList.add("hidden");
   } catch (_e) {
     void _e;
     sel.dataset.loadError = "true";
     sel.innerHTML = '<option value="">Seviyeler yüklenemedi — tekrar dene</option>';
     retry?.classList.remove("hidden");
-  } finally {
-    if (retry) retry.disabled = false;
   }
 }
 
@@ -1861,30 +1944,6 @@ function setupOnboardingEvents() {
   var next = $("onboarding-next");
   var prev = $("onboarding-prev");
   var complete = $("onboarding-complete");
-  var retry = $("onboarding-retry");
-  if (retry)
-    retry.addEventListener("click", async function () {
-      retry.disabled = true;
-      retry.setAttribute("aria-busy", "true");
-      try {
-        await maybeShowOnboarding();
-      } finally {
-        retry.disabled = false;
-        retry.removeAttribute("aria-busy");
-      }
-    });
-  var levelRetry = $("onboarding-level-retry");
-  if (levelRetry)
-    levelRetry.addEventListener("click", async function () {
-      levelRetry.disabled = true;
-      levelRetry.setAttribute("aria-busy", "true");
-      try {
-        await loadOnboardingLevels();
-      } finally {
-        levelRetry.disabled = false;
-        levelRetry.removeAttribute("aria-busy");
-      }
-    });
   if (next)
     next.addEventListener("click", async function () {
       var errEl = $("onboarding-error");
@@ -1896,7 +1955,7 @@ function setupOnboardingEvents() {
         onboardingStep++;
         updateOnboardingStep();
       } catch (e) {
-        errEl.textContent = (e.message || "Kaydedilemedi") + " Tekrar deneyebilirsin.";
+        errEl.textContent = formatStudentError(e, "Bu adım kaydedilemedi. Tekrar deneyebilirsin.");
         errEl.classList.remove("hidden");
       } finally {
         next.disabled = false;
@@ -1931,13 +1990,23 @@ function setupOnboardingEvents() {
         $("onboarding-next").classList.add("hidden");
         $("onboarding-complete").classList.add("hidden");
         $("onboarding-step-num").textContent = "✓";
+        recordPilotTelemetry("ONBOARDING_COMPLETED");
       } catch (e) {
-        errEl.textContent = e.message || "Tamamlanamadı";
+        errEl.textContent = formatStudentError(
+          e,
+          "Onboarding tamamlanamadı. Tekrar deneyebilirsin.",
+        );
         errEl.classList.remove("hidden");
       }
       complete.disabled = false;
       complete.removeAttribute("aria-busy");
     });
+  $("onboarding-retry-load")?.addEventListener("click", function () {
+    void maybeShowOnboarding();
+  });
+  $("onboarding-level-retry")?.addEventListener("click", function () {
+    void loadOnboardingLevels();
+  });
   for (var btn of document.querySelectorAll(".goal-card")) {
     btn.addEventListener("click", function (e) {
       onboardingSelectedGoal = e.currentTarget.dataset.goal;
@@ -1953,35 +2022,55 @@ function setupOnboardingEvents() {
   if (quick)
     quick.addEventListener("click", async function () {
       var tokens = getStoredTokens();
+      quick.disabled = true;
+      quick.setAttribute("aria-busy", "true");
+      quick.textContent = "Hazırlanıyor…";
       try {
         var res = await fetch("/student/onboarding/quick-start", {
           headers: authHeaders(tokens.accessToken, tokens.tenantId),
         });
         var data = await parseResponse(res);
         if (!data.templateVersionId) throw new Error("Uygun egzersiz bulunamadı");
-        var meForSession = await fetchMe(tokens.accessToken, tokens.tenantId);
-        var createRes = await fetch("/admin/exercise-sessions", {
+        var startRes = await fetch("/student/exercises/start", {
           method: "POST",
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
+          headers: {
+            ...authHeaders(tokens.accessToken, tokens.tenantId),
+            ...csrfHeaders(),
+          },
           body: JSON.stringify({
-            studentId: meForSession.user.id,
             templateVersionId: data.templateVersionId,
             clientSessionId: "onboard-" + Date.now(),
           }),
         });
-        await parseResponse(createRes);
+        var started = await parseResponse(startRes);
+        if (!started.sessionId) throw new Error("İlk çalışma başlatılamadı");
+        exerciseRequestedSessionId = started.sessionId;
+        if (typeof rememberExerciseSession === "function")
+          rememberExerciseSession(started.sessionId);
+        recordPilotTelemetry(
+          "EXERCISE_STARTED",
+          { sessionId: started.sessionId },
+          "first-training-started",
+        );
         navigate("exercise");
         // trigger exercise load if needed
         if (typeof loadExercisePage === "function") void loadExercisePage();
-      } catch (e) {
-        $("onboarding-error").textContent = e.message;
-        $("onboarding-error").classList.remove("hidden");
+      } catch (_e) {
+        void _e;
+        showOnboardingError("İlk çalışman başlatılamadı. Tekrar deneyebilirsin.", false);
+      } finally {
+        quick.disabled = false;
+        quick.removeAttribute("aria-busy");
+        quick.textContent = "Hızlı Başla →";
       }
     });
   var place = $("onboard-placement");
   if (place)
     place.addEventListener("click", async function () {
       var tokens = getStoredTokens();
+      place.disabled = true;
+      place.setAttribute("aria-busy", "true");
+      place.textContent = "Hazırlanıyor…";
       try {
         var res = await fetch("/student/onboarding/placement", {
           headers: authHeaders(tokens.accessToken, tokens.tenantId),
@@ -1996,12 +2085,24 @@ function setupOnboardingEvents() {
           },
           body: JSON.stringify({}),
         });
-        await parseResponse(startRes);
-        navigate("assessments");
-        void loadAssessments();
-      } catch (e) {
-        $("onboarding-error").textContent = e.message;
-        $("onboarding-error").classList.remove("hidden");
+        var started = await parseResponse(startRes);
+        if (!started.sessionId) throw new Error("Seviye ölçümü başlatılamadı");
+        exerciseRequestedSessionId = started.sessionId;
+        if (typeof rememberExerciseSession === "function")
+          rememberExerciseSession(started.sessionId);
+        recordPilotTelemetry(
+          "ASSESSMENT_STARTED",
+          { sessionId: started.sessionId },
+          "placement-started",
+        );
+        navigate("exercise");
+      } catch (_e) {
+        void _e;
+        showOnboardingError("Seviye ölçümü başlatılamadı. Tekrar deneyebilirsin.", false);
+      } finally {
+        place.disabled = false;
+        place.removeAttribute("aria-busy");
+        place.textContent = "Seviyemi Ölç";
       }
     });
 }
@@ -2089,7 +2190,7 @@ async function loadLessons() {
   } catch (err) {
     status.textContent = "";
     if (error) {
-      error.textContent = err.message || "Dersler yüklenemedi.";
+      error.textContent = formatStudentError(err, "Dersler yüklenemedi. Tekrar deneyebilirsin.");
       error.classList.remove("hidden");
     }
   }
@@ -2100,11 +2201,13 @@ async function startSelectedLesson() {
   if (!lesson) return;
   const status = $("lesson-detail-status");
   try {
-    const tokens = getStoredTokens();
     const data = await parseResponse(
       await fetch("/student/exercises/start", {
         method: "POST",
-        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        headers: {
+          ...authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
+          ...csrfHeaders(),
+        },
         body: JSON.stringify({
           templateVersionId: lesson.exerciseTemplateVersionId,
           clientSessionId: `lesson-${lesson.id}-${Date.now()}`,
@@ -2117,7 +2220,11 @@ async function startSelectedLesson() {
     navigate("exercise");
     void loadExercisePage();
   } catch (err) {
-    if (status) status.textContent = err.message || "Egzersiz başlatılamadı.";
+    if (status)
+      status.textContent = formatStudentError(
+        err,
+        "Egzersiz başlatılamadı. Tekrar deneyebilirsin.",
+      );
   }
 }
 
@@ -2127,10 +2234,7 @@ async function completeSelectedLesson() {
   const status = $("lesson-detail-status");
   try {
     const updated = await parseResponse(
-      await lessonApi(`/${encodeURIComponent(lesson.id)}/complete`, {
-        method: "POST",
-        body: "{}",
-      }),
+      await lessonApi(`/${encodeURIComponent(lesson.id)}/complete`, { method: "POST", body: "{}" }),
     );
     const index = lessonData.findIndex((item) => item.id === lesson.id);
     if (index >= 0) lessonData[index] = updated;
@@ -2140,7 +2244,8 @@ async function completeSelectedLesson() {
       updatedStatus.textContent = "Ders tamamlandı. Şimdi egzersizle pekiştirebilirsin.";
     }
   } catch (err) {
-    if (status) status.textContent = err.message || "Ders tamamlanamadı.";
+    if (status)
+      status.textContent = formatStudentError(err, "Ders tamamlanamadı. Tekrar deneyebilirsin.");
   }
 }
 
@@ -2206,11 +2311,11 @@ function navigate(page) {
     if (active) item.setAttribute("aria-current", "page");
   }
   if (page === "dashboard") {
+    if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
     if (!isPlatformUser) {
       void loadToday();
       void loadLearningPath();
       void loadEntitlements();
-      void loadDashboardProgress();
     }
   } else if (page === "premium-info") {
     recordPremiumTelemetry("PREMIUM_INFO_VIEWED");
@@ -2256,6 +2361,8 @@ function navigate(page) {
   } else if (page === "assessments") {
     void loadAssessments();
   } else if (page === "progress") {
+    if (isPlatformUser === false)
+      recordPilotTelemetry("LEARNING_PATH_OPENED", {}, "progress-viewed");
     void loadProgress();
   } else if (page === "badges") {
     void loadGamification();
@@ -2713,8 +2820,9 @@ $("signup-form").addEventListener("submit", async (event) => {
     const session = await signup(displayName, email, password);
     setStoredSession(session);
     showDashboard(session);
+    recordPilotTelemetry("SIGNUP_COMPLETED");
   } catch (err) {
-    $("signup-error").textContent = err.message || "Hesap oluşturulamadı.";
+    $("signup-error").textContent = formatStudentError(err, "Hesap oluşturulamadı. Tekrar dene.");
     $("signup-error").classList.remove("hidden");
   } finally {
     inFlight = false;
@@ -2742,7 +2850,10 @@ $("login-form").addEventListener("submit", async (event) => {
     setStoredSession(session);
     showDashboard(session);
   } catch (err) {
-    $("login-error").textContent = err.message || "Giriş başarısız.";
+    $("login-error").textContent = formatStudentError(
+      err,
+      "E-posta veya şifre doğru değil. Tekrar dene.",
+    );
     $("login-error").classList.remove("hidden");
   } finally {
     inFlight = false;
@@ -6133,14 +6244,19 @@ const CONTENT_TYPE_LABELS = {
 
 const CONTENT_STATUS_LABELS = {
   DRAFT: "Taslak",
+  REVIEW: "İncelemede",
+  APPROVED: "Onaylandı",
   PUBLISHED: "Yayında",
+  RETIRED: "Emekli",
   ARCHIVED: "Arşivlenmiş",
 };
 
 const VERSION_STATUS_LABELS = {
   DRAFT: "Taslak",
   REVIEW: "İncelemede",
+  APPROVED: "Onaylandı",
   PUBLISHED: "Yayında",
+  RETIRED: "Emekli",
   ARCHIVED: "Arşivlenmiş",
 };
 
@@ -6167,6 +6283,19 @@ let contentEditingId = null;
 let contentDetailCurrent = null;
 let contentDetailVersions = [];
 let contentDetailSkills = [];
+let contentDetailAudit = [];
+let contentAuthoringCurrent = null;
+let contentAuthoringVersions = [];
+let contentAuthoringQuestions = [];
+let contentAuthoringAudit = [];
+let contentAuthoringVersion = null;
+let contentAuthoringQuestionDetails = [];
+let contentAuthoringReadinessReady = false;
+let contentAuthoringDirty = false;
+let questionAuthoringContext = null;
+let contentAuthoringReturnAfterVersion = false;
+let currentUserId = null;
+let currentPlatformRole = null;
 
 const QUESTION_TYPE_LABELS = {
   MULTIPLE_CHOICE: "Çoktan Seçmeli",
@@ -6179,7 +6308,9 @@ const QUESTION_TYPE_LABELS = {
 const QUESTION_STATUS_LABELS = {
   DRAFT: "Taslak",
   REVIEW: "İncelemede",
+  APPROVED: "Onaylandı",
   PUBLISHED: "Yayında",
+  RETIRED: "Emekli",
   ARCHIVED: "Arşivlenmiş",
 };
 
@@ -6189,8 +6320,10 @@ let questionTotal = 0;
 let questionData = [];
 let currentQuestionId = null;
 let currentQuestionType = null;
+let currentQuestionContentId = null;
 let currentVersionId = null;
 let questionVersionData = [];
+let questionAuditData = [];
 let questionFormMode = "createQuestion";
 let editingVersionId = null;
 let editingQuestionId = null;
@@ -6217,6 +6350,7 @@ let exerciseGamificationRequest = 0;
 let exerciseRequest = null;
 let exerciseRequestedSessionId = null;
 let exerciseScope = null;
+let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
 let lessonData = [];
@@ -6259,17 +6393,34 @@ function hideContentError() {
 function contentStatusBadge(status) {
   const cls = {
     DRAFT: "badge badge-neutral",
+    REVIEW: "badge badge-info",
+    APPROVED: "badge badge-info",
     PUBLISHED: "badge badge-success",
+    RETIRED: "badge badge-warning",
     ARCHIVED: "badge badge-warning",
   }[status];
   return `<span class="${cls ?? "badge"}">${CONTENT_STATUS_LABELS[status] ?? status}</span>`;
+}
+
+function hasContentRole(...roles) {
+  return currentPlatformRole !== null && roles.includes(currentPlatformRole);
+}
+
+function canAuthorContent() {
+  return hasContentRole("SUPER_ADMIN", "CONTENT_EDITOR");
+}
+
+function canReviewContent() {
+  return hasContentRole("SUPER_ADMIN", "CONTENT_REVIEWER");
 }
 
 function versionStatusBadge(status) {
   const cls = {
     DRAFT: "badge badge-neutral",
     REVIEW: "badge badge-info",
+    APPROVED: "badge badge-info",
     PUBLISHED: "badge badge-success",
+    RETIRED: "badge badge-warning",
     ARCHIVED: "badge badge-warning",
   }[status];
   return `<span class="${cls ?? "badge"}">${VERSION_STATUS_LABELS[status] ?? status}</span>`;
@@ -6298,6 +6449,7 @@ function difficultyLabel(value) {
 async function populateContentFilters() {
   const tenantSelect = $("content-tenant-filter");
   const skillSelect = $("content-skill-filter");
+  const authorSelect = $("content-author-filter");
   const typeSelect = $("content-type-filter");
 
   try {
@@ -6330,6 +6482,22 @@ async function populateContentFilters() {
     skillSelect.innerHTML = `<option value="">Beceriler yüklenemedi</option>`;
   }
 
+  try {
+    const res = await contentApi("/contents/authors");
+    const body = await parseResponse(res);
+    const options = body
+      .map(
+        (user) => `<option value="${user.id}">${escapeHtml(user.displayName || user.id)}</option>`,
+      )
+      .join("");
+    authorSelect.innerHTML = options
+      ? `<option value="">Tüm oluşturanlar</option>${options}`
+      : `<option value="">Oluşturan bulunamadı</option>`;
+  } catch (_e) {
+    void _e;
+    authorSelect.innerHTML = `<option value="">Oluşturanlar yüklenemedi</option>`;
+  }
+
   const typeOptions = Object.entries(CONTENT_TYPE_LABELS)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
     .join("");
@@ -6339,7 +6507,7 @@ async function populateContentFilters() {
 async function loadContents() {
   hideContentError();
   const tbody = $("content-list-body");
-  tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Yükleniyor…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Yükleniyor…</td></tr>';
 
   const search = $("content-search").value.trim();
   const scope = $("content-scope-filter").value;
@@ -6347,6 +6515,9 @@ async function loadContents() {
   const type = $("content-type-filter").value;
   const status = $("content-status-filter").value;
   const skillId = $("content-skill-filter").value;
+  const authorId = $("content-author-filter").value;
+  const sort = $("content-sort").value;
+  const sortDirection = $("content-sort-direction").value;
 
   const params = new URLSearchParams({
     page: contentPage,
@@ -6358,6 +6529,9 @@ async function loadContents() {
   if (type) params.set("type", type);
   if (status) params.set("status", status);
   if (skillId) params.set("skillId", skillId);
+  if (authorId) params.set("authorId", authorId);
+  if (sort) params.set("sort", sort);
+  if (sortDirection) params.set("sortDirection", sortDirection);
 
   try {
     const res = await contentApi(`/contents?${params.toString()}`);
@@ -6366,7 +6540,7 @@ async function loadContents() {
     contentTotal = body.total;
     renderContentList();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">—</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">—</td></tr>';
     showContentError(err.message || "İçerikler yüklenemedi.");
   }
 }
@@ -6375,7 +6549,7 @@ function renderContentList() {
   const tbody = $("content-list-body");
 
   if (contentData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">İçerik bulunamadı.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">İçerik bulunamadı.</td></tr>';
   } else {
     tbody.innerHTML = contentData
       .map(
@@ -6388,12 +6562,17 @@ function renderContentList() {
         </td>
         <td>${scopeBadge(c.tenantId)}</td>
         <td>${escapeHtml(contentTypeLabel(c.type))}</td>
-        <td class="numeric">${difficultyLabel(c.difficulty)}</td>
+        <td>${c.skillNames?.length ? c.skillNames.map(escapeHtml).join("<br>") : "—"}</td>
         <td class="numeric">${c.currentVersionNumber ?? "—"}</td>
         <td>${contentStatusBadge(c.status)}</td>
+        <td>${c.createdByName ? escapeHtml(c.createdByName) : "—"}</td>
+        <td>${formatContentDate(c.updatedAt)}</td>
+        <td>${formatContentDate(c.publishedAt)}</td>
+        <td>${formatContentAudit(c.lastAction)}</td>
         <td class="text-right">
-          <button type="button" class="btn btn-ghost btn-sm" data-content-edit-id="${c.id}">Düzenle</button>
-          <button type="button" class="btn btn-ghost btn-sm" data-content-delete-id="${c.id}">Sil</button>
+          ${canAuthorContent() ? `<button type="button" class="btn btn-primary btn-sm" data-content-authoring-id="${c.id}">İçerik Üretimi</button>` : ""}
+          ${c.status === "DRAFT" && canAuthorContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-content-edit-id="${c.id}">Düzenle</button>` : ""}
+          ${canAuthorContent() || canReviewContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-content-delete-id="${c.id}">Sil</button>` : ""}
         </td>
       </tr>`,
       )
@@ -6407,6 +6586,20 @@ function renderContentList() {
   $("content-next-btn").disabled = contentPage >= totalPages;
 }
 
+function formatContentDate(value) {
+  return value ? new Date(value).toLocaleDateString("tr-TR") : "—";
+}
+
+function formatContentAudit(action) {
+  if (!action) return "—";
+  const transition =
+    action.fromStatus && action.toStatus
+      ? `${action.fromStatus} → ${action.toStatus}`
+      : action.toStatus || "";
+  const actor = action.actorName ? ` · ${escapeHtml(action.actorName)}` : "";
+  return `<span title="${formatContentDate(action.createdAt)}">${escapeHtml(action.action)}${transition ? ` (${escapeHtml(transition)})` : ""}${actor}</span>`;
+}
+
 // ---------- Soru Bankası ----------
 function questionTypeLabel(type) {
   return QUESTION_TYPE_LABELS[type] ?? type;
@@ -6415,7 +6608,9 @@ function questionStatusBadge(status) {
   const cls = {
     DRAFT: "badge badge-neutral",
     REVIEW: "badge badge-info",
+    APPROVED: "badge badge-info",
     PUBLISHED: "badge badge-success",
+    RETIRED: "badge badge-warning",
     ARCHIVED: "badge badge-warning",
   }[status];
   return `<span class="${cls ?? "badge"}">${QUESTION_STATUS_LABELS[status] ?? status}</span>`;
@@ -6437,6 +6632,8 @@ function hideQuestionError() {
 async function populateQuestionFilters() {
   const contentSelect = $("question-content-filter");
   const skillSelect = $("question-skill-filter");
+  const authorSelect = $("question-author-filter");
+  $("question-create-btn").classList.toggle("hidden", !canAuthorContent());
   try {
     const res = await contentApi("/contents?page=1&pageSize=100");
     const body = await parseResponse(res);
@@ -6463,16 +6660,31 @@ async function populateQuestionFilters() {
     void _e;
     skillSelect.innerHTML = `<option value="">Beceriler yüklenemedi</option>`;
   }
+  try {
+    const res = await questionApi("/questions/authors");
+    const body = await parseResponse(res);
+    const options = body
+      .map((author) => `<option value="${author.id}">${escapeHtml(author.displayName)}</option>`)
+      .join("");
+    authorSelect.innerHTML = options
+      ? `<option value="">Tüm yazarlar</option>${options}`
+      : `<option value="">Yazar bulunamadı</option>`;
+  } catch (_e) {
+    void _e;
+    authorSelect.innerHTML = `<option value="">Yazarlar yüklenemedi</option>`;
+  }
 }
 async function loadQuestions() {
   hideQuestionError();
   const tbody = $("question-list-body");
-  tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Yükleniyor…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Yükleniyor…</td></tr>';
   const search = $("question-search").value.trim();
   const contentId = $("question-content-filter").value;
   const type = $("question-type-filter").value;
   const skillId = $("question-skill-filter").value;
   const status = $("question-status-filter").value;
+  const difficulty = $("question-difficulty-filter").value;
+  const authorId = $("question-author-filter").value;
   const pageSize = Number($("question-page-size").value) || 10;
   questionPageSize = pageSize;
   const params = new URLSearchParams({ page: String(questionPage), pageSize: String(pageSize) });
@@ -6481,6 +6693,19 @@ async function loadQuestions() {
   if (type) params.set("type", type);
   if (skillId) params.set("skillId", skillId);
   if (status) params.set("status", status);
+  if (authorId) params.set("authorId", authorId);
+  if (difficulty === "easy") {
+    params.set("difficultyMin", "0");
+    params.set("difficultyMax", "0.33");
+  } else if (difficulty === "medium") {
+    params.set("difficultyMin", "0.34");
+    params.set("difficultyMax", "0.66");
+  } else if (difficulty === "hard") {
+    params.set("difficultyMin", "0.67");
+    params.set("difficultyMax", "1");
+  }
+  params.set("sort", "updatedAt");
+  params.set("sortDirection", "desc");
   try {
     const res = await questionApi(`/questions?${params.toString()}`);
     const body = await parseResponse(res);
@@ -6488,26 +6713,32 @@ async function loadQuestions() {
     questionTotal = body.total;
     renderQuestionList();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">—</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Sorular yüklenemedi.</td></tr>';
     showQuestionError(err.message || "Sorular yüklenirken bir hata oluştu.");
   }
 }
 function renderQuestionList() {
   const tbody = $("question-list-body");
   if (questionData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Henüz soru bulunmuyor.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-cell">Henüz soru bulunmuyor.</td></tr>';
   } else {
     tbody.innerHTML = questionData
       .map(
         (q) => `
       <tr>
-        <td><button type="button" class="link-btn" data-question-detail-id="${q.id}">${escapeHtml((q.prompt ?? q.id).slice(0, 60))}</button></td>
-        <td>${escapeHtml(q.contentTitle ?? q.contentId ?? "—")}</td>
-        <td>${escapeHtml(questionTypeLabel(q.type))}</td>
+        <td>
+          <button type="button" class="link-btn" data-question-detail-id="${q.id}">${escapeHtml((q.currentVersion?.prompt ?? q.id).slice(0, 60))}</button>
+          <div class="muted mono">${escapeHtml(q.id)}</div>
+        </td>
+        <td>${escapeHtml(q.contentTitle ?? q.contentId ?? "—")}<div class="muted">${q.currentVersion?.contentVersion ? `v${q.currentVersion.contentVersion.version} · ${escapeHtml(q.currentVersion.contentVersion.title)}` : "İçerik sürümü yok"}</div></td>
         <td>${escapeHtml(q.skill?.name ?? "—")}</td>
-        <td class="numeric">${q.difficulty != null ? difficultyLabel(q.difficulty) : "—"}</td>
-        <td class="numeric">${q.versionCount ?? q.versions?.length ?? "—"}</td>
+        <td>${escapeHtml(questionTypeLabel(q.type))}</td>
+        <td class="numeric">${q.currentVersion?.difficulty != null ? difficultyLabel(q.currentVersion.difficulty) : "—"}</td>
         <td>${questionStatusBadge(q.status)}</td>
+        <td class="numeric">${q.currentVersion?.version ?? q.versionCount ?? "—"}</td>
+        <td>${escapeHtml(q.createdByName ?? "—")}</td>
+        <td>${escapeHtml(formatDateTime(q.updatedAt))}</td>
+        <td>${escapeHtml(formatDateTime(q.publishedAt))}</td>
         <td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-question-detail-id="${q.id}">Detay</button></td>
       </tr>`,
       )
@@ -6534,22 +6765,42 @@ async function openQuestionDetail(id) {
     const data = await parseResponse(res);
     const q = data;
     currentQuestionType = q.type;
+    currentQuestionContentId = q.contentId;
     const current = q.currentVersion ?? (q.versions && q.versions[0]) ?? null;
+    let currentDetail = null;
+    if (current) {
+      try {
+        currentDetail = await parseResponse(await questionApi(`/questions/versions/${current.id}`));
+      } catch (_e) {
+        void _e;
+      }
+    }
     title.textContent = (q.prompt ?? "Soru detayı").slice(0, 80);
     body.innerHTML = `
       <div class="detail-grid">
         <div class="info-item"><dt>Soru</dt><dd>${escapeHtml(q.prompt ?? current?.prompt ?? "—")}</dd></div>
         <div class="info-item"><dt>Tür</dt><dd>${escapeHtml(questionTypeLabel(q.type))}</dd></div>
         <div class="info-item"><dt>İçerik</dt><dd>${escapeHtml(q.contentTitle ?? q.contentId ?? "—")}</dd></div>
+        <div class="info-item"><dt>ContentVersion</dt><dd>${current?.contentVersion ? `v${current.contentVersion.version} · ${escapeHtml(current.contentVersion.title)}` : "—"}</dd></div>
         <div class="info-item"><dt>Beceri</dt><dd>${escapeHtml(q.skill?.name ?? "—")}</dd></div>
-        <div class="info-item"><dt>Zorluk</dt><dd>${q.difficulty != null ? escapeHtml(difficultyLabel(q.difficulty)) : "—"}</dd></div>
+        <div class="info-item"><dt>Zorluk</dt><dd>${current?.difficulty != null ? escapeHtml(difficultyLabel(current.difficulty)) : q.contentDifficulty != null ? escapeHtml(difficultyLabel(q.contentDifficulty)) : "—"}</dd></div>
         <div class="info-item"><dt>Durum</dt><dd>${questionStatusBadge(q.status)}</dd></div>
         <div class="info-item"><dt>Sürüm</dt><dd>${current ? `v${current.version} · ${QUESTION_STATUS_LABELS[current.status] ?? current.status}` : "—"}</dd></div>
+        <div class="info-item"><dt>Oluşturan</dt><dd>${escapeHtml(q.createdByName ?? "—")}</dd></div>
+        <div class="info-item"><dt>Güncellenme</dt><dd>${escapeHtml(formatDateTime(q.updatedAt))}</dd></div>
+        <div class="info-item"><dt>Yayınlanma</dt><dd>${escapeHtml(formatDateTime(q.publishedAt))}</dd></div>
+        ${current?.reviewedByName ? `<div class="info-item"><dt>İnceleyen</dt><dd>${escapeHtml(current.reviewedByName)} · ${escapeHtml(formatDateTime(current.reviewedAt))}</dd></div>` : ""}
+        ${current?.approvedByName ? `<div class="info-item"><dt>Onaylayan</dt><dd>${escapeHtml(current.approvedByName)} · ${escapeHtml(formatDateTime(current.approvedAt))}</dd></div>` : ""}
         ${current?.prompt ? `<div class="info-item"><dt>Mevcut Sürüm Prompt</dt><dd>${escapeHtml(current.prompt)}</dd></div>` : ""}
-        ${q.explanation ? `<div class="info-item"><dt>Açıklama</dt><dd>${escapeHtml(q.explanation)}</dd></div>` : ""}
-        ${q.hint ? `<div class="info-item"><dt>İpucu</dt><dd>${escapeHtml(q.hint)}</dd></div>` : ""}
-      </div>`;
+        ${currentDetail ? `<div class="info-item detail-wide"><dt>Seçenekler</dt><dd>${renderQuestionOptions(currentDetail)}</dd></div><div class="info-item"><dt>Doğru cevap</dt><dd>${escapeHtml(formatQuestionCorrectAnswer(currentDetail.correctAnswer))}</dd></div><div class="info-item"><dt>Açıklama</dt><dd>${escapeHtml(currentDetail.explanation ?? "—")}</dd></div><div class="info-item"><dt>İpucu</dt><dd>${escapeHtml(currentDetail.hint ?? "—")}</dd></div>` : ""}
+      </div>
+      ${current?.status === "PUBLISHED" ? '<p class="field-hint muted">Yayınlanmış sürüm değiştirilemez. Değişiklik için yeni bir taslak sürüm oluşturun.</p>' : ""}`;
+    $("question-new-version-btn").disabled =
+      q.status === "RETIRED" ||
+      !canAuthorContent() ||
+      (currentPlatformRole !== "SUPER_ADMIN" && q.createdById !== currentUserId);
     void loadQuestionVersions(id);
+    void loadQuestionAudit(id);
     if (current) {
       currentVersionId = current.id;
       void loadQuestionMedia(current.id);
@@ -6561,6 +6812,23 @@ async function openQuestionDetail(id) {
     body.innerHTML = `<p class="error">${escapeHtml(err.message || "Soru detayı yüklenemedi.")}</p>`;
     $("question-version-list").innerHTML = '<p class="error">Sürümler yüklenemedi.</p>';
   }
+}
+function renderQuestionOptions(version) {
+  const options = Array.isArray(version?.options) ? version.options : [];
+  if (options.length === 0) return "—";
+  const correctIds = new Set(version?.correctAnswer?.correctOptionIds ?? []);
+  return `<ul class="question-option-list">${options
+    .map(
+      (option) =>
+        `<li>${escapeHtml(option.text ?? option.id)}${correctIds.has(option.id) ? ' <span class="badge badge-success">Doğru</span>' : ""}</li>`,
+    )
+    .join("")}</ul>`;
+}
+function formatQuestionCorrectAnswer(answer) {
+  if (!answer || typeof answer !== "object") return "—";
+  if (answer.type === "MULTIPLE_CHOICE") return (answer.correctOptionIds ?? []).join(", ");
+  if (answer.type === "TRUE_FALSE") return answer.answer ? "Doğru" : "Yanlış";
+  return "Tanımlı";
 }
 function closeQuestionDetail() {
   $("question-detail-modal").classList.add("hidden");
@@ -6581,6 +6849,35 @@ async function loadQuestionVersions(questionId) {
     errEl.classList.remove("hidden");
   }
 }
+async function loadQuestionAudit(questionId) {
+  const listEl = $("question-audit-list");
+  if (!listEl) return;
+  listEl.innerHTML = "Yükleniyor…";
+  try {
+    const res = await questionApi(`/questions/${questionId}/audit`);
+    questionAuditData = await parseResponse(res);
+    renderQuestionAudit();
+  } catch (err) {
+    listEl.innerHTML = `<p class="error">${escapeHtml(err.message || "Denetim geçmişi yüklenemedi.")}</p>`;
+  }
+}
+function renderQuestionAudit() {
+  const listEl = $("question-audit-list");
+  if (!listEl) return;
+  if (!Array.isArray(questionAuditData) || questionAuditData.length === 0) {
+    listEl.innerHTML = '<p class="muted">Henüz denetim kaydı bulunmuyor.</p>';
+    return;
+  }
+  listEl.innerHTML = questionAuditData
+    .map(
+      (entry) => `
+        <div class="question-audit-row">
+          <div><strong>${escapeHtml(entry.action ?? "İşlem")}</strong> · v${escapeHtml(String(entry.version ?? "—"))}</div>
+          <div class="muted">${escapeHtml(entry.fromStatus ?? "—")} → ${escapeHtml(entry.toStatus ?? "—")} · ${escapeHtml(entry.actorName ?? "Bilinmeyen aktör")} · ${escapeHtml(formatDateTime(entry.createdAt))}</div>
+        </div>`,
+    )
+    .join("");
+}
 function formatDateTime(value) {
   if (!value) return "—";
   try {
@@ -6589,6 +6886,41 @@ function formatDateTime(value) {
     void _e;
     return String(value);
   }
+}
+function questionVersionActions(v) {
+  const canEdit =
+    canAuthorContent() &&
+    (currentPlatformRole === "SUPER_ADMIN" || v.createdById === currentUserId);
+  const canReview = canReviewContent();
+  const actions = [
+    `<button type="button" class="btn btn-ghost btn-sm" data-qversion-view="${escapeHtml(v.id)}">Detay</button>`,
+  ];
+  if (v.status === "DRAFT" && canEdit) {
+    actions.push(
+      `<button type="button" class="btn btn-ghost btn-sm" data-qversion-edit="${escapeHtml(v.id)}">Düzenle</button>`,
+      `<button type="button" class="btn btn-ghost btn-sm" data-qversion-review="${escapeHtml(v.id)}">İncelemeye Al</button>`,
+    );
+  }
+  if (v.status === "REVIEW" && canReview) {
+    if (v.createdById !== currentUserId) {
+      actions.push(
+        `<button type="button" class="btn btn-ghost btn-sm" data-qversion-approve="${escapeHtml(v.id)}">Onayla</button>`,
+      );
+    } else {
+      actions.push('<span class="field-hint">Kendi oluşturduğunuz soruyu onaylayamazsınız.</span>');
+    }
+  }
+  if (v.status === "APPROVED" && canReview) {
+    actions.push(
+      `<button type="button" class="btn btn-primary btn-sm" data-qversion-publish="${escapeHtml(v.id)}">Yayınla</button>`,
+    );
+  }
+  if (v.status === "PUBLISHED" && canReview) {
+    actions.push(
+      `<button type="button" class="btn btn-ghost btn-sm" data-qversion-retire="${escapeHtml(v.id)}">Emekliye Ayır</button>`,
+    );
+  }
+  return actions.join("");
 }
 function renderQuestionVersionList() {
   const listEl = $("question-version-list");
@@ -6599,22 +6931,21 @@ function renderQuestionVersionList() {
   listEl.innerHTML = `
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Sürüm</th><th>Durum</th><th>Oluşturulma</th><th>Yayınlanma</th><th>İşlemler</th></tr></thead>
+        <thead><tr><th>Sürüm</th><th>İçerik sürümü</th><th>Durum</th><th>Oluşturan</th><th>Oluşturulma</th><th>Yayınlanma</th><th>İşlemler</th></tr></thead>
         <tbody>
           ${questionVersionData
             .map(
               (v) => `
             <tr>
               <td>v${escapeHtml(String(v.version))}</td>
+              <td>${v.contentVersion ? `v${escapeHtml(String(v.contentVersion.version))} · ${escapeHtml(v.contentVersion.title)}` : "—"}</td>
               <td>${versionStatusBadge(v.status)}</td>
+              <td>${escapeHtml(v.createdByName ?? "—")}</td>
               <td>${escapeHtml(formatDateTime(v.createdAt))}</td>
               <td>${escapeHtml(formatDateTime(v.publishedAt))}</td>
               <td>
                 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                  <button type="button" class="btn btn-ghost btn-sm" data-qversion-view="${escapeHtml(v.id)}">Detay</button>
-                  ${v.status === "DRAFT" ? `<button type="button" class="btn btn-ghost btn-sm" data-qversion-edit="${escapeHtml(v.id)}">Düzenle</button>` : ""}
-                  ${v.status === "DRAFT" ? `<button type="button" class="btn btn-ghost btn-sm" data-qversion-review="${escapeHtml(v.id)}">İncelemeye Al</button>` : ""}
-                  ${v.status === "DRAFT" || v.status === "REVIEW" ? `<button type="button" class="btn btn-primary btn-sm" data-qversion-publish="${escapeHtml(v.id)}">Yayınla</button>` : ""}
+                  ${questionVersionActions(v)}
                 </div>
               </td>
             </tr>`,
@@ -6690,6 +7021,26 @@ async function handleQuestionVersionReview(versionId) {
     showQuestionError(err.message || "İncelemeye alma başarısız.");
   }
 }
+async function handleQuestionVersionApprove(versionId) {
+  const errEl = $("question-version-error");
+  errEl.classList.add("hidden");
+  try {
+    const res = await questionApi(`/questions/versions/${versionId}/approve`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await parseResponse(res);
+    if (currentQuestionId) {
+      void loadQuestionVersions(currentQuestionId);
+      void loadQuestions();
+    }
+    showQuestionError("Sürüm onaylandı.");
+    setTimeout(hideQuestionError, 3000);
+  } catch (err) {
+    errEl.textContent = err.message || "Onaylama başarısız.";
+    errEl.classList.remove("hidden");
+  }
+}
 async function handleQuestionVersionPublish(versionId) {
   const errEl = $("question-version-error");
   errEl.classList.add("hidden");
@@ -6711,8 +7062,29 @@ async function handleQuestionVersionPublish(versionId) {
     showQuestionError(err.message || "Yayınlama başarısız.");
   }
 }
+async function handleQuestionVersionRetire(versionId) {
+  const errEl = $("question-version-error");
+  errEl.classList.add("hidden");
+  try {
+    const res = await questionApi(`/questions/versions/${versionId}/retire`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await parseResponse(res);
+    if (currentQuestionId) {
+      void loadQuestionVersions(currentQuestionId);
+      void loadQuestions();
+    }
+    showQuestionError("Sürüm emekliye ayrıldı.");
+    setTimeout(hideQuestionError, 3000);
+  } catch (err) {
+    errEl.textContent = err.message || "Sürüm emekliye ayrılamadı.";
+    errEl.classList.remove("hidden");
+  }
+}
 async function handleQuestionNewVersion() {
   if (!currentQuestionId) return;
+  const authoringContext = questionAuthoringContext;
   const errEl = $("question-version-error");
   errEl.classList.add("hidden");
   try {
@@ -6721,6 +7093,12 @@ async function handleQuestionNewVersion() {
       body: JSON.stringify({}),
     });
     await parseResponse(res);
+    if (authoringContext) {
+      questionAuthoringContext = null;
+      closeQuestionDetail();
+      await openContentAuthoring(authoringContext.contentId, authoringContext.contentVersionId);
+      return;
+    }
     void loadQuestionVersions(currentQuestionId);
     void loadQuestions();
     showQuestionError("Yeni sürüm oluşturuldu.");
@@ -6753,11 +7131,12 @@ async function handleQuestionVersionEdit(versionId) {
 }
 async function populateQuestionFormForVersion(v) {
   resetQuestionForm();
-  await populateQuestionFormSelects();
+  await populateQuestionFormSelects(currentQuestionContentId ?? "", v.contentVersionId ?? "");
   const type = currentQuestionType ?? v.questionType ?? $("question-form-type").value;
   $("question-form-type").value = type;
   $("question-form-type").disabled = true;
   $("question-form-content").closest(".field").classList.add("hidden");
+  $("question-form-content-version").closest(".field").classList.remove("hidden");
   $("question-form-skill").closest(".field").classList.add("hidden");
   $("question-form-position").closest(".field").classList.add("hidden");
   $("question-form-title").textContent = `Sürüm Düzenle v${v.version}`;
@@ -6839,6 +7218,14 @@ function setupQuestionEvents() {
     questionPage = 1;
     void loadQuestions();
   });
+  $("question-difficulty-filter").addEventListener("change", () => {
+    questionPage = 1;
+    void loadQuestions();
+  });
+  $("question-author-filter").addEventListener("change", () => {
+    questionPage = 1;
+    void loadQuestions();
+  });
   $("question-status-filter").addEventListener("change", () => {
     questionPage = 1;
     void loadQuestions();
@@ -6867,12 +7254,19 @@ function setupQuestionEvents() {
   $("question-detail-close").addEventListener("click", closeQuestionDetail);
   $("question-detail-close-action").addEventListener("click", closeQuestionDetail);
   $("question-create-btn").addEventListener("click", openQuestionForm);
-  $("question-form-close").addEventListener("click", closeQuestionForm);
-  $("question-form-cancel").addEventListener("click", closeQuestionForm);
+  const cancelQuestionAuthoring = () => {
+    questionAuthoringContext = null;
+    closeQuestionForm();
+  };
+  $("question-form-close").addEventListener("click", cancelQuestionAuthoring);
+  $("question-form-cancel").addEventListener("click", cancelQuestionAuthoring);
   const form = $("question-form");
   if (form) {
     form.addEventListener("submit", submitQuestionForm);
   }
+  $("question-form-content").addEventListener("change", (event) => {
+    void populateQuestionContentVersions(event.target.value);
+  });
   $("question-form-type").addEventListener("change", updateQuestionFormTypeVisibility);
   $("question-form-mc-add").addEventListener("click", () => addMcOption());
   $("question-form-matching-add").addEventListener("click", () => addMatchingOption());
@@ -6907,8 +7301,12 @@ function setupQuestionEvents() {
     if (editBtn) void handleQuestionVersionEdit(editBtn.dataset.qversionEdit);
     const reviewBtn = e.target.closest("[data-qversion-review]");
     if (reviewBtn) void handleQuestionVersionReview(reviewBtn.dataset.qversionReview);
+    const approveBtn = e.target.closest("[data-qversion-approve]");
+    if (approveBtn) void handleQuestionVersionApprove(approveBtn.dataset.qversionApprove);
     const publishBtn = e.target.closest("[data-qversion-publish]");
     if (publishBtn) void handleQuestionVersionPublish(publishBtn.dataset.qversionPublish);
+    const retireBtn = e.target.closest("[data-qversion-retire]");
+    if (retireBtn) void handleQuestionVersionRetire(retireBtn.dataset.qversionRetire);
   });
   $("question-version-detail-close").addEventListener("click", closeQuestionVersionDetail);
   $("question-version-detail-close-action").addEventListener("click", closeQuestionVersionDetail);
@@ -7176,7 +7574,35 @@ async function handleVersionMediaDetach(mediaId) {
     }
   }
 }
-async function populateQuestionFormSelects() {
+async function populateQuestionContentVersions(contentId, selectedVersionId = "") {
+  const versionSel = $("question-form-content-version");
+  if (!versionSel) return;
+  if (!contentId) {
+    versionSel.innerHTML = '<option value="">Önce içerik seçin…</option>';
+    return;
+  }
+  versionSel.innerHTML = '<option value="">İçerik sürümleri yükleniyor…</option>';
+  try {
+    const res = await contentApi(`/contents/${encodeURIComponent(contentId)}/versions`);
+    const body = await parseResponse(res);
+    const versions = Array.isArray(body) ? body : (body.items ?? body.versions ?? []);
+    versionSel.innerHTML =
+      '<option value="">İçerik sürümü seçin…</option>' +
+      versions
+        .map(
+          (version) =>
+            `<option value="${escapeHtml(version.id)}" ${version.id === selectedVersionId ? "selected" : ""}>v${escapeHtml(String(version.version))} · ${escapeHtml(version.title ?? "İçerik sürümü")} · ${escapeHtml(CONTENT_STATUS_LABELS[version.status] ?? version.status ?? "")}</option>`,
+        )
+        .join("");
+    if (selectedVersionId && !versions.some((version) => version.id === selectedVersionId)) {
+      versionSel.value = "";
+    }
+  } catch (_e) {
+    void _e;
+    versionSel.innerHTML = '<option value="">İçerik sürümleri yüklenemedi</option>';
+  }
+}
+async function populateQuestionFormSelects(selectedContentId = "", selectedContentVersionId = "") {
   const contentSel = $("question-form-content");
   const skillSel = $("question-form-skill");
   try {
@@ -7185,9 +7611,16 @@ async function populateQuestionFormSelects() {
     contentSel.innerHTML =
       '<option value="">İçerik seçin…</option>' +
       body.items.map((c) => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("");
+    if (selectedContentId) {
+      contentSel.value = selectedContentId;
+      await populateQuestionContentVersions(selectedContentId, selectedContentVersionId);
+    } else {
+      await populateQuestionContentVersions("");
+    }
   } catch (_e) {
     void _e;
     contentSel.innerHTML = '<option value="">İçerikler yüklenemedi</option>';
+    await populateQuestionContentVersions("");
   }
   try {
     const res = await questionApi("/skills?page=1&pageSize=100");
@@ -7208,8 +7641,11 @@ function openQuestionForm() {
   $("question-form-title").textContent = "Yeni Soru";
   $("question-form-submit").querySelector(".btn-label").textContent = "Oluştur";
   $("question-form-content").closest(".field").classList.remove("hidden");
+  $("question-form-content-version").closest(".field").classList.remove("hidden");
   $("question-form-skill").closest(".field").classList.remove("hidden");
   $("question-form-position").closest(".field").classList.remove("hidden");
+  $("question-form-content").disabled = false;
+  $("question-form-content-version").disabled = false;
   $("question-form-type").disabled = false;
   void populateQuestionFormSelects();
   $("question-form-modal").classList.remove("hidden");
@@ -7221,8 +7657,11 @@ function closeQuestionForm() {
   editingVersionId = null;
   editingQuestionId = null;
   $("question-form-content").closest(".field").classList.remove("hidden");
+  $("question-form-content-version").closest(".field").classList.remove("hidden");
   $("question-form-skill").closest(".field").classList.remove("hidden");
   $("question-form-position").closest(".field").classList.remove("hidden");
+  $("question-form-content").disabled = false;
+  $("question-form-content-version").disabled = false;
   $("question-form-type").disabled = false;
   $("question-form-title").textContent = "Yeni Soru";
   $("question-form-submit").querySelector(".btn-label").textContent = "Oluştur";
@@ -7243,6 +7682,7 @@ function resetQuestionForm() {
   $("question-form-matching-partial").checked = true;
   $("question-form-blank-partial").checked = true;
   $("question-form-content").closest(".field").classList.remove("hidden");
+  $("question-form-content-version").closest(".field").classList.remove("hidden");
   $("question-form-skill").closest(".field").classList.remove("hidden");
   $("question-form-position").closest(".field").classList.remove("hidden");
   $("question-form-type").disabled = false;
@@ -7308,8 +7748,10 @@ async function submitQuestionForm(event) {
   event.preventDefault();
   const errorEl = $("question-form-error");
   errorEl.classList.add("hidden");
+  const authoringContext = questionAuthoringContext;
   const isVersionMode = questionFormMode === "editVersion" || questionFormMode === "createVersion";
   const contentId = $("question-form-content").value.trim();
+  const contentVersionId = $("question-form-content-version").value.trim();
   const type = isVersionMode ? currentQuestionType : $("question-form-type").value;
   const prompt = $("question-form-prompt").value.trim();
   const explanation = $("question-form-explanation").value.trim() || null;
@@ -7320,6 +7762,11 @@ async function submitQuestionForm(event) {
   const position = Number($("question-form-position").value);
   if (!isVersionMode && !contentId) {
     errorEl.textContent = "İçerik seçimi zorunludur.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+  if (!isVersionMode && !contentVersionId) {
+    errorEl.textContent = "İçerik sürümü seçimi zorunludur.";
     errorEl.classList.remove("hidden");
     return;
   }
@@ -7460,6 +7907,7 @@ async function submitQuestionForm(event) {
     return;
   }
   const versionPayload = {
+    ...(contentVersionId ? { contentVersionId } : {}),
     prompt,
     options,
     correctAnswer,
@@ -7478,6 +7926,7 @@ async function submitQuestionForm(event) {
     ...(skillId ? { skillId } : {}),
     position,
     contentId,
+    ...(contentVersionId ? { contentVersionId } : {}),
   };
   setQuestionFormLoading(true);
   try {
@@ -7488,6 +7937,11 @@ async function submitQuestionForm(event) {
       });
       await parseResponse(res);
       closeQuestionForm();
+      if (authoringContext) {
+        questionAuthoringContext = null;
+        await openContentAuthoring(authoringContext.contentId, authoringContext.contentVersionId);
+        return;
+      }
       if (editingQuestionId) {
         currentQuestionId = editingQuestionId;
         void loadQuestionVersions(editingQuestionId);
@@ -7505,6 +7959,11 @@ async function submitQuestionForm(event) {
       });
       await parseResponse(res);
       closeQuestionForm();
+      if (authoringContext) {
+        questionAuthoringContext = null;
+        await openContentAuthoring(authoringContext.contentId, authoringContext.contentVersionId);
+        return;
+      }
       void loadQuestionVersions(editingQuestionId);
       void loadQuestions();
       showQuestionError("Yeni sürüm oluşturuldu.");
@@ -7520,6 +7979,11 @@ async function submitQuestionForm(event) {
       });
       await parseResponse(res);
       closeQuestionForm();
+      if (authoringContext) {
+        questionAuthoringContext = null;
+        await openContentAuthoring(authoringContext.contentId, authoringContext.contentVersionId);
+        return;
+      }
       hideQuestionError();
       questionPage = 1;
       void loadQuestions();
@@ -8411,22 +8875,6 @@ function resetExerciseState() {
   exerciseGamificationRequest++;
   currentExerciseQuestionIndex = 0;
 }
-function markExerciseTiming(name) {
-  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
-  try {
-    performance.mark(name);
-  } catch (_e) {
-    void _e;
-  }
-}
-function measureExerciseTiming(name, start, end) {
-  if (typeof performance === "undefined" || typeof performance.measure !== "function") return;
-  try {
-    performance.measure(name, start, end);
-  } catch (_e) {
-    void _e;
-  }
-}
 async function refreshExerciseGamification() {
   const requestId = ++exerciseGamificationRequest;
   let next = null;
@@ -8483,21 +8931,17 @@ function latestExerciseAttempt(attempts, questionVersionId, clientAttemptId) {
 function restoreExerciseAttempts(session) {
   const previous = exerciseAttempts;
   exerciseAttempts = new Map();
-  const attempts = [...(session.attempts || [])].sort(
-    (a, b) =>
-      (Number(a.responseOrder) || 1) - (Number(b.responseOrder) || 1) ||
-      String(a.id).localeCompare(String(b.id)),
-  );
-  for (const attempt of attempts) {
+  for (const attempt of session.attempts || []) {
     const known = previous.get(attempt.questionVersionId);
+    const current = exerciseAttempts.get(attempt.questionVersionId);
+    if (current && (Number(current.responseOrder) || 0) > (Number(attempt.responseOrder) || 0)) {
+      continue;
+    }
     exerciseAttempts.set(attempt.questionVersionId, {
-      ...(known?.id === attempt.id ? known : {}),
+      ...(known?.id === attempt.id || current?.id === attempt.id ? known || current : {}),
       ...attempt,
     });
   }
-}
-function exerciseAttemptNeedsRetry(attempt) {
-  return attempt?.isCorrect === false && Number(attempt.responseOrder || 1) === 1;
 }
 async function loadExercisePage() {
   if (exerciseLoading || exerciseBusy) return;
@@ -8516,20 +8960,13 @@ async function loadExercisePage() {
       }
       exerciseScope = scope;
       const t = getStoredTokens();
-      // startDailyTraining() already returned the current daily snapshot.
-      // Reusing it avoids two redundant round trips before the first question
-      // can render. A fresh/resumed tab still loads the source of truth below.
-      const hasDailySnapshot = Boolean(dailyTrainingSummary);
-      const today = hasDailySnapshot
-        ? null
-        : await parseResponse(
-            await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
-          );
+      const today = await parseResponse(
+        await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
+      );
       const persistedDaily = restoreDailyTrainingState();
       if (!dailyTrainingSessionId && persistedDaily?.id) dailyTrainingSessionId = persistedDaily.id;
-      let dailySession = dailyTrainingSummary;
-      if (!dailySession && dailyTrainingSessionId)
-        dailySession = await fetchDailyTraining(dailyTrainingSessionId);
+      let dailySession = null;
+      if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
       if (dailySession) dailyTrainingSummary = dailySession;
       if (dailySession) $("exercise-gp").textContent = "⭐ — GP";
@@ -8539,12 +8976,19 @@ async function loadExercisePage() {
       } catch {
         /* optional */
       }
+      const requestedSessionId = exerciseRequestedSessionId;
+      if (
+        requestedSessionId &&
+        dailySession &&
+        requestedSessionId !== dailyItem?.exerciseSessionId
+      ) {
+        resetDailyTrainingState();
+        dailySession = null;
+      }
       const id =
-        exerciseRequestedSessionId ||
+        requestedSessionId ||
         dailyItem?.exerciseSessionId ||
-        today?.activeSession?.id ||
-        exerciseSession?.id ||
-        savedId;
+        (dailySession ? null : today.activeSession?.id || exerciseSession?.id || savedId);
       exerciseRequestedSessionId = null;
       if (id) {
         let session;
@@ -8566,9 +9010,7 @@ async function loadExercisePage() {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
       }
-      // Gamification is a non-critical refresh; render the exercise as soon
-      // as the session/question data is ready.
-      void refreshExerciseGamification();
+      await refreshExerciseGamification();
     } else {
       await Promise.all([populateExerciseStudentSelect(), populateExerciseTemplateVersionSelect()]);
       if (exerciseSession) await loadExerciseQuestions();
@@ -8592,6 +9034,7 @@ async function loadExercisePage() {
 }
 function returnToExercisePath() {
   if (exerciseBusy) return;
+  exerciseReviewMode = false;
   rememberExerciseSession(null);
   resetDailyTrainingState();
   resetExerciseState();
@@ -8717,8 +9160,7 @@ function renderStudentReading(session, question = exerciseQuestions[currentExerc
         (question?.contentVersionId && contentVersion?.id === question.contentVersionId) ||
         (question?.contentId && contentVersion?.contentId === question.contentId)
       );
-    })?.contentVersion ??
-    (question?.contentId || question?.contentVersionId ? null : contents[0]?.contentVersion);
+    })?.contentVersion ?? null;
   if (!current?.body) {
     card.style.display = "none";
     heading.textContent = "Metin";
@@ -8741,13 +9183,18 @@ function renderExerciseResult() {
   if (isStudent) {
     const pointsLabel = "Toplam GP";
     const isAssessment = Boolean(exerciseSession.assessmentId);
+    const isDailyReview = Boolean(
+      dailyTrainingSummary?.items?.find((item) => item.exerciseSessionId === exerciseSession.id)
+        ?.review,
+    );
+    const isReview = exerciseReviewMode || isDailyReview;
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
     const g = exerciseGamification;
     body.innerHTML = `
       <div class="completion-card">
         <div aria-hidden="true" style="font-size:48px">🎉</div>
-        <h3 tabindex="-1" id="exercise-completion-title">${isAssessment ? "Değerlendirmeyi tamamladın!" : "Alıştırmayı tamamladın!"}</h3>
-        <p>${pending ? pending + " cevap için değerlendirme bekleniyor. Puan yalnızca değerlendirilen cevapları içerir." : isAssessment ? "Sonuçların öğrenme yolunu kişiselleştirmek için kaydedildi." : "Çalışman kaydedildi."}</p>
+        <h3 tabindex="-1" id="exercise-completion-title">${isReview ? "Tekrarını tamamladın." : isAssessment ? "Değerlendirmeyi tamamladın!" : "Alıştırmayı tamamladın!"}</h3>
+        <p>${pending ? pending + " cevap için değerlendirme bekleniyor. Puan yalnızca değerlendirilen cevapları içerir." : isReview ? "Bu çalışma gelişimini pekiştirmek için kaydedildi." : isAssessment ? "Sonuçların öğrenme yolunu kişiselleştirmek için kaydedildi." : "Çalışman kaydedildi."}</p>
         <dl class="exercise-result-stats">
           <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
           <div><dt>Cevaplanan</dt><dd>${s.attempted ?? "—"}</dd></div>
@@ -8822,18 +9269,12 @@ async function handleExerciseCreate() {
 }
 async function loadExerciseQuestions() {
   if (!exerciseSession) return;
-  // The student session response already contains the sanitized question
-  // projection. Reuse it for the first render; keep the endpoint fallback so
-  // older deployments and admin-created sessions remain compatible.
-  const data = Array.isArray(exerciseSession.questions)
-    ? { questions: exerciseSession.questions }
-    : await parseResponse(await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`));
+  const data = await parseResponse(
+    await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`),
+  );
   exerciseQuestions = Array.isArray(data.questions) ? data.questions : [];
   exerciseQuestions.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  const unanswered = exerciseQuestions.findIndex((q) => {
-    const attempt = exerciseAttempts.get(q.questionVersionId);
-    return !attempt || exerciseAttemptNeedsRetry(attempt);
-  });
+  const unanswered = exerciseQuestions.findIndex((q) => !exerciseAttempts.has(q.questionVersionId));
   currentExerciseQuestionIndex =
     unanswered < 0 ? Math.max(0, exerciseQuestions.length - 1) : unanswered;
   renderExerciseQuestion();
@@ -8852,6 +9293,11 @@ function renderExerciseQuestion() {
   }
   const q = exerciseQuestions[currentExerciseQuestionIndex];
   if (!q) return;
+  if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
+    recordPilotTelemetry("QUESTION_VIEWED", {
+      sessionId: exerciseSession?.id,
+      questionVersionId: q.questionVersionId,
+    });
   renderStudentReading(exerciseSession, q);
   if (counter)
     counter.textContent = `Soru ${currentExerciseQuestionIndex + 1} / ${exerciseQuestions.length}`;
@@ -9084,79 +9530,48 @@ function syncExerciseDisclosures(root) {
     sync();
   });
 }
-function exerciseFeedbackMessage(data) {
-  if (typeof data.feedback === "string") return data.feedback;
-  if (data.feedback && typeof data.feedback === "object" && !Array.isArray(data.feedback)) {
-    return typeof data.feedback.message === "string" ? data.feedback.message : "";
-  }
-  return "";
-}
-function exerciseRevealedAnswer(data, question) {
-  const answer =
-    data.revealedAnswer ??
-    (data.feedback && typeof data.feedback === "object" ? data.feedback.revealedAnswer : null);
-  if (answer == null) return "";
-  if (answer.type === "MULTIPLE_CHOICE" && Array.isArray(answer.correctOptionIds)) {
-    const options = Array.isArray(question?.options) ? question.options : [];
-    const labels = answer.correctOptionIds.map((id) => {
-      const option = options.find((candidate) => candidate?.id === id);
-      return option?.text || option?.label || id;
-    });
-    return labels.join(", ");
-  }
-  if (answer.type === "TRUE_FALSE" && typeof answer.answer === "boolean") {
-    return answer.answer ? "Doğru" : "Yanlış";
-  }
-  if (typeof answer === "string") return answer;
-  try {
-    return JSON.stringify(answer);
-  } catch {
-    return "";
-  }
-}
 function showExerciseFeedback(data) {
   const el = $("exercise-attempt-feedback");
   const question = exerciseQuestions.find((q) => q.questionVersionId === data.questionVersionId);
   const pending = data.isCorrect === null;
-  const responseOrder = Number(data.responseOrder || 1);
-  const firstWrong = data.isCorrect === false && responseOrder === 1;
-  const finalWrong = data.isCorrect === false && responseOrder >= 2;
-  const message = exerciseFeedbackMessage(data);
   const kind = pending ? "pending" : data.isCorrect === true ? "correct" : "wrong";
+  const secondWrong = data.isCorrect === false && Number(data.responseOrder) > 1;
+  const firstWrong = data.isCorrect === false && !secondWrong;
   const title = pending
     ? "⌛ Değerlendirme bekleniyor"
-    : firstWrong
-      ? "Tekrar düşün."
-      : finalWrong
-        ? "Bu kez olmadı. Doğru cevabı birlikte inceleyelim."
-        : data.isCorrect === true
-          ? responseOrder === 2
-            ? "✓ Güzel yakaladın."
-            : "✅ Doğru!"
-          : "💡 Tekrar düşün!";
+    : data.isCorrect === true
+      ? "✓ Güzel yakaladın."
+      : secondWrong
+        ? "Bu kez olmadı."
+        : "Tekrar düşün.";
   const event = exerciseGamification?.recentPointEvents?.find(
     (e) => e.sourceType === "ATTEMPT" && e.sourceId === data.id,
   );
   const pointsLabel = "GP";
+  const correctAnswer =
+    secondWrong && data.correctAnswer != null
+      ? `<div>Doğru cevap: ${escapeHtml(exerciseAnswerLabel(data.correctAnswer, question))}</div>`
+      : "";
   el.className = "feedback-panel " + kind;
   const disclosureSuffix = String(data.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
-  const reveal = finalWrong ? exerciseRevealedAnswer(data, question) : "";
-  const explanation =
-    finalWrong && data.feedback && typeof data.feedback === "object"
-      ? data.feedback.explanation || question?.explanation
-      : question?.explanation;
-  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-xp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${message ? `<div>${escapeHtml(message)}</div>` : ""}${reveal ? `<div>Doğru cevap: ${escapeHtml(reveal)}</div>` : ""}${explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(explanation)}</p></details>` : ""}`;
+  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${data.feedback ? `<div>${escapeHtml(typeof data.feedback === "string" ? data.feedback : JSON.stringify(data.feedback))}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
   el.style.display = "block";
-  exerciseAwaitingNext = !firstWrong;
-  lockExerciseInputs(!firstWrong);
-  const button = $("exercise-submit-attempt");
-  button.disabled = false;
-  button.textContent = firstWrong
+  exerciseAwaitingNext = true;
+  lockExerciseInputs(true);
+  $("exercise-submit-attempt").textContent = firstWrong
     ? "Tekrar Cevapla"
     : currentExerciseQuestionIndex < exerciseQuestions.length - 1
       ? "Devam Et"
       : "Tamamla";
+}
+
+function exerciseAnswerLabel(answer, question) {
+  const values = Array.isArray(answer) ? answer : [answer];
+  const options = Array.isArray(question?.options) ? question.options : [];
+  return values
+    .map((value) => options.find((option) => option.id === value)?.text ?? String(value))
+    .join(", ");
 }
 async function handleExerciseSubmitAttempt() {
   const container = $("exercise-current-question");
@@ -9170,6 +9585,25 @@ async function handleExerciseSubmitAttempt() {
   )
     return;
   if (exerciseAwaitingNext) {
+    const currentQuestionId = container.dataset.questionVersionId;
+    const latest = currentQuestionId ? exerciseAttempts.get(currentQuestionId) : null;
+    if (latest?.isCorrect === false && Number(latest.responseOrder) === 1) {
+      exerciseRetryingQuestionVersionId = currentQuestionId;
+      exerciseAwaitingNext = false;
+      lockExerciseInputs(false);
+      container.querySelectorAll("input, textarea, select").forEach((input) => {
+        if (input.type === "radio" || input.type === "checkbox") input.checked = false;
+        else if (input.tagName === "SELECT") input.value = "";
+        else input.value = "";
+      });
+      container.querySelectorAll("label.answer-card").forEach((card) => {
+        card.classList.remove("selected");
+        card.setAttribute("aria-checked", "false");
+      });
+      $("exercise-attempt-feedback").style.display = "none";
+      $("exercise-submit-attempt").textContent = "Cevabı kontrol et";
+      return;
+    }
     if (currentExerciseQuestionIndex === exerciseQuestions.length - 1) {
       await handleExerciseComplete();
       return;
@@ -9249,6 +9683,8 @@ async function handleExerciseSubmitAttempt() {
   exerciseQuestionTelemetry.set(questionVersionId, telemetry);
   const retrying =
     previousAttempt?.isCorrect === false && Number(previousAttempt.responseOrder) === 1;
+  if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
+    recordPilotTelemetry("QUESTION_ATTEMPTED", { sessionId, questionVersionId });
   // Reuse the exact logical request after an uncertain network failure.
   const retry =
     exerciseRequest?.sessionId === sessionId &&
@@ -9264,11 +9700,6 @@ async function handleExerciseSubmitAttempt() {
       hintUsed: telemetry.hintUsed,
       isFinal: retrying,
     };
-  const answerTimingId = "oku-exercise-answer-" + exerciseRequest.clientAttemptId;
-  const answerTimingStart = answerTimingId + "-start";
-  const answerTimingResponse = answerTimingId + "-response";
-  const answerTimingFeedback = answerTimingId + "-feedback";
-  markExerciseTiming(answerTimingStart);
   try {
     let data;
     if (retry && isPlatformUser === false) {
@@ -9307,25 +9738,19 @@ async function handleExerciseSubmitAttempt() {
         if (!data) await parseResponse(response);
       } else data = await parseResponse(response);
     }
-    markExerciseTiming(answerTimingResponse);
-    measureExerciseTiming("oku-exercise-answer-response", answerTimingStart, answerTimingResponse);
     if (!data?.id || ![true, false, null].includes(data.isCorrect))
       throw new Error("Geçersiz cevap yanıtı");
     exerciseAttempts.set(questionVersionId, data);
     exerciseRequest = null;
+    if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
+      recordPilotTelemetry("QUESTION_ANSWERED", { sessionId, questionVersionId });
     showExerciseFeedback(data);
-    markExerciseTiming(answerTimingFeedback);
-    measureExerciseTiming(
-      "oku-exercise-feedback-render",
-      answerTimingResponse,
-      answerTimingFeedback,
-    );
     if (data.isCorrect === false && !isFastReadingExercise() && !isDailyTrainingExercise()) {
       showCelebration({
         icon: "💡",
         eyebrow: "DEVAM ET",
-        title: "Tekrar düşün.",
-        detail: exerciseFeedbackMessage(data) || "Bu cevap öğrenmenin bir parçası.",
+        title: "Tekrar düşün!",
+        detail: data.feedback || "Bu cevap öğrenmenin bir parçası.",
         kind: "wrong",
         key: "attempt-" + data.id,
       });
@@ -9340,9 +9765,9 @@ async function handleExerciseSubmitAttempt() {
           const event = exerciseGamification?.recentPointEvents?.find(
             (e) => e.sourceType === "ATTEMPT" && e.sourceId === data.id,
           );
-          const xp = $("exercise-feedback-xp");
+          const gp = $("exercise-feedback-gp");
           const pointsLabel = "GP";
-          if (xp) xp.textContent = event ? "+" + event.points + " " + pointsLabel : "";
+          if (gp) gp.textContent = event ? "+" + event.points + " " + pointsLabel : "";
           // Ara cevaplar yalnızca inline mikro feedback gösterir; kutlama
           // günlük antrenman/başarı tamamlanmasına ayrılır.
         }
@@ -9350,7 +9775,8 @@ async function handleExerciseSubmitAttempt() {
     }
   } catch (err) {
     if (isPremiumLimitError(err)) {
-      errEl.classList.add("hidden");
+      errEl.textContent = err.message || "Günlük ücretsiz soru hakkın doldu.";
+      errEl.classList.remove("hidden");
       return;
     }
     errEl.textContent = isDailyTrainingExercise()
@@ -9386,6 +9812,19 @@ async function handleExerciseComplete() {
             }),
           );
     const daily = student && isDailyTrainingExercise();
+    if (student && typeof recordPilotTelemetry === "function") {
+      recordPilotTelemetry(
+        "EXERCISE_COMPLETED",
+        { sessionId: exerciseSession.id },
+        daily ? "training-completed" : "exercise-completed",
+      );
+      if (exerciseSession.assessmentId)
+        recordPilotTelemetry(
+          "ASSESSMENT_COMPLETED",
+          { sessionId: exerciseSession.id },
+          "placement-completed",
+        );
+    }
     if (student && !daily) {
       const isAssessment = Boolean(exerciseSession.assessmentId);
       const beforeBadges = new Set((exerciseGamification?.badges || []).map((badge) => badge.id));
@@ -9465,7 +9904,8 @@ async function handleExerciseComplete() {
 }
 function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
-  $("refresh-today-training")?.addEventListener("click", () => void loadToday());
+  $("today-training-retry")?.addEventListener("click", () => void loadToday());
+  $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
   const createBtn = $("exercise-create-btn");
@@ -9636,10 +10076,17 @@ function openContentForm(mode, content = null) {
     $("content-form-title-input").value = "";
     $("content-form-difficulty").value = "";
     $("content-form-status").value = "DRAFT";
+    $("content-form-skill").value = "";
+    $("content-form-body").value = "";
+    $("content-form-metadata").value = "";
     void populateContentFormTenantSelect();
+    void populateContentFormSkillSelect();
   } else if (content) {
     $("content-form-title-input").value = content.title ?? "";
     $("content-form-difficulty").value = content.difficulty ?? "";
+    $("content-form-body").value = "";
+    $("content-form-metadata").value = "";
+    $("content-form-skill").value = "";
   }
 
   $("content-form-error").classList.add("hidden");
@@ -9695,6 +10142,22 @@ async function submitContentForm(event) {
     }
     payload.type = type;
     payload.status = $("content-form-status").value;
+    const metadataText = $("content-form-metadata").value.trim();
+    if (metadataText) {
+      try {
+        const metadata = JSON.parse(metadataText);
+        if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+          throw new Error("Metadata bir JSON nesnesi olmalı.");
+        }
+        payload.metadata = metadata;
+      } catch (err) {
+        errorEl.textContent = err.message || "Metadata JSON biçimi geçersiz.";
+        errorEl.classList.remove("hidden");
+        return;
+      }
+    } else {
+      payload.metadata = null;
+    }
     if (scope === "TENANT") {
       payload.tenantId = $("content-form-tenant").value;
     } else {
@@ -9710,7 +10173,25 @@ async function submitContentForm(event) {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
-    await parseResponse(res);
+    const saved = await parseResponse(res);
+    if (isCreate) {
+      const skillId = $("content-form-skill").value;
+      if (skillId) {
+        const skillRes = await contentApi(`/contents/${encodeURIComponent(saved.id)}/skills`, {
+          method: "PUT",
+          body: JSON.stringify({ skillIds: [skillId] }),
+        });
+        await parseResponse(skillRes);
+      }
+      const body = $("content-form-body").value.trim();
+      if (body) {
+        const versionRes = await contentApi(`/contents/${encodeURIComponent(saved.id)}/versions`, {
+          method: "POST",
+          body: JSON.stringify({ body }),
+        });
+        await parseResponse(versionRes);
+      }
+    }
     closeContentForm();
     contentPage = 1;
     await loadContents();
@@ -9719,6 +10200,25 @@ async function submitContentForm(event) {
     errorEl.classList.remove("hidden");
   } finally {
     setContentFormLoading(false);
+  }
+}
+
+async function populateContentFormSkillSelect() {
+  const select = $("content-form-skill");
+  if (!select) return;
+  try {
+    const res = await contentApi("/skills?page=1&pageSize=100");
+    const body = await parseResponse(res);
+    const options = body.items
+      .map(
+        (skill) =>
+          `<option value="${skill.id}">${escapeHtml(skill.name)} (${escapeHtml(skill.code)})</option>`,
+      )
+      .join("");
+    select.innerHTML = `<option value="">Beceri seçmeden devam et</option>${options}`;
+  } catch (_e) {
+    void _e;
+    select.innerHTML = `<option value="">Beceriler yüklenemedi</option>`;
   }
 }
 
@@ -9732,8 +10232,10 @@ async function openContentDetail(id) {
     const detail = await parseResponse(res);
     contentDetailCurrent = detail;
     contentDetailSkills = detail.skills ?? [];
+    contentDetailAudit = [];
     renderContentDetail(detail);
     void loadContentVersions(id);
+    void loadContentAudit(id);
   } catch (err) {
     contentDetailCurrent = null;
     $("content-detail-body").innerHTML =
@@ -9741,8 +10243,653 @@ async function openContentDetail(id) {
   }
 }
 
+// ---------- İçerik Üretimi çalışma alanı ----------
+function showContentAuthoringError(message) {
+  const errorEl = $("content-authoring-error");
+  if (!errorEl) return;
+  errorEl.textContent = message;
+  errorEl.classList.remove("hidden");
+}
+
+function hideContentAuthoringError() {
+  const errorEl = $("content-authoring-error");
+  if (!errorEl) return;
+  errorEl.textContent = "";
+  errorEl.classList.add("hidden");
+}
+
+function setContentAuthoringStatus(message, state = "") {
+  const statusEl = $("content-authoring-status");
+  if (!statusEl) return;
+  statusEl.textContent = message;
+  statusEl.dataset.state = state;
+}
+
+function authoringVersionForId(versionId) {
+  return contentAuthoringVersions.find((version) => version.id === versionId) ?? null;
+}
+
+function authoringLinkedQuestions() {
+  const versionId = contentAuthoringVersion?.id;
+  if (!versionId) return [];
+  return contentAuthoringQuestions.filter(
+    (question) => question.currentVersion?.contentVersionId === versionId,
+  );
+}
+
+function setContentAuthoringFields() {
+  const content = contentAuthoringCurrent;
+  const version = contentAuthoringVersion;
+  if (!content) return;
+  const versionStatus = version?.status ?? null;
+  const canEditVersion = versionStatus === "DRAFT" && canAuthorContent();
+  const canEditParent = content.status === "DRAFT" && canAuthorContent();
+
+  $("content-authoring-title-input").value = version?.title ?? content.title ?? "";
+  $("content-authoring-body").value = version?.body ?? "";
+  $("content-authoring-difficulty").value = content.difficulty ?? "";
+  $("content-authoring-wordcount").textContent = `${version?.wordCount ?? 0} kelime`;
+  $("content-authoring-version-state").innerHTML = version
+    ? versionStatusBadge(version.status)
+    : '<span class="badge badge-warning">Sürüm yok</span>';
+
+  const title = $("content-authoring-title-input");
+  const body = $("content-authoring-body");
+  const difficulty = $("content-authoring-difficulty");
+  const skill = $("content-authoring-skill");
+  title.disabled = !canEditVersion;
+  body.disabled = !canEditVersion;
+  difficulty.disabled = !canEditParent;
+
+  // Güvenli detay endpoint'i metadata değerlerini değil yalnız anahtarlarını döndürür.
+  // Değerleri uydurmamak veya mevcut metadata'yı yanlışlıkla silmemek için bu alan read-only'dir.
+  const metadata = $("content-authoring-metadata");
+  metadata.value = content.metadataKeys?.length ? content.metadataKeys.join(", ") : "";
+  metadata.disabled = true;
+  metadata.title = "Mevcut endpoint yalnızca metadata anahtarlarını döndürür";
+
+  skill.disabled = !canEditParent;
+  $("content-authoring-save").disabled = !canEditVersion;
+  $("content-authoring-new-question").disabled = content.status !== "DRAFT" || !canAuthorContent();
+  $("content-authoring-new-version").disabled = content.status === "RETIRED" || !canAuthorContent();
+}
+
+async function populateContentAuthoringSkillSelect() {
+  const select = $("content-authoring-skill");
+  if (!select || !contentAuthoringCurrent) return;
+  try {
+    const res = await contentApi("/skills?page=1&pageSize=100");
+    const body = await parseResponse(res);
+    const currentSkillId = contentAuthoringCurrent.skills?.[0]?.id ?? "";
+    select.innerHTML =
+      '<option value="">Beceri seçin…</option>' +
+      body.items
+        .map(
+          (skill) =>
+            `<option value="${escapeHtml(skill.id)}" ${skill.id === currentSkillId ? "selected" : ""}>${escapeHtml(skill.name)} (${escapeHtml(skill.code)})</option>`,
+        )
+        .join("");
+  } catch (err) {
+    select.innerHTML = '<option value="">Beceriler yüklenemedi</option>';
+    showContentAuthoringError(err.message || "Beceriler yüklenemedi.");
+  }
+}
+
+function renderContentAuthoringMeta() {
+  const content = contentAuthoringCurrent;
+  const version = contentAuthoringVersion;
+  const meta = $("content-authoring-meta");
+  if (!content) {
+    meta.innerHTML = '<p class="muted">İçerik bulunamadı.</p>';
+    return;
+  }
+  meta.innerHTML = `
+    <div class="authoring-meta-item"><span>İçerik</span><strong>${escapeHtml(content.title)}</strong></div>
+    <div class="authoring-meta-item"><span>Content ID</span><code>${escapeHtml(content.id)}</code></div>
+    <div class="authoring-meta-item"><span>Version</span><strong>${version ? `v${escapeHtml(String(version.version))}` : "—"}</strong></div>
+    <div class="authoring-meta-item"><span>Durum</span>${content.status ? contentStatusBadge(content.status) : "—"}</div>
+    <div class="authoring-meta-item"><span>Competency</span><strong>${content.skills?.length ? escapeHtml(content.skills.map((skill) => skill.code).join(", ")) : "Tanımlı değil"}</strong></div>
+    <div class="authoring-meta-item"><span>Zorluk</span><strong>${content.difficulty != null ? escapeHtml(difficultyLabel(content.difficulty)) : "Tanımlı değil"}</strong></div>
+    <div class="authoring-meta-item"><span>Yazar</span><strong>${escapeHtml(version?.createdByName ?? content.createdByName ?? "—")}</strong></div>
+    <div class="authoring-meta-item"><span>Son güncelleme</span><strong>${escapeHtml(formatDateTime(content.updatedAt))}</strong></div>`;
+}
+
+function renderContentAuthoringQuestions() {
+  const list = $("content-authoring-question-list");
+  if (!list) return;
+  if (!contentAuthoringVersion) {
+    list.innerHTML = '<p class="muted">Önce bir ContentVersion oluşturun.</p>';
+    return;
+  }
+  const linked = authoringLinkedQuestions();
+  const mismatched = contentAuthoringQuestions.filter(
+    (question) =>
+      !question.currentVersion ||
+      question.currentVersion.contentVersionId !== contentAuthoringVersion.id,
+  );
+  const rows = linked
+    .map((question) => {
+      const version = question.currentVersion;
+      const edit =
+        version?.status === "DRAFT" && canAuthorContent()
+          ? `<button type="button" class="btn btn-ghost btn-sm" data-authoring-question-edit="${escapeHtml(version.id)}" data-question-id="${escapeHtml(question.id)}">Düzenle</button>`
+          : "";
+      const newVersion =
+        version && question.status !== "RETIRED" && canAuthorContent()
+          ? `<button type="button" class="btn btn-ghost btn-sm" data-authoring-question-version="${escapeHtml(question.id)}">Yeni sürüm</button>`
+          : "";
+      return `
+        <div class="authoring-question-row">
+          <div class="authoring-question-position">${escapeHtml(String(question.position + 1))}</div>
+          <div class="authoring-question-main">
+            <strong>${escapeHtml((version?.prompt ?? question.id).slice(0, 120))}</strong>
+            <span class="muted">${escapeHtml(question.skill?.code ?? "Beceri yok")} · ${version?.difficulty != null ? escapeHtml(difficultyLabel(version.difficulty)) : "Zorluk yok"} · v${escapeHtml(String(version?.version ?? "—"))}</span>
+          </div>
+          <div class="authoring-question-status">${questionStatusBadge(question.status)}</div>
+          <div class="authoring-question-actions">
+            <button type="button" class="btn btn-ghost btn-sm" data-authoring-question-view="${escapeHtml(question.id)}">Görüntüle</button>
+            ${edit}${newVersion}
+          </div>
+        </div>`;
+    })
+    .join("");
+  list.innerHTML = rows || '<p class="muted">Seçili ContentVersion’a bağlı soru bulunmuyor.</p>';
+  if (mismatched.length > 0) {
+    list.insertAdjacentHTML(
+      "beforeend",
+      `<p class="authoring-warning">${mismatched.length} soru başka bir ContentVersion’a bağlı veya sürümsüz. Yayınlama öncesi bağlantıyı kontrol edin.</p>`,
+    );
+  }
+}
+
+function authoringQuestionDetailFor(questionId) {
+  return (
+    contentAuthoringQuestionDetails.find((item) => item.questionId === questionId)?.detail ?? null
+  );
+}
+
+function renderContentAuthoringReadiness() {
+  const list = $("content-authoring-readiness");
+  const badge = $("content-authoring-readiness-badge");
+  const content = contentAuthoringCurrent;
+  const version = contentAuthoringVersion;
+  if (!list || !badge) return;
+  if (!content || !version) {
+    contentAuthoringReadinessReady = false;
+    badge.className = "badge badge-warning";
+    badge.textContent = "Yayınlamaya hazır değil";
+    list.innerHTML = '<div class="readiness-item readiness-fail">✕ İçerik sürümü bulunamadı</div>';
+    return;
+  }
+  const linked = authoringLinkedQuestions();
+  const detailsReady =
+    linked.length === 0 || contentAuthoringQuestionDetails.length === linked.length;
+  const checks = [
+    { ok: Boolean(version.body?.trim()), label: "İçerik metni mevcut" },
+    { ok: (content.skills?.length ?? 0) > 0, label: "Competency / beceri tanımlı" },
+    { ok: Number.isFinite(Number(content.difficulty)), label: "Difficulty tanımlı" },
+    { ok: linked.length > 0, label: "En az bir soru bağlı" },
+    {
+      ok:
+        linked.length > 0 &&
+        linked.every((question) => question.currentVersion?.contentVersionId === version.id),
+      label: "Soru ContentVersion bağlantıları geçerli",
+    },
+    { ok: detailsReady, label: "Soru ayrıntıları doğrulandı" },
+    {
+      ok:
+        detailsReady &&
+        linked.every((question) => {
+          const detail = authoringQuestionDetailFor(question.id);
+          const options = Array.isArray(detail?.options) ? detail.options : [];
+          const ids = options.map((option) => option.id).filter(Boolean);
+          const correctIds = detail?.correctAnswer?.correctOptionIds ?? [];
+          return (
+            question.type === "MULTIPLE_CHOICE" &&
+            options.length === 4 &&
+            new Set(ids).size === 4 &&
+            correctIds.length === 1 &&
+            ids.includes(correctIds[0])
+          );
+        }),
+      label: "Her çoktan seçmeli soruda 4 seçenek ve tek doğru cevap var",
+    },
+    { ok: Array.isArray(content.metadataKeys), label: "Metadata alanı kontrol edildi (varsa)" },
+  ];
+  contentAuthoringReadinessReady = checks.every((check) => check.ok);
+  badge.className = contentAuthoringReadinessReady ? "badge badge-success" : "badge badge-warning";
+  badge.textContent = contentAuthoringReadinessReady
+    ? "Yayınlamaya hazır"
+    : "Yayınlamaya hazır değil";
+  list.innerHTML = checks
+    .map(
+      (check) =>
+        `<div class="readiness-item ${check.ok ? "readiness-pass" : "readiness-fail"}">${check.ok ? "✓" : "✕"} ${escapeHtml(check.label)}</div>`,
+    )
+    .join("");
+}
+
+function renderContentAuthoringLifecycle() {
+  const container = $("content-authoring-lifecycle");
+  const version = contentAuthoringVersion;
+  if (!container) return;
+  if (!version) {
+    container.innerHTML = '<p class="muted">Lifecycle için sürüm bulunmuyor.</p>';
+    return;
+  }
+  const actions = [];
+  if (version.status === "DRAFT" && canAuthorContent()) {
+    actions.push(
+      '<button type="button" class="btn btn-primary btn-sm" data-authoring-action="review">İncelemeye Gönder</button>',
+    );
+  }
+  if (version.status === "REVIEW" && canReviewContent()) {
+    actions.push(
+      '<button type="button" class="btn btn-primary btn-sm" data-authoring-action="approve">Onayla</button>',
+    );
+  }
+  if (version.status === "APPROVED" && canReviewContent()) {
+    actions.push(
+      `<button type="button" class="btn btn-primary btn-sm" data-authoring-action="publish" ${contentAuthoringReadinessReady ? "" : 'disabled title="Önce yayınlama hazırlığı tamamlanmalı"'}>Yayınla</button>`,
+    );
+  }
+  if (version.status === "PUBLISHED") {
+    if (canAuthorContent())
+      actions.push(
+        '<button type="button" class="btn btn-primary btn-sm" data-authoring-action="new-version">Yeni Sürüm Oluştur</button>',
+      );
+    if (canReviewContent())
+      actions.push(
+        '<button type="button" class="btn btn-ghost btn-sm" data-authoring-action="retire">Emekliye Ayır</button>',
+      );
+  }
+  const note =
+    version.status === "PUBLISHED"
+      ? "Yayınlanmış sürüm immutable’dır. Değişiklik için yeni bir taslak sürüm oluşturun."
+      : version.status === "RETIRED"
+        ? "Emekliye ayrılmış sürüm salt okunurdur."
+        : "Durum değişiklikleri ve self-approval kuralları backend tarafından da doğrulanır.";
+  container.innerHTML = `
+    <div class="authoring-lifecycle-status">${versionStatusBadge(version.status)} <span>${escapeHtml(note)}</span></div>
+    <div class="authoring-lifecycle-actions">${actions.join("") || '<span class="muted">Bu rol ve durum için bekleyen işlem yok.</span>'}</div>`;
+}
+
+function renderContentAuthoringAudit() {
+  const container = $("content-authoring-audit");
+  if (!container) return;
+  if (!contentAuthoringAudit.length) {
+    container.innerHTML = '<p class="muted">Henüz lifecycle işlemi kaydı yok.</p>';
+    return;
+  }
+  container.innerHTML = contentAuthoringAudit
+    .map(
+      (entry) => `
+      <div class="audit-row">
+        <strong>${escapeHtml(entry.action)}</strong>
+        ${entry.version ? `<span>v${escapeHtml(String(entry.version))}</span>` : ""}
+        <span>${entry.fromStatus && entry.toStatus ? `${escapeHtml(entry.fromStatus)} → ${escapeHtml(entry.toStatus)}` : ""}</span>
+        <span class="muted">${entry.actorName ? escapeHtml(entry.actorName) : "Sistem"} · ${escapeHtml(formatDateTime(entry.createdAt))}</span>
+      </div>`,
+    )
+    .join("");
+}
+
+async function refreshContentAuthoringQuestionDetails() {
+  const versionId = contentAuthoringVersion?.id;
+  const linked = authoringLinkedQuestions();
+  contentAuthoringQuestionDetails = [];
+  renderContentAuthoringReadiness();
+  if (!versionId || linked.length === 0) return;
+  try {
+    const details = await Promise.all(
+      linked.map(async (question) => ({
+        questionId: question.id,
+        detail: await parseResponse(
+          await questionApi(
+            `/questions/versions/${encodeURIComponent(question.currentVersion.id)}`,
+          ),
+        ),
+      })),
+    );
+    if (contentAuthoringVersion?.id !== versionId) return;
+    contentAuthoringQuestionDetails = details;
+    renderContentAuthoringReadiness();
+    renderContentAuthoringLifecycle();
+  } catch (err) {
+    contentAuthoringQuestionDetails = [];
+    showContentAuthoringError(err.message || "Soru ayrıntıları doğrulanamadı.");
+    renderContentAuthoringReadiness();
+  }
+}
+
+async function loadContentAuthoringPreview() {
+  const preview = $("content-authoring-preview");
+  if (!preview || !contentAuthoringVersion) return;
+  preview.classList.remove("hidden");
+  preview.innerHTML = '<p class="muted">Önizleme hazırlanıyor…</p>';
+  const linked = authoringLinkedQuestions();
+  try {
+    const details = await Promise.all(
+      linked.map(async (question) => ({
+        question,
+        detail:
+          authoringQuestionDetailFor(question.id) ??
+          (await parseResponse(
+            await questionApi(
+              `/questions/versions/${encodeURIComponent(question.currentVersion.id)}`,
+            ),
+          )),
+      })),
+    );
+    preview.innerHTML = `
+      <article class="authoring-preview-passage">
+        <h5>${escapeHtml(contentAuthoringVersion.title)}</h5>
+        <div class="version-body-view">${escapeHtml(contentAuthoringVersion.body)}</div>
+      </article>
+      <div class="authoring-preview-questions">
+        ${
+          details.length
+            ? details
+                .map(
+                  ({ question, detail }, index) => `
+          <article class="authoring-preview-question">
+            <p><strong>${index + 1}. ${escapeHtml(detail.prompt ?? question.currentVersion?.prompt ?? "Soru")}</strong></p>
+            <ul class="question-option-list">${(Array.isArray(detail.options) ? detail.options : []).map((option) => `<li>${escapeHtml(option.text ?? option.id)}</li>`).join("")}</ul>
+          </article>`,
+                )
+                .join("")
+            : '<p class="muted">Bu sürümde önizlenecek soru yok.</p>'
+        }
+      </div>
+      <p class="field-hint muted">Bu önizleme salt okunurdur; TrainingSession, GP, streak veya progress üretmez.</p>`;
+  } catch (err) {
+    preview.innerHTML = `<p class="error">${escapeHtml(err.message || "Önizleme yüklenemedi.")}</p>`;
+  }
+}
+
+async function openContentAuthoring(id, preferredVersionId = null) {
+  const modal = $("content-authoring-modal");
+  if (!modal) return;
+  hideContentAuthoringError();
+  modal.classList.remove("hidden");
+  setContentAuthoringStatus("Yükleniyor…", "loading");
+  $("content-authoring-meta").innerHTML = '<p class="muted">İçerik bilgileri yükleniyor…</p>';
+  $("content-authoring-question-list").innerHTML = '<p class="muted">Sorular yükleniyor…</p>';
+  $("content-authoring-audit").innerHTML = '<p class="muted">Denetim geçmişi yükleniyor…</p>';
+  try {
+    const [content, versionsResponse, questions, audit] = await Promise.all([
+      parseResponse(await contentApi(`/contents/${encodeURIComponent(id)}`)),
+      parseResponse(await contentApi(`/contents/${encodeURIComponent(id)}/versions`)),
+      parseResponse(await questionApi(`/contents/${encodeURIComponent(id)}/questions`)),
+      parseResponse(await contentApi(`/contents/${encodeURIComponent(id)}/audit`)),
+    ]);
+    const versions = Array.isArray(versionsResponse)
+      ? versionsResponse
+      : (versionsResponse.items ?? versionsResponse.versions ?? []);
+    contentAuthoringCurrent = content;
+    contentAuthoringVersions = versions;
+    contentAuthoringQuestions = Array.isArray(questions) ? questions : (questions.items ?? []);
+    contentAuthoringAudit = Array.isArray(audit) ? audit : (audit.items ?? []);
+    const selectedId =
+      preferredVersionId ??
+      content.currentVersionId ??
+      content.currentVersion?.id ??
+      versions[0]?.id ??
+      null;
+    contentAuthoringVersion = authoringVersionForId(selectedId);
+    if (contentAuthoringVersion) {
+      contentAuthoringVersion = await parseResponse(
+        await contentApi(`/content-versions/${encodeURIComponent(contentAuthoringVersion.id)}`),
+      );
+    }
+    contentAuthoringQuestionDetails = [];
+    contentAuthoringReadinessReady = false;
+    contentAuthoringDirty = false;
+    renderContentAuthoringMeta();
+    const versionSelect = $("content-authoring-version-select");
+    versionSelect.innerHTML = versions.length
+      ? versions
+          .map(
+            (version) =>
+              `<option value="${escapeHtml(version.id)}" ${version.id === contentAuthoringVersion?.id ? "selected" : ""}>v${escapeHtml(String(version.version))} · ${escapeHtml(version.title)} · ${escapeHtml(VERSION_STATUS_LABELS[version.status] ?? version.status)}</option>`,
+          )
+          .join("")
+      : '<option value="">Sürüm bulunamadı</option>';
+    await populateContentAuthoringSkillSelect();
+    setContentAuthoringFields();
+    renderContentAuthoringMeta();
+    renderContentAuthoringQuestions();
+    renderContentAuthoringReadiness();
+    renderContentAuthoringLifecycle();
+    renderContentAuthoringAudit();
+    setContentAuthoringStatus("Hazır", "ready");
+    void refreshContentAuthoringQuestionDetails();
+  } catch (err) {
+    contentAuthoringCurrent = null;
+    contentAuthoringVersion = null;
+    setContentAuthoringStatus("İçerik yüklenemedi", "error");
+    showContentAuthoringError(err.message || "İçerik üretim alanı yüklenemedi.");
+  }
+}
+
+async function selectContentAuthoringVersion(versionId) {
+  const version = authoringVersionForId(versionId);
+  if (!version) return;
+  try {
+    setContentAuthoringStatus("Sürüm yükleniyor…", "loading");
+    contentAuthoringVersion = await parseResponse(
+      await contentApi(`/content-versions/${encodeURIComponent(version.id)}`),
+    );
+    contentAuthoringQuestionDetails = [];
+    contentAuthoringReadinessReady = false;
+    setContentAuthoringFields();
+    renderContentAuthoringQuestions();
+    renderContentAuthoringReadiness();
+    renderContentAuthoringLifecycle();
+    $("content-authoring-preview").classList.add("hidden");
+    $("content-authoring-preview-btn").textContent = "Önizlemeyi Göster";
+    setContentAuthoringStatus("Hazır", "ready");
+    void refreshContentAuthoringQuestionDetails();
+  } catch (err) {
+    showContentAuthoringError(err.message || "Sürüm yüklenemedi.");
+  }
+}
+
+function markContentAuthoringDirty() {
+  if (!contentAuthoringCurrent) return;
+  contentAuthoringDirty = true;
+  setContentAuthoringStatus("Kaydedilmemiş değişiklikler var", "dirty");
+}
+
+function updateContentAuthoringWordCount() {
+  const text = $("content-authoring-body")?.value ?? "";
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  $("content-authoring-wordcount").textContent = `${words} kelime`;
+}
+
+function setContentAuthoringSaveLoading(isLoading) {
+  const button = $("content-authoring-save");
+  if (!button) return;
+  button.disabled = isLoading || contentAuthoringVersion?.status !== "DRAFT" || !canAuthorContent();
+  button.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
+  button.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+}
+
+async function saveContentAuthoring(event) {
+  event.preventDefault();
+  hideContentAuthoringError();
+  const content = contentAuthoringCurrent;
+  const version = contentAuthoringVersion;
+  if (!content || !version)
+    return showContentAuthoringError("Kaydedilecek içerik sürümü bulunamadı.");
+  if (version.status !== "DRAFT")
+    return showContentAuthoringError(
+      "Yayınlanmış veya incelemedeki sürüm düzenlenemez. Yeni sürüm oluşturun.",
+    );
+  const title = $("content-authoring-title-input").value.trim();
+  const body = $("content-authoring-body").value;
+  const difficulty = Number($("content-authoring-difficulty").value);
+  if (!title) return showContentAuthoringError("Başlık gereklidir.");
+  if (!body.trim()) return showContentAuthoringError("Passage metni gereklidir.");
+  if (!Number.isFinite(difficulty) || difficulty < 0 || difficulty > 1)
+    return showContentAuthoringError("Zorluk 0 ile 1 arasında olmalı.");
+  const selectedSkillId = $("content-authoring-skill").value;
+  setContentAuthoringSaveLoading(true);
+  setContentAuthoringStatus("Kaydediliyor…", "saving");
+  try {
+    if (content.status === "DRAFT" && canAuthorContent()) {
+      await parseResponse(
+        await contentApi(`/contents/${encodeURIComponent(content.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title, difficulty }),
+        }),
+      );
+      const currentSkillIds = content.skills?.map((skill) => skill.id) ?? [];
+      const nextSkillIds = selectedSkillId ? [selectedSkillId] : [];
+      if (JSON.stringify(currentSkillIds) !== JSON.stringify(nextSkillIds)) {
+        await parseResponse(
+          await contentApi(`/contents/${encodeURIComponent(content.id)}/skills`, {
+            method: "PUT",
+            body: JSON.stringify({ skillIds: nextSkillIds }),
+          }),
+        );
+      }
+    }
+    await parseResponse(
+      await contentApi(`/content-versions/${encodeURIComponent(version.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title, body }),
+      }),
+    );
+    contentAuthoringDirty = false;
+    await openContentAuthoring(content.id, version.id);
+    setContentAuthoringStatus("Kaydedildi", "saved");
+  } catch (err) {
+    setContentAuthoringStatus("Kaydedilemedi", "error");
+    showContentAuthoringError(err.message || "İçerik kaydedilemedi.");
+  } finally {
+    setContentAuthoringSaveLoading(false);
+  }
+}
+
+async function runContentAuthoringLifecycle(action) {
+  const contentId = contentAuthoringCurrent?.id;
+  const versionId = contentAuthoringVersion?.id;
+  if (!contentId || !versionId) return;
+  if (action === "publish" && !contentAuthoringReadinessReady) {
+    showContentAuthoringError("Yayınlama hazırlığı tamamlanmadan yayınlama yapılamaz.");
+    return;
+  }
+  if (action === "publish" && !window.confirm("Bu sürümü yayınlamak istediğinize emin misiniz?"))
+    return;
+  if (
+    action === "retire" &&
+    !window.confirm("Bu sürümü emekliye ayırmak istediğinize emin misiniz?")
+  )
+    return;
+  if (action === "new-version") {
+    contentDetailCurrent = contentAuthoringCurrent;
+    contentAuthoringReturnAfterVersion = true;
+    window.__versionFormMode = "new";
+    window.__versionFormId = null;
+    await openVersionForm("new");
+    return;
+  }
+  const suffix = { review: "review", approve: "approve", publish: "publish", retire: "retire" }[
+    action
+  ];
+  if (!suffix) return;
+  try {
+    setContentAuthoringStatus(
+      action === "publish" ? "Yayınlanıyor…" : "İşlem uygulanıyor…",
+      "saving",
+    );
+    await parseResponse(
+      await contentApi(`/content-versions/${encodeURIComponent(versionId)}/${suffix}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    );
+    await openContentAuthoring(contentId, versionId);
+  } catch (err) {
+    showContentAuthoringError(err.message || "Lifecycle işlemi uygulanamadı.");
+    setContentAuthoringStatus("İşlem başarısız", "error");
+  }
+}
+
+async function openAuthoringQuestionBuilder() {
+  const contentId = contentAuthoringCurrent?.id;
+  const versionId = contentAuthoringVersion?.id;
+  if (!contentId || !versionId)
+    return showContentAuthoringError("Önce bir ContentVersion oluşturun.");
+  if (contentAuthoringCurrent.status !== "DRAFT" || !canAuthorContent())
+    return showContentAuthoringError(
+      "Yeni soru yalnızca taslak içerikte yetkili editör tarafından oluşturulabilir.",
+    );
+  questionAuthoringContext = { contentId, contentVersionId: versionId };
+  openQuestionForm();
+  await populateQuestionFormSelects(contentId, versionId);
+  $("question-form-content").value = contentId;
+  $("question-form-content-version").value = versionId;
+  $("question-form-content").disabled = true;
+  $("question-form-content-version").disabled = true;
+  $("question-form-type").value = "MULTIPLE_CHOICE";
+  $("question-form-type").disabled = true;
+  updateQuestionFormTypeVisibility();
+}
+
+async function openAuthoringQuestionEdit(questionId, versionId) {
+  try {
+    const question = await parseResponse(
+      await questionApi(`/questions/${encodeURIComponent(questionId)}`),
+    );
+    currentQuestionId = question.id;
+    currentQuestionType = question.type;
+    currentQuestionContentId = question.contentId;
+    questionAuthoringContext = {
+      contentId: contentAuthoringCurrent?.id ?? question.contentId,
+      contentVersionId: contentAuthoringVersion?.id ?? "",
+    };
+    await handleQuestionVersionEdit(versionId);
+  } catch (err) {
+    showContentAuthoringError(err.message || "Soru sürümü yüklenemedi.");
+  }
+}
+
+async function openAuthoringQuestionNewVersion(questionId) {
+  try {
+    const question = await parseResponse(
+      await questionApi(`/questions/${encodeURIComponent(questionId)}`),
+    );
+    currentQuestionId = question.id;
+    currentQuestionType = question.type;
+    currentQuestionContentId = question.contentId;
+    questionAuthoringContext = {
+      contentId: contentAuthoringCurrent?.id ?? question.contentId,
+      contentVersionId: contentAuthoringVersion?.id ?? "",
+    };
+    await handleQuestionNewVersion();
+  } catch (err) {
+    showContentAuthoringError(err.message || "Yeni soru sürümü oluşturulamadı.");
+  }
+}
+
+function closeContentAuthoring() {
+  if (
+    contentAuthoringDirty &&
+    !window.confirm("Kaydedilmemiş değişiklikler var. Kapatmak istediğinize emin misiniz?")
+  )
+    return;
+  $("content-authoring-modal").classList.add("hidden");
+  contentAuthoringDirty = false;
+  questionAuthoringContext = null;
+  contentAuthoringReturnAfterVersion = false;
+}
+
 function renderContentDetail(d) {
   $("content-detail-title").textContent = d.title;
+  const canEditDetails = d.status === "DRAFT" && canAuthorContent();
+  const canManageLifecycle = hasContentRole("SUPER_ADMIN", "CONTENT_EDITOR", "CONTENT_REVIEWER");
 
   const currentVersion = d.currentVersion
     ? `
@@ -9752,6 +10899,8 @@ function renderContentDetail(d) {
           ${versionStatusBadge(d.currentVersion.status)}
           <span>${escapeHtml(d.currentVersion.title)}</span>
           <span class="muted">${d.currentVersion.wordCount ?? 0} kelime</span>
+          <span class="muted">Oluşturan: ${d.currentVersion.createdByName ? escapeHtml(d.currentVersion.createdByName) : "—"}</span>
+          <span class="muted">Onaylayan: ${d.currentVersion.approvedByName ? escapeHtml(d.currentVersion.approvedByName) : "—"}</span>
         </div>
         <div class="version-row-actions">
           <button type="button" class="btn btn-ghost btn-sm" data-version-view="${d.currentVersion.id}">Görüntüle</button>
@@ -9763,25 +10912,32 @@ function renderContentDetail(d) {
     ? d.skills
         .map(
           (s) =>
-            `<span class="chip chip-info">${escapeHtml(s.name)} (${escapeHtml(s.code)})<button type="button" class="chip-remove" data-skill-remove="${s.id}" aria-label="Beceriyi çıkar">✕</button></span>`,
+            `<span class="chip chip-info">${escapeHtml(s.name)} (${escapeHtml(s.code)})${canEditDetails ? `<button type="button" class="chip-remove" data-skill-remove="${s.id}" aria-label="Beceriyi çıkar">✕</button>` : ""}</span>`,
         )
         .join("")
     : '<span class="muted">Bu içeriğe bağlı beceri yok.</span>';
 
   $("content-detail-body").innerHTML = `
     <section class="detail-section">
-      <h4>İçerik Bilgileri</h4>
+      <div class="enrollment-add-row">
+        <h4 style="margin:0">İçerik Bilgileri</h4>
+        <button id="content-authoring-open" type="button" class="btn btn-primary btn-sm">İçerik Üretimi</button>
+      </div>
       <dl class="info-grid">
         <div class="info-item"><dt>Başlık</dt><dd>${escapeHtml(d.title)}</dd></div>
         <div class="info-item"><dt>Kapsam</dt><dd>${scopeBadge(d.tenantId)}</dd></div>
         <div class="info-item"><dt>Tür</dt><dd>${escapeHtml(contentTypeLabel(d.type))}</dd></div>
         <div class="info-item"><dt>Zorluk</dt><dd>${difficultyLabel(d.difficulty)}</dd></div>
         <div class="info-item"><dt>Durum</dt><dd>${contentStatusBadge(d.status)}</dd></div>
+        <div class="info-item"><dt>İçerik kimliği</dt><dd><code>${escapeHtml(d.id)}</code></dd></div>
+        <div class="info-item"><dt>Oluşturan</dt><dd>${d.createdByName ? escapeHtml(d.createdByName) : "—"}</dd></div>
         <div class="info-item"><dt>Sürüm sayısı</dt><dd>${d.versionCount}</dd></div>
         <div class="info-item"><dt>Soru sayısı</dt><dd>${d.questionCount}</dd></div>
         <div class="info-item"><dt>Beceri sayısı</dt><dd>${d.skillCount}</dd></div>
         <div class="info-item"><dt>Oluşturulma</dt><dd>${new Date(d.createdAt).toLocaleDateString("tr-TR")}</dd></div>
         <div class="info-item"><dt>Güncellenme</dt><dd>${new Date(d.updatedAt).toLocaleDateString("tr-TR")}</dd></div>
+        <div class="info-item"><dt>Yayınlanma</dt><dd>${formatContentDate(d.publishedAt)}</dd></div>
+        <div class="info-item"><dt>Metadata anahtarları</dt><dd>${d.metadataKeys?.length ? d.metadataKeys.map(escapeHtml).join(", ") : "—"}</dd></div>
       </dl>
     </section>
 
@@ -9798,9 +10954,9 @@ function renderContentDetail(d) {
       <div class="enrollment-add-row">
         <label class="field">
           <span>Beceri ekle</span>
-          <select id="content-skill-picker"><option value="">Yükleniyor…</option></select>
+          <select id="content-skill-picker" ${canEditDetails ? "" : "disabled"}><option value="">Yükleniyor…</option></select>
         </label>
-        <button data-content-skill-add type="button" class="btn btn-ghost">Ekle</button>
+        <button data-content-skill-add type="button" class="btn btn-ghost" ${canEditDetails ? "" : "disabled"}>Ekle</button>
       </div>
       <div class="chip-list">${skillChips}</div>
     </section>
@@ -9815,22 +10971,35 @@ function renderContentDetail(d) {
       <div class="enrollment-add-row">
         <label class="field">
           <span>Durum</span>
-          <select id="content-detail-status">
-            <option value="DRAFT" ${d.status === "DRAFT" ? "selected" : ""}>Taslak</option>
-            <option value="PUBLISHED" ${d.status === "PUBLISHED" ? "selected" : ""}>Yayında</option>
-            <option value="ARCHIVED" ${d.status === "ARCHIVED" ? "selected" : ""}>Arşivlenmiş</option>
+          <select id="content-detail-status" ${canManageLifecycle ? "" : "disabled"}>
+            ${Object.entries(CONTENT_STATUS_LABELS)
+              .map(
+                ([status, label]) =>
+                  `<option value="${status}" ${d.status === status ? "selected" : ""}>${label}</option>`,
+              )
+              .join("")}
           </select>
         </label>
-        <button data-content-status-apply type="button" class="btn btn-ghost">Uygula</button>
+        <button data-content-status-apply type="button" class="btn btn-ghost" ${canManageLifecycle ? "" : "disabled"}>Uygula</button>
       </div>
       <p class="muted field-hint">
         "Yayında" durumu için içeriğin yayınlanmış bir sürümü olmalıdır. "Arşivlenmiş" içerik
         yalnızca "Taslak" durumuna geri alınabilir. İçeriği tamamen silmek için "İçeriği Sil"
         butonunu kullanın (soft-delete; sürüm geçmişi korunur).
       </p>
+    </section>
+
+    <section class="detail-section">
+      <h4>Denetim geçmişi</h4>
+      <div id="content-audit-history"><p class="muted">Yükleniyor…</p></div>
+      <p class="field-hint muted">Yalnız lifecycle işlemleri ve sorumlu bilgisi gösterilir. İçerik metni ve cevaplar gösterilmez.</p>
     </section>`;
 
   void populateContentSkillPicker();
+  $("content-new-version-btn").disabled = d.status === "RETIRED" || !canAuthorContent();
+  $("content-detail-edit").disabled = !canEditDetails;
+  $("content-detail-delete").disabled =
+    d.status === "RETIRED" || !(canAuthorContent() || canReviewContent());
 }
 
 async function populateContentSkillPicker() {
@@ -9867,6 +11036,42 @@ async function loadContentVersions(contentId) {
   }
 }
 
+async function loadContentAudit(contentId) {
+  const container = $("content-audit-history");
+  if (!container) return;
+  container.innerHTML = '<p class="muted">Yükleniyor…</p>';
+  try {
+    const res = await contentApi(`/contents/${encodeURIComponent(contentId)}/audit`);
+    contentDetailAudit = await parseResponse(res);
+    renderContentAudit();
+  } catch (err) {
+    container.innerHTML = `<p class="error">${escapeHtml(err.message || "Denetim geçmişi yüklenemedi.")}</p>`;
+  }
+}
+
+function renderContentAudit() {
+  const container = $("content-audit-history");
+  if (!container) return;
+  if (!contentDetailAudit.length) {
+    container.innerHTML = '<p class="muted">Henüz lifecycle işlemi kaydı yok.</p>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="audit-list">
+      ${contentDetailAudit
+        .map(
+          (entry) => `
+            <div class="audit-row">
+              <strong>${escapeHtml(entry.action)}</strong>
+              ${entry.version ? `<span>v${entry.version}</span>` : ""}
+              <span>${entry.fromStatus && entry.toStatus ? `${escapeHtml(entry.fromStatus)} → ${escapeHtml(entry.toStatus)}` : ""}</span>
+              <span class="muted">${entry.actorName ? escapeHtml(entry.actorName) : "Sistem"} · ${new Date(entry.createdAt).toLocaleString("tr-TR")}</span>
+            </div>`,
+        )
+        .join("")}
+    </div>`;
+}
+
 function renderVersionHistory() {
   const container = $("content-version-history");
   if (!container) return;
@@ -9884,13 +11089,16 @@ function renderVersionHistory() {
         ${versionStatusBadge(v.status)}
         <span>${escapeHtml(v.title)}</span>
         <span class="muted">${v.wordCount ?? 0} kelime</span>
-        <span class="muted">${v.createdByName ? escapeHtml(v.createdByName) : "—"} · ${new Date(v.createdAt).toLocaleDateString("tr-TR")}</span>
+        <span class="muted">Oluşturan: ${v.createdByName ? escapeHtml(v.createdByName) : "—"} · ${new Date(v.createdAt).toLocaleDateString("tr-TR")}</span>
+        <span class="muted">İnceleyen: ${v.reviewedByName ? escapeHtml(v.reviewedByName) : "—"} · Onaylayan: ${v.approvedByName ? escapeHtml(v.approvedByName) : "—"}</span>
       </div>
       <div class="version-row-actions">
         <button type="button" class="btn btn-ghost btn-sm" data-version-view="${v.id}">Görüntüle</button>
-        ${v.status !== "PUBLISHED" ? `<button type="button" class="btn btn-ghost btn-sm" data-version-edit="${v.id}">Düzenle</button>` : ""}
-        ${v.status === "DRAFT" ? `<button type="button" class="btn btn-ghost btn-sm" data-version-review="${v.id}">İncelemeye Al</button>` : ""}
-        ${v.status === "DRAFT" || v.status === "REVIEW" ? `<button type="button" class="btn btn-primary btn-sm" data-version-publish="${v.id}">Yayınla</button>` : ""}
+        ${v.status === "DRAFT" && canAuthorContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-version-edit="${v.id}">Düzenle</button>` : ""}
+        ${v.status === "DRAFT" && canAuthorContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-version-review="${v.id}">İncelemeye Al</button>` : ""}
+        ${v.status === "REVIEW" && canReviewContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-version-approve="${v.id}">Onayla</button>` : ""}
+        ${v.status === "APPROVED" && canReviewContent() ? `<button type="button" class="btn btn-primary btn-sm" data-version-publish="${v.id}">Yayınla</button>` : ""}
+        ${v.status === "PUBLISHED" && canReviewContent() ? `<button type="button" class="btn btn-ghost btn-sm" data-version-retire="${v.id}">Emekliye ayır</button>` : ""}
       </div>
     </div>`,
     )
@@ -9965,8 +11173,13 @@ async function submitVersionForm(event) {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
-    await parseResponse(res);
+    const savedVersion = await parseResponse(res);
     closeVersionForm();
+    if (contentAuthoringReturnAfterVersion) {
+      contentAuthoringReturnAfterVersion = false;
+      await openContentAuthoring(contentId, savedVersion?.id ?? null);
+      return;
+    }
     await openContentDetail(contentId);
     await loadContents();
   } catch (err) {
@@ -9991,6 +11204,11 @@ async function viewVersion(versionId) {
         <div class="info-item"><dt>Durum</dt><dd>${versionStatusBadge(v.status)}</dd></div>
         <div class="info-item"><dt>Kelime sayısı</dt><dd>${v.wordCount ?? 0}</dd></div>
         <div class="info-item"><dt>Yayınlanma</dt><dd>${v.publishedAt ? new Date(v.publishedAt).toLocaleString("tr-TR") : "—"}</dd></div>
+        <div class="info-item"><dt>İnceleyen</dt><dd>${v.reviewedByName ? escapeHtml(v.reviewedByName) : "—"}</dd></div>
+        <div class="info-item"><dt>İnceleme tarihi</dt><dd>${formatContentDate(v.reviewedAt)}</dd></div>
+        <div class="info-item"><dt>Onaylayan</dt><dd>${v.approvedByName ? escapeHtml(v.approvedByName) : "—"}</dd></div>
+        <div class="info-item"><dt>Onay tarihi</dt><dd>${formatContentDate(v.approvedAt)}</dd></div>
+        <div class="info-item"><dt>Emekli edilme</dt><dd>${formatContentDate(v.retiredAt)}</dd></div>
         <div class="info-item"><dt>Oluşturan</dt><dd>${v.createdByName ? escapeHtml(v.createdByName) : "—"}</dd></div>
         <div class="info-item"><dt>Oluşturulma</dt><dd>${new Date(v.createdAt).toLocaleDateString("tr-TR")}</dd></div>
       </dl>
@@ -10019,6 +11237,21 @@ async function reviewVersion(versionId) {
   }
 }
 
+async function approveVersion(versionId) {
+  const contentId = contentDetailCurrent?.id;
+  if (!contentId) return;
+  try {
+    const res = await contentApi(`/content-versions/${encodeURIComponent(versionId)}/approve`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await parseResponse(res);
+    await openContentDetail(contentId);
+  } catch (err) {
+    showContentError(err.message || "Sürüm onaylanamadı.");
+  }
+}
+
 async function publishVersion(versionId) {
   const contentId = contentDetailCurrent?.id;
   if (!contentId) return;
@@ -10033,6 +11266,23 @@ async function publishVersion(versionId) {
     await loadContents();
   } catch (err) {
     showContentError(err.message || "Sürüm yayınlanamadı.");
+  }
+}
+
+async function retireVersion(versionId) {
+  const contentId = contentDetailCurrent?.id;
+  if (!contentId) return;
+  if (!window.confirm("Bu sürümü emekliye ayırmak istediğinize emin misiniz?")) return;
+  try {
+    const res = await contentApi(`/content-versions/${encodeURIComponent(versionId)}/retire`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await parseResponse(res);
+    await openContentDetail(contentId);
+    await loadContents();
+  } catch (err) {
+    showContentError(err.message || "Sürüm emekliye ayrılamadı.");
   }
 }
 
@@ -10458,11 +11708,14 @@ async function deleteLevel(levelId) {
 
 function setupContentEvents() {
   $("content-list-body").addEventListener("click", (event) => {
+    const authoringBtn = event.target.closest("[data-content-authoring-id]");
     const detailBtn = event.target.closest("[data-content-detail-id]");
     const editBtn = event.target.closest("[data-content-edit-id]");
     const deleteBtn = event.target.closest("[data-content-delete-id]");
 
-    if (detailBtn) {
+    if (authoringBtn) {
+      void openContentAuthoring(authoringBtn.dataset.contentAuthoringId);
+    } else if (detailBtn) {
       void openContentDetail(detailBtn.dataset.contentDetailId);
     } else if (editBtn) {
       const content = contentData.find((c) => c.id === editBtn.dataset.contentEditId);
@@ -10496,6 +11749,18 @@ function setupContentEvents() {
     void loadContents();
   });
   $("content-skill-filter").addEventListener("change", () => {
+    contentPage = 1;
+    void loadContents();
+  });
+  $("content-author-filter").addEventListener("change", () => {
+    contentPage = 1;
+    void loadContents();
+  });
+  $("content-sort").addEventListener("change", () => {
+    contentPage = 1;
+    void loadContents();
+  });
+  $("content-sort-direction").addEventListener("change", () => {
     contentPage = 1;
     void loadContents();
   });
@@ -10535,16 +11800,21 @@ function setupContentEvents() {
   });
 
   $("content-detail-body").addEventListener("click", (event) => {
+    const authoringOpen = event.target.closest("#content-authoring-open");
     const versionView = event.target.closest("[data-version-view]");
     const versionEdit = event.target.closest("[data-version-edit]");
     const versionReview = event.target.closest("[data-version-review]");
+    const versionApprove = event.target.closest("[data-version-approve]");
     const versionPublish = event.target.closest("[data-version-publish]");
+    const versionRetire = event.target.closest("[data-version-retire]");
     const skillRemove = event.target.closest("[data-skill-remove]");
     const skillAdd = event.target.closest("[data-content-skill-add]");
     const statusApply = event.target.closest("[data-content-status-apply]");
     const newVersion = event.target.closest("#content-new-version-btn");
 
-    if (newVersion) {
+    if (authoringOpen) {
+      void openContentAuthoring(contentDetailCurrent?.id);
+    } else if (newVersion) {
       window.__versionFormMode = "new";
       window.__versionFormId = null;
       openVersionForm("new");
@@ -10566,8 +11836,12 @@ function setupContentEvents() {
       })();
     } else if (versionReview) {
       void reviewVersion(versionReview.dataset.versionReview);
+    } else if (versionApprove) {
+      void approveVersion(versionApprove.dataset.versionApprove);
     } else if (versionPublish) {
       void publishVersion(versionPublish.dataset.versionPublish);
+    } else if (versionRetire) {
+      void retireVersion(versionRetire.dataset.versionRetire);
     } else if (skillRemove) {
       void removeContentSkill(skillRemove.dataset.skillRemove);
     } else if (skillAdd) {
@@ -10578,8 +11852,12 @@ function setupContentEvents() {
   });
 
   $("version-form").addEventListener("submit", submitVersionForm);
-  $("version-form-close").addEventListener("click", closeVersionForm);
-  $("version-form-cancel").addEventListener("click", closeVersionForm);
+  const cancelVersionAuthoring = () => {
+    contentAuthoringReturnAfterVersion = false;
+    closeVersionForm();
+  };
+  $("version-form-close").addEventListener("click", cancelVersionAuthoring);
+  $("version-form-cancel").addEventListener("click", cancelVersionAuthoring);
   $("version-form-body").addEventListener("input", updateVersionWordCount);
 
   $("version-detail-close").addEventListener("click", () => {
@@ -10587,6 +11865,64 @@ function setupContentEvents() {
   });
   $("version-detail-close-action").addEventListener("click", () => {
     $("version-detail-modal").classList.add("hidden");
+  });
+
+  $("content-authoring-passage-form").addEventListener("submit", saveContentAuthoring);
+  for (const id of [
+    "content-authoring-title-input",
+    "content-authoring-difficulty",
+    "content-authoring-body",
+    "content-authoring-skill",
+  ]) {
+    $(id).addEventListener("input", markContentAuthoringDirty);
+    $(id).addEventListener("change", markContentAuthoringDirty);
+  }
+  $("content-authoring-body").addEventListener("input", updateContentAuthoringWordCount);
+  $("content-authoring-version-select").addEventListener("change", (event) => {
+    if (
+      contentAuthoringDirty &&
+      !window.confirm("Kaydedilmemiş değişiklikler var. Başka bir sürüme geçilsin mi?")
+    ) {
+      event.target.value = contentAuthoringVersion?.id ?? "";
+      return;
+    }
+    contentAuthoringDirty = false;
+    void selectContentAuthoringVersion(event.target.value);
+  });
+  $("content-authoring-preview-btn").addEventListener("click", () => {
+    const preview = $("content-authoring-preview");
+    const hidden = preview.classList.toggle("hidden");
+    $("content-authoring-preview-btn").textContent = hidden
+      ? "Önizlemeyi Göster"
+      : "Önizlemeyi Gizle";
+    if (!hidden) void loadContentAuthoringPreview();
+  });
+  $("content-authoring-new-question").addEventListener("click", () => {
+    void openAuthoringQuestionBuilder();
+  });
+  $("content-authoring-new-version").addEventListener("click", () => {
+    void runContentAuthoringLifecycle("new-version");
+  });
+  $("content-authoring-question-list").addEventListener("click", (event) => {
+    const view = event.target.closest("[data-authoring-question-view]");
+    const edit = event.target.closest("[data-authoring-question-edit]");
+    const newVersion = event.target.closest("[data-authoring-question-version]");
+    if (view) void openQuestionDetail(view.dataset.authoringQuestionView);
+    else if (edit)
+      void openAuthoringQuestionEdit(edit.dataset.questionId, edit.dataset.authoringQuestionEdit);
+    else if (newVersion)
+      void openAuthoringQuestionNewVersion(newVersion.dataset.authoringQuestionVersion);
+  });
+  $("content-authoring-lifecycle").addEventListener("click", (event) => {
+    const action = event.target.closest("[data-authoring-action]");
+    if (action) void runContentAuthoringLifecycle(action.dataset.authoringAction);
+  });
+  $("content-authoring-close").addEventListener("click", closeContentAuthoring);
+  $("content-authoring-close-action").addEventListener("click", closeContentAuthoring);
+  window.addEventListener("beforeunload", (event) => {
+    if (!contentAuthoringDirty) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 }
 
@@ -10759,6 +12095,7 @@ for (const id of [
   "class-detail-modal",
   "content-form-modal",
   "content-detail-modal",
+  "content-authoring-modal",
   "version-form-modal",
   "version-detail-modal",
   "question-detail-modal",
@@ -11342,6 +12679,7 @@ async function init() {
   setupGamificationEvents();
   setupCelebrationEvents();
   setupAssessmentEvents();
+  setupPilotExperienceEvents();
 }
 init();
 
@@ -11361,7 +12699,6 @@ function resetInsights() {
   for (const id of [
     "progress-summary",
     "progress-path",
-    "development-comparison",
     "development-journey-summary",
     "progress-skills",
     "progress-study",
@@ -11414,7 +12751,7 @@ function insightMetric(icon, label, value, tone = "", id = "") {
   return `<article class="insight-stat ${tone}"><span aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span><strong${id ? ` id="${id}"` : ""}>${escapeHtml(String(value))}</strong></article>`;
 }
 function insightBar(accuracy, label) {
-  if (!Number.isFinite(accuracy)) return '<p class="muted">Henüz değerlendirilmiş cevap yok.</p>';
+  if (!Number.isFinite(accuracy)) return '<p class="muted">Henüz yeterli veri yok.</p>';
   const value = Math.round(accuracy * 100);
   return `<div class="insight-bar" role="progressbar" aria-label="${escapeHtml(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}"><span style="width:${Math.min(100, Math.max(0, value))}%"></span></div>`;
 }
@@ -11437,12 +12774,39 @@ function renderHomeInsights(path) {
 const DEVELOPMENT_SKILL_CARDS = [
   { label: "Dikkat", icon: "👀", aliases: ["FAST_ATTENTION", "ATTENTION_BURST"] },
   { label: "Hızlı Tanıma", icon: "⚡", aliases: ["FAST_RECOGNITION", "RAPID_RECOGNITION"] },
-  { label: "Phrase Chunking", icon: "🧩", aliases: ["FAST_CHUNKING", "PHRASE_CHUNKING"] },
+  { label: "Cümle Gruplama", icon: "🧩", aliases: ["FAST_CHUNKING", "PHRASE_CHUNKING"] },
   { label: "Ana Fikir", icon: "💡", aliases: ["RC_MAIN_IDEA", "MAIN_IDEA"] },
   { label: "Detay", icon: "🔎", aliases: ["RC_DETAIL", "DETAIL_EVIDENCE", "DETAIL"] },
   { label: "Çıkarım", icon: "🧠", aliases: ["RC_INFERENCE", "INFERENCE"] },
 ];
 function developmentSkillState(progress) {
+  if (progress && typeof progress.masteryState === "string") {
+    const labels = {
+      NOT_STARTED: "Yeni başlıyor",
+      PRACTICING: "Pratik yapıyor",
+      DEVELOPING: "Gelişiyor",
+      STABLE: "Stabil / Ustalık",
+      NEEDS_REVIEW: "Tekrar gerekli",
+    };
+    const recentAccuracy =
+      typeof progress.recentAccuracy === "number" && Number.isFinite(progress.recentAccuracy)
+        ? progress.recentAccuracy
+        : null;
+    const trendLabels = {
+      DEVELOPING: "Gelişiyor",
+      STABLE: "Stabil",
+      NEEDS_REVIEW: "Tekrar gerekli",
+    };
+    const trend = trendLabels[progress.trend] || "";
+    return {
+      value: recentAccuracy,
+      label: labels[progress.masteryState] || "Yeni başlıyor",
+      detail:
+        recentAccuracy === null
+          ? "Henüz yeterli puanlanan çalışma yok."
+          : `${trend ? trend + " · " : ""}Son çalışmalarında ${formatAccuracy(recentAccuracy)} doğruluk`,
+    };
+  }
   const mastery =
     typeof progress?.masteryScore === "number" && Number.isFinite(progress.masteryScore)
       ? progress.masteryScore
@@ -11461,10 +12825,16 @@ function developmentSkillState(progress) {
 }
 function findDevelopmentSkill(items, aliases, label) {
   return (items || []).find((item) => {
-    const code = String(item.skillCode || "").toUpperCase();
-    const name = String(item.skillName || "").toUpperCase();
+    const normalize = (value) =>
+      String(value || "")
+        .toUpperCase()
+        .replaceAll("İ", "I")
+        .replaceAll("İ", "I")
+        .replaceAll("ı", "i");
+    const code = normalize(item.skillCode);
+    const name = normalize(item.skillName);
     return [label, ...aliases].some((alias) => {
-      const candidate = String(alias || "").toUpperCase();
+      const candidate = normalize(alias);
       return code === candidate || code.includes(candidate) || name.includes(candidate);
     });
   });
@@ -11494,7 +12864,7 @@ function renderProgressList(items, trainingSkills) {
       <div class="skill-title"><span aria-hidden="true">${card.icon}</span><h4>${card.label}</h4><strong class="skill-stage">${state.label}</strong></div>
       <p class="muted skill-state-detail">${state.detail}</p>
       ${insightBar(state.value, label)}
-      ${progress ? `<dl class="insight-facts"><div><dt>Egzersiz</dt><dd class="skill-sessions">${sessionCount ?? 0}</dd></div><div><dt>Puanlanan cevap</dt><dd class="skill-attempts">${attemptCount ?? 0}</dd></div>${exposureCount !== undefined ? `<div><dt>Farklı çalışma</dt><dd>${exposureCount}</dd></div>` : `<div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount ?? 0}</dd></div>`}${responseTimeFact}</dl>${lastActivityAt ? `<time class="muted skill-last-activity">Son çalışma: ${escapeHtml(insightDate(lastActivityAt))}</time>` : ""}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
+      ${progress ? `<dl class="insight-facts"><div><dt>Egzersiz</dt><dd class="skill-sessions">${sessionCount ?? 0}</dd></div><div><dt>Puanlanan cevap</dt><dd class="skill-attempts">${attemptCount ?? 0}</dd></div>${exposureCount !== undefined ? `<div><dt>Farklı çalışma</dt><dd>${exposureCount}</dd></div>` : `<div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div>`}${responseTimeFact}</dl>${lastActivityAt ? `<time class="muted skill-last-activity">Son çalışma: ${escapeHtml(insightDate(lastActivityAt))}</time>` : ""}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
     </article>`;
   }).join("");
 }
@@ -11669,7 +13039,7 @@ async function loadProgress() {
     "development-trophies",
     "development-next-targets",
   ])
-    if ($(id)) $(id).replaceChildren();
+    $(id).replaceChildren();
   $("development-total-gp").textContent = "—";
   $("development-achievement-count").textContent = "Başarıların yükleniyor…";
   $("development-streak").textContent = "";
@@ -11692,8 +13062,8 @@ async function loadProgress() {
     ) +
     insightMetric(
       "📚",
-      "Tamamlanan oturum",
-      summary?.sessionCount ?? "—",
+      "Tamamlanan antrenman",
+      progress?.training?.completedTrainingSessionCount ?? summary?.sessionCount ?? "—",
       "",
       "progress-sessions",
     ) +
@@ -11732,8 +13102,6 @@ async function loadProgress() {
 function setupProgressEvents() {
   $("progress-refresh").addEventListener("click", loadProgress);
   $("home-progress-link").addEventListener("click", () => navigate("progress"));
-  $("dashboard-progress-link")?.addEventListener("click", () => navigate("progress"));
-  $("dashboard-progress-retry")?.addEventListener("click", () => void loadDashboardProgress());
   $("history-prev").addEventListener("click", () => loadInsightHistory(insightHistoryPage - 1));
   $("history-next").addEventListener("click", () => loadInsightHistory(insightHistoryPage + 1));
   $("page-progress").addEventListener("click", (event) => {

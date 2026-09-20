@@ -7,7 +7,6 @@ const styles = readFileSync("public/styles.css", "utf8");
 
 describe("training home and development UI", () => {
   it("renders the daily training home states", () => {
-    expect(index).toContain("Bugün de gelişmeye hazır mısın?");
     expect(index).toContain("Bugünkü Antrenmanın");
     expect(index).toContain('id="daily-training-progress"');
     expect(index).toContain('role="progressbar"');
@@ -18,15 +17,16 @@ describe("training home and development UI", () => {
     expect(app).toContain("function renderTrainingHome(data)");
     expect(app).toContain("Antrenmana Başla");
     expect(app).toContain("Antrenmana Devam Et");
-    expect(app).toContain("Bugünkü antrenmanı tamamladın!");
+    expect(app).toContain("Bugünkü hedefini tamamladın! 🎉");
+    expect(app).toContain("Antrenman tamamlandı");
     expect(app).toContain("pointsToday");
     expect(app).toContain("dailyTraining");
     expect(app).toContain("dailyGoal");
-    expect(app).toContain("Günlük soru hakkın doldu; tamamlanmayan adımlar yarına kalabilir.");
   });
 
   it("renders development awards, goals, streak, and six skill areas", () => {
-    expect(index).toContain("Gelişimin");
+    expect(index).toContain("Gelişim Yolculuğun");
+    expect(index).toContain('id="development-journey-summary"');
     expect(index).toContain('id="development-total-gp"');
     expect(index).toContain('id="development-badges"');
     expect(index).toContain('id="development-trophies"');
@@ -35,7 +35,7 @@ describe("training home and development UI", () => {
     expect(app).toContain("DEVELOPMENT_SKILL_CARDS");
     expect(app).toContain("Dikkat");
     expect(app).toContain("Hızlı Tanıma");
-    expect(app).toContain("Phrase Chunking");
+    expect(app).toContain("Cümle Gruplama");
     expect(app).toContain("Ana Fikir");
     expect(app).toContain("Detay");
     expect(app).toContain("Çıkarım");
@@ -43,6 +43,8 @@ describe("training home and development UI", () => {
     expect(app).toContain('typeof progress?.masteryScore === "number"');
     expect(app).toContain("const value = mastery ?? accuracy");
     expect(app).toContain("renderDevelopmentGamification");
+    expect(app).toContain("developmentJourneySummary");
+    expect(app).toContain("Tamamlanan antrenman");
     expect(app).toContain("GP daha kazanırsan sonraki kilometre taşına ulaşırsın.");
   });
 
@@ -54,5 +56,18 @@ describe("training home and development UI", () => {
     expect(styles).toContain(":focus-visible");
     expect(styles).toContain("training-home-card");
     expect(styles).toContain("@media (max-width: 600px)");
+  });
+
+  it("keeps the student shell focused on five primary destinations", () => {
+    expect(index).toContain('data-page="dashboard" data-student-primary');
+    expect(index).toContain('data-page="exercise" data-student-primary');
+    expect(index).toContain('data-page="lessons" data-student');
+    expect(index).toContain('data-page="progress" data-student-primary');
+    expect(index).toContain('data-page="settings" data-student-primary');
+    expect(index).toContain("Bugünkü Antrenmanın");
+    expect(index).toContain("Öğren");
+    expect(index).toContain("Geri bildirim");
+    expect(app).toContain("formatStudentError");
+    expect(app).toContain("data-student-secondary");
   });
 });
