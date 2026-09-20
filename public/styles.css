@@ -4131,3 +4131,298 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* ================= Student home visual language =================
+   Oku+ keeps its professional blue identity while making the daily action
+   easier to read, warmer to scan, and more motivating to start. */
+.student-shell {
+  --student-ink: #12223f;
+  --student-muted: #5f6f87;
+  --student-blue: #2563eb;
+  --student-teal: #159a83;
+  font-size: 17px;
+  background: linear-gradient(135deg, #f6f8fc 0%, #f0f5ff 58%, #f5fbf8 100%);
+}
+
+.student-shell .sidebar {
+  background: rgba(255, 255, 255, 0.96);
+  border-right-color: #dfe7f3;
+}
+
+.student-shell .sidebar-brand {
+  padding: 22px 24px;
+}
+
+.student-shell .brand-mark {
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.student-shell .sidebar-nav {
+  gap: 6px;
+  padding: 18px 14px;
+}
+
+.student-shell .nav-item {
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--student-ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.student-shell .nav-item:hover {
+  background: #f2f6ff;
+  color: var(--student-blue);
+}
+
+.student-shell .nav-item.active {
+  background: #e6efff;
+  color: var(--student-blue);
+  box-shadow: inset 3px 0 0 var(--student-blue);
+}
+
+.student-shell .nav-icon {
+  width: 22px;
+  font-size: 19px;
+}
+
+.student-shell .topbar {
+  height: 68px;
+  padding-inline: 28px;
+  border-bottom-color: #dfe7f3;
+}
+
+.student-shell .gamification-badge {
+  padding: 7px 11px;
+  font-size: 14px;
+}
+
+.student-shell .user-name {
+  font-size: 15px;
+}
+
+.student-shell .user-role {
+  font-size: 13px;
+}
+
+.student-shell .page {
+  padding: clamp(24px, 4vw, 44px);
+}
+
+.student-shell .page-view {
+  max-width: 1180px;
+}
+
+.student-shell .page-head {
+  margin-bottom: 24px;
+}
+
+.student-shell .page-head h2 {
+  color: var(--student-ink);
+  font-size: clamp(2rem, 3.5vw, 2.35rem);
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+}
+
+.student-shell .page-head p {
+  color: var(--student-muted);
+  font-size: 17px;
+}
+
+.student-shell #home-insights {
+  margin-top: 0;
+  padding: 18px 22px;
+  border: 1px solid #d5e2fb;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #edf4ff, #ffffff 72%);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.07);
+}
+
+.student-shell #home-insights-values {
+  gap: 18px;
+  color: var(--student-muted);
+  font-size: 16px;
+}
+
+.student-shell #home-insights-values strong {
+  color: var(--student-ink);
+  font-size: 18px;
+}
+
+.student-shell #home-progress-link {
+  min-height: 46px;
+  font-size: 16px;
+}
+
+.student-shell #today-card.training-home-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-top: 20px;
+  padding: clamp(24px, 4vw, 34px);
+  border: 1px solid #cfdfff;
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 96% 4%, rgba(255, 218, 112, 0.58), transparent 22%),
+    radial-gradient(circle at 4% 100%, rgba(77, 208, 169, 0.14), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f4f8ff 68%, #f1fbf8 100%);
+  box-shadow:
+    0 18px 42px rgba(37, 99, 235, 0.11),
+    0 3px 0 rgba(37, 99, 235, 0.08);
+}
+
+.student-shell #today-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.student-shell .training-home-heading {
+  gap: 22px;
+}
+
+.student-shell .insight-eyebrow {
+  margin-bottom: 8px;
+  color: #3b5fc2;
+  font-size: 13px;
+  letter-spacing: 0.13em;
+}
+
+.student-shell .training-home-heading h2 {
+  margin: 0 0 10px;
+  color: var(--student-ink);
+  font-size: clamp(2rem, 4vw, 2.5rem);
+  letter-spacing: -0.045em;
+  line-height: 1.1;
+}
+
+.student-shell .training-home-heading p {
+  color: var(--student-muted);
+  font-size: 18px;
+}
+
+.student-shell .training-status {
+  padding: 10px 14px;
+  color: #12664e;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.student-shell .training-progress-track {
+  height: 14px;
+  margin: 28px 0 12px;
+  background: #dfe8f7;
+}
+
+.student-shell .training-progress-track > span {
+  background: linear-gradient(90deg, #2563eb 0%, #159a83 100%);
+}
+
+.student-shell .training-progress-meta {
+  color: var(--student-muted);
+  font-size: 16px;
+}
+
+.student-shell .training-progress-meta strong {
+  color: var(--student-ink);
+  font-size: 18px;
+}
+
+.student-shell .training-home-actions {
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.student-shell .training-home-actions .btn-primary {
+  min-width: 220px;
+  min-height: 54px;
+  border-radius: 14px;
+  box-shadow: 0 9px 18px rgba(37, 99, 235, 0.22);
+  font-size: 17px;
+}
+
+.student-shell .training-home-actions .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(37, 99, 235, 0.27);
+}
+
+.student-shell #daily-training-streak {
+  color: #a4541d;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.student-shell .training-focus-grid {
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.student-shell .training-focus-card {
+  min-height: 88px;
+  padding: 18px;
+  gap: 13px;
+  border-color: #dce6f5;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 6px 16px rgba(37, 58, 100, 0.05);
+}
+
+.student-shell .training-focus-card > span {
+  font-size: 28px;
+}
+
+.student-shell .training-focus-card strong {
+  color: var(--student-ink);
+  font-size: 15px;
+}
+
+.student-shell .training-focus-card small {
+  margin-top: 6px;
+  color: var(--student-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.student-shell #today-next-action {
+  color: var(--student-muted);
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .student-shell {
+    font-size: 16px;
+  }
+
+  .student-shell .topbar {
+    padding-inline: 16px;
+  }
+
+  .student-shell .page {
+    padding: 24px 16px 30px;
+  }
+
+  .student-shell .training-home-heading h2 {
+    font-size: clamp(1.8rem, 8vw, 2.2rem);
+  }
+
+  .student-shell .training-home-heading p {
+    font-size: 17px;
+  }
+}
+
+@media (max-width: 560px) {
+  .student-shell .page-head h2 {
+    font-size: 2rem;
+  }
+
+  .student-shell #today-card.training-home-card {
+    padding: 22px 18px;
+    border-radius: 22px;
+  }
+
+  .student-shell .training-home-actions .btn-primary {
+    min-width: 0;
+    width: 100%;
+  }
+}
