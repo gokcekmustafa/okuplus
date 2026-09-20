@@ -192,7 +192,7 @@ async function assertNoOverflow(page: Page, viewport: (typeof VIEWPORTS)[number]
 }
 
 async function waitForDashboard(page: Page): Promise<void> {
-  await visibleUnique(page, "#page-dashboard:not(.hidden)");
+  await visibleUnique(page, "#page-dashboard");
   await visibleUnique(page, "#today-card");
   await visibleUnique(page, "#start-daily-training");
   activeSelector = '#start-daily-training[data-today-loaded="true"]';
@@ -214,7 +214,7 @@ async function runOneExercise(page: Page): Promise<void> {
   activeSelector = "#start-daily-training";
   await startButton.click();
   assert.equal((await startResponse).status(), 200, "daily training start failed");
-  await visibleUnique(page, "#page-exercise:not(.hidden)", REQUEST_TIMEOUT_MS);
+  await visibleUnique(page, "#page-exercise", REQUEST_TIMEOUT_MS);
   await visibleUnique(
     page,
     "#exercise-current-question[data-question-version-id]",
@@ -241,11 +241,11 @@ async function runOneExercise(page: Page): Promise<void> {
 async function assertFastViewport(page: Page, viewport: (typeof VIEWPORTS)[number]): Promise<void> {
   await page.setViewportSize(viewport);
 
-  await goToStudentPage(page, "dashboard", "#page-dashboard:not(.hidden)");
+  await goToStudentPage(page, "dashboard", "#page-dashboard");
   await waitForDashboard(page);
   await assertNoOverflow(page, viewport);
 
-  await goToStudentPage(page, "exercise", "#page-exercise:not(.hidden)");
+  await goToStudentPage(page, "exercise", "#page-exercise");
   await visibleUnique(
     page,
     "#exercise-current-question[data-question-version-id]",
@@ -253,14 +253,14 @@ async function assertFastViewport(page: Page, viewport: (typeof VIEWPORTS)[numbe
   );
   await assertNoOverflow(page, viewport);
 
-  await goToStudentPage(page, "settings", "#page-settings:not(.hidden)");
+  await goToStudentPage(page, "settings", "#page-settings");
   await visibleUnique(page, "#pilot-support-open", 5_000);
   await visibleUnique(page, "#pilot-bug-open", 5_000);
   await assertNoOverflow(page, viewport);
 }
 
 async function verifySupportAndBugReport(page: Page): Promise<void> {
-  await goToStudentPage(page, "settings", "#page-settings:not(.hidden)");
+  await goToStudentPage(page, "settings", "#page-settings");
   const supportButton = await visibleUnique(page, "#pilot-support-open", 5_000);
   activeSelector = "#pilot-support-open";
   await supportButton.click();

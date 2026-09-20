@@ -148,8 +148,8 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).not.toContain("console.log(PASSWORD");
     expect(pilotSmokeRunner).not.toMatch(/page\.screenshot|\.tracing|recordVideo/iu);
     expect(pilotSmokeRunner).toContain("STAGING_STUDENT_PASSWORD");
-    expect(pilotSmokeRunner).toContain("#page-dashboard:not(.hidden)");
-    expect(pilotSmokeRunner).toContain("#page-exercise:not(.hidden)");
+    expect(pilotSmokeRunner).toContain('"#page-dashboard"');
+    expect(pilotSmokeRunner).toContain('"#page-exercise"');
     expect(pilotSmokeRunner).toContain('[role="radio"]');
     expect(pilotSmokeRunner).not.toContain(".check({");
     expect(pilotSmokeRunner).not.toContain(".first(");
