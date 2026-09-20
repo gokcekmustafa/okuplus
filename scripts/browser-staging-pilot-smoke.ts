@@ -230,6 +230,10 @@ async function assertFastViewport(page: Page, viewport: (typeof VIEWPORTS)[numbe
 }
 
 async function verifySupportAndBugReport(page: Page): Promise<void> {
+  await page.locator('#student-bottom-nav .bottom-nav-item[data-bottom-page="settings"]').click();
+  await page
+    .locator("#page-settings:not(.hidden)")
+    .waitFor({ state: "visible", timeoutMs: 10_000 });
   await page.locator("#pilot-support-open").click();
   await page.locator("#pilot-report-dialog[open]").waitFor({ state: "visible", timeoutMs: 5_000 });
   const supportText = await page.locator("#pilot-report-dialog").innerText();
