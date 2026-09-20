@@ -141,6 +141,8 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).toContain("STAGING_STUDENT_PASSWORD");
     expect(pilotSmokeRunner).toContain("#page-dashboard:not(.hidden)");
     expect(pilotSmokeRunner).toContain("#page-exercise:not(.hidden)");
+    expect(pilotSmokeRunner).toContain('[role="radio"]');
+    expect(pilotSmokeRunner).not.toContain(".check({");
     expect(pilotSmokeRunner).toContain("page.setViewportSize(viewport)");
     expect(pilotSmokeRunner).not.toContain("completePlacement");
     expect(pilotSmokeRunner).not.toContain("verifyTelemetryRuntime");
