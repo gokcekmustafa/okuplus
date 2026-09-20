@@ -50,9 +50,18 @@ function assertApiOk(result: BrowserApiResult, label: string): void {
 async function visibleUnique(page: Page, selector: string, timeoutMs = 10_000) {
   activeSelector = selector;
   const locator = page.locator(selector);
-  assert.equal(await locator.count(), 1, `selector eşleşmesi tekil değil: ${selector}`);
   await locator.waitFor({ state: "visible", timeoutMs });
+  assert.equal(await locator.count(), 1, `selector eşleşmesi tekil değil: ${selector}`);
   assert.equal(await locator.isVisible(), true, `selector görünür değil: ${selector}`);
+  return locator;
+}
+
+async function visibleAtLeastOne(page: Page, selector: string, timeoutMs = 10_000) {
+  activeSelector = selector;
+  const locator = page.locator(`${selector}:visible`);
+  await locator.nth(0).waitFor({ state: "visible", timeoutMs });
+  assert.ok((await locator.count()) >= 1, `görünür selector eşleşmesi yok: ${selector}`);
+  assert.equal(await locator.nth(0).isVisible(), true, `selector görünür değil: ${selector}`);
   return locator;
 }
 
@@ -118,17 +127,13 @@ async function readQuestionState(page: Page): Promise<QuestionState> {
 async function selectAnswer(page: Page, question: QuestionState): Promise<void> {
   if (question.type === "MULTIPLE_CHOICE") {
     const selector = '#exercise-current-question [role="radio"]';
-    const radios = page.locator(selector);
-    activeSelector = selector;
-    assert.ok((await radios.count()) >= 1, `visible answer cards missing: ${selector}`);
+    const radios = await visibleAtLeastOne(page, selector, REQUEST_TIMEOUT_MS);
     await radios.nth(0).click();
     return;
   }
   if (question.type === "TRUE_FALSE") {
     const selector = '#exercise-current-question [role="radio"]';
-    const radios = page.locator(selector);
-    activeSelector = selector;
-    assert.ok((await radios.count()) >= 1, `visible answer cards missing: ${selector}`);
+    const radios = await visibleAtLeastOne(page, selector, REQUEST_TIMEOUT_MS);
     await radios.nth(0).click();
     return;
   }
@@ -137,18 +142,16 @@ async function selectAnswer(page: Page, question: QuestionState): Promise<void> 
     await answer.fill("Metindeki kanıta dayalı kısa yanıt.");
     return;
   }
-  const selectSelector = "#exercise-current-question select[data-exercise-match-left]";
-  const selects = page.locator(selectSelector);
-  activeSelector = selectSelector;
-  if ((await selects.count()) > 0) {
+  if (question.type === "MATCHING") {
+    const selectSelector = "#exercise-current-question select[data-exercise-match-left]";
+    const selects = await visibleAtLeastOne(page, selectSelector, REQUEST_TIMEOUT_MS);
     for (let index = 0; index < (await selects.count()); index += 1)
       await selects.nth(index).selectOption({ index: 1 });
     return;
   }
-  const blankSelector = "#exercise-current-question input[data-exercise-blank]";
-  const blanks = page.locator(blankSelector);
-  activeSelector = blankSelector;
-  if ((await blanks.count()) > 0) {
+  if (question.type === "FILL_BLANK") {
+    const blankSelector = "#exercise-current-question input[data-exercise-blank]";
+    const blanks = await visibleAtLeastOne(page, blankSelector, REQUEST_TIMEOUT_MS);
     for (let index = 0; index < (await blanks.count()); index += 1)
       await blanks.nth(index).fill("gözlem");
     return;

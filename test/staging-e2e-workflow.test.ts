@@ -78,8 +78,11 @@ describe("staging authenticated E2E workflow contract", () => {
   });
 
   it("uses unique login fields in the closure browser smoke", () => {
-    expect(closureRunner).toContain('page.locator("#login-email").fill(EMAIL)');
-    expect(closureRunner).toContain('page.locator("#login-password").fill(PASSWORD)');
+    expect(closureRunner).toContain("emailInput.fill(EMAIL)");
+    expect(closureRunner).toContain("passwordInput.fill(PASSWORD)");
+    expect(closureRunner).toContain('emailInput.waitFor({ state: "visible"');
+    expect(closureRunner).toContain('passwordInput.waitFor({ state: "visible"');
+    expect(closureRunner).toContain('loginButton.waitFor({ state: "visible"');
     expect(closureRunner).not.toContain('getByLabel("E-posta"');
     expect(closureRunner).not.toContain('getByLabel("Şifre"');
     expect(closureRunner).not.toContain("console.log(PASSWORD");
@@ -150,6 +153,7 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).toContain("STAGING_STUDENT_PASSWORD");
     expect(pilotSmokeRunner).toContain('"#page-dashboard"');
     expect(pilotSmokeRunner).toContain('"#page-exercise"');
+    expect(pilotSmokeRunner).toContain("async function visibleAtLeastOne");
     expect(pilotSmokeRunner).toContain('[role="radio"]');
     expect(pilotSmokeRunner).not.toContain(".check({");
     expect(pilotSmokeRunner).not.toContain(".first(");
@@ -159,5 +163,14 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).not.toContain("page.reload");
     expect(pilotSmokeRunner).not.toContain("provision-staging-release-0-5-e2e.ts");
     expect((pilotSmokeRunner.match(/await timed\("login"/gu) ?? []).length).toBe(1);
+    const visibleWait = pilotSmokeRunner.indexOf(
+      'await locator.waitFor({ state: "visible", timeoutMs });',
+    );
+    const uniqueCount = pilotSmokeRunner.indexOf("assert.equal(await locator.count(), 1,");
+    expect(visibleWait).toBeGreaterThanOrEqual(0);
+    expect(uniqueCount).toBeGreaterThan(visibleWait);
+    expect(pilotSmokeRunner).toContain(
+      'await locator.nth(0).waitFor({ state: "visible", timeoutMs });',
+    );
   });
 });

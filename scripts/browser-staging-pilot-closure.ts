@@ -32,14 +32,20 @@ export async function waitForStudentApp(page: Page): Promise<void> {
 
 export async function login(page: Page): Promise<void> {
   await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded", timeout: 30000 });
-  await page.locator("#login-email").fill(EMAIL);
-  await page.locator("#login-password").fill(PASSWORD);
+  const emailInput = page.locator("#login-email");
+  const passwordInput = page.locator("#login-password");
+  await emailInput.waitFor({ state: "visible", timeout: 30_000 });
+  await passwordInput.waitFor({ state: "visible", timeout: 30_000 });
+  await emailInput.fill(EMAIL);
+  await passwordInput.fill(PASSWORD);
   const response = page.waitForResponse(
     (candidate) =>
       candidate.url().endsWith("/auth/login") && candidate.request().method() === "POST",
     { timeout: 30000 },
   );
-  await page.getByRole("button", { name: "Giriş yap", exact: true }).click();
+  const loginButton = page.getByRole("button", { name: "Giriş yap", exact: true });
+  await loginButton.waitFor({ state: "visible", timeout: 30_000 });
+  await loginButton.click();
   assert.equal((await response).status(), 200, "staging login failed");
   await waitForStudentApp(page);
 }
