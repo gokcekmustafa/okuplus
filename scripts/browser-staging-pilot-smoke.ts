@@ -26,6 +26,9 @@ type QuestionState = {
 };
 type StepTiming = { name: string; durationMs: number };
 
+let activeTimings: StepTiming[] = [];
+let activeStartedAt = 0;
+
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -90,15 +93,11 @@ async function readQuestionState(page: Page): Promise<QuestionState> {
 
 async function selectAnswer(page: Page, question: QuestionState): Promise<void> {
   if (question.type === "MULTIPLE_CHOICE") {
-    await page.locator("#exercise-current-question input[data-exercise-opt]").first().check({
-      force: true,
-    });
+    await page.locator('#exercise-current-question [role="radio"]').first().click();
     return;
   }
   if (question.type === "TRUE_FALSE") {
-    await page.locator("#exercise-current-question input[data-exercise-tf]").first().check({
-      force: true,
-    });
+    await page.locator('#exercise-current-question [role="radio"]').first().click();
     return;
   }
   if (question.type === "OPEN_ENDED") {
@@ -249,6 +248,8 @@ async function verifySupportAndBugReport(page: Page): Promise<void> {
 async function main(): Promise<void> {
   const startedAt = Date.now();
   const timings: StepTiming[] = [];
+  activeStartedAt = startedAt;
+  activeTimings = timings;
   const timed = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
     const stepStartedAt = Date.now();
     try {
@@ -336,8 +337,20 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "fast pilot smoke failed";
+  const totalDurationMs = activeStartedAt ? Date.now() - activeStartedAt : 0;
+  const slowStages = activeTimings
+    .filter((timing) => timing.durationMs > 10_000)
+    .map((timing) => timing.name);
   console.error(
-    JSON.stringify({ status: "FAIL", message: message.slice(0, 240), productionTouched: "NO" }),
+    JSON.stringify({
+      status: "FAIL",
+      message: message.slice(0, 240),
+      totalDurationMs,
+      stepDurations: activeTimings,
+      slowStages,
+      productionTouched: "NO",
+      fullE2e: "NOT_RUN",
+    }),
   );
   process.exitCode = 1;
 });
