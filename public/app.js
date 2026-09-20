@@ -1524,6 +1524,29 @@ function renderReviewCard(review) {
   }
 }
 
+function learningPathStatusLabel(status) {
+  return (
+    {
+      completed: "Tamamlandı",
+      active: "Şimdi devam et",
+      available: "Sıradaki adım",
+      locked: "Kilitli",
+    }[status] || "Öğrenme adımı"
+  );
+}
+
+function learningPathNodeMeta(progress) {
+  if (!progress) return "";
+  const facts = [];
+  if (Number.isFinite(progress.sessionCount)) {
+    facts.push(`${progress.sessionCount} çalışma`);
+  }
+  if (Number.isFinite(progress.accuracy)) {
+    facts.push(`Başarı ${formatAccuracy(progress.accuracy)}`);
+  }
+  return facts.join(" · ");
+}
+
 async function loadLearningPath() {
   var container = $("learning-path");
   var progEl = $("learning-path-progress");
@@ -1572,27 +1595,49 @@ async function loadLearningPath() {
               : n.status === "active"
                 ? "▶"
                 : "○";
-        var label = n.label || n.code;
+        var label = n.label || n.code || "Öğrenme adımı";
+        var statusLabel = learningPathStatusLabel(n.status);
+        var meta = learningPathNodeMeta(n.progress);
         var disabled = n.status === "locked" ? " disabled" : "";
-        var aria = label + " - " + n.status;
+        var current = n.isCurrent ? ' aria-current="step"' : "";
+        var aria = label + " - " + statusLabel;
+        var actionLabel =
+          n.status === "active"
+            ? "Devam et"
+            : n.status === "available"
+              ? "Başla"
+              : n.status === "completed"
+                ? "Tekrar et"
+                : "Aç";
         return (
+          '<div class="path-node-item ' +
+          escapeHtml(n.status) +
+          (n.isCurrent ? " is-current" : "") +
+          '" role="listitem">' +
           '<button type="button" class="path-node ' +
-          n.status +
+          escapeHtml(n.status) +
           '" data-node-id="' +
-          n.id +
+          escapeHtml(n.id) +
           '" data-node-type="' +
-          n.type +
+          escapeHtml(n.type) +
           '" data-template="' +
-          (n.templateVersionId || "") +
+          escapeHtml(n.templateVersionId || "") +
           '" aria-label="' +
           escapeHtml(aria) +
           '"' +
+          current +
           disabled +
-          '><span aria-hidden="true">' +
+          '><span class="path-node-marker" aria-hidden="true">' +
           icon +
+          '</span><span class="path-node-copy"><span class="path-node-status">' +
+          escapeHtml(statusLabel) +
           '</span><span class="path-node-label">' +
           escapeHtml(label) +
-          "</span></button>"
+          "</span>" +
+          (meta ? '<span class="path-node-meta">' + escapeHtml(meta) + "</span>" : "") +
+          '</span><span class="path-node-action" aria-hidden="true">' +
+          (n.status === "locked" ? "🔒" : escapeHtml(actionLabel) + " →") +
+          "</span></button></div>"
         );
       })
       .join("");

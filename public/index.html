@@ -603,21 +603,19 @@
               <div id="review-items" class="review-items" aria-live="polite"></div>
             </section>
 
-            <div
-              id="learning-path-card"
-              class="card"
-              data-student
-              style="padding: 16px; margin-top: 16px"
-            >
-              <div style="display: flex; justify-content: space-between; align-items: center">
-                <h3 style="margin: 0">Öğrenme Yolu</h3>
-                <span id="learning-path-progress" class="muted" style="font-size: 12px"></span>
+            <div id="learning-path-card" class="card learning-path-card" data-student>
+              <div class="learning-path-heading">
+                <div>
+                  <p class="learning-path-eyebrow">ADIM ADIM İLERLE</p>
+                  <h3>Öğrenme Yolu</h3>
+                  <div id="learning-path-level" class="learning-path-level muted"></div>
+                </div>
+                <span
+                  id="learning-path-progress"
+                  class="learning-path-progress"
+                  aria-live="polite"
+                ></span>
               </div>
-              <div
-                id="learning-path-level"
-                class="muted"
-                style="font-size: 13px; margin: 6px 0 12px"
-              ></div>
               <div
                 id="learning-path"
                 class="learning-path"
