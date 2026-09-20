@@ -8,37 +8,37 @@ const styles = readFileSync("public/styles.css", "utf8");
 describe("student dashboard release 0.4", () => {
   it("uses real student APIs for the dashboard summary", () => {
     expect(app).toContain('fetch("/student/today"');
-    expect(app).toContain('insightApi("progress")');
+    expect(app).toContain("async function insightApi(path)");
+    expect(app).toContain(
+      'const paths = ["progress", "gamification", "history?page=1&pageSize=5", "learning-path"];',
+    );
     expect(app).toContain('fetch("/student/learning-path"');
     expect(app).toContain('fetch("/account/entitlements"');
-    expect(app).toContain("function renderDashboardProgress(data)");
-    expect(app).toContain("summary.sessionCount");
+    expect(app).toContain("function renderTrainingHome(data)");
+    expect(app).toContain("summary?.sessionCount");
   });
 
   it("keeps empty or unmeasurable progress honest", () => {
+    expect(app).toContain("formatAccuracy(summary?.accuracy)");
     expect(app).toContain(
-      '"İlk tamamlanan antrenmanından sonra gerçek gelişim verilerin burada görünecek."',
+      "Tamamlanan oturumların tüm cevapları. Doğruluk yalnızca puanlanan cevaplar üzerinden hesaplanır.",
     );
-    expect(app).toContain('lastAccuracy === null ? "—" : formatAccuracy(lastAccuracy)');
-    expect(app).toContain("formatDashboardDuration(averageTime)");
-    expect(app).toContain(
-      '"Doğruluk yalnızca puanlanan cevaplardan hesaplanır; ölçülemeyen değerler boş bırakılır."',
-    );
+    expect(app).toContain("summary.scoredCount");
   });
 
   it("shows quota, next step, recent activity and accessible responsive states", () => {
-    expect(index).toContain('id="daily-training-quota"');
-    expect(index).toContain('id="dashboard-progress-card"');
-    expect(index).toContain('id="dashboard-recent-list"');
-    expect(app).toContain("Önerilen sonraki adım");
-    expect(app).toContain("Günlük soru hakkın doldu; tamamlanmayan adımlar yarına kalabilir.");
-    expect(app).toContain("learningPathLabel(n)");
-    expect(styles).toContain(".dashboard-progress-grid");
+    expect(index).toContain('id="today-card"');
+    expect(index).toContain('id="home-insights"');
+    expect(app).toContain("renderTrainingHome(data)");
+    expect(app).toContain("renderHomeInsights(data)");
+    expect(app).toContain("data.nextAction");
+    expect(styles).toContain(".training-home-card");
     expect(styles).toContain("@media (max-width: 700px)");
     expect(index).toContain('aria-live="polite"');
   });
 
   it("does not flash the dashboard while student onboarding is being resolved", () => {
-    expect(app).toContain('navigate("onboarding");\n    void maybeShowOnboarding();');
+    expect(app).toContain('if (isPlatform) {\n    navigate("dashboard");');
+    expect(app).toContain("} else {\n    void maybeShowOnboarding();");
   });
 });
