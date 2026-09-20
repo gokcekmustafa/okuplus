@@ -28,6 +28,9 @@ type StepTiming = { name: string; durationMs: number };
 
 let activeTimings: StepTiming[] = [];
 let activeStartedAt = 0;
+let activeStage = "startup";
+let activeSelector = "";
+let activePage: Page | null = null;
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -42,6 +45,26 @@ function safeErrorMessage(result: BrowserApiResult): string {
 
 function assertApiOk(result: BrowserApiResult, label: string): void {
   if (result.status !== 200) throw new Error(`${label} başarısız (${safeErrorMessage(result)})`);
+}
+
+async function visibleUnique(page: Page, selector: string, timeoutMs = 10_000) {
+  activeSelector = selector;
+  const locator = page.locator(selector);
+  assert.equal(await locator.count(), 1, `selector eşleşmesi tekil değil: ${selector}`);
+  await locator.waitFor({ state: "visible", timeoutMs });
+  assert.equal(await locator.isVisible(), true, `selector görünür değil: ${selector}`);
+  return locator;
+}
+
+async function goToStudentPage(
+  page: Page,
+  pageName: "dashboard" | "exercise" | "settings",
+  expectedSelector: string,
+): Promise<void> {
+  const navSelector = `#student-bottom-nav .bottom-nav-item[data-bottom-page="${pageName}"]`;
+  const nav = await visibleUnique(page, navSelector, 5_000);
+  await nav.click();
+  await visibleUnique(page, expectedSelector, REQUEST_TIMEOUT_MS);
 }
 
 async function browserApi(page: Page, path: string): Promise<BrowserApiResult> {
@@ -73,6 +96,7 @@ async function browserApi(page: Page, path: string): Promise<BrowserApiResult> {
 }
 
 async function readQuestionState(page: Page): Promise<QuestionState> {
+  activeSelector = "#exercise-current-question";
   return page.evaluate(() => {
     const container = document.getElementById("exercise-current-question");
     if (!container) throw new Error("exercise question container missing");
@@ -93,26 +117,37 @@ async function readQuestionState(page: Page): Promise<QuestionState> {
 
 async function selectAnswer(page: Page, question: QuestionState): Promise<void> {
   if (question.type === "MULTIPLE_CHOICE") {
-    await page.locator('#exercise-current-question [role="radio"]').first().click();
+    const selector = '#exercise-current-question [role="radio"]';
+    const radios = page.locator(selector);
+    activeSelector = selector;
+    assert.ok((await radios.count()) >= 1, `visible answer cards missing: ${selector}`);
+    await radios.nth(0).click();
     return;
   }
   if (question.type === "TRUE_FALSE") {
-    await page.locator('#exercise-current-question [role="radio"]').first().click();
+    const selector = '#exercise-current-question [role="radio"]';
+    const radios = page.locator(selector);
+    activeSelector = selector;
+    assert.ok((await radios.count()) >= 1, `visible answer cards missing: ${selector}`);
+    await radios.nth(0).click();
     return;
   }
   if (question.type === "OPEN_ENDED") {
-    await page
-      .locator("#exercise-current-question #exercise-oe-answer")
-      .fill("Metindeki kanıta dayalı kısa yanıt.");
+    const answer = await visibleUnique(page, "#exercise-current-question #exercise-oe-answer");
+    await answer.fill("Metindeki kanıta dayalı kısa yanıt.");
     return;
   }
-  const selects = page.locator("#exercise-current-question select[data-exercise-match-left]");
+  const selectSelector = "#exercise-current-question select[data-exercise-match-left]";
+  const selects = page.locator(selectSelector);
+  activeSelector = selectSelector;
   if ((await selects.count()) > 0) {
     for (let index = 0; index < (await selects.count()); index += 1)
       await selects.nth(index).selectOption({ index: 1 });
     return;
   }
-  const blanks = page.locator("#exercise-current-question input[data-exercise-blank]");
+  const blankSelector = "#exercise-current-question input[data-exercise-blank]";
+  const blanks = page.locator(blankSelector);
+  activeSelector = blankSelector;
   if ((await blanks.count()) > 0) {
     for (let index = 0; index < (await blanks.count()); index += 1)
       await blanks.nth(index).fill("gözlem");
@@ -151,26 +186,24 @@ async function assertNoOverflow(page: Page, viewport: (typeof VIEWPORTS)[number]
     criticalControls.every((control) => control.width >= 44 && control.height >= 44),
     `critical touch target failure at ${viewport.width}px`,
   );
-  assert.doesNotMatch(
-    await page.locator("body").innerText(),
-    /stack trace|database_url|at object\.|node_modules/i,
-  );
+  activeSelector = "body";
+  const visibleText = await page.locator("body").innerText();
+  assert.doesNotMatch(visibleText, /stack trace|database_url|at object\.|node_modules/i);
 }
 
 async function waitForDashboard(page: Page): Promise<void> {
-  await page
-    .locator("#page-dashboard:not(.hidden)")
-    .waitFor({ state: "visible", timeoutMs: 10_000 });
-  await page.locator("#today-card").waitFor({ state: "visible", timeoutMs: 10_000 });
+  await visibleUnique(page, "#page-dashboard:not(.hidden)");
+  await visibleUnique(page, "#today-card");
+  await visibleUnique(page, "#start-daily-training");
+  activeSelector = '#start-daily-training[data-today-loaded="true"]';
   await page.waitForFunction(
     () => document.getElementById("start-daily-training")?.dataset.todayLoaded === "true",
     { timeoutMs: REQUEST_TIMEOUT_MS },
   );
-  assert.equal(await page.locator("#start-daily-training").isVisible(), true);
 }
 
 async function runOneExercise(page: Page): Promise<void> {
-  const startButton = page.locator("#start-daily-training");
+  const startButton = await visibleUnique(page, "#start-daily-training");
   assert.equal(await startButton.isEnabled(), true, "daily training CTA is not ready");
   const startResponse = page.waitForResponse(
     (response) =>
@@ -178,14 +211,15 @@ async function runOneExercise(page: Page): Promise<void> {
       response.request().method() === "POST",
     { timeout: REQUEST_TIMEOUT_MS },
   );
+  activeSelector = "#start-daily-training";
   await startButton.click();
   assert.equal((await startResponse).status(), 200, "daily training start failed");
-  await page
-    .locator("#page-exercise:not(.hidden)")
-    .waitFor({ state: "visible", timeoutMs: REQUEST_TIMEOUT_MS });
-  await page
-    .locator("#exercise-current-question[data-question-version-id]")
-    .waitFor({ state: "visible", timeoutMs: REQUEST_TIMEOUT_MS });
+  await visibleUnique(page, "#page-exercise:not(.hidden)", REQUEST_TIMEOUT_MS);
+  await visibleUnique(
+    page,
+    "#exercise-current-question[data-question-version-id]",
+    REQUEST_TIMEOUT_MS,
+  );
 
   const question = await readQuestionState(page);
   assert.equal(question.hasAnswerControl, true, "exercise answer control missing");
@@ -196,56 +230,65 @@ async function runOneExercise(page: Page): Promise<void> {
       response.request().method() === "POST",
     { timeout: REQUEST_TIMEOUT_MS },
   );
-  await page.locator("#exercise-submit-attempt").click();
+  const submit = await visibleUnique(page, "#exercise-submit-attempt");
+  activeSelector = "#exercise-submit-attempt";
+  await submit.click();
   assert.equal((await answerResponse).status(), 200, "exercise answer failed");
-  await page
-    .locator("#exercise-attempt-feedback")
-    .waitFor({ state: "visible", timeoutMs: REQUEST_TIMEOUT_MS });
+  await visibleUnique(page, "#exercise-attempt-feedback", REQUEST_TIMEOUT_MS);
   assert.ok((await page.locator("#exercise-attempt-feedback").innerText()).trim());
 }
 
 async function assertFastViewport(page: Page, viewport: (typeof VIEWPORTS)[number]): Promise<void> {
   await page.setViewportSize(viewport);
 
-  await page.locator('#student-bottom-nav .bottom-nav-item[data-bottom-page="dashboard"]').click();
+  await goToStudentPage(page, "dashboard", "#page-dashboard:not(.hidden)");
   await waitForDashboard(page);
   await assertNoOverflow(page, viewport);
 
-  await page.locator('#student-bottom-nav .bottom-nav-item[data-bottom-page="exercise"]').click();
-  await page
-    .locator("#page-exercise:not(.hidden)")
-    .waitFor({ state: "visible", timeoutMs: REQUEST_TIMEOUT_MS });
-  await page
-    .locator("#exercise-current-question[data-question-version-id]")
-    .waitFor({ state: "visible", timeoutMs: REQUEST_TIMEOUT_MS });
+  await goToStudentPage(page, "exercise", "#page-exercise:not(.hidden)");
+  await visibleUnique(
+    page,
+    "#exercise-current-question[data-question-version-id]",
+    REQUEST_TIMEOUT_MS,
+  );
   await assertNoOverflow(page, viewport);
 
-  await page.locator('#student-bottom-nav .bottom-nav-item[data-bottom-page="settings"]').click();
-  await page
-    .locator("#page-settings:not(.hidden)")
-    .waitFor({ state: "visible", timeoutMs: 10_000 });
-  await page.locator("#pilot-support-open").waitFor({ state: "visible", timeoutMs: 5_000 });
-  await page.locator("#pilot-bug-open").waitFor({ state: "visible", timeoutMs: 5_000 });
+  await goToStudentPage(page, "settings", "#page-settings:not(.hidden)");
+  await visibleUnique(page, "#pilot-support-open", 5_000);
+  await visibleUnique(page, "#pilot-bug-open", 5_000);
   await assertNoOverflow(page, viewport);
 }
 
 async function verifySupportAndBugReport(page: Page): Promise<void> {
-  await page.locator('#student-bottom-nav .bottom-nav-item[data-bottom-page="settings"]').click();
-  await page
-    .locator("#page-settings:not(.hidden)")
-    .waitFor({ state: "visible", timeoutMs: 10_000 });
-  await page.locator("#pilot-support-open").click();
-  await page.locator("#pilot-report-dialog[open]").waitFor({ state: "visible", timeoutMs: 5_000 });
+  await goToStudentPage(page, "settings", "#page-settings:not(.hidden)");
+  const supportButton = await visibleUnique(page, "#pilot-support-open", 5_000);
+  activeSelector = "#pilot-support-open";
+  await supportButton.click();
+  await visibleUnique(page, "#pilot-report-dialog[open]", 5_000);
+  await visibleUnique(page, "#pilot-report-category", 5_000);
+  await visibleUnique(page, "#pilot-report-message", 5_000);
+  const supportSubmit = await visibleUnique(page, "#pilot-report-submit", 5_000);
+  assert.equal(await supportSubmit.isEnabled(), true, "support form submit control is disabled");
   const supportText = await page.locator("#pilot-report-dialog").innerText();
   assert.doesNotMatch(supportText, /stack trace|database_url|at object\.|node_modules/i);
-  await page.locator("#pilot-report-close").click();
+  const closeSupport = await visibleUnique(page, "#pilot-report-close", 5_000);
+  await closeSupport.click();
+  activeSelector = "#pilot-report-dialog[open]";
   await page.locator("#pilot-report-dialog[open]").waitFor({ state: "hidden", timeoutMs: 5_000 });
 
-  await page.locator("#pilot-bug-open").click();
-  await page.locator("#pilot-report-dialog[open]").waitFor({ state: "visible", timeoutMs: 5_000 });
+  const bugButton = await visibleUnique(page, "#pilot-bug-open", 5_000);
+  activeSelector = "#pilot-bug-open";
+  await bugButton.click();
+  await visibleUnique(page, "#pilot-report-dialog[open]", 5_000);
+  await visibleUnique(page, "#pilot-report-category", 5_000);
+  await visibleUnique(page, "#pilot-report-message", 5_000);
+  const bugSubmit = await visibleUnique(page, "#pilot-report-submit", 5_000);
+  assert.equal(await bugSubmit.isEnabled(), true, "bug report submit control is disabled");
   const bugText = await page.locator("#pilot-report-dialog").innerText();
   assert.doesNotMatch(bugText, /stack trace|database_url|at object\.|node_modules/i);
-  await page.locator("#pilot-report-close").click();
+  const closeBug = await visibleUnique(page, "#pilot-report-close", 5_000);
+  await closeBug.click();
+  activeSelector = "#pilot-report-dialog[open]";
   await page.locator("#pilot-report-dialog[open]").waitFor({ state: "hidden", timeoutMs: 5_000 });
 }
 
@@ -255,6 +298,7 @@ async function main(): Promise<void> {
   activeStartedAt = startedAt;
   activeTimings = timings;
   const timed = async <T>(name: string, action: () => Promise<T>): Promise<T> => {
+    activeStage = name;
     const stepStartedAt = Date.now();
     try {
       return await action();
@@ -274,6 +318,7 @@ async function main(): Promise<void> {
   const requestCounts = new Map<string, number>();
   try {
     const page = await browser.newPage({ viewport: VIEWPORTS[0] });
+    activePage = page;
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
@@ -288,8 +333,10 @@ async function main(): Promise<void> {
       requestCounts.set(key, (requestCounts.get(key) ?? 0) + 1);
     });
 
+    activeSelector = '#login-email, #login-password, button[aria-label="Giriş yap"]';
     await timed("login", () => login(page));
     await timed("authMe", async () => {
+      activeSelector = "/auth/me";
       const result = await browserApi(page, "/auth/me");
       assertApiOk(result, "auth/me");
     });
@@ -310,6 +357,10 @@ async function main(): Promise<void> {
     const slowStages = timings
       .filter((timing) => timing.durationMs > 10_000)
       .map((timing) => timing.name);
+    const performanceWarnings = [
+      ...slowStages.map((stage) => `${stage}>10s`),
+      ...(totalDurationMs > 120_000 ? ["total>120s"] : []),
+    ];
     console.log(
       JSON.stringify({
         status: "PASS",
@@ -330,6 +381,7 @@ async function main(): Promise<void> {
         totalDurationMs,
         stepDurations: timings,
         slowStages,
+        performanceWarnings,
         productionTouched: "NO",
         fullE2e: "NOT_RUN",
       }),
@@ -345,13 +397,28 @@ main().catch((error: unknown) => {
   const slowStages = activeTimings
     .filter((timing) => timing.durationMs > 10_000)
     .map((timing) => timing.name);
+  const performanceWarnings = [
+    ...slowStages.map((stage) => `${stage}>10s`),
+    ...(totalDurationMs > 120_000 ? ["total>120s"] : []),
+  ];
   console.error(
     JSON.stringify({
       status: "FAIL",
       message: message.slice(0, 240),
+      failedStage: activeStage,
+      selector: activeSelector || "unknown",
+      currentRoute: (() => {
+        try {
+          return activePage ? new URL(activePage.url()).pathname : "unknown";
+        } catch {
+          return "unknown";
+        }
+      })(),
+      errorType: error instanceof Error ? error.name : typeof error,
       totalDurationMs,
       stepDurations: activeTimings,
       slowStages,
+      performanceWarnings,
       productionTouched: "NO",
       fullE2e: "NOT_RUN",
     }),

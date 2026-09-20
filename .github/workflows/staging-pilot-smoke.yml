@@ -167,6 +167,13 @@ jobs:
             totalDurationMs: Number(result.totalDurationMs ?? 0),
             stepDurations: Array.isArray(result.stepDurations) ? result.stepDurations : [],
             slowStages: Array.isArray(result.slowStages) ? result.slowStages : [],
+            performanceWarnings: Array.isArray(result.performanceWarnings) ? result.performanceWarnings : [],
+            failedStage: typeof result.failedStage === "string" ? result.failedStage : null,
+            selector: typeof result.selector === "string" ? result.selector.slice(0, 200) : null,
+            currentRoute: typeof result.currentRoute === "string" && result.currentRoute.startsWith("/")
+              ? result.currentRoute.slice(0, 120)
+              : null,
+            errorType: typeof result.errorType === "string" ? result.errorType : null,
             error: typeof result.message === "string" ? redact(result.message) : null,
             productionTouched: "NO",
             fullE2e: "NOT_RUN",
@@ -180,6 +187,11 @@ jobs:
           console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
           console.log(`totalDurationMs=${safe.totalDurationMs}`);
           console.log(`slowStages=${safe.slowStages.join(",") || "none"}`);
+          console.log(`performanceWarnings=${safe.performanceWarnings.join(",") || "none"}`);
+          console.log(`failedStage=${safe.failedStage ?? "none"}`);
+          console.log(`selector=${safe.selector ?? "none"}`);
+          console.log(`currentRoute=${safe.currentRoute ?? "unknown"}`);
+          console.log(`errorType=${safe.errorType ?? "unknown"}`);
           console.log("fullE2E=NOT_RUN");
           if (safe.error) console.log(`pilotSmoke.error=${safe.error}`);
           const duration = Math.max(0, Number(process.env.SMOKE_DURATION_SECONDS ?? 0));

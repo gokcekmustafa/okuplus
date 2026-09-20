@@ -124,6 +124,11 @@ describe("staging authenticated E2E workflow contract", () => {
       "start-daily-training",
       "exercise-submit-attempt",
       "answerFeedback",
+      "student-bottom-nav",
+      "data-bottom-page",
+      "pilot-report-category",
+      "pilot-report-message",
+      "pilot-report-submit",
       "pilot-support-open",
       "pilot-bug-open",
       "320",
@@ -133,6 +138,10 @@ describe("staging authenticated E2E workflow contract", () => {
       'productionTouched: "NO"',
       "stepDurations",
       "slowStages",
+      "performanceWarnings",
+      "failedStage",
+      "currentRoute",
+      "errorType",
     ]) {
       expect(pilotSmokeWorkflow + pilotSmokeRunner + closureRunner).toContain(marker);
     }
@@ -143,6 +152,7 @@ describe("staging authenticated E2E workflow contract", () => {
     expect(pilotSmokeRunner).toContain("#page-exercise:not(.hidden)");
     expect(pilotSmokeRunner).toContain('[role="radio"]');
     expect(pilotSmokeRunner).not.toContain(".check({");
+    expect(pilotSmokeRunner).not.toContain(".first(");
     expect(pilotSmokeRunner).toContain("page.setViewportSize(viewport)");
     expect(pilotSmokeRunner).not.toContain("completePlacement");
     expect(pilotSmokeRunner).not.toContain("verifyTelemetryRuntime");
