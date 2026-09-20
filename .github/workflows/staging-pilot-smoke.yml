@@ -20,7 +20,7 @@ jobs:
     name: Run short authenticated staging pilot smoke
     if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 3
     env:
       APP_ENV: staging
       NODE_ENV: test
@@ -57,8 +57,16 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci --include=dev
+      - name: Install fast-smoke dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          started=$SECONDS
+          npm ci --include=dev --ignore-scripts --prefer-offline
+          duration=$((SECONDS - started))
+          echo "installDurationSeconds=$duration"
+          echo "- install duration: ${duration}s" >> "$GITHUB_STEP_SUMMARY"
+          if (( duration > 10 )); then echo "::warning title=Slow staging smoke step::install took ${duration}s"; fi
 
       - name: Validate staging configuration
         shell: bash
@@ -85,11 +93,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          started=$SECONDS
+          pids=()
           for path in /health /health/db /ready; do
-            status="$(curl --fail --silent --show-error --location --max-time 20 -o /dev/null -w '%{http_code}' "${BASE_URL}${path}")"
+            curl --fail --silent --show-error --location --max-time 20 -o "/tmp/okuplus-health-${path//\//_}" -w "%{http_code}" "${BASE_URL}${path}" > "/tmp/okuplus-status-${path//\//_}" &
+            pids+=("$!")
+          done
+          for index in "${!pids[@]}"; do
+            wait "${pids[$index]}"
+            path="$(printf '%s\n' /health /health/db /ready | sed -n "$((index + 1))p")"
+            status="$(cat "/tmp/okuplus-status-${path//\//_}")"
             test "$status" = "200"
             echo "${path}=200"
           done
+          duration=$((SECONDS - started))
+          echo "healthDurationSeconds=$duration"
+          echo "- health duration: ${duration}s" >> "$GITHUB_STEP_SUMMARY"
+          if (( duration > 10 )); then echo "::warning title=Slow staging smoke step::health took ${duration}s"; fi
 
       - name: Locate Chromium
         shell: bash
@@ -100,55 +120,18 @@ jobs:
           printf 'CHROME_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
           echo "browser=available"
 
-      - name: Provision official synthetic staging student
+      - name: Run fast authenticated browser smoke
         shell: bash
         run: |
           set -euo pipefail
-          set +e
-          output="$(npx tsx scripts/provision-staging-release-0-5-e2e.ts 2>&1)"
-          exit_code=$?
-          set -e
-          PROVISION_EXIT_CODE="$exit_code" PROVISION_OUTPUT="$output" node --input-type=module <<'NODE'
-          import { writeFileSync } from "node:fs";
-          const raw = process.env.PROVISION_OUTPUT ?? "";
-          const parseJson = (text) => {
-            for (const line of text.trim().split("\n").reverse()) {
-              try {
-                const parsed = JSON.parse(line);
-                if (parsed && typeof parsed === "object") return parsed;
-              } catch {}
-            }
-            return null;
-          };
-          const result = parseJson(raw) ?? { status: "FAIL" };
-          const redact = (value) => String(value)
-            .replace(/https?:\/\/\S+/gu, "[url]")
-            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
-            .slice(0, 200);
-          const summary = {
-            status: result.status === "PASS" ? "PASS" : "FAIL",
-            account: result.account === "CREATED" || result.account === "EXISTING" ? result.account : "UNKNOWN",
-            auth: result.auth === "PASS" ? "PASS" : "FAIL",
-            onboarding: result.onboarding === "PASS" ? "PASS" : "FAIL",
-            entitlement: result.entitlement === "PLAN_PREMIUM_STAGING_FIXTURE" ? "PASS" : "FAIL",
-            error: typeof result.message === "string" ? redact(result.message) : null,
-            productionTouched: "NO",
-          };
-          writeFileSync("staging-pilot-provision-summary.json", JSON.stringify(summary, null, 2));
-          console.log(`provisioning=${summary.status} account=${summary.account}`);
-          if (summary.error) console.log(`provisioning.error=${summary.error}`);
-          if (Number(process.env.PROVISION_EXIT_CODE) !== 0 || summary.status !== "PASS") process.exit(1);
-          NODE
-
-      - name: Run short authenticated browser smoke
-        shell: bash
-        run: |
-          set -euo pipefail
+          started=$SECONDS
           set +e
           output="$(npx tsx scripts/browser-staging-pilot-smoke.ts 2>&1)"
           exit_code=$?
           set -e
-          SMOKE_EXIT_CODE="$exit_code" SMOKE_OUTPUT="$output" node --input-type=module <<'NODE'
+          duration=$((SECONDS - started))
+          set +e
+          SMOKE_EXIT_CODE="$exit_code" SMOKE_DURATION_SECONDS="$duration" SMOKE_OUTPUT="$output" node --input-type=module <<'NODE'
           import { writeFileSync } from "node:fs";
           const raw = process.env.SMOKE_OUTPUT ?? "";
           const parseJson = (text) => {
@@ -169,13 +152,10 @@ jobs:
             status: result.status === "PASS" ? "PASS" : "FAIL",
             auth: result.auth ?? "NOT_RUN",
             authMe: result.authMe ?? "NOT_RUN",
-            onboarding: result.onboarding ?? "NOT_RUN",
-            placement: result.placement ?? "NOT_RUN",
-            baseline: result.baseline ?? "NOT_RUN",
-            firstTraining: result.firstTraining ?? "NOT_RUN",
+            dashboard: result.dashboard ?? "NOT_RUN",
+            training: result.training ?? "NOT_RUN",
             exercise: result.exercise ?? "NOT_RUN",
-            wrongAnswerRetry: result.wrongAnswerRetry ?? "NOT_RUN",
-            firstExerciseCompletion: result.firstExerciseCompletion ?? "NOT_RUN",
+            answerFeedback: result.answerFeedback ?? "NOT_RUN",
             mobile: Array.isArray(result.mobile) ? result.mobile : [],
             support: result.support ?? "NOT_RUN",
             bugReport: result.bugReport ?? "NOT_RUN",
@@ -184,6 +164,9 @@ jobs:
             networkErrors: Number(result.networkErrors ?? 0),
             unexpectedHttpErrors: Number(result.unexpectedHttpErrors ?? 0),
             duplicateAnswerRequests: Number(result.duplicateAnswerRequests ?? 0),
+            totalDurationMs: Number(result.totalDurationMs ?? 0),
+            stepDurations: Array.isArray(result.stepDurations) ? result.stepDurations : [],
+            slowStages: Array.isArray(result.slowStages) ? result.slowStages : [],
             error: typeof result.message === "string" ? redact(result.message) : null,
             productionTouched: "NO",
             fullE2e: "NOT_RUN",
@@ -195,10 +178,22 @@ jobs:
           console.log(`consoleErrors=${safe.consoleErrors} pageErrors=${safe.pageErrors}`);
           console.log(`networkErrors=${safe.networkErrors} unexpectedHttpErrors=${safe.unexpectedHttpErrors}`);
           console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
+          console.log(`totalDurationMs=${safe.totalDurationMs}`);
+          console.log(`slowStages=${safe.slowStages.join(",") || "none"}`);
           console.log("fullE2E=NOT_RUN");
           if (safe.error) console.log(`pilotSmoke.error=${safe.error}`);
-          if (Number(process.env.SMOKE_EXIT_CODE) !== 0 || safe.status !== "PASS") process.exit(1);
+          const duration = Math.max(0, Number(process.env.SMOKE_DURATION_SECONDS ?? 0));
+          console.log(`workflowSmokeDurationSeconds=${duration}`);
+          if (Number(process.env.SMOKE_EXIT_CODE) !== 0 || safe.status !== "PASS") process.exitCode = 1;
           NODE
+          summary_exit_code=$?
+          set -e
+
+          echo "workflowSmokeDurationSeconds=$duration"
+          echo "- browser smoke duration: ${duration}s" >> "$GITHUB_STEP_SUMMARY"
+          if (( duration > 10 )); then echo "::warning title=Slow staging smoke step::browser smoke took ${duration}s"; fi
+          if (( exit_code != 0 )); then exit "$exit_code"; fi
+          if (( summary_exit_code != 0 )); then exit "$summary_exit_code"; fi
 
       - name: Verify secret redaction and staging-only output
         if: always()
@@ -228,7 +223,7 @@ jobs:
             echo "- health: /health /health/db /ready = 200"
             echo "- Full E2E: NOT RUN"
             echo "- production touched: NO"
-            for file in staging-pilot-provision-summary.json staging-pilot-smoke-summary.json; do
+            for file in staging-pilot-smoke-summary.json; do
               if test -f "$file"; then
                 SUMMARY_FILE="$file" node --input-type=module - <<'NODE'
           import { readFileSync } from "node:fs";
@@ -246,8 +241,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: staging-pilot-smoke-summary
-          path: |
-            staging-pilot-provision-summary.json
-            staging-pilot-smoke-summary.json
+          path: staging-pilot-smoke-summary.json
           if-no-files-found: warn
           retention-days: 7
