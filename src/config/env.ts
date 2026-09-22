@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const APP_ENV_VALUES = ["development", "test", "staging", "production"] as const;
+const VERCEL_ENV_VALUES = ["development", "preview", "production"] as const;
 const DEFAULT_DEV_JWT_SECRET = "oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef";
 
 const PLACEHOLDER_SECRET_PATTERNS = [
@@ -39,6 +40,7 @@ function isExplicitOriginAllowlist(value: string): boolean {
 const envSchema = z.object({
   APP_ENV: z.enum(APP_ENV_VALUES).default("development"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  VERCEL_ENV: z.enum(VERCEL_ENV_VALUES).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default("0.0.0.0"),
   BODY_LIMIT_BYTES: z.coerce
@@ -111,6 +113,19 @@ export type Env = z.infer<typeof envSchema>;
 export { envSchema };
 
 export type RawEnv = Record<string, string | undefined>;
+
+function resolveAppEnvironment(raw: RawEnv): RawEnv {
+  if (raw.APP_ENV !== undefined) return raw;
+
+  if (raw.VERCEL_ENV === "preview") return { ...raw, APP_ENV: "staging" };
+  if (raw.VERCEL_ENV === "production") return { ...raw, APP_ENV: "production" };
+  if (raw.VERCEL_ENV === "development") return { ...raw, APP_ENV: "development" };
+
+  // Preserve the existing local/CI test inference when Vercel is absent.
+  if (raw.NODE_ENV === "test") return { ...raw, APP_ENV: "test" };
+
+  return raw;
+}
 
 function hasStrongJwtSecret(value: string): boolean {
   if (
@@ -230,10 +245,7 @@ function validateSecurityEnvironment(env: Env): void {
 }
 
 export function parseEnv(raw: RawEnv): Env {
-  // Existing local/CI callers set NODE_ENV=test without APP_ENV. Infer only
-  // that safe test value; production and staging must remain explicit.
-  const input =
-    raw.APP_ENV === undefined && raw.NODE_ENV === "test" ? { ...raw, APP_ENV: "test" } : raw;
+  const input = resolveAppEnvironment(raw);
   const result = envSchema.safeParse(input);
   if (!result.success) {
     const issues = result.error.issues
