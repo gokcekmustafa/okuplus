@@ -5,6 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import {
   GuestDiagnosticSecurityError,
+  withNewGuestSessionContext,
   guestDatabaseUrl,
   hashGuestToken,
   withGuestDbContext,
@@ -165,5 +166,19 @@ describe("guest diagnostic security context", () => {
     await expect(
       withGuestSessionContext("guest-secret", "ANSWER", async () => undefined, expired.client),
     ).rejects.toThrow("not active");
+  });
+
+  it("yeni session context'ini server-generated ID ile CREATE olarak kurar", async () => {
+    const fake = fakeClient();
+    const expiresAt = new Date(Date.now() + 60_000);
+    const sessionId = await withNewGuestSessionContext(
+      expiresAt,
+      async (_tx, session) => session.id,
+      fake.client,
+    );
+
+    expect(sessionId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(fake.executions.flatMap((entry) => entry.values)).toContain(sessionId);
+    expect(fake.executions.flatMap((entry) => entry.values)).toContain("CREATE");
   });
 });

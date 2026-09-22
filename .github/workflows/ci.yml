@@ -83,6 +83,16 @@ jobs:
           GRANT SELECT, INSERT ON "GuestDiagnosticAnswer" TO oku_guest_app;
           GRANT SELECT, INSERT ON "GuestDiagnosticResult" TO oku_guest_app;
           GRANT SELECT ON "GuestDiagnosticRecommendationConfig" TO oku_guest_app;
+          GRANT SELECT ON "Content" TO oku_guest_app;
+          GRANT SELECT ON "ContentVersion" TO oku_guest_app;
+          GRANT SELECT ON "ContentSkill" TO oku_guest_app;
+          GRANT SELECT ON "Question" TO oku_guest_app;
+          GRANT SELECT ON "QuestionVersion" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplate" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersion" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersionContent" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersionQuestion" TO oku_guest_app;
+          GRANT SELECT ON "Skill" TO oku_guest_app;
           SQL
 
       - name: Prepare Guest Diagnostic RLS fixtures

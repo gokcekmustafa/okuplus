@@ -1,8 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { PrismaClient, type Prisma } from "@prisma/client";
 
-export type GuestDiagnosticOperation = "LOOKUP" | "CREATE" | "ANSWER" | "COMPLETE" | "EXPIRE";
+export type GuestDiagnosticOperation =
+  "LOOKUP" | "CREATE" | "READ" | "ANSWER" | "COMPLETE" | "EXPIRE";
 
 type GuestTransaction = Prisma.TransactionClient;
 
@@ -128,6 +129,10 @@ export function hashGuestToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
+export function createGuestToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
 async function assertRestrictedDatabaseRole(tx: GuestTransaction): Promise<void> {
   const rows = await tx.$queryRaw<GuestRoleRow[]>`
     SELECT current_user::text AS role_name,
@@ -171,6 +176,34 @@ async function clearGuestTokenLookupContext(tx: GuestTransaction): Promise<void>
   await tx.$executeRaw`
     SELECT set_config('app.guest_token_hash', '', true)
   `;
+}
+
+/**
+ * Establishes the CREATE context for a brand-new session. The session ID is
+ * generated inside this server-side boundary and is never accepted from the
+ * request. The caller must insert the session row and its snapshot records in
+ * the callback while the same transaction-local context is active.
+ */
+export async function withNewGuestSessionContext<T>(
+  expiresAt: Date,
+  callback: (tx: GuestTransaction, session: ValidatedGuestSession) => Promise<T>,
+  client: PrismaClient = getGuestDbClient(),
+): Promise<T> {
+  if (!Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+    throw new GuestDiagnosticSecurityError("Guest session expiry must be in the future");
+  }
+
+  const sessionId = randomUUID();
+  return client.$transaction(async (tx) => {
+    await assertRestrictedDatabaseRole(tx);
+    await setGuestContext(tx, sessionId, "CREATE");
+    const session = createValidatedGuestSession({
+      id: sessionId,
+      status: "IN_PROGRESS",
+      expiresAt,
+    });
+    return callback(tx, session);
+  });
 }
 
 /**

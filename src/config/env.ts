@@ -72,6 +72,8 @@ const envSchema = z.object({
   RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().int().min(10).max(5000).default(120),
   RATE_LIMIT_PILOT_MAX: z.coerce.number().int().min(5).max(1000).default(60),
   RATE_LIMIT_MAX_KEYS: z.coerce.number().int().min(100).max(100_000).default(10_000),
+  UPSTASH_REDIS_REST_URL: z.string().trim().default(""),
+  UPSTASH_REDIS_REST_TOKEN: z.string().trim().default(""),
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET en az 32 karakter olmalı")
