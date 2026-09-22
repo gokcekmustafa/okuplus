@@ -196,6 +196,8 @@ try {
     );
   });
 
+  maskGitHubActionsValue(sessionAToken);
+  maskGitHubActionsValue(sessionBToken);
   writeEnv(envFile, "GUEST_RLS_SESSION_A_TOKEN", sessionAToken);
   writeEnv(envFile, "GUEST_RLS_SESSION_B_TOKEN", sessionBToken);
   writeEnv(envFile, "GUEST_RLS_SESSION_A_ID", sessionAId);
@@ -240,6 +242,12 @@ function hash(value: string): string {
 
 function writeEnv(file: string, name: string, value: string): void {
   appendFileSync(file, `${name}=${value}\n`, { encoding: "utf8" });
+}
+
+function maskGitHubActionsValue(value: string): void {
+  if (process.env.GITHUB_ACTIONS === "true") {
+    process.stdout.write(`::add-mask::${value}\n`);
+  }
 }
 
 async function insertContent(
