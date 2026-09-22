@@ -720,15 +720,6 @@ async function completeInTransaction(
         orderBy: { responseOrder: "asc" },
         select: { isCorrect: true, rawScore: true, item: { select: { skillCode: true } } },
       },
-      recommendationConfig: {
-        select: {
-          recommendationThresholds: true,
-          skillSignalThresholds: true,
-          status: true,
-          enabled: true,
-          publishedAt: true,
-        },
-      },
     },
   });
   if (!row) throw notFoundError("Tanı oturumu bulunamadı");
@@ -745,13 +736,26 @@ async function completeInTransaction(
     throw validationError("Tanı sonucu için yeterli sayıda puanlanabilir cevap gerekli");
   }
 
+  // The config relation is deliberately loaded as an optional top-level row.
+  // Its RLS policy hides disabled/unpublished configs; selecting it as a
+  // required Prisma relation would turn that expected absence into a 500.
+  const recommendationConfig = await tx.guestDiagnosticRecommendationConfig.findUnique({
+    where: { id: row.recommendationConfigId },
+    select: {
+      recommendationThresholds: true,
+      skillSignalThresholds: true,
+      status: true,
+      enabled: true,
+      publishedAt: true,
+    },
+  });
   const config =
-    row.recommendationConfig?.status === "PUBLISHED" &&
-    row.recommendationConfig.enabled &&
-    row.recommendationConfig.publishedAt
+    recommendationConfig?.status === "PUBLISHED" &&
+    recommendationConfig.enabled &&
+    recommendationConfig.publishedAt
       ? parseGuestRecommendationPolicy(
-          row.recommendationConfig.recommendationThresholds,
-          row.recommendationConfig.skillSignalThresholds,
+          recommendationConfig.recommendationThresholds,
+          recommendationConfig.skillSignalThresholds,
         )
       : null;
   const evaluation = evaluateStoredAnswers(row.answers, row.minimumScorableCount, config);

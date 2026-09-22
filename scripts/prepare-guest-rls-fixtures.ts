@@ -459,11 +459,10 @@ async function insertGuestDiagnosticApiFixtures(
       skillId,
     );
     await tx.$executeRawUnsafe(
-      `INSERT INTO "ExerciseTemplate" ("id", "tenantId", "title", "type", "skillId", "config", "status", "contentId", "createdAt", "updatedAt")
-       VALUES ($1, NULL, $2, 'COMPREHENSION', $3, $4::jsonb, 'PUBLISHED', $5, $6, $6)`,
+      `INSERT INTO "ExerciseTemplate" ("id", "tenantId", "title", "type", "config", "status", "contentId", "createdAt", "updatedAt")
+       VALUES ($1, NULL, $2, 'COMPREHENSION', $3::jsonb, 'PUBLISHED', $4, $5, $5)`,
       templateId,
       `CI Guest Diagnostic · ${content.title}`,
-      skillId,
       JSON.stringify({ source: "ci-guest-diagnostic-api", slug: templateSlug }),
       contentId,
       timestamp,

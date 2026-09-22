@@ -116,11 +116,12 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
     position: number,
     clientAnswerId: string,
     extra: Record<string, unknown> = {},
+    includeCsrf = true,
   ) {
     return app.inject({
       method: "POST",
       url: `/guest/diagnostics/${sessionId}/answers`,
-      headers: stateChangingHeaders(jar),
+      headers: stateChangingHeaders(jar, includeCsrf),
       payload: {
         itemId: `item-${position}`,
         clientAnswerId,
@@ -194,7 +195,7 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
   });
 
   it("enforces CSRF and session ownership for answer submission", async () => {
-    const missingCsrf = await answer(sessionA, cookiesA, 1, "missing-csrf");
+    const missingCsrf = await answer(sessionA, cookiesA, 1, "missing-csrf", {}, false);
     expect(missingCsrf.statusCode).toBe(403);
 
     const invalidCsrf = await app.inject({
