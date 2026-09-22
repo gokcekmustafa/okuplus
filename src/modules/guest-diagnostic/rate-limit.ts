@@ -11,6 +11,8 @@ export const GUEST_RATE_LIMIT_POLICIES = {
   resultRetrieval: { maxRequests: 30, windowSeconds: 60 },
 } as const;
 
+export const DEFAULT_GUEST_RATE_LIMIT_NAMESPACE = "okuplus:guest";
+
 export type GuestRateLimitPolicy = keyof typeof GUEST_RATE_LIMIT_POLICIES;
 
 export type GuestRateLimitResult = {
@@ -34,6 +36,7 @@ type UpstashLimiter = {
 type RateLimitEnvironment = {
   UPSTASH_REDIS_REST_URL?: string;
   UPSTASH_REDIS_REST_TOKEN?: string;
+  GUEST_RATE_LIMIT_NAMESPACE?: string;
 };
 
 type RateLimitDependencies = {
@@ -77,6 +80,14 @@ function requireRedisEnvironment(env: RateLimitEnvironment): { url: string; toke
   return { url, token };
 }
 
+function requireRateLimitNamespace(value: string | undefined): string {
+  const namespace = value?.trim() || DEFAULT_GUEST_RATE_LIMIT_NAMESPACE;
+  if (namespace.length > 64 || !/^[A-Za-z0-9](?:[A-Za-z0-9:_-]*[A-Za-z0-9])?$/u.test(namespace)) {
+    throw new GuestRateLimitConfigurationError("GUEST_RATE_LIMIT_NAMESPACE is malformed");
+  }
+  return namespace;
+}
+
 function validateIdentifier(identifier: string): string {
   const normalized = identifier.trim();
   const hasControlCharacter = [...normalized].some((character) => {
@@ -113,6 +124,7 @@ export function createGuestRateLimiter(
   limit(policy: GuestRateLimitPolicy, identifier: string): Promise<GuestRateLimitResult>;
 } {
   const { url, token } = requireRedisEnvironment(env);
+  const namespace = requireRateLimitNamespace(env.GUEST_RATE_LIMIT_NAMESPACE);
   const redis = new Redis({ url, token });
   const createLimiter =
     dependencies.createLimiter ??
@@ -127,7 +139,7 @@ export function createGuestRateLimiter(
       createLimiter({
         redis,
         limiter: Ratelimit.slidingWindow(policy.maxRequests, `${policy.windowSeconds} s`),
-        prefix: `okuplus:guest:${policyName}`,
+        prefix: `${namespace}:${policyName}`,
       }),
     );
   }

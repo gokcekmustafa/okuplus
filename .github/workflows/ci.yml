@@ -34,6 +34,11 @@ jobs:
       GUEST_DATABASE_URL: postgresql://oku_guest_app:oku_guest_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
       GUEST_RLS_TEST_DATABASE_URL: postgresql://oku_guest_app:oku_guest_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
       JWT_SECRET: ci-only-jwt-secret-not-for-deployment
+      # CI and Vercel Preview may share one disposable Upstash database, but
+      # their rate-limit keys must remain isolated by namespace.
+      GUEST_RATE_LIMIT_NAMESPACE: ci:guest
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -74,6 +74,13 @@ const envSchema = z.object({
   RATE_LIMIT_MAX_KEYS: z.coerce.number().int().min(100).max(100_000).default(10_000),
   UPSTASH_REDIS_REST_URL: z.string().trim().default(""),
   UPSTASH_REDIS_REST_TOKEN: z.string().trim().default(""),
+  GUEST_RATE_LIMIT_NAMESPACE: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9](?:[A-Za-z0-9:_-]*[A-Za-z0-9])?$/u)
+    .default("okuplus:guest"),
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET en az 32 karakter olmalı")
