@@ -39,8 +39,15 @@ export interface ValidatedGuestSession {
 
 const validatedGuestSessions = new WeakSet<object>();
 
-function createValidatedGuestSession(row: GuestSessionRow): ValidatedGuestSession {
-  if (row.status !== "IN_PROGRESS" || row.expiresAt.getTime() <= Date.now()) {
+function createValidatedGuestSession(
+  row: GuestSessionRow,
+  allowCompleted = false,
+): ValidatedGuestSession {
+  if (
+    (!allowCompleted && row.status !== "IN_PROGRESS") ||
+    (allowCompleted && !["IN_PROGRESS", "COMPLETED"].includes(row.status)) ||
+    row.expiresAt.getTime() <= Date.now()
+  ) {
     throw new GuestDiagnosticSecurityError("Guest session is not active");
   }
 
@@ -256,7 +263,7 @@ export async function withGuestSessionContext<T>(
       throw new GuestDiagnosticSecurityError("Guest session was not found");
     }
 
-    const session = createValidatedGuestSession(row);
+    const session = createValidatedGuestSession(row, operation === "READ");
     await clearGuestTokenLookupContext(tx);
     await setGuestContext(tx, session.id, operation);
     return callback(tx, session);

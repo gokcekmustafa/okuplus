@@ -2,6 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { PrismaClient, type Prisma } from "@prisma/client";
 
+import { FIRST_REAL_CURRICULUM_PACK } from "../src/curriculum/first-real-pack.js";
+import {
+  GUEST_DIAGNOSTIC_CANDIDATES,
+  GUEST_DIAGNOSTIC_CONFIG_KEY,
+  GUEST_DIAGNOSTIC_MINIMUM_SCORABLE_COUNT,
+  GUEST_DIAGNOSTIC_QUESTION_COUNT,
+  GUEST_DIAGNOSTIC_SCORING_VERSION,
+} from "../src/modules/guest-diagnostic/definition.js";
+
 const adminUrl = requiredEnv("GUEST_RLS_FIXTURE_ADMIN_DATABASE_URL");
 const guestUrl = requiredEnv("GUEST_DATABASE_URL");
 const guestTestUrl = requiredEnv("GUEST_RLS_TEST_DATABASE_URL");
@@ -194,6 +203,8 @@ try {
       "DETAIL",
       0.6,
     );
+
+    await insertGuestDiagnosticApiFixtures(tx, now);
   });
 
   maskGitHubActionsValue(sessionAToken);
@@ -358,5 +369,189 @@ async function insertItem(
     questionType,
     skillCode,
     difficulty,
+  );
+}
+
+async function insertGuestDiagnosticApiFixtures(
+  tx: Prisma.TransactionClient,
+  timestamp: Date,
+): Promise<void> {
+  const skillIds = new Map<string, string>();
+  const skillDefinitions = [
+    { code: "RC_MAIN_IDEA", category: "MAIN_IDEA", name: "Ana fikir" },
+    { code: "RC_DETAIL", category: "DETAIL", name: "Detay" },
+    { code: "RC_INFERENCE", category: "INFERENCE", name: "Çıkarım" },
+  ] as const;
+
+  for (const skill of skillDefinitions) {
+    const id = `ci-guest-diagnostic-skill-${skill.code.toLowerCase()}`;
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "Skill" ("id", "code", "name", "category", "displayOrder", "createdAt")
+       VALUES ($1, $2, $3, $4::"SkillCategory", $5, $6)
+       ON CONFLICT ("code") DO NOTHING`,
+      id,
+      skill.code,
+      skill.name,
+      skill.category,
+      skillDefinitions.findIndex((entry) => entry.code === skill.code) + 1,
+      timestamp,
+    );
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "Skill" WHERE "code" = ${skill.code}
+    `;
+    if (!rows[0])
+      throw new Error(`Guest Diagnostic CI skill fixture oluşturulamadı: ${skill.code}`);
+    skillIds.set(skill.code, rows[0].id);
+  }
+
+  const candidatesByTemplate = new Map<string, (typeof GUEST_DIAGNOSTIC_CANDIDATES)[number][]>();
+  for (const candidate of GUEST_DIAGNOSTIC_CANDIDATES) {
+    const existing = candidatesByTemplate.get(candidate.sourceTemplateVersionId) ?? [];
+    existing.push(candidate);
+    candidatesByTemplate.set(candidate.sourceTemplateVersionId, existing);
+  }
+
+  const contentItems = new Map(
+    FIRST_REAL_CURRICULUM_PACK.contents.map((item) => [item.slug, item]),
+  );
+
+  for (const [templateVersionId, candidates] of candidatesByTemplate) {
+    const templateSlug = templateVersionId
+      .replace(/^8g8-template-version-/u, "")
+      .replace(/-v1$/u, "");
+    const content = contentItems.get(templateSlug);
+    if (!content)
+      throw new Error(`Guest Diagnostic CI content fixture bulunamadı: ${templateSlug}`);
+
+    const contentId = `ci-guest-diagnostic-content-${templateSlug}`;
+    const contentVersionId = `ci-guest-diagnostic-content-version-${templateSlug}-v1`;
+    const templateId = `ci-guest-diagnostic-template-${templateSlug}`;
+    const skillId = skillIds.get(candidates[0]!.skillCode);
+    if (!skillId)
+      throw new Error(`Guest Diagnostic CI skill fixture bulunamadı: ${candidates[0]!.skillCode}`);
+
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "Content" ("id", "tenantId", "type", "title", "difficulty", "status", "createdAt", "updatedAt")
+       VALUES ($1, NULL, 'PASSAGE', $2, $3, 'PUBLISHED', $4, $4)`,
+      contentId,
+      content.title,
+      content.difficulty,
+      timestamp,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "ContentVersion" ("id", "contentId", "version", "title", "body", "wordCount", "status", "publishedAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, 1, $3, $4, $5, 'PUBLISHED', $6, $6, $6)`,
+      contentVersionId,
+      contentId,
+      content.title,
+      content.body,
+      content.body.trim().split(/\s+/u).filter(Boolean).length,
+      timestamp,
+    );
+    await tx.$executeRawUnsafe(
+      `UPDATE "Content" SET "currentVersionId" = $1 WHERE "id" = $2`,
+      contentVersionId,
+      contentId,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "ContentSkill" ("contentId", "skillId") VALUES ($1, $2)`,
+      contentId,
+      skillId,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "ExerciseTemplate" ("id", "tenantId", "title", "type", "skillId", "config", "status", "contentId", "createdAt", "updatedAt")
+       VALUES ($1, NULL, $2, 'COMPREHENSION', $3, $4::jsonb, 'PUBLISHED', $5, $6, $6)`,
+      templateId,
+      `CI Guest Diagnostic · ${content.title}`,
+      skillId,
+      JSON.stringify({ source: "ci-guest-diagnostic-api", slug: templateSlug }),
+      contentId,
+      timestamp,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "ExerciseTemplateVersion" ("id", "templateId", "version", "config", "status", "publishedAt", "createdAt")
+       VALUES ($1, $2, 1, $3::jsonb, 'PUBLISHED', $4, $4)`,
+      templateVersionId,
+      templateId,
+      JSON.stringify({ source: "ci-guest-diagnostic-api", slug: templateSlug }),
+      timestamp,
+    );
+    await tx.$executeRawUnsafe(
+      `INSERT INTO "ExerciseTemplateVersionContent" ("templateVersionId", "contentVersionId", "position")
+       VALUES ($1, $2, 0)`,
+      templateVersionId,
+      contentVersionId,
+    );
+
+    for (const candidate of candidates) {
+      const questionPosition = Number(candidate.questionId.split("-").at(-1)) - 1;
+      const question = content.questions[questionPosition];
+      const candidateSkillId = skillIds.get(candidate.skillCode);
+      if (!question || !candidateSkillId) {
+        throw new Error(
+          `Guest Diagnostic CI question fixture bulunamadı: ${candidate.questionVersionId}`,
+        );
+      }
+      if (question.difficulty !== candidate.difficulty) {
+        throw new Error(
+          `Guest Diagnostic CI difficulty eşleşmiyor: ${candidate.questionVersionId}`,
+        );
+      }
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "Question" ("id", "contentId", "position", "type", "skillId", "status", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, $4::"QuestionType", $5, 'PUBLISHED', $6, $6)`,
+        candidate.questionId,
+        contentId,
+        questionPosition,
+        question.type,
+        candidateSkillId,
+        timestamp,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "QuestionVersion" ("id", "questionId", "contentVersionId", "version", "prompt", "options", "correctAnswer", "explanation", "hint", "difficulty", "status", "publishedAt", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, 1, $4, $5::jsonb, $6::jsonb, $7, $8, $9, 'PUBLISHED', $10, $10, $10)`,
+        candidate.questionVersionId,
+        candidate.questionId,
+        contentVersionId,
+        question.prompt,
+        JSON.stringify(question.options),
+        JSON.stringify(question.correctAnswer),
+        question.explanation,
+        question.hint,
+        question.difficulty,
+        timestamp,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "ExerciseTemplateVersionQuestion" ("templateVersionId", "questionVersionId", "questionId", "position")
+         VALUES ($1, $2, $3, $4)`,
+        templateVersionId,
+        candidate.questionVersionId,
+        candidate.questionId,
+        questionPosition,
+      );
+    }
+  }
+
+  await tx.$executeRawUnsafe(
+    `INSERT INTO "GuestDiagnosticRecommendationConfig"
+      ("id", "configKey", "version", "scoringContractVersion", "minimumAnsweredCount", "minimumScorableCount",
+       "recommendationThresholds", "skillSignalThresholds", "boundaryHandling", "status", "enabled", "publishedAt", "createdAt", "updatedAt")
+     VALUES ($1, $2, 1, $3, $4, $5, $6::jsonb, $7::jsonb, 'BOUNDARY_SENSITIVE', 'PUBLISHED', true, $8, $8, $8)`,
+    "ci-guest-diagnostic-recommendation-v1",
+    GUEST_DIAGNOSTIC_CONFIG_KEY,
+    GUEST_DIAGNOSTIC_SCORING_VERSION,
+    GUEST_DIAGNOSTIC_QUESTION_COUNT,
+    GUEST_DIAGNOSTIC_MINIMUM_SCORABLE_COUNT,
+    JSON.stringify({
+      bands: [
+        { levelCode: "R1_FOUNDATION", minInclusive: 0, maxExclusive: 0.35 },
+        { levelCode: "R2_DEVELOPING", minInclusive: 0.35, maxExclusive: 0.55 },
+        { levelCode: "R3_INDEPENDENT", minInclusive: 0.55, maxExclusive: 0.75 },
+        { levelCode: "R4_ADVANCED", minInclusive: 0.75, maxInclusive: 1 },
+      ],
+    }),
+    JSON.stringify({ minimumSkillAnsweredCount: 1, distinctSkillDelta: 0.5 }),
+    timestamp,
   );
 }
