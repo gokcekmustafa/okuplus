@@ -31,14 +31,14 @@ $$;
 CREATE POLICY "guest_diagnostic_content_published_restriction" ON "Content"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR ("tenantId" IS NULL AND "status" = 'PUBLISHED')
   );
 
 CREATE POLICY "guest_diagnostic_content_version_published_restriction" ON "ContentVersion"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR (
       "status" = 'PUBLISHED'
       AND "publishedAt" IS NOT NULL
@@ -54,7 +54,7 @@ CREATE POLICY "guest_diagnostic_content_version_published_restriction" ON "Conte
 CREATE POLICY "guest_diagnostic_content_skill_published_restriction" ON "ContentSkill"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR EXISTS (
       SELECT 1 FROM "Content" c
       WHERE c."id" = "ContentSkill"."contentId"
@@ -66,7 +66,7 @@ CREATE POLICY "guest_diagnostic_content_skill_published_restriction" ON "Content
 CREATE POLICY "guest_diagnostic_question_published_restriction" ON "Question"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR (
       "status" = 'PUBLISHED'
       AND EXISTS (
@@ -81,7 +81,7 @@ CREATE POLICY "guest_diagnostic_question_published_restriction" ON "Question"
 CREATE POLICY "guest_diagnostic_question_version_published_restriction" ON "QuestionVersion"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR (
       "status" = 'PUBLISHED'
       AND "publishedAt" IS NOT NULL
@@ -100,14 +100,14 @@ CREATE POLICY "guest_diagnostic_question_version_published_restriction" ON "Ques
 CREATE POLICY "guest_diagnostic_template_published_restriction" ON "ExerciseTemplate"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR ("tenantId" IS NULL AND "status" = 'PUBLISHED')
   );
 
 CREATE POLICY "guest_diagnostic_template_version_published_restriction" ON "ExerciseTemplateVersion"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR (
       "status" = 'PUBLISHED'
       AND "publishedAt" IS NOT NULL
@@ -124,7 +124,7 @@ CREATE POLICY "guest_diagnostic_template_content_published_restriction"
   ON "ExerciseTemplateVersionContent"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR EXISTS (
       SELECT 1
       FROM "ExerciseTemplateVersion" tv
@@ -147,7 +147,7 @@ CREATE POLICY "guest_diagnostic_template_question_published_restriction"
   ON "ExerciseTemplateVersionQuestion"
   AS RESTRICTIVE FOR SELECT
   USING (
-    current_setting('app.guest_operation', true) NOT IN ('CREATE', 'READ', 'ANSWER')
+    COALESCE(current_setting('app.guest_operation', true), '') NOT IN ('CREATE', 'READ', 'ANSWER')
     OR EXISTS (
       SELECT 1
       FROM "ExerciseTemplateVersion" tv
