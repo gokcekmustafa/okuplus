@@ -44,6 +44,15 @@ type GuestDbClient = PrismaClient;
 type GuestTransaction = Prisma.TransactionClient;
 type GuestRateLimiter = ReturnType<typeof createGuestRateLimiter>;
 
+const CONTENT_VERSION_SELECT = {
+  id: true,
+  title: true,
+  body: true,
+  status: true,
+  publishedAt: true,
+  content: { select: { id: true, tenantId: true, status: true, deletedAt: true } },
+} satisfies Prisma.ContentVersionSelect;
+
 const QUESTION_VERSION_SELECT = {
   id: true,
   questionId: true,
@@ -60,19 +69,18 @@ const QUESTION_VERSION_SELECT = {
       status: true,
       deletedAt: true,
       skill: { select: { code: true } },
-      content: { select: { id: true, tenantId: true, status: true, deletedAt: true } },
+      content: {
+        select: {
+          id: true,
+          tenantId: true,
+          status: true,
+          deletedAt: true,
+          currentVersion: { select: CONTENT_VERSION_SELECT },
+        },
+      },
     },
   },
-  contentVersion: {
-    select: {
-      id: true,
-      title: true,
-      body: true,
-      status: true,
-      publishedAt: true,
-      content: { select: { id: true, tenantId: true, status: true, deletedAt: true } },
-    },
-  },
+  contentVersion: { select: CONTENT_VERSION_SELECT },
 } satisfies Prisma.QuestionVersionSelect;
 
 type QuestionVersionRow = Prisma.QuestionVersionGetPayload<{
@@ -163,7 +171,9 @@ function validateQuestionVersion(
   candidate: (typeof GUEST_DIAGNOSTIC_CANDIDATES)[number],
 ): void {
   const content = row?.question.content;
-  const contentVersion = row?.contentVersion;
+  // Older published curriculum rows may predate the contentVersionId link.
+  // In that case, use the parent Content's immutable current published version.
+  const contentVersion = row?.contentVersion ?? row?.question.content.currentVersion;
   if (
     !row ||
     row.id !== candidate.questionVersionId ||
@@ -534,12 +544,16 @@ export async function getGuestDiagnosticQuestions(
           difficulty: item.difficulty,
           prompt: item.questionVersion.prompt,
           options: publicOptions(item.questionVersion.options),
-          content: item.questionVersion.contentVersion
-            ? {
-                title: item.questionVersion.contentVersion.title,
-                body: item.questionVersion.contentVersion.body,
-              }
-            : null,
+          content:
+            (item.questionVersion.contentVersion ??
+            item.questionVersion.question.content.currentVersion)
+              ? {
+                  title: (item.questionVersion.contentVersion ??
+                    item.questionVersion.question.content.currentVersion)!.title,
+                  body: (item.questionVersion.contentVersion ??
+                    item.questionVersion.question.content.currentVersion)!.body,
+                }
+              : null,
         })),
       };
     },

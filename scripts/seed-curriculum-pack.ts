@@ -704,6 +704,7 @@ async function createPack(
         data: {
           id: plannedQuestion.questionVersionId,
           questionId: plannedQuestion.questionId,
+          contentVersionId: contentVersion.id,
           version: 1,
           prompt: plannedQuestion.question.prompt,
           options: asJson(plannedQuestion.question.options),
