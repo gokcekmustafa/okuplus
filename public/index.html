@@ -115,6 +115,91 @@
       </div>
     </main>
 
+    <!-- ================= Guest Diagnostic ================= -->
+    <main id="view-guest" class="guest-shell hidden">
+      <div class="guest-card card">
+        <header class="guest-header">
+          <div class="guest-brand-mark" aria-hidden="true">Oku+</div>
+          <p class="guest-eyebrow">KISA BAŞLANGIÇ TANISI</p>
+          <h1>Okuma yolculuğuna başlayalım</h1>
+          <p>
+            Birkaç kısa soruyla sana uygun başlangıcı birlikte keşfedelim. Hesap açman gerekmiyor.
+          </p>
+        </header>
+
+        <section id="guest-loading" class="guest-state" aria-live="polite">
+          <div class="guest-loader" aria-hidden="true"></div>
+          <h2>Tanı hazırlanıyor…</h2>
+          <p class="muted">Sorularını güvenli şekilde yüklüyoruz.</p>
+        </section>
+
+        <section id="guest-error" class="guest-state hidden" role="alert" aria-live="assertive">
+          <div class="guest-state-icon" aria-hidden="true">!</div>
+          <h2>Şu anda devam edemiyoruz</h2>
+          <p id="guest-error-message" class="muted"></p>
+          <button id="guest-retry" type="button" class="btn btn-primary">Tekrar dene</button>
+        </section>
+
+        <section
+          id="guest-question-view"
+          class="guest-question-view hidden"
+          aria-labelledby="guest-question-heading"
+        >
+          <div class="guest-progress-head">
+            <span id="guest-progress-label">1 / 1</span>
+            <span id="guest-progress-status" class="muted" role="status"></span>
+          </div>
+          <div class="guest-progress-track" aria-hidden="true">
+            <span id="guest-progress-value"></span>
+          </div>
+
+          <article id="guest-passage" class="guest-passage hidden">
+            <p id="guest-passage-title" class="guest-passage-title"></p>
+            <div id="guest-passage-body" class="guest-passage-body"></div>
+          </article>
+
+          <p id="guest-question-meta" class="guest-question-meta"></p>
+          <h2 id="guest-question-heading">Soruyu yanıtla</h2>
+          <p id="guest-question-prompt" class="guest-question-prompt"></p>
+          <div
+            id="guest-answer-list"
+            class="guest-answer-list"
+            role="group"
+            aria-label="Cevap seçenekleri"
+          ></div>
+          <p id="guest-question-error" class="error hidden" role="alert"></p>
+          <button id="guest-answer-submit" type="button" class="btn btn-primary" disabled>
+            Devam et
+          </button>
+        </section>
+
+        <section
+          id="guest-result-view"
+          class="guest-result-view hidden"
+          aria-labelledby="guest-result-heading"
+        >
+          <div class="guest-result-icon" aria-hidden="true">✓</div>
+          <p class="guest-eyebrow">TANI TAMAMLANDI</p>
+          <h2 id="guest-result-heading">Başlangıç seviyen için önerimiz</h2>
+          <p id="guest-result-level" class="guest-result-level"></p>
+          <p id="guest-result-copy" class="guest-result-copy"></p>
+          <p class="guest-result-disclaimer">
+            Bu kısa tanı yalnızca başlangıç için bir öneridir. Resmî seviye ataması yapmaz ve
+            öğrenci hesabındaki seviyeni değiştirmez.
+          </p>
+          <div class="guest-result-actions">
+            <p>İlerlemeni kaydetmek için hesap oluştur veya giriş yap.</p>
+            <div class="guest-result-buttons">
+              <button id="guest-signup-btn" type="button" class="btn btn-primary">Kayıt ol</button>
+              <button id="guest-login-btn" type="button" class="btn btn-secondary">
+                Giriş yap
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
     <!-- ================= Uygulama (auth) ================= -->
     <div id="view-app" class="app hidden">
       <!-- Sidebar -->
