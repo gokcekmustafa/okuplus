@@ -13,6 +13,7 @@
     "start": "node dist/server.js",
     "db:fingerprint": "tsx scripts/db-fingerprint.ts",
     "test:guest-rls:fixtures": "tsx scripts/prepare-guest-rls-fixtures.ts",
+    "guest:provision:config": "tsx scripts/provision-guest-diagnostic-config.ts",
     "production:smoke:preflight": "tsx scripts/provision-production-smoke-student.ts --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
