@@ -260,7 +260,10 @@ function clearStoredGuestSession() {
 async function guestApi(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const headers = {
-    ...(method === "POST" ? { "content-type": "application/json", ...guestCsrfHeaders() } : {}),
+    ...(method === "POST" && options.body !== undefined && options.body !== null
+      ? { "content-type": "application/json" }
+      : {}),
+    ...(method === "POST" ? guestCsrfHeaders() : {}),
     ...(options.headers || {}),
   };
   const response = await fetch(path, { ...options, credentials: "include", headers });
