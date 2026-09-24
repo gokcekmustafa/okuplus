@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { PrismaClient, type Prisma } from "@prisma/client";
 
 export type GuestDiagnosticOperation =
-  "LOOKUP" | "CREATE" | "READ" | "ANSWER" | "COMPLETE" | "EXPIRE";
+  "LOOKUP" | "CREATE" | "READ" | "ANSWER" | "COMPLETE" | "EXPIRE" | "CLAIM" | "USER_READ";
 
 type GuestTransaction = Prisma.TransactionClient;
 
@@ -179,6 +179,24 @@ async function setGuestTokenLookupContext(tx: GuestTransaction, tokenHash: strin
   `;
 }
 
+async function setGuestUserContext(tx: GuestTransaction, userId: string): Promise<void> {
+  if (!userId.trim()) {
+    throw new GuestDiagnosticSecurityError("Authenticated user context is required");
+  }
+  await tx.$executeRaw`
+    SELECT set_config('app.guest_session_id', '', true)
+  `;
+  await tx.$executeRaw`
+    SELECT set_config('app.guest_token_hash', '', true)
+  `;
+  await tx.$executeRaw`
+    SELECT set_config('app.guest_user_id', ${userId}, true)
+  `;
+  await tx.$executeRaw`
+    SELECT set_config('app.guest_operation', 'USER_READ', true)
+  `;
+}
+
 async function clearGuestTokenLookupContext(tx: GuestTransaction): Promise<void> {
   await tx.$executeRaw`
     SELECT set_config('app.guest_token_hash', '', true)
@@ -263,9 +281,26 @@ export async function withGuestSessionContext<T>(
       throw new GuestDiagnosticSecurityError("Guest session was not found");
     }
 
-    const session = createValidatedGuestSession(row, operation === "READ");
+    const session = createValidatedGuestSession(row, operation === "READ" || operation === "CLAIM");
     await clearGuestTokenLookupContext(tx);
     await setGuestContext(tx, session.id, operation);
     return callback(tx, session);
+  });
+}
+
+/**
+ * Establishes a read-only context for the authenticated owner of a claimed
+ * result. The user ID comes from the verified auth provider, never from the
+ * request body or query string.
+ */
+export async function withGuestUserContext<T>(
+  userId: string,
+  callback: (tx: GuestTransaction) => Promise<T>,
+  client: PrismaClient = getGuestDbClient(),
+): Promise<T> {
+  return client.$transaction(async (tx) => {
+    await assertRestrictedDatabaseRole(tx);
+    await setGuestUserContext(tx, userId);
+    return callback(tx);
   });
 }

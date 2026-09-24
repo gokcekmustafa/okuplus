@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 
 import { buildApp } from "../src/app.js";
@@ -290,6 +291,91 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
     expect(answerAfterComplete.statusCode).toBe(404);
 
     expect(await admin.guestDiagnosticResult.count({ where: { sessionId: sessionA } })).toBe(1);
+  });
+
+  it("claims the completed recommendation for the authenticated user without changing placement", async () => {
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      headers: { origin: ORIGIN, "content-type": "application/json" },
+      payload: {
+        displayName: "Guest Claim Test",
+        email: `guest-claim-${randomUUID()}@example.test`,
+        password: "guest-claim-password",
+      },
+    });
+    expect(signup.statusCode).toBe(201);
+    const authData = data(signup) as {
+      tokens: { accessToken: string };
+    };
+
+    const claim = await app.inject({
+      method: "POST",
+      url: `/guest/diagnostics/${sessionA}/claim`,
+      headers: {
+        ...stateChangingHeaders(cookiesA),
+        authorization: `Bearer ${authData.tokens.accessToken}`,
+      },
+    });
+    expect(claim.statusCode).toBe(200);
+    expect(data(claim)).toEqual({ claimed: true, alreadyClaimed: false });
+
+    const stored = await admin.guestDiagnosticSession.findUniqueOrThrow({
+      where: { id: sessionA },
+      select: { claimedUserId: true, claimedAt: true },
+    });
+    expect(stored.claimedUserId).toBeTruthy();
+    expect(stored.claimedAt).toBeInstanceOf(Date);
+
+    const result = await app.inject({
+      method: "GET",
+      url: "/student/guest-diagnostic",
+      headers: { authorization: `Bearer ${authData.tokens.accessToken}` },
+    });
+    expect(result.statusCode).toBe(200);
+    expect(data(result).result).toMatchObject({
+      recommendationMode: "RECOMMENDATION_ONLY",
+      flags: {
+        officialPlacement: false,
+        studentProfileUpdated: false,
+        baselineCreated: false,
+        assessmentResultCreated: false,
+      },
+    });
+
+    const repeat = await app.inject({
+      method: "POST",
+      url: `/guest/diagnostics/${sessionA}/claim`,
+      headers: {
+        ...stateChangingHeaders(cookiesA),
+        authorization: `Bearer ${authData.tokens.accessToken}`,
+      },
+    });
+    expect(repeat.statusCode).toBe(200);
+    expect(data(repeat)).toEqual({ claimed: true, alreadyClaimed: true });
+
+    const otherSignup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      headers: { origin: ORIGIN, "content-type": "application/json" },
+      payload: {
+        displayName: "Other Guest Claim Test",
+        email: `guest-claim-other-${randomUUID()}@example.test`,
+        password: "guest-claim-password",
+      },
+    });
+    const otherAuthData = data(otherSignup) as {
+      tokens: { accessToken: string };
+    };
+    const crossAccount = await app.inject({
+      method: "POST",
+      url: `/guest/diagnostics/${sessionA}/claim`,
+      headers: {
+        ...stateChangingHeaders(cookiesA),
+        authorization: `Bearer ${otherAuthData.tokens.accessToken}`,
+      },
+    });
+    expect(crossAccount.statusCode).toBe(409);
   });
 
   it("rejects an expired session", async () => {

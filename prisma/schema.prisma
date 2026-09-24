@@ -986,8 +986,11 @@ model ExerciseTemplateVersion {
 }
 
 // ============ GUEST DIAGNOSTIC ============
-// Guest sessions are intentionally not attached to User, Tenant or Membership.
-// The server must establish a validated app.guest_session_id context before
+// Guest sessions are intentionally not attached to Tenant or Membership.
+// A completed result may be claimed by an authenticated user through the
+// server-only opaque claimedUserId field. It is not a Prisma relation: the
+// restricted guest role must not gain access to identity or tenant tables.
+// The server must establish a validated transaction-local guest context before
 // accessing these tables; the migration policies fail closed when it is absent.
 
 model GuestDiagnosticSession {
@@ -1008,6 +1011,8 @@ model GuestDiagnosticSession {
   lastActivityAt          DateTime                            @default(now())
   expiresAt               DateTime
   completedAt             DateTime?
+  claimedUserId           String?
+  claimedAt               DateTime?
   createdAt               DateTime                            @default(now())
   updatedAt               DateTime                            @updatedAt
 
@@ -1018,6 +1023,7 @@ model GuestDiagnosticSession {
   @@index([status, expiresAt])
   @@index([recommendationConfigId, status])
   @@index([sourceTemplateVersionId])
+  @@index([claimedUserId, status, claimedAt])
 }
 
 model GuestDiagnosticItem {

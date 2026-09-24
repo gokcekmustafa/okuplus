@@ -8,6 +8,7 @@ export {
   withNewGuestSessionContext,
   withGuestDbContext,
   withGuestSessionContext,
+  withGuestUserContext,
 } from "./context.js";
 export type { GuestDiagnosticOperation } from "./context.js";
 export {
@@ -31,6 +32,8 @@ export { guestDiagnosticRoutes } from "./routes.js";
 export {
   completeGuestDiagnostic,
   createOrResumeGuestDiagnostic,
+  claimGuestDiagnostic,
+  getClaimedGuestDiagnostic,
   getGuestDiagnosticQuestions,
   getGuestDiagnosticResult,
   hashGuestAnswer,

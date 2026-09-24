@@ -19,6 +19,8 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain("/answers");
     expect(app).toContain("/complete");
     expect(app).toContain("/result");
+    expect(app).toContain("/claim");
+    expect(app).toContain("/student/guest-diagnostic");
     expect(app).toContain("question.prompt");
     expect(app).toContain("question.options");
     expect(app).toContain("question.position");
@@ -39,6 +41,7 @@ describe("guest-first diagnostic frontend", () => {
     expect(index).toContain('id="guest-login-btn"');
     expect(index).toContain('id="login-form"');
     expect(index).toContain('id="signup-form"');
+    expect(index).toContain('id="guest-diagnostic-card"');
   });
 
   it("provides responsive loading, error, question and result presentation", () => {

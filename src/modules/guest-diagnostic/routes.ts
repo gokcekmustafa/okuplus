@@ -4,13 +4,17 @@ import { z } from "zod";
 
 import type { Env } from "../../config/env.js";
 import { ok } from "../../lib/response.js";
+import { requireAuth } from "../../middleware/authenticate.js";
+import type { AuthProvider } from "../auth/index.js";
 import { setNoStore } from "../auth/cookies.js";
-import { getGuestToken, setGuestCookies } from "./cookies.js";
+import { clearGuestCookies, getGuestToken, setGuestCookies } from "./cookies.js";
 import { GUEST_DIAGNOSTIC_SESSION_TTL_SECONDS } from "./definition.js";
 import { guestRateLimitIdentifier, createGuestRateLimiter } from "./rate-limit.js";
 import {
   completeGuestDiagnostic,
   createOrResumeGuestDiagnostic,
+  claimGuestDiagnostic,
+  getClaimedGuestDiagnostic,
   getGuestDiagnosticQuestions,
   getGuestDiagnosticResult,
   normalizeGuestServiceError,
@@ -42,7 +46,7 @@ function allowedOrigins(env: Env): readonly string[] {
 
 export async function guestDiagnosticRoutes(
   app: FastifyInstance,
-  opts: { env: Env; rateLimiter?: GuestRateLimiter },
+  opts: { env: Env; authProvider: AuthProvider; rateLimiter?: GuestRateLimiter },
 ): Promise<void> {
   let rateLimiter = opts.rateLimiter;
   const getLimiter = (): GuestRateLimiter => {
@@ -131,4 +135,28 @@ export async function guestDiagnosticRoutes(
       await handle(() => getGuestDiagnosticResult(requestParams(request), dependencies(request))),
     );
   });
+
+  app.post(
+    "/guest/diagnostics/:session/claim",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request, reply) => {
+      setNoStore(reply);
+      const result = await handle(() =>
+        claimGuestDiagnostic(requestParams(request), request.authUser!.id, dependencies(request)),
+      );
+      clearGuestCookies(reply);
+      return ok(result);
+    },
+  );
+
+  app.get(
+    "/student/guest-diagnostic",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request, reply) => {
+      setNoStore(reply);
+      return ok(
+        await handle(() => getClaimedGuestDiagnostic(request.authUser!.id, dependencies(request))),
+      );
+    },
+  );
 }

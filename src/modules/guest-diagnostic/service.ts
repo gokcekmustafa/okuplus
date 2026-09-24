@@ -21,6 +21,7 @@ import {
   getGuestDbClient,
   hashGuestToken,
   withGuestSessionContext,
+  withGuestUserContext,
   withNewGuestSessionContext,
   type ValidatedGuestSession,
 } from "./context.js";
@@ -298,7 +299,7 @@ function sessionSummary(
 async function withOwnedGuestSession<T>(
   token: string,
   sessionId: string,
-  operation: "READ" | "ANSWER" | "COMPLETE",
+  operation: "READ" | "ANSWER" | "COMPLETE" | "CLAIM",
   callback: (tx: GuestTransaction, session: ValidatedGuestSession) => Promise<T>,
   client: GuestDbClient,
 ): Promise<T> {
@@ -859,6 +860,102 @@ export async function getGuestDiagnosticResult(
       });
       if (!result) throw conflictError("Tanı henüz tamamlanmadı");
       return resultContract(result);
+    },
+    client,
+  );
+}
+
+export async function claimGuestDiagnostic(
+  sessionId: string,
+  userId: string,
+  dependencies: GuestServiceDependencies,
+): Promise<{ claimed: true; alreadyClaimed: boolean }> {
+  if (!userId.trim()) throw validationError("Kimlik doğrulaması gerekli");
+
+  const client = dependencies.client ?? getGuestDbClient();
+  await limit(
+    requireRateLimiter(dependencies),
+    "resultRetrieval",
+    dependencies.rateLimitIdentifier,
+  );
+  const token = getGuestToken(dependencies.request);
+  if (!token) throw notFoundError("Tanı oturumu bulunamadı veya artık geçerli değil");
+
+  return withOwnedGuestSession(
+    token,
+    sessionId,
+    "CLAIM",
+    async (tx, session) => {
+      const row = await tx.guestDiagnosticSession.findUnique({
+        where: { id: session.id },
+        select: {
+          csrfTokenHash: true,
+          status: true,
+          claimedUserId: true,
+          result: { select: { id: true } },
+        },
+      });
+      if (!row) throw notFoundError("Tanı oturumu bulunamadı");
+      assertGuestCsrfRequest(dependencies.request, row.csrfTokenHash, dependencies.allowedOrigins);
+      if (row.status !== "COMPLETED" || !row.result) {
+        throw conflictError("Tanı sonucu henüz kaydedilmeye hazır değil");
+      }
+      if (row.claimedUserId && row.claimedUserId !== userId) {
+        throw conflictError("Bu tanı sonucu başka bir hesaba bağlanmış");
+      }
+      if (row.claimedUserId === userId) return { claimed: true, alreadyClaimed: true };
+
+      // Make the first claimant win atomically. A plain update after the
+      // read would allow two accounts racing on the same guest cookie to
+      // overwrite one another.
+      const claimed = await tx.guestDiagnosticSession.updateMany({
+        where: {
+          id: session.id,
+          status: "COMPLETED",
+          claimedUserId: null,
+        },
+        data: { claimedUserId: userId, claimedAt: new Date() },
+      });
+      if (claimed.count === 1) return { claimed: true, alreadyClaimed: false };
+
+      const winner = await tx.guestDiagnosticSession.findUnique({
+        where: { id: session.id },
+        select: { claimedUserId: true },
+      });
+      if (winner?.claimedUserId === userId) return { claimed: true, alreadyClaimed: true };
+      throw conflictError("Bu tanı sonucu başka bir hesaba bağlanmış");
+    },
+    client,
+  );
+}
+
+export async function getClaimedGuestDiagnostic(
+  userId: string,
+  dependencies: GuestServiceDependencies,
+): Promise<{ claimedAt: string | null; result: ReturnType<typeof resultContract> | null }> {
+  if (!userId.trim()) throw validationError("Kimlik doğrulaması gerekli");
+
+  const client = dependencies.client ?? getGuestDbClient();
+  await limit(
+    requireRateLimiter(dependencies),
+    "resultRetrieval",
+    dependencies.rateLimitIdentifier,
+  );
+  return withGuestUserContext(
+    userId,
+    async (tx) => {
+      const row = await tx.guestDiagnosticSession.findFirst({
+        where: { claimedUserId: userId, status: "COMPLETED" },
+        orderBy: [{ claimedAt: "desc" }, { completedAt: "desc" }],
+        select: {
+          claimedAt: true,
+          result: true,
+        },
+      });
+      return {
+        claimedAt: row?.claimedAt?.toISOString() ?? null,
+        result: row?.result ? resultContract(row.result) : null,
+      };
     },
     client,
   );

@@ -124,7 +124,7 @@ export async function buildApp(
   await app.register(baselineStudentRoutes, { authProvider });
   await app.register(lessonStudentRoutes, { authProvider });
   await app.register(trainingStudentRoutes, { authProvider });
-  await app.register(guestDiagnosticRoutes, { env });
+  await app.register(guestDiagnosticRoutes, { env, authProvider });
   await app.register(staticPlugin);
   return app;
 }

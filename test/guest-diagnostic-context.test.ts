@@ -10,6 +10,7 @@ import {
   hashGuestToken,
   withGuestDbContext,
   withGuestSessionContext,
+  withGuestUserContext,
 } from "../src/modules/guest-diagnostic/context.js";
 
 const contextSource = readFileSync(
@@ -180,5 +181,19 @@ describe("guest diagnostic security context", () => {
     expect(sessionId).toMatch(/^[0-9a-f-]{36}$/u);
     expect(fake.executions.flatMap((entry) => entry.values)).toContain(sessionId);
     expect(fake.executions.flatMap((entry) => entry.values)).toContain("CREATE");
+  });
+
+  it("authenticated result read context'ini transaction-local user ID ile kurar", async () => {
+    const fake = fakeClient();
+    await withGuestUserContext("user-123", async () => undefined, fake.client);
+
+    expect(fake.executions.flatMap((entry) => entry.values)).toContain("user-123");
+    expect(fake.executions.map((entry) => entry.sql).join("\n")).toContain("USER_READ");
+    expect(fake.executions.map((entry) => entry.sql)).toEqual([
+      expect.stringContaining("app.guest_session_id"),
+      expect.stringContaining("app.guest_token_hash"),
+      expect.stringContaining("app.guest_user_id"),
+      expect.stringContaining("app.guest_operation"),
+    ]);
   });
 });

@@ -243,6 +243,64 @@ function setStoredGuestSessionId(sessionId) {
   }
 }
 
+async function claimGuestDiagnosticForCurrentUser() {
+  const sessionId = guestDiagnosticState.sessionId || storedGuestSessionId();
+  const { accessToken, tenantId } = getStoredTokens();
+  if (!sessionId || !accessToken) return false;
+
+  try {
+    const response = await fetch(`/guest/diagnostics/${encodeURIComponent(sessionId)}/claim`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...authHeaders(accessToken, tenantId),
+        ...guestCsrfHeaders(),
+      },
+    });
+    await parseResponse(response);
+    clearStoredGuestSession();
+    return true;
+  } catch {
+    // Account access must not be blocked by an expired or already-cleared
+    // guest cookie. The server remains the source of truth for the claim.
+    return false;
+  }
+}
+
+function renderClaimedGuestDiagnostic(data) {
+  const card = $("guest-diagnostic-card");
+  const summary = $("guest-diagnostic-home-summary");
+  const level = $("guest-diagnostic-home-level");
+  const result = data?.result;
+  if (!card || !summary || !level || !result) {
+    card?.classList.add("hidden");
+    return;
+  }
+
+  const levelName =
+    typeof result.recommendedLevelName === "string" ? result.recommendedLevelName.trim() : "";
+  const confidenceCopy =
+    result.confidenceState === "USABLE_SIGNAL"
+      ? "Tanı sonucu öğrenme yolunun başlangıcını seçmene yardımcı olacak."
+      : "Bu sonuç başlangıç için bir öneridir; ilerledikçe seviyen daha netleşir.";
+  summary.textContent = `${confidenceCopy} ${result.questionCount} soruluk tanı hesabına bağlandı.`;
+  level.textContent = levelName || "Başlangıç adımını keşfet";
+  card.classList.remove("hidden");
+}
+
+async function loadClaimedGuestDiagnostic() {
+  const { accessToken, tenantId } = getStoredTokens();
+  if (!accessToken) return;
+  try {
+    const response = await fetch("/student/guest-diagnostic", {
+      headers: authHeaders(accessToken, tenantId),
+    });
+    renderClaimedGuestDiagnostic(await parseResponse(response));
+  } catch {
+    $("guest-diagnostic-card")?.classList.add("hidden");
+  }
+}
+
 function clearStoredGuestSession() {
   try {
     sessionStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
@@ -600,6 +658,7 @@ async function socialLogin(provider, idToken, nonce, displayName) {
 async function completeSocialLogin(provider, idToken, nonce, displayName) {
   const session = await socialLogin(provider, idToken, nonce, displayName);
   setStoredSession(session);
+  await claimGuestDiagnosticForCurrentUser();
   showDashboard(session);
   return session;
 }
@@ -772,6 +831,7 @@ function showDashboard(me) {
   var gamif = $("topbar-gamification");
   if (gamif) gamif.classList.toggle("hidden", isPlatform);
   if (!isPlatform) void loadTopbarGamification();
+  if (!isPlatform) void loadClaimedGuestDiagnostic();
 
   if (isPlatform) {
     void loadTenants();
@@ -3207,6 +3267,7 @@ $("signup-form").addEventListener("submit", async (event) => {
   try {
     const session = await signup(displayName, email, password);
     setStoredSession(session);
+    await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
     recordPilotTelemetry("SIGNUP_COMPLETED");
   } catch (err) {
@@ -3236,6 +3297,7 @@ $("login-form").addEventListener("submit", async (event) => {
   try {
     const session = await login(email, password);
     setStoredSession(session);
+    await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
   } catch (err) {
     $("login-error").textContent = formatStudentError(

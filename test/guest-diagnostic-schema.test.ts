@@ -17,6 +17,13 @@ const tokenLookupMigration = readFileSync(
   ),
   "utf8",
 );
+const claimMigration = readFileSync(
+  new URL(
+    "../prisma/migrations/20260924100000_add_guest_diagnostic_claim/migration.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function enumBody(name: string): string {
   const match = schema.match(new RegExp(`enum ${name} \\{([\\s\\S]*?)\\n\\}`));
@@ -56,10 +63,13 @@ describe("guest diagnostic Prisma contract", () => {
     const session = modelBody("GuestDiagnosticSession");
     const result = modelBody("GuestDiagnosticResult");
 
-    for (const forbiddenField of ["userId", "tenantId", "membershipId", "studentId"]) {
+    for (const forbiddenField of ["tenantId", "membershipId", "studentId"]) {
       expect(session).not.toMatch(new RegExp(`\\b${forbiddenField}\\b`));
       expect(result).not.toMatch(new RegExp(`\\b${forbiddenField}\\b`));
     }
+    expect(session).toMatch(/claimedUserId\s+String\?/);
+    expect(session).toMatch(/claimedAt\s+DateTime\?/);
+    expect(session).not.toContain("claimedUser         User");
   });
 
   it("preserves the required graph and immutable source references", () => {
@@ -157,5 +167,15 @@ describe("guest diagnostic migration and RLS contract", () => {
     expect(migration).toMatch(/REFERENCES "QuestionVersion"\("id"\)\s+ON DELETE RESTRICT/);
     expect(migration).toContain('CONSTRAINT "GuestDiagnosticSession_sourceTemplateVersionId_fkey"');
     expect(migration).toMatch(/REFERENCES "ExerciseTemplateVersion"\("id"\)\s+ON DELETE RESTRICT/);
+  });
+
+  it("keeps result claims server-controlled and tenant-independent", () => {
+    expect(claimMigration).toContain('ADD COLUMN "claimedUserId" TEXT');
+    expect(claimMigration).toContain('ADD COLUMN "claimedAt" TIMESTAMP(3)');
+    expect(claimMigration).toContain("'CLAIM'");
+    expect(claimMigration).toContain("current_setting('app.guest_operation', true) = 'USER_READ'");
+    expect(claimMigration).toContain("current_setting('app.guest_user_id', true)");
+    expect(claimMigration).not.toContain('REFERENCES "User"');
+    expect(claimMigration).not.toContain('REFERENCES "Tenant"');
   });
 });
