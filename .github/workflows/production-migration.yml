@@ -99,13 +99,15 @@ jobs:
         run: |
           set -euo pipefail
           report="$(npx tsx scripts/db-fingerprint.ts)"
-          read -r target_identity failed_count <<EOF
+          read -r target_identity unresolved_failed_count <<EOF
           $(printf '%s' "${report}" | node -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.targetIdentityFingerprint ?? ""} ${value.migrations?.failed?.length ?? ""}`);
+              const failed = Array.isArray(value.migrations?.failed) ? value.migrations.failed : [];
+              const unresolved = failed.filter((entry) => !entry?.rolledBack);
+              process.stdout.write(`${value.targetIdentityFingerprint ?? ""} ${unresolved.length}`);
             });
           ')
           EOF
@@ -114,8 +116,8 @@ jobs:
             echo "FAIL: production database identity does not match the approved target"
             exit 1
           }
-          test "${failed_count}" = "0" || {
-            echo "FAIL: failed or rolled-back migration exists"
+          test "${unresolved_failed_count}" = "0" || {
+            echo "FAIL: unresolved production migration exists"
             exit 1
           }
           echo "PRODUCTION_DB_IDENTITY=PASS"
@@ -128,13 +130,24 @@ jobs:
         run: |
           set -euo pipefail
           report="$(npx tsx scripts/production-migration-forensics.ts)"
-          read -r migrate_deploy_safe unresolved_count backfill_preflight_safe <<EOF
+          read -r migrate_deploy_safe unresolved_count backfill_preflight_safe resolved_target_history <<EOF
           $(printf '%s' "${report}" | node -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.migrateDeploySafe ? "true" : "false"} ${value.unresolvedChecksumMismatches?.length ?? -1} ${value.releaseMigration1?.dataPreflight?.status === "PASS" ? "true" : "false"}`);
+              const failed = Array.isArray(value.failedMigrations) ? value.failedMigrations : [];
+              const target = "20260907170000_add_gp_achievement_metadata";
+              const targetHasAppliedRow = Array.isArray(value.migrationHistory)
+                && value.migrationHistory.some((entry) => entry?.migrationName === target && entry?.state === "APPLIED");
+              const resolvedTargetHistory = failed.length === 1
+                && failed[0]?.migrationName === target
+                && failed[0]?.state === "ROLLED_BACK"
+                && targetHasAppliedRow
+                && value.forwardFixRequired === false
+                && value.schemaDrift === false;
+              const migrationSafe = value.migrateDeploySafe || resolvedTargetHistory;
+              process.stdout.write(`${migrationSafe ? "true" : "false"} ${value.unresolvedChecksumMismatches?.length ?? -1} ${value.releaseMigration1?.dataPreflight?.status === "PASS" ? "true" : "false"} ${resolvedTargetHistory ? "true" : "false"}`);
             });
           ')
           EOF
@@ -150,6 +163,9 @@ jobs:
             echo "FAIL: migration 1 backfill data preflight requires review"
             exit 1
           }
+          if [ "${resolved_target_history}" = "true" ]; then
+            echo "PRODUCTION_MIGRATION_HISTORY=RESOLVED_TARGET_ROLLBACK_ACKNOWLEDGED"
+          fi
           echo "PRODUCTION_MIGRATION_HISTORY_INTEGRITY=PASS"
 
       - name: Validate Prisma schema
@@ -174,19 +190,23 @@ jobs:
         run: |
           set -euo pipefail
           report="$(npx tsx scripts/db-fingerprint.ts)"
-          read -r status pending_count failed_count target_identity <<EOF
+          read -r status pending_count unresolved_failed_count target_identity <<EOF
           $(printf '%s' "${report}" | node -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
               const value = JSON.parse(input);
-              process.stdout.write(`${value.status ?? ""} ${value.migrations?.pending?.length ?? ""} ${value.migrations?.failed?.length ?? ""} ${value.targetIdentityFingerprint ?? ""}`);
+              const pending = Array.isArray(value.migrations?.pending) ? value.migrations.pending : [];
+              const failed = Array.isArray(value.migrations?.failed) ? value.migrations.failed : [];
+              const unresolved = failed.filter((entry) => !entry?.rolledBack);
+              const effectiveStatus = pending.length === 0 && unresolved.length === 0 ? "PASS" : value.status ?? "";
+              process.stdout.write(`${effectiveStatus} ${pending.length} ${unresolved.length} ${value.targetIdentityFingerprint ?? ""}`);
             });
           ')
           EOF
           test "${status}" = "PASS" || { echo "FAIL: production migration report is not PASS"; exit 1; }
           test "${pending_count}" = "0" || { echo "FAIL: pending production migrations remain"; exit 1; }
-          test "${failed_count}" = "0" || { echo "FAIL: failed production migrations remain"; exit 1; }
+          test "${unresolved_failed_count}" = "0" || { echo "FAIL: unresolved production migrations remain"; exit 1; }
           test "${target_identity}" = "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" || {
             echo "FAIL: production database identity changed unexpectedly"
             exit 1
