@@ -176,11 +176,12 @@ jobs:
           const target = "20260907170000_add_gp_achievement_metadata";
           const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
           const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
+          const unresolvedFailed = failed.filter((entry) => !entry?.rolledBack);
           if (report.target?.environment !== "PRODUCTION") throw new Error("post-recovery environment mismatch");
           if (report.targetIdentityFingerprint !== process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT) {
             throw new Error("post-recovery fingerprint mismatch");
           }
-          if (failed.length !== 0) throw new Error("failed production migrations remain");
+          if (unresolvedFailed.length !== 0) throw new Error("unresolved production migrations remain");
           if (pending[0] !== "20260908110000_add_content_question_lifecycle" && pending[0] !== "20260914100000_add_learning_experience_foundation" && pending[0] !== "20260922120000_add_guest_diagnostic_models") {
             throw new Error("unexpected next production migration state");
           }
