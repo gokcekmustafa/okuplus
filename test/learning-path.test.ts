@@ -336,6 +336,18 @@ describe.sequential("learning path", () => {
     await prisma.studentProgress.deleteMany({ where: { studentId: userId, skillId: SKILL_A } });
   });
   it("blocks skipping a locked future node", async () => {
+    const completed = await prisma.exerciseSession.create({
+      data: {
+        tenantId: personalTenantId,
+        studentId: userId,
+        templateVersionId: TMPL_AV,
+        status: "COMPLETED",
+        completedAt: new Date(),
+        context: "INDIVIDUAL",
+        sessionType: "PRACTICE",
+      },
+      select: { id: true },
+    });
     await prisma.studentProgress.create({
       data: {
         tenantId: personalTenantId,
@@ -352,8 +364,10 @@ describe.sequential("learning path", () => {
       url: "/student/learning-path",
       headers: { authorization: `Bearer ${token}` },
     });
-    const locked = path.json().data.nodes.find((n: any) => n.status === "locked");
-    expect(locked?.templateVersionId).toBe(TMPL_CV);
+    const nodes = path.json().data.nodes;
+    const locked = nodes.find((n: any) => n.templateVersionId === TMPL_CV);
+    expect(locked).toBeDefined();
+    expect(locked.status).toBe("locked");
 
     const start = await app.inject({
       method: "POST",
@@ -365,6 +379,7 @@ describe.sequential("learning path", () => {
       },
     });
     expect(start.statusCode).toBe(403);
+    await prisma.exerciseSession.delete({ where: { id: completed.id } });
     await prisma.studentProgress.deleteMany({ where: { studentId: userId, skillId: SKILL_A } });
   });
   it("personal context", async () => {
