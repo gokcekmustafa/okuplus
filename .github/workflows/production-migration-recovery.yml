@@ -1,0 +1,183 @@
+name: Manual production migration recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_recovery:
+        description: "Type RESOLVE_APPLIED_20260907170000 to approve the targeted recovery"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-migration
+  cancel-in-progress: false
+
+jobs:
+  production-migration-recovery:
+    name: Resolve targeted production migration history
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production-migration
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      CONFIRM_RECOVERY: ${{ inputs.confirm_recovery }}
+      TARGET_MIGRATION: 20260907170000_add_gp_achievement_metadata
+
+    steps:
+      - name: Verify production recovery gate
+        shell: bash
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_REF" = "refs/heads/master"
+          test "$APP_ENV" = "production"
+          test "$NODE_ENV" = "production"
+          test "$CONFIRM_RECOVERY" = "RESOLVE_APPLIED_20260907170000"
+          test -n "$PRODUCTION_DATABASE_URL"
+          [[ "$PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT" =~ ^[0-9a-fA-F]{64}$ ]]
+
+      - name: Checkout selected master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify targeted recovery preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          fingerprint_file="$RUNNER_TEMP/production-recovery-before.json"
+          npx tsx scripts/db-fingerprint.ts >"$fingerprint_file"
+
+          FINGERPRINT_FILE="$fingerprint_file" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_FILE, "utf8"));
+          const target = "20260907170000_add_gp_achievement_metadata";
+          const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
+          const targetFailures = failed.filter((entry) => entry?.name === target);
+          const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
+          const targetFingerprint = report.targetIdentityFingerprint;
+
+          if (report.target?.environment !== "PRODUCTION") {
+            throw new Error("production target environment verification failed");
+          }
+          if (targetFingerprint !== process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT) {
+            throw new Error("production target fingerprint verification failed");
+          }
+          if (targetFailures.length !== 1 || unexpectedFailures.length !== 0) {
+            throw new Error("unexpected production migration failure state");
+          }
+          if (targetFailures[0].appliedStepsCount !== 0) {
+            throw new Error("target migration has applied steps and cannot be resolved by this workflow");
+          }
+          console.log("PRODUCTION_RECOVERY_TARGET=PASS");
+          NODE
+
+          npx tsx -e '
+          import { PrismaClient } from "@prisma/client";
+
+          const expectedCategory = ["TRAINING", "READING", "COMPREHENSION", "CONSISTENCY", "MILESTONE"];
+          const expectedKind = ["BADGE", "TROPHY"];
+          const prisma = new PrismaClient({ datasources: { db: { url: process.env.PRODUCTION_DATABASE_URL } } });
+
+          async function main() {
+            const enumRows = await prisma.$queryRaw`
+              SELECT t.typname AS type_name,
+                     array_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels
+              FROM pg_type t
+              JOIN pg_namespace n ON n.oid = t.typnamespace
+              JOIN pg_enum e ON e.enumtypid = t.oid
+              WHERE n.nspname = ${"public"}
+                AND t.typname IN (${"AchievementCategory"}, ${"AchievementKind"}, ${"PointEventType"})
+              GROUP BY t.typname
+            `;
+            const byName = new Map(enumRows.map((row) => [row.type_name, row.labels]));
+            const pointLabels = byName.get("PointEventType") ?? [];
+            if (JSON.stringify(byName.get("AchievementCategory")) !== JSON.stringify(expectedCategory)) {
+              throw new Error("AchievementCategory is not canonical");
+            }
+            if (JSON.stringify(byName.get("AchievementKind")) !== JSON.stringify(expectedKind)) {
+              throw new Error("AchievementKind is not canonical");
+            }
+            if (!pointLabels.includes("TRAINING_SESSION_COMPLETED")) {
+              throw new Error("PointEventType is missing TRAINING_SESSION_COMPLETED");
+            }
+
+            const columns = await prisma.$queryRaw`
+              SELECT column_name, udt_name, is_nullable, column_default
+              FROM information_schema.columns
+              WHERE table_schema = ${"public"}
+                AND table_name = ${"Badge"}
+                AND column_name IN (${"category"}, ${"kind"}, ${"targetValue"})
+            `;
+            const columnNames = new Set(columns.map((row) => row.column_name));
+            if (!["category", "kind", "targetValue"].every((name) => columnNames.has(name))) {
+              throw new Error("Badge achievement metadata columns are incomplete");
+            }
+
+            const indexes = await prisma.$queryRaw`
+              SELECT to_regclass(${"public.\"Badge_category_status_displayOrder_idx\""}) AS index_name
+            `;
+            if (indexes[0]?.index_name !== "Badge_category_status_displayOrder_idx") {
+              throw new Error("Badge achievement metadata index is missing");
+            }
+            console.log("PRODUCTION_RECOVERY_SCHEMA=PASS");
+          }
+
+          main().catch((error) => {
+            console.error(error instanceof Error ? error.message : "production recovery precondition failed");
+            process.exitCode = 1;
+          }).finally(() => prisma.$disconnect());
+          '
+
+      - name: Resolve only the targeted production migration as applied
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: npx prisma migrate resolve --applied 20260907170000_add_gp_achievement_metadata --schema=prisma/schema.prisma
+
+      - name: Verify production recovery result
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint_file="$RUNNER_TEMP/production-recovery-after.json"
+          npx tsx scripts/db-fingerprint.ts >"$fingerprint_file"
+
+          FINGERPRINT_FILE="$fingerprint_file" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_FILE, "utf8"));
+          const target = "20260907170000_add_gp_achievement_metadata";
+          const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
+          const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
+          if (report.target?.environment !== "PRODUCTION") throw new Error("post-recovery environment mismatch");
+          if (report.targetIdentityFingerprint !== process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT) {
+            throw new Error("post-recovery fingerprint mismatch");
+          }
+          if (failed.length !== 0) throw new Error("failed production migrations remain");
+          if (pending[0] !== "20260908110000_add_content_question_lifecycle" && pending[0] !== "20260914100000_add_learning_experience_foundation" && pending[0] !== "20260922120000_add_guest_diagnostic_models") {
+            throw new Error("unexpected next production migration state");
+          }
+          console.log(`PRODUCTION_RECOVERY=PASS; pending=${pending.length}`);
+          NODE
+
+          echo "PRODUCTION_MIGRATION_RECOVERY=PASS"
