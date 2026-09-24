@@ -19,6 +19,7 @@ type DbIdentity = {
 
 type MigrationRow = {
   migration_name: string;
+  applied_steps_count: number;
   finished_at: Date | null;
   rolled_back_at: Date | null;
 };
@@ -119,7 +120,7 @@ async function main(): Promise<void> {
           version() AS server_version
       `,
       prisma.$queryRaw<MigrationRow[]>`
-        SELECT migration_name, finished_at, rolled_back_at
+        SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
         FROM _prisma_migrations
         ORDER BY started_at
       `,
@@ -196,6 +197,7 @@ async function main(): Promise<void> {
             pending,
             failed: failed.map((row) => ({
               name: row.migration_name,
+              appliedStepsCount: row.applied_steps_count,
               rolledBack: Boolean(row.rolled_back_at),
             })),
             lastApplied,
