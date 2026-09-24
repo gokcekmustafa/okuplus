@@ -218,6 +218,33 @@ enum AssessmentStatus {
   ARCHIVED
 }
 
+enum GuestDiagnosticSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+}
+
+enum GuestDiagnosticResultState {
+  INSUFFICIENT_DATA
+  PARTIAL_LOW_SIGNAL
+  BALANCED_PERFORMANCE
+  DISTINCT_SKILL_SIGNAL
+  RECOMMENDATION_UNAVAILABLE
+  RECOMMENDATION_AVAILABLE
+}
+
+enum GuestDiagnosticConfidenceState {
+  INSUFFICIENT_DATA
+  LOW_SIGNAL
+  USABLE_SIGNAL
+  BOUNDARY_SENSITIVE
+  NOT_AVAILABLE
+}
+
+enum GuestDiagnosticRecommendationMode {
+  RECOMMENDATION_ONLY
+}
+
 enum BadgeStatus {
   ACTIVE
   INACTIVE
@@ -898,6 +925,7 @@ model QuestionVersion {
   templateQuestions ExerciseTemplateVersionQuestion[]
   attempts          Attempt[]
   media             QuestionVersionMedia[]
+  guestDiagnosticItems GuestDiagnosticItem[]
 
   @@unique([questionId, version])
   @@index([questionId, status])
@@ -951,9 +979,142 @@ model ExerciseTemplateVersion {
   questions ExerciseTemplateVersionQuestion[]
   sessions  ExerciseSession[]
   trainingSessionItems TrainingSessionItem[]
+  guestDiagnosticSessions GuestDiagnosticSession[]          @relation("GuestDiagnosticSource")
 
   @@unique([templateId, version])
   @@index([templateId, status])
+}
+
+// ============ GUEST DIAGNOSTIC ============
+// Guest sessions are intentionally not attached to Tenant or Membership.
+// A completed result may be claimed by an authenticated user through the
+// server-only opaque claimedUserId field. It is not a Prisma relation: the
+// restricted guest role must not gain access to identity or tenant tables.
+// The server must establish a validated transaction-local guest context before
+// accessing these tables; the migration policies fail closed when it is absent.
+
+model GuestDiagnosticSession {
+  id                      String                              @id @default(dbgenerated("uuidv7()"))
+  tokenHash               String                              @unique
+  csrfTokenHash           String
+  status                  GuestDiagnosticSessionStatus        @default(IN_PROGRESS)
+  definitionVersion       Int
+  scoringContractVersion  Int
+  recommendationConfigId  String
+  recommendationConfig    GuestDiagnosticRecommendationConfig @relation(fields: [recommendationConfigId], references: [id], onDelete: Restrict)
+  sourceTemplateVersionId String
+  sourceTemplateVersion   ExerciseTemplateVersion             @relation("GuestDiagnosticSource", fields: [sourceTemplateVersionId], references: [id], onDelete: Restrict)
+  questionCount           Int
+  minimumScorableCount    Int
+  minimumAnsweredCount    Int
+  startedAt               DateTime                            @default(now())
+  lastActivityAt          DateTime                            @default(now())
+  expiresAt               DateTime
+  completedAt             DateTime?
+  claimedUserId           String?
+  claimedAt               DateTime?
+  createdAt               DateTime                            @default(now())
+  updatedAt               DateTime                            @updatedAt
+
+  items   GuestDiagnosticItem[]
+  answers GuestDiagnosticAnswer[]
+  result  GuestDiagnosticResult?
+
+  @@index([status, expiresAt])
+  @@index([recommendationConfigId, status])
+  @@index([sourceTemplateVersionId])
+  @@index([claimedUserId, status, claimedAt])
+}
+
+model GuestDiagnosticItem {
+  id                String                 @id @default(dbgenerated("uuidv7()"))
+  sessionId         String
+  session           GuestDiagnosticSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  position          Int
+  questionVersionId String
+  questionVersion   QuestionVersion        @relation(fields: [questionVersionId], references: [id], onDelete: Restrict)
+  questionType      QuestionType
+  skillCode         String
+  difficulty        Float?
+  createdAt         DateTime               @default(now())
+
+  answers GuestDiagnosticAnswer[]
+
+  @@unique([id, sessionId])
+  @@unique([sessionId, position])
+  @@unique([sessionId, questionVersionId])
+  @@index([questionVersionId])
+}
+
+model GuestDiagnosticAnswer {
+  id                String                 @id @default(dbgenerated("uuidv7()"))
+  sessionId         String
+  session           GuestDiagnosticSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  itemId            String
+  item              GuestDiagnosticItem    @relation(fields: [itemId, sessionId], references: [id, sessionId], onDelete: Cascade)
+  clientAnswerId    String
+  answerFingerprint String
+  isCorrect         Boolean
+  rawScore          Float
+  responseOrder     Int
+  timeSpentMs       Int?
+  answeredAt        DateTime               @default(now())
+  createdAt         DateTime               @default(now())
+
+  @@unique([sessionId, itemId])
+  @@unique([sessionId, clientAnswerId])
+  @@index([sessionId, answeredAt])
+  @@index([itemId])
+}
+
+model GuestDiagnosticResult {
+  id                     String                              @id @default(dbgenerated("uuidv7()"))
+  sessionId              String                              @unique
+  session                GuestDiagnosticSession              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scoringContractVersion Int
+  recommendationConfigId String
+  recommendationConfig   GuestDiagnosticRecommendationConfig @relation(fields: [recommendationConfigId], references: [id], onDelete: Restrict)
+  definitionVersion      Int
+  questionCount          Int
+  answeredCount          Int
+  scoredQuestionCount    Int
+  score                  Float?
+  skillSubscores         Json
+  resultState            GuestDiagnosticResultState
+  confidenceState        GuestDiagnosticConfidenceState
+  recommendationMode     GuestDiagnosticRecommendationMode   @default(RECOMMENDATION_ONLY)
+  recommendedLevelCode   String?
+  recommendedLevelName   String?
+  recommendationCopyKey  String?
+  createdAt              DateTime                            @default(now())
+  completedAt            DateTime
+
+  @@index([createdAt])
+  @@index([resultState, createdAt])
+}
+
+model GuestDiagnosticRecommendationConfig {
+  id                       String        @id @default(dbgenerated("uuidv7()"))
+  configKey                String
+  version                  Int
+  scoringContractVersion   Int
+  minimumAnsweredCount     Int
+  minimumScorableCount     Int
+  recommendationThresholds Json
+  skillSignalThresholds    Json
+  boundaryHandling         String
+  status                   VersionStatus @default(DRAFT)
+  enabled                  Boolean       @default(false)
+  publishedAt              DateTime?
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  sessions GuestDiagnosticSession[]
+  results  GuestDiagnosticResult[]
+
+  @@unique([configKey, version])
+  @@index([configKey, status, enabled])
+  @@index([status, publishedAt])
 }
 
 /// Org şablonu başka tenant'ın içeriğini kullanamaz (tenant compatibility -> prisma/manual/005).

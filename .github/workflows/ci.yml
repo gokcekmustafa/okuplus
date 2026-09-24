@@ -28,10 +28,19 @@ jobs:
           --health-retries 5
     env:
       NODE_ENV: test
+      GUEST_API_INTEGRATION: "true"
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/oku_plus_test?schema=public
       PSQL_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/oku_plus_test
       RLS_TEST_DATABASE_URL: postgresql://oku_app:oku_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
+      GUEST_DATABASE_URL: postgresql://oku_guest_app:oku_guest_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
+      GUEST_RLS_TEST_DATABASE_URL: postgresql://oku_guest_app:oku_guest_app_pass@localhost:5432/oku_plus_test?schema=public&connection_limit=1
       JWT_SECRET: ci-only-jwt-secret-not-for-deployment
+      # CI and Vercel Preview may share one disposable Upstash database, but
+      # their rate-limit keys must remain isolated by namespace.
+      GUEST_RATE_LIMIT_NAMESPACE: ci:guest
+      CORS_ORIGIN: https://okuplus.online
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,7 +57,10 @@ jobs:
       - name: Apply database migrations
         run: npx prisma migrate deploy
 
-      - name: Prepare non-superuser RLS test role
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Prepare non-superuser RLS test roles
         run: |
           psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
           DO $$
@@ -62,7 +74,38 @@ jobs:
           GRANT USAGE ON SCHEMA public TO oku_app;
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO oku_app;
           GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO oku_app;
+
+          DO $$
+          BEGIN
+            CREATE ROLE oku_guest_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'oku_guest_app_pass';
+          EXCEPTION
+            WHEN duplicate_object THEN NULL;
+          END
+          $$;
+          ALTER ROLE oku_guest_app WITH LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'oku_guest_app_pass';
+          GRANT CONNECT ON DATABASE oku_plus_test TO oku_guest_app;
+          GRANT USAGE ON SCHEMA public TO oku_guest_app;
+          GRANT SELECT, INSERT, UPDATE ON "GuestDiagnosticSession" TO oku_guest_app;
+          GRANT SELECT, INSERT ON "GuestDiagnosticItem" TO oku_guest_app;
+          GRANT SELECT, INSERT ON "GuestDiagnosticAnswer" TO oku_guest_app;
+          GRANT SELECT, INSERT ON "GuestDiagnosticResult" TO oku_guest_app;
+          GRANT SELECT ON "GuestDiagnosticRecommendationConfig" TO oku_guest_app;
+          GRANT SELECT ON "Content" TO oku_guest_app;
+          GRANT SELECT ON "ContentVersion" TO oku_guest_app;
+          GRANT SELECT ON "ContentSkill" TO oku_guest_app;
+          GRANT SELECT ON "Question" TO oku_guest_app;
+          GRANT SELECT ON "QuestionVersion" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplate" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersion" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersionContent" TO oku_guest_app;
+          GRANT SELECT ON "ExerciseTemplateVersionQuestion" TO oku_guest_app;
+          GRANT SELECT ON "Skill" TO oku_guest_app;
           SQL
+
+      - name: Prepare Guest Diagnostic RLS fixtures
+        env:
+          GUEST_RLS_FIXTURE_ADMIN_DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: npm run test:guest-rls:fixtures
 
       - name: Lint
         run: npm run lint

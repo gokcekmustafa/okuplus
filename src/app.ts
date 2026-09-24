@@ -38,6 +38,7 @@ import { templateAdminRoutes } from "./modules/templates/index.js";
 import { tenantAdminRoutes } from "./modules/tenant/index.js";
 import { trainingStudentRoutes } from "./modules/training/index.js";
 import { userAdminRoutes } from "./modules/users/index.js";
+import { guestDiagnosticRoutes } from "./modules/guest-diagnostic/index.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { staticPlugin } from "./plugins/static.js";
@@ -123,6 +124,7 @@ export async function buildApp(
   await app.register(baselineStudentRoutes, { authProvider });
   await app.register(lessonStudentRoutes, { authProvider });
   await app.register(trainingStudentRoutes, { authProvider });
+  await app.register(guestDiagnosticRoutes, { env, authProvider });
   await app.register(staticPlugin);
   return app;
 }

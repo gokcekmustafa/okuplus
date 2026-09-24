@@ -9,6 +9,18 @@ const STORAGE_KEYS = {
   soundEffects: "oku.soundEffects",
 };
 
+const GUEST_SESSION_STORAGE_KEY = "oku.guestDiagnostic.sessionId";
+
+const guestDiagnosticState = {
+  sessionId: null,
+  questions: [],
+  questionCount: 0,
+  currentIndex: 0,
+  selectedAnswerIds: [],
+  clientAnswerId: null,
+  busy: false,
+};
+
 const $ = (id) => document.getElementById(id);
 
 let inFlight = false;
@@ -202,6 +214,120 @@ function csrfHeaders() {
   }
 }
 
+function guestCsrfHeaders() {
+  const cookie = document.cookie
+    .split(";")
+    .find((part) => part.trim().startsWith("__Host-oku_guest_csrf="));
+  if (!cookie) return {};
+  const value = cookie.trim().slice("__Host-oku_guest_csrf=".length);
+  try {
+    return { "x-csrf-token": decodeURIComponent(value) };
+  } catch {
+    return { "x-csrf-token": value };
+  }
+}
+
+function storedGuestSessionId() {
+  try {
+    return sessionStorage.getItem(GUEST_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredGuestSessionId(sessionId) {
+  try {
+    sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, sessionId);
+  } catch {
+    /* Session storage is optional; the HttpOnly cookie remains authoritative. */
+  }
+}
+
+async function claimGuestDiagnosticForCurrentUser() {
+  const sessionId = guestDiagnosticState.sessionId || storedGuestSessionId();
+  const { accessToken, tenantId } = getStoredTokens();
+  if (!sessionId || !accessToken) return false;
+
+  try {
+    const response = await fetch(`/guest/diagnostics/${encodeURIComponent(sessionId)}/claim`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...authHeaders(accessToken, tenantId),
+        ...guestCsrfHeaders(),
+      },
+    });
+    await parseResponse(response);
+    clearStoredGuestSession();
+    return true;
+  } catch {
+    // Account access must not be blocked by an expired or already-cleared
+    // guest cookie. The server remains the source of truth for the claim.
+    return false;
+  }
+}
+
+function renderClaimedGuestDiagnostic(data) {
+  const card = $("guest-diagnostic-card");
+  const summary = $("guest-diagnostic-home-summary");
+  const level = $("guest-diagnostic-home-level");
+  const result = data?.result;
+  if (!card || !summary || !level || !result) {
+    card?.classList.add("hidden");
+    return;
+  }
+
+  const levelName =
+    typeof result.recommendedLevelName === "string" ? result.recommendedLevelName.trim() : "";
+  const confidenceCopy =
+    result.confidenceState === "USABLE_SIGNAL"
+      ? "Tanı sonucu öğrenme yolunun başlangıcını seçmene yardımcı olacak."
+      : "Bu sonuç başlangıç için bir öneridir; ilerledikçe seviyen daha netleşir.";
+  summary.textContent = `${confidenceCopy} ${result.questionCount} soruluk tanı hesabına bağlandı.`;
+  level.textContent = levelName || "Başlangıç adımını keşfet";
+  card.classList.remove("hidden");
+}
+
+async function loadClaimedGuestDiagnostic() {
+  const { accessToken, tenantId } = getStoredTokens();
+  if (!accessToken) return;
+  try {
+    const response = await fetch("/student/guest-diagnostic", {
+      headers: authHeaders(accessToken, tenantId),
+    });
+    renderClaimedGuestDiagnostic(await parseResponse(response));
+  } catch {
+    $("guest-diagnostic-card")?.classList.add("hidden");
+  }
+}
+
+function clearStoredGuestSession() {
+  try {
+    sessionStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
+  } catch {
+    /* Session storage is optional. */
+  }
+  guestDiagnosticState.sessionId = null;
+  guestDiagnosticState.questions = [];
+  guestDiagnosticState.questionCount = 0;
+  guestDiagnosticState.currentIndex = 0;
+  guestDiagnosticState.selectedAnswerIds = [];
+  guestDiagnosticState.clientAnswerId = null;
+}
+
+async function guestApi(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = {
+    ...(method === "POST" && options.body !== undefined && options.body !== null
+      ? { "content-type": "application/json" }
+      : {}),
+    ...(method === "POST" ? guestCsrfHeaders() : {}),
+    ...(options.headers || {}),
+  };
+  const response = await fetch(path, { ...options, credentials: "include", headers });
+  return parseResponse(response);
+}
+
 async function parseResponse(res) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -225,6 +351,270 @@ function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar
   if (error?.status === 409) return "Bu işlem zaten kaydedilmiş olabilir. Biraz sonra tekrar dene.";
   if (error?.status >= 500) return "Bir bağlantı sorunu oldu. Biraz sonra tekrar dene.";
   return fallback;
+}
+
+function setGuestPhase(phase) {
+  const sections = {
+    loading: "guest-loading",
+    error: "guest-error",
+    question: "guest-question-view",
+    result: "guest-result-view",
+  };
+  for (const [name, id] of Object.entries(sections))
+    $(id)?.classList.toggle("hidden", name !== phase);
+}
+
+function showGuest() {
+  $("view-login")?.classList.add("hidden");
+  $("view-app")?.classList.add("hidden");
+  $("view-guest")?.classList.remove("hidden");
+  closeSidebar();
+}
+
+function showGuestLoading(
+  title = "Tanı hazırlanıyor…",
+  detail = "Sorularını güvenli şekilde yüklüyoruz.",
+) {
+  showGuest();
+  setGuestPhase("loading");
+  const heading = $("guest-loading")?.querySelector("h2");
+  if (heading) heading.textContent = title;
+  const message = $("guest-loading")?.querySelector("p");
+  if (message) message.textContent = detail;
+}
+
+function guestErrorMessage(error) {
+  if (error?.status === 409)
+    return "Tanı oturumun şu anda işleniyor. Birkaç saniye bekleyip tekrar dene.";
+  if (error?.status === 429) return "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar dene.";
+  if (!error?.status && (error?.name === "TypeError" || error?.message === "Failed to fetch"))
+    return "Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene.";
+  if (error?.status >= 500) return "Tanı şu anda kullanılamıyor. Lütfen biraz sonra tekrar dene.";
+  if (error?.status === 400) return "Tanı isteği tamamlanamadı. Lütfen tekrar dene.";
+  return "Tanı oturumun sona ermiş olabilir. Yeni bir tanı başlatmayı deneyebilirsin.";
+}
+
+function isGuestSessionExpired(error) {
+  return error?.status === 401 || error?.status === 404 || error?.status === 410;
+}
+
+function showGuestError(error, retryLabel = "Tekrar dene") {
+  showGuest();
+  setGuestPhase("error");
+  $("guest-error-message").textContent = guestErrorMessage(error);
+  $("guest-retry").textContent = retryLabel;
+  requestAnimationFrame(() => $("guest-retry")?.focus({ preventScroll: true }));
+}
+
+function guestSkillLabel(skill) {
+  return (
+    {
+      RC_MAIN_IDEA: "Ana fikir",
+      RC_DETAIL: "Detay",
+      RC_INFERENCE: "Çıkarım",
+    }[skill] || "Okuma becerisi"
+  );
+}
+
+function guestDifficultyLabel(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  if (value < 0.45) return "Kolay";
+  if (value < 0.6) return "Orta";
+  return "İleri";
+}
+
+function renderGuestQuestion() {
+  const question = guestDiagnosticState.questions[guestDiagnosticState.currentIndex];
+  if (!question) return;
+
+  setGuestPhase("question");
+  const total = guestDiagnosticState.questionCount || guestDiagnosticState.questions.length;
+  const position = Number(question.position) || guestDiagnosticState.currentIndex + 1;
+  const progress = total > 0 ? Math.round(((position - 1) / total) * 100) : 0;
+  $("guest-question-view").dataset.questionType = question.questionType || "";
+  $("guest-progress-label").textContent = `${position} / ${total}`;
+  $("guest-progress-status").textContent =
+    position === total ? "Son sorudasın." : "Kısa ve dikkatli yanıtla.";
+  $("guest-progress-track").setAttribute("aria-valuemax", String(total));
+  $("guest-progress-track").setAttribute("aria-valuenow", String(position - 1));
+  $("guest-progress-value").style.width = `${progress}%`;
+  $("guest-question-meta").textContent = `${guestSkillLabel(question.skill)}${
+    guestDifficultyLabel(question.difficulty)
+      ? ` · ${guestDifficultyLabel(question.difficulty)}`
+      : ""
+  }`;
+  $("guest-question-prompt").textContent = question.prompt || "";
+  $("guest-question-error").textContent = "";
+  $("guest-question-error").classList.add("hidden");
+
+  const passage = $("guest-passage");
+  const content = question.content;
+  if (content?.body || content?.title) {
+    passage.classList.remove("hidden");
+    $("guest-passage-title").textContent = content.title || "";
+    $("guest-passage-body").textContent = content.body || "";
+  } else {
+    passage.classList.add("hidden");
+    $("guest-passage-title").textContent = "";
+    $("guest-passage-body").textContent = "";
+  }
+
+  const answerList = $("guest-answer-list");
+  answerList.replaceChildren();
+  guestDiagnosticState.selectedAnswerIds = [];
+  guestDiagnosticState.clientAnswerId =
+    typeof crypto?.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `guest-answer-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const options = Array.isArray(question.options) ? question.options : [];
+  for (const option of options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "guest-answer-option";
+    button.dataset.optionId = option.id;
+    button.setAttribute("aria-pressed", "false");
+    button.textContent = option.text;
+    button.addEventListener("click", () => {
+      guestDiagnosticState.selectedAnswerIds = [option.id];
+      for (const item of answerList.querySelectorAll(".guest-answer-option")) {
+        const selected = item === button;
+        item.classList.toggle("selected", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      }
+      $("guest-answer-submit").disabled = false;
+    });
+    answerList.appendChild(button);
+  }
+  $("guest-answer-submit").disabled = options.length === 0;
+  $("guest-answer-submit").textContent = position === total ? "Sonucu gör" : "Devam et";
+}
+
+function renderGuestResult(result) {
+  showGuest();
+  setGuestPhase("result");
+  const levelName =
+    typeof result?.recommendedLevelName === "string" ? result.recommendedLevelName.trim() : "";
+  const copyByKey = {
+    GUEST_DIAGNOSTIC_RECOMMENDATION:
+      "Yanıtlarına göre öğrenme yoluna uygun bir başlangıç noktası belirledik.",
+  };
+  $("guest-result-level").textContent =
+    levelName || "Sana uygun başlangıç adımını birlikte keşfedelim.";
+  $("guest-result-copy").textContent =
+    copyByKey[result?.recommendationCopyKey] ||
+    "Bu sonuç, ilk adımını seçmene yardımcı olan kısa bir öneridir.";
+  const questionCount = guestDiagnosticState.questionCount || guestDiagnosticState.questions.length;
+  $("guest-result-count").textContent = questionCount
+    ? `${questionCount} soruluk tanıyı tamamladın.`
+    : "Tanıyı tamamladın.";
+}
+
+async function loadGuestResult() {
+  showGuestLoading("Sonucun hazırlanıyor…", "Yanıtlarını güvenli şekilde değerlendiriyoruz.");
+  const result = await guestApi(
+    `/guest/diagnostics/${encodeURIComponent(guestDiagnosticState.sessionId)}/result`,
+  );
+  renderGuestResult(result);
+}
+
+async function loadGuestQuestions() {
+  const data = await guestApi(
+    `/guest/diagnostics/${encodeURIComponent(guestDiagnosticState.sessionId)}/questions`,
+  );
+  if (!Array.isArray(data?.questions) || !data.questions.length) {
+    throw new Error("Tanı soruları kullanılamıyor");
+  }
+  guestDiagnosticState.questions = data.questions;
+  guestDiagnosticState.questionCount = Number(data.questionCount) || data.questions.length;
+  const nextIndex = data.questions.findIndex((question) => !question.answered);
+  if (data.status === "COMPLETED" || nextIndex === -1) {
+    await loadGuestResult();
+    return;
+  }
+  guestDiagnosticState.currentIndex = nextIndex;
+  renderGuestQuestion();
+}
+
+async function startGuestDiagnostic() {
+  if (guestDiagnosticState.busy) return;
+  guestDiagnosticState.busy = true;
+  guestDiagnosticState.sessionId ||= storedGuestSessionId();
+  showGuestLoading();
+  try {
+    const data = await guestApi("/guest/diagnostics", { method: "POST" });
+    if (typeof data?.sessionId !== "string" || !data.sessionId) {
+      throw new Error("Tanı oturumu oluşturulamadı");
+    }
+    guestDiagnosticState.sessionId = data.sessionId;
+    setStoredGuestSessionId(data.sessionId);
+    await loadGuestQuestions();
+  } catch (error) {
+    if (isGuestSessionExpired(error)) clearStoredGuestSession();
+    showGuestError(error, isGuestSessionExpired(error) ? "Yeni tanı başlat" : "Tekrar dene");
+  } finally {
+    guestDiagnosticState.busy = false;
+  }
+}
+
+async function completeGuestDiagnostic() {
+  showGuestLoading("Sonucun hazırlanıyor…", "Yanıtlarını güvenli şekilde değerlendiriyoruz.");
+  try {
+    await guestApi(
+      `/guest/diagnostics/${encodeURIComponent(guestDiagnosticState.sessionId)}/complete`,
+      { method: "POST" },
+    );
+    await loadGuestResult();
+  } catch (error) {
+    if (isGuestSessionExpired(error)) clearStoredGuestSession();
+    showGuestError(
+      error,
+      isGuestSessionExpired(error) ? "Yeni tanı başlat" : "Sonucu tekrar yükle",
+    );
+  }
+}
+
+async function submitGuestAnswer() {
+  if (guestDiagnosticState.busy || !guestDiagnosticState.selectedAnswerIds.length) return;
+  const question = guestDiagnosticState.questions[guestDiagnosticState.currentIndex];
+  if (!question || !guestDiagnosticState.sessionId || !guestDiagnosticState.clientAnswerId) return;
+
+  guestDiagnosticState.busy = true;
+  $("guest-answer-submit").disabled = true;
+  $("guest-progress-status").textContent = "Cevabın kaydediliyor…";
+  try {
+    await guestApi(
+      `/guest/diagnostics/${encodeURIComponent(guestDiagnosticState.sessionId)}/answers`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          itemId: question.id,
+          clientAnswerId: guestDiagnosticState.clientAnswerId,
+          answer: guestDiagnosticState.selectedAnswerIds,
+        }),
+      },
+    );
+    question.answered = true;
+    const nextIndex = guestDiagnosticState.questions.findIndex(
+      (item, index) => index > guestDiagnosticState.currentIndex && !item.answered,
+    );
+    if (nextIndex === -1) {
+      await completeGuestDiagnostic();
+    } else {
+      guestDiagnosticState.currentIndex = nextIndex;
+      renderGuestQuestion();
+    }
+  } catch (error) {
+    if (isGuestSessionExpired(error)) {
+      clearStoredGuestSession();
+      showGuestError(error, "Yeni tanı başlat");
+    } else {
+      $("guest-question-error").textContent = guestErrorMessage(error);
+      $("guest-question-error").classList.remove("hidden");
+      $("guest-answer-submit").disabled = false;
+    }
+  } finally {
+    guestDiagnosticState.busy = false;
+  }
 }
 
 // ---------- Auth API çağrıları ----------
@@ -268,6 +658,7 @@ async function socialLogin(provider, idToken, nonce, displayName) {
 async function completeSocialLogin(provider, idToken, nonce, displayName) {
   const session = await socialLogin(provider, idToken, nonce, displayName);
   setStoredSession(session);
+  await claimGuestDiagnosticForCurrentUser();
   showDashboard(session);
   return session;
 }
@@ -351,7 +742,7 @@ async function logout(refreshToken, tenantId) {
 async function restoreSession() {
   const { accessToken, refreshToken, tenantId } = getStoredTokens();
   if (!accessToken || !refreshToken) {
-    showLogin();
+    void startGuestDiagnostic();
     return;
   }
 
@@ -377,7 +768,7 @@ async function restoreSession() {
   } catch (_e) {
     void _e;
     clearStoredSession();
-    showLogin();
+    void startGuestDiagnostic();
   }
 }
 
@@ -386,6 +777,7 @@ async function restoreSession() {
 function showLogin() {
   $("view-login").classList.remove("hidden");
   $("view-app").classList.add("hidden");
+  $("view-guest")?.classList.add("hidden");
   showLoginForm();
   closeSidebar();
 }
@@ -393,6 +785,7 @@ function showLogin() {
 function showDashboard(me) {
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
+  $("view-guest")?.classList.add("hidden");
 
   const { user, tenantContext } = me;
   resetInsights();
@@ -438,6 +831,7 @@ function showDashboard(me) {
   var gamif = $("topbar-gamification");
   if (gamif) gamif.classList.toggle("hidden", isPlatform);
   if (!isPlatform) void loadTopbarGamification();
+  if (!isPlatform) void loadClaimedGuestDiagnostic();
 
   if (isPlatform) {
     void loadTenants();
@@ -2844,6 +3238,15 @@ function showLoginForm() {
 
 $("show-signup-btn").addEventListener("click", showSignupForm);
 $("show-login-btn").addEventListener("click", showLoginForm);
+$("guest-answer-submit")?.addEventListener("click", () => void submitGuestAnswer());
+$("guest-retry")?.addEventListener("click", () => {
+  void startGuestDiagnostic();
+});
+$("guest-signup-btn")?.addEventListener("click", () => {
+  showLogin();
+  showSignupForm();
+});
+$("guest-login-btn")?.addEventListener("click", showLogin);
 
 $("signup-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2864,6 +3267,7 @@ $("signup-form").addEventListener("submit", async (event) => {
   try {
     const session = await signup(displayName, email, password);
     setStoredSession(session);
+    await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
     recordPilotTelemetry("SIGNUP_COMPLETED");
   } catch (err) {
@@ -2893,6 +3297,7 @@ $("login-form").addEventListener("submit", async (event) => {
   try {
     const session = await login(email, password);
     setStoredSession(session);
+    await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
   } catch (err) {
     $("login-error").textContent = formatStudentError(
