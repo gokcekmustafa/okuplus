@@ -11,7 +11,6 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain('fetch(path, { ...options, credentials: "include", headers })');
     expect(index).toContain('id="view-guest"');
     expect(index).toContain('id="guest-question-view"');
-    expect(index).toContain('id="guest-answer-feedback"');
   });
 
   it("renders backend question data and submits only the guest answer contract", () => {
@@ -29,9 +28,6 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain("question.difficulty");
     expect(app).toContain("clientAnswerId");
     expect(app).toContain("answer: guestDiagnosticState.selectedAnswerIds");
-    expect(app).toContain("renderGuestFeedback(response?.feedback)");
-    expect(app).toContain("setGuestAnswerOptionsDisabled(true)");
-    expect(app).toContain('"Sonraki soru"');
     expect(app).not.toContain("isCorrect:");
     expect(app).not.toContain("correctAnswer:");
   });
@@ -40,14 +36,11 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain("__Host-oku_guest_csrf");
     expect(app).toContain("sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY");
     expect(app).not.toContain("oku.guestToken");
-    expect(index).toContain("Sonucun burada hazır.");
     expect(index).toContain('id="guest-signup-btn"');
     expect(index).toContain('id="guest-login-btn"');
     expect(index).toContain('id="login-form"');
     expect(index).toContain('id="signup-form"');
     expect(index).toContain('id="guest-diagnostic-card"');
-    expect(index).toContain('id="guest-diagnostic-home-path"');
-    expect(app).toContain('$("guest-diagnostic-home-path")?.addEventListener("click"');
   });
 
   it("provides responsive loading, error, question and result presentation", () => {

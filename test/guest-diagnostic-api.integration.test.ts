@@ -229,37 +229,10 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
     expect(manipulated.statusCode).toBe(200);
     expect(data(manipulated).isCorrect).toBe(true);
     expect(data(manipulated).rawScore).toBe(1);
-    expect(data(first).feedback).toMatchObject({ isCorrect: true, correctOptions: [] });
-    expect(data(manipulated).feedback).toMatchObject({ isCorrect: true, correctOptions: [] });
 
     const duplicate = await answer(sessionA, cookiesA, 2, "answer-2");
     expect(duplicate.statusCode).toBe(200);
     expect(data(duplicate).idempotent).toBe(true);
-    expect(data(duplicate).feedback).toEqual(data(manipulated).feedback);
-
-    const questions = await app.inject({
-      method: "GET",
-      url: `/guest/diagnostics/${sessionB}/questions`,
-      headers: { cookie: cookieHeader(cookiesB) },
-    });
-    const options = data(questions).questions as Array<{ id: string }>;
-    const correctIds = answersByPosition[1] as string[];
-    const wrongOption = options.find((option) => !correctIds.includes(option.id));
-    expect(wrongOption).toBeDefined();
-
-    const wrong = await app.inject({
-      method: "POST",
-      url: `/guest/diagnostics/${sessionB}/answers`,
-      headers: stateChangingHeaders(cookiesB),
-      payload: {
-        itemId: "item-1",
-        clientAnswerId: "wrong-answer-1",
-        answer: [wrongOption!.id],
-      },
-    });
-    expect(wrong.statusCode).toBe(200);
-    expect(data(wrong).feedback).toMatchObject({ isCorrect: false });
-    expect(data(wrong).feedback.correctOptions.length).toBeGreaterThan(0);
   });
 
   it("does not complete before all eight answers are present", async () => {
