@@ -476,10 +476,7 @@ export async function getLearningPath(actor: {
       else if (!foundActive) {
         status = "active";
         foundActive = true;
-      } else status = "available";
-      const isCurrent =
-        today?.nextAction?.id === tv.id ||
-        (today?.activeSession?.templateVersionId === tv.id && status === "active");
+      } else status = "locked";
       nodes.push({
         id: tv.id,
         type: "TEMPLATE",
@@ -488,7 +485,7 @@ export async function getLearningPath(actor: {
         status,
         progress: isCompleted ? { sessionCount: 1, accuracy: null } : null,
         templateVersionId: tv.id,
-        isCurrent: isCurrent || status === "active",
+        isCurrent: status === "active",
       });
     }
     if (nodes.length === 0) {
@@ -508,16 +505,6 @@ export async function getLearningPath(actor: {
     const hasMultipleTemplateNodes = Array.from(templatesBySkill.values()).some(
       (templates) => templates.length > 1,
     );
-    let activeSkillId: string | null = null;
-    if (today?.activeSession?.templateVersionId) {
-      const atv = await prisma.exerciseTemplateVersion
-        .findUnique({
-          where: { id: today.activeSession.templateVersionId },
-          select: { template: { select: { skillId: true } } },
-        })
-        .catch(() => null);
-      activeSkillId = atv?.template.skillId ?? null;
-    }
     if (hasMultipleTemplateNodes) {
       const templateVersionIds = Array.from(templatesBySkill.values())
         .flat()
@@ -545,11 +532,7 @@ export async function getLearningPath(actor: {
           else if (!foundActive) {
             status = "active";
             foundActive = true;
-          } else status = "available";
-          const isCurrent =
-            today?.nextAction?.id === template.templateVersionId ||
-            today?.activeSession?.templateVersionId === template.templateVersionId ||
-            (activeSkillId === skill.id && status === "active");
+          } else status = "locked";
           nodes.push({
             id: template.templateVersionId,
             type: "CONTENT",
@@ -558,16 +541,9 @@ export async function getLearningPath(actor: {
             status,
             progress: isCompleted ? { sessionCount: 1, accuracy: null } : null,
             templateVersionId: template.templateVersionId,
-            isCurrent,
+            isCurrent: status === "active",
           });
         }
-      }
-      if (
-        !nodes.some((node) => node.status === "active") &&
-        nodes.some((node) => node.status === "available")
-      ) {
-        const firstAvailable = nodes.find((node) => node.status === "available");
-        if (firstAvailable) firstAvailable.status = "active";
       }
     } else {
       let foundActive = false;
@@ -581,10 +557,8 @@ export async function getLearningPath(actor: {
         else if (!foundActive && hasTemplate) {
           status = "active";
           foundActive = true;
-        } else if (hasTemplate) status = "available";
+        } else if (hasTemplate) status = "locked";
         else status = "locked";
-        let isCurrent = status === "active";
-        if (activeSkillId && activeSkillId === s.id) isCurrent = true;
         nodes.push({
           id: s.id,
           type: "SKILL",
@@ -595,15 +569,8 @@ export async function getLearningPath(actor: {
             ? { sessionCount: prog.sessionCount, accuracy: prog.accuracy ?? null }
             : null,
           templateVersionId: template?.templateVersionId ?? null,
-          isCurrent,
+          isCurrent: status === "active",
         });
-      }
-      if (
-        !nodes.some((node) => node.status === "active") &&
-        nodes.some((node) => node.status === "available")
-      ) {
-        const firstAvailable = nodes.find((node) => node.status === "available");
-        if (firstAvailable) firstAvailable.status = "active";
       }
     }
   }
@@ -619,6 +586,32 @@ export async function getLearningPath(actor: {
     nodes,
     today,
   };
+}
+
+async function assertLearningPathTemplateAccessible(
+  actor: { userId: string; tenantId: string; platformRole: PlatformRole | null },
+  templateVersionId: string,
+) {
+  const learningPath = await getLearningPath(actor);
+  const node = learningPath.nodes.find((item) => item.templateVersionId === templateVersionId);
+  if (!node || node.status !== "locked") return;
+
+  // An existing session may be resumed, but a new session cannot skip ahead.
+  const resumable = await prisma.exerciseSession.findFirst({
+    where: {
+      tenantId: actor.tenantId,
+      studentId: actor.userId,
+      templateVersionId,
+      context: "INDIVIDUAL",
+      sessionType: "PRACTICE",
+      status: "IN_PROGRESS",
+      assignmentId: null,
+      assessmentId: null,
+    },
+    select: { id: true },
+  });
+  if (resumable) return;
+  throw forbiddenError("Bu öğrenme adımı henüz açık değil");
 }
 
 export async function getHistory(
@@ -656,7 +649,11 @@ export async function getHistory(
 
 export async function startPersonalExercise(
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
-  input: { templateVersionId?: string; clientSessionId?: string },
+  input: {
+    templateVersionId?: string;
+    clientSessionId?: string;
+    enforceLearningPathOrder?: boolean;
+  },
 ) {
   const tenantId = actor.tenantId;
   if (!tenantId || actor.platformRole !== null) {
@@ -704,6 +701,12 @@ export async function startPersonalExercise(
     if (tv.template.tenantId && tv.template.tenantId !== tenantId)
       throw forbiddenError("Şablon tenant uyuşmazlığı");
     selectedTemplateConfig = tv.config;
+    if (input.enforceLearningPathOrder) {
+      await assertLearningPathTemplateAccessible(
+        { userId: actor.userId, tenantId, platformRole: actor.platformRole },
+        templateVersionId,
+      );
+    }
   }
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
     await loadTrainingRuntimeGraph(templateVersionId!, actor);

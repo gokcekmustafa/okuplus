@@ -2416,6 +2416,20 @@ body {
   margin-bottom: 24px;
 }
 
+.learning-path-primary {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.learning-path-primary .btn {
+  min-width: 168px;
+  min-height: 48px;
+  border-radius: 14px;
+}
+
 .learning-path-heading h3 {
   margin: 0;
   color: var(--text);
@@ -2667,6 +2681,15 @@ body {
   .learning-path-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .learning-path-primary {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .learning-path-primary .btn {
+    width: 100%;
   }
 
   .learning-path-progress {
@@ -4476,6 +4499,69 @@ textarea:focus-visible {
     0 3px 0 rgba(37, 99, 235, 0.08);
 }
 
+.student-shell #learning-path-card {
+  margin-top: 20px;
+  border: 1px solid #cfdfff;
+  border-radius: 26px;
+  box-shadow:
+    0 18px 42px rgba(37, 99, 235, 0.1),
+    0 3px 0 rgba(37, 99, 235, 0.07);
+}
+
+.student-shell #learning-path-card .learning-path-heading {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.student-shell #learning-path-card .learning-path-heading h3 {
+  color: var(--student-ink);
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  letter-spacing: -0.045em;
+}
+
+.student-shell #learning-path-card .learning-path-primary .btn-primary {
+  min-height: 52px;
+  box-shadow: 0 9px 18px rgba(37, 99, 235, 0.2);
+  font-size: 16px;
+}
+
+.student-shell #today-card.supporting-task-card {
+  margin-top: 14px;
+  padding: 22px 24px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 8px 22px rgba(37, 58, 100, 0.06);
+}
+
+.student-shell #today-card.supporting-task-card .training-home-heading h2 {
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+}
+
+.student-shell #today-card.supporting-task-card .training-home-heading p,
+.student-shell #today-card.supporting-task-card #today-next-action {
+  font-size: 15px;
+}
+
+.student-shell #today-card.supporting-task-card .training-progress-track {
+  height: 10px;
+  margin: 18px 0 10px;
+}
+
+.student-shell #today-card.supporting-task-card .training-focus-grid {
+  display: none;
+}
+
+.student-shell #today-card.supporting-task-card .training-home-actions {
+  margin-top: 16px;
+}
+
+.student-shell #today-card.supporting-task-card .training-home-actions .btn-primary {
+  min-width: 168px;
+  min-height: 46px;
+  box-shadow: none;
+  font-size: 15px;
+}
+
 .student-shell #today-card > * {
   position: relative;
   z-index: 1;
@@ -4622,6 +4708,11 @@ textarea:focus-visible {
   .student-shell #today-card.training-home-card {
     padding: 22px 18px;
     border-radius: 22px;
+  }
+
+  .student-shell #today-card.supporting-task-card {
+    padding: 18px 16px;
+    border-radius: 18px;
   }
 
   .student-shell .training-home-actions .btn-primary {

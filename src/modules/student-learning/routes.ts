@@ -85,7 +85,7 @@ export async function studentLearningRoutes(
           tenantId: req.tenantContext?.tenantId ?? null,
           platformRole: req.authUser!.platformRole ?? null,
         },
-        body,
+        { ...body, enforceLearningPathOrder: true },
       ),
     );
   });
