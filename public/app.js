@@ -18,6 +18,7 @@ const guestDiagnosticState = {
   currentIndex: 0,
   selectedAnswerIds: [],
   clientAnswerId: null,
+  feedbackReady: false,
   busy: false,
 };
 
@@ -313,6 +314,7 @@ function clearStoredGuestSession() {
   guestDiagnosticState.currentIndex = 0;
   guestDiagnosticState.selectedAnswerIds = [];
   guestDiagnosticState.clientAnswerId = null;
+  guestDiagnosticState.feedbackReady = false;
 }
 
 async function guestApi(path, options = {}) {
@@ -423,6 +425,64 @@ function guestDifficultyLabel(value) {
   return "İleri";
 }
 
+function resetGuestAnswerFeedback() {
+  const feedback = $("guest-answer-feedback");
+  feedback?.classList.add("hidden");
+  feedback?.classList.remove("is-correct", "is-wrong");
+  $("guest-feedback-title").textContent = "";
+  $("guest-feedback-message").textContent = "";
+  $("guest-feedback-correct").classList.add("hidden");
+  $("guest-feedback-correct-list").replaceChildren();
+  $("guest-feedback-explanation").textContent = "";
+  $("guest-feedback-explanation").classList.add("hidden");
+}
+
+function renderGuestFeedback(feedback) {
+  const feedbackView = $("guest-answer-feedback");
+  if (!feedbackView) return;
+
+  const isCorrect = feedback?.isCorrect === true;
+  const correctOptions = Array.isArray(feedback?.correctOptions)
+    ? feedback.correctOptions.filter((option) => option && typeof option.text === "string")
+    : [];
+  feedbackView.classList.remove("hidden", "is-correct", "is-wrong");
+  feedbackView.classList.add(isCorrect ? "is-correct" : "is-wrong");
+  $("guest-feedback-title").textContent = isCorrect
+    ? "Harika, doğru cevap!"
+    : "Bu kez olmadı — birlikte kontrol edelim.";
+  $("guest-feedback-message").textContent =
+    typeof feedback?.message === "string"
+      ? feedback.message
+      : isCorrect
+        ? "Yanıtın tanıya kaydedildi."
+        : "Yanıtın tanıya kaydedildi; doğru seçeneği aşağıda görebilirsin.";
+
+  const correct = $("guest-feedback-correct");
+  const correctList = $("guest-feedback-correct-list");
+  correctList.replaceChildren();
+  if (!isCorrect && correctOptions.length) {
+    correct.classList.remove("hidden");
+    for (const option of correctOptions) {
+      const item = document.createElement("li");
+      item.textContent = option.text;
+      correctList.appendChild(item);
+    }
+  } else {
+    correct.classList.add("hidden");
+  }
+
+  const explanation = typeof feedback?.explanation === "string" ? feedback.explanation.trim() : "";
+  $("guest-feedback-explanation").textContent = explanation;
+  $("guest-feedback-explanation").classList.toggle("hidden", !explanation);
+}
+
+function setGuestAnswerOptionsDisabled(disabled) {
+  for (const option of document.querySelectorAll(".guest-answer-option")) {
+    option.disabled = disabled;
+    option.setAttribute("aria-disabled", String(disabled));
+  }
+}
+
 function renderGuestQuestion() {
   const question = guestDiagnosticState.questions[guestDiagnosticState.currentIndex];
   if (!question) return;
@@ -446,6 +506,8 @@ function renderGuestQuestion() {
   $("guest-question-prompt").textContent = question.prompt || "";
   $("guest-question-error").textContent = "";
   $("guest-question-error").classList.add("hidden");
+  guestDiagnosticState.feedbackReady = false;
+  resetGuestAnswerFeedback();
 
   const passage = $("guest-passage");
   const content = question.content;
@@ -475,6 +537,7 @@ function renderGuestQuestion() {
     button.setAttribute("aria-pressed", "false");
     button.textContent = option.text;
     button.addEventListener("click", () => {
+      if (guestDiagnosticState.busy || guestDiagnosticState.feedbackReady) return;
       guestDiagnosticState.selectedAnswerIds = [option.id];
       for (const item of answerList.querySelectorAll(".guest-answer-option")) {
         const selected = item === button;
@@ -485,6 +548,7 @@ function renderGuestQuestion() {
     });
     answerList.appendChild(button);
   }
+  setGuestAnswerOptionsDisabled(false);
   $("guest-answer-submit").disabled = options.length === 0;
   $("guest-answer-submit").textContent = position === total ? "Sonucu gör" : "Devam et";
 }
@@ -527,8 +591,12 @@ async function loadGuestQuestions() {
   guestDiagnosticState.questions = data.questions;
   guestDiagnosticState.questionCount = Number(data.questionCount) || data.questions.length;
   const nextIndex = data.questions.findIndex((question) => !question.answered);
-  if (data.status === "COMPLETED" || nextIndex === -1) {
+  if (data.status === "COMPLETED") {
     await loadGuestResult();
+    return;
+  }
+  if (nextIndex === -1) {
+    await completeGuestDiagnostic();
     return;
   }
   guestDiagnosticState.currentIndex = nextIndex;
@@ -574,7 +642,27 @@ async function completeGuestDiagnostic() {
 }
 
 async function submitGuestAnswer() {
-  if (guestDiagnosticState.busy || !guestDiagnosticState.selectedAnswerIds.length) return;
+  if (guestDiagnosticState.busy) return;
+
+  if (guestDiagnosticState.feedbackReady) {
+    guestDiagnosticState.busy = true;
+    const nextIndex = guestDiagnosticState.questions.findIndex(
+      (item, index) => index > guestDiagnosticState.currentIndex && !item.answered,
+    );
+    try {
+      if (nextIndex === -1) {
+        await completeGuestDiagnostic();
+      } else {
+        guestDiagnosticState.currentIndex = nextIndex;
+        renderGuestQuestion();
+      }
+    } finally {
+      guestDiagnosticState.busy = false;
+    }
+    return;
+  }
+
+  if (!guestDiagnosticState.selectedAnswerIds.length) return;
   const question = guestDiagnosticState.questions[guestDiagnosticState.currentIndex];
   if (!question || !guestDiagnosticState.sessionId || !guestDiagnosticState.clientAnswerId) return;
 
@@ -582,7 +670,7 @@ async function submitGuestAnswer() {
   $("guest-answer-submit").disabled = true;
   $("guest-progress-status").textContent = "Cevabın kaydediliyor…";
   try {
-    await guestApi(
+    const response = await guestApi(
       `/guest/diagnostics/${encodeURIComponent(guestDiagnosticState.sessionId)}/answers`,
       {
         method: "POST",
@@ -594,15 +682,16 @@ async function submitGuestAnswer() {
       },
     );
     question.answered = true;
-    const nextIndex = guestDiagnosticState.questions.findIndex(
-      (item, index) => index > guestDiagnosticState.currentIndex && !item.answered,
-    );
-    if (nextIndex === -1) {
-      await completeGuestDiagnostic();
-    } else {
-      guestDiagnosticState.currentIndex = nextIndex;
-      renderGuestQuestion();
-    }
+    guestDiagnosticState.feedbackReady = true;
+    setGuestAnswerOptionsDisabled(true);
+    renderGuestFeedback(response?.feedback);
+    const position = Number(question.position) || guestDiagnosticState.currentIndex + 1;
+    const total = guestDiagnosticState.questionCount || guestDiagnosticState.questions.length;
+    $("guest-progress-status").textContent =
+      position === total ? "Son soru tamamlandı." : "Cevabın kaydedildi.";
+    $("guest-answer-submit").textContent = position === total ? "Sonucu gör" : "Sonraki soru";
+    $("guest-answer-submit").disabled = false;
+    requestAnimationFrame(() => $("guest-answer-submit")?.focus({ preventScroll: true }));
   } catch (error) {
     if (isGuestSessionExpired(error)) {
       clearStoredGuestSession();
