@@ -3247,6 +3247,9 @@ $("guest-signup-btn")?.addEventListener("click", () => {
   showSignupForm();
 });
 $("guest-login-btn")?.addEventListener("click", showLogin);
+$("guest-diagnostic-home-path")?.addEventListener("click", () => {
+  $("learning-path-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 $("signup-form").addEventListener("submit", async (event) => {
   event.preventDefault();

@@ -42,6 +42,8 @@ describe("guest-first diagnostic frontend", () => {
     expect(index).toContain('id="login-form"');
     expect(index).toContain('id="signup-form"');
     expect(index).toContain('id="guest-diagnostic-card"');
+    expect(index).toContain('id="guest-diagnostic-home-path"');
+    expect(app).toContain('$("guest-diagnostic-home-path")?.addEventListener("click"');
   });
 
   it("provides responsive loading, error, question and result presentation", () => {
