@@ -107,8 +107,15 @@ describe("protected production migration forensics", () => {
   });
 
   it("consumes the db fingerprint migration arrays using their actual output contract", () => {
-    expect(migrationWorkflow).toContain('value.migrations?.failed?.length ?? ""');
-    expect(migrationWorkflow).toContain('value.migrations?.pending?.length ?? ""');
+    expect(migrationWorkflow).toContain(
+      "const failed = Array.isArray(value.migrations?.failed) ? value.migrations.failed : [];",
+    );
+    expect(migrationWorkflow).toContain(
+      "const unresolved = failed.filter((entry) => !entry?.rolledBack);",
+    );
+    expect(migrationWorkflow).toContain(
+      "const pending = Array.isArray(value.migrations?.pending) ? value.migrations.pending : [];",
+    );
     expect(migrationWorkflow).not.toContain("value.migrations?.failedCount");
     expect(migrationWorkflow).not.toContain("value.migrations?.pendingCount");
   });
