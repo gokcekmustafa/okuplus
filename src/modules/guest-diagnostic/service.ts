@@ -159,6 +159,44 @@ function publicOptions(
   return options.sort((left, right) => left.position - right.position);
 }
 
+type GuestAnswerFeedback = {
+  isCorrect: boolean;
+  message: string;
+  correctOptions: Array<{ id: string; text: string; position: number }>;
+  explanation: string | null;
+};
+
+function guestAnswerFeedback(
+  version: {
+    options: Prisma.JsonValue | null;
+    correctAnswer: Prisma.JsonValue | null;
+    explanation: string | null;
+  },
+  scored: { isCorrect: boolean | null },
+): GuestAnswerFeedback {
+  const isCorrect = scored.isCorrect === true;
+  const correctOptions: Array<{ id: string; text: string; position: number }> = [];
+  const answer = version.correctAnswer;
+  if (!isCorrect && isRecord(answer) && answer.type === "MULTIPLE_CHOICE") {
+    const correctOptionIds = Array.isArray(answer.correctOptionIds)
+      ? answer.correctOptionIds.filter((id): id is string => typeof id === "string")
+      : [];
+    const options = publicOptions(version.options);
+    for (const option of options) {
+      if (correctOptionIds.includes(option.id)) correctOptions.push(option);
+    }
+  }
+
+  return {
+    isCorrect,
+    message: isCorrect
+      ? "Yanıtın tanıya kaydedildi."
+      : "Yanıtın tanıya kaydedildi; doğru seçeneği aşağıda görebilirsin.",
+    correctOptions,
+    explanation: isCorrect ? null : version.explanation?.trim() || null,
+  };
+}
+
 function levelName(levelCode: string | null): string | null {
   if (!levelCode) return null;
   return (
@@ -602,7 +640,12 @@ export async function submitGuestDiagnosticAnswer(
             skillCode: true,
             questionType: true,
             questionVersion: {
-              select: { options: true, correctAnswer: true, question: { select: { type: true } } },
+              select: {
+                options: true,
+                correctAnswer: true,
+                explanation: true,
+                question: { select: { type: true } },
+              },
             },
           },
         });
@@ -638,6 +681,7 @@ export async function submitGuestDiagnosticAnswer(
             rawScore: existingByClientId.rawScore,
             responseOrder: existingByClientId.responseOrder,
             idempotent: true,
+            feedback: guestAnswerFeedback(item.questionVersion, existingByClientId),
           };
         }
 
@@ -676,6 +720,7 @@ export async function submitGuestDiagnosticAnswer(
           rawScore: scored.rawScore,
           responseOrder,
           idempotent: false,
+          feedback: guestAnswerFeedback(item.questionVersion, scored),
         };
       },
       client,
