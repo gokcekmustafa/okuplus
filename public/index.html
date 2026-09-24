@@ -555,7 +555,7 @@
             <div class="page-head">
               <h2>Ana Sayfa</h2>
               <p class="muted">
-                Hazırsan bugün de birlikte ilerleyelim, <span id="welcome-name">—</span>.
+                Bugün sıradaki adımına devam et, <span id="welcome-name">—</span>.
               </p>
             </div>
 
@@ -620,9 +620,44 @@
                 </button>
               </div>
             </section>
+            <div id="learning-path-card" class="card learning-path-card" data-student>
+              <div class="learning-path-heading">
+                <div>
+                  <p class="learning-path-eyebrow">SIRADAKİ ÇALIŞMAN</p>
+                  <h3>Öğrenme Yolun</h3>
+                  <div id="learning-path-level" class="learning-path-level muted"></div>
+                </div>
+                <div class="learning-path-primary">
+                  <span
+                    id="learning-path-progress"
+                    class="learning-path-progress"
+                    aria-live="polite"
+                  ></span>
+                  <button
+                    id="learning-path-continue"
+                    type="button"
+                    class="btn btn-primary hidden"
+                    aria-controls="learning-path"
+                  >
+                    Devam Et <span aria-hidden="true">→</span>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="learning-path"
+                class="learning-path"
+                role="list"
+                aria-label="Öğrenme yolu"
+                aria-busy="true"
+              ></div>
+              <button id="learning-path-retry" type="button" class="btn btn-ghost btn-sm hidden">
+                Öğrenme yolunu yeniden yükle
+              </button>
+            </div>
+
             <section
               id="today-card"
-              class="card training-home-card"
+              class="card training-home-card supporting-task-card"
               data-student
               aria-labelledby="training-home-title"
             >
@@ -744,31 +779,6 @@
               </div>
               <div id="review-items" class="review-items" aria-live="polite"></div>
             </section>
-
-            <div id="learning-path-card" class="card learning-path-card" data-student>
-              <div class="learning-path-heading">
-                <div>
-                  <p class="learning-path-eyebrow">ADIM ADIM İLERLE</p>
-                  <h3>Öğrenme Yolu</h3>
-                  <div id="learning-path-level" class="learning-path-level muted"></div>
-                </div>
-                <span
-                  id="learning-path-progress"
-                  class="learning-path-progress"
-                  aria-live="polite"
-                ></span>
-              </div>
-              <div
-                id="learning-path"
-                class="learning-path"
-                role="list"
-                aria-label="Öğrenme yolu"
-                aria-busy="true"
-              ></div>
-              <button id="learning-path-retry" type="button" class="btn btn-ghost btn-sm hidden">
-                Öğrenme yolunu yeniden yükle
-              </button>
-            </div>
 
             <div class="placeholder-note card" data-admin>
               İstatistikler, ilgili modüller tamamlandığında burada gösterilecek.

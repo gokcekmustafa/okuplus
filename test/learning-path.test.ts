@@ -12,6 +12,7 @@ const EMAIL = "path-8f2@example.com";
 const OTHER_EMAIL = "path-other-8f2@example.com";
 const SKILL_A = "8f200000-0000-7000-8000-0000000000a1";
 const SKILL_B = "8f200000-0000-7000-8000-0000000000a2";
+const SKILL_C = "8f200000-0000-7000-8000-0000000000a3";
 const CONTENT_ID = "8f200000-0000-7000-8000-0000000000c1";
 const CV_ID = "8f200000-0000-7000-8000-0000000000c2";
 const Q_ID = "8f200000-0000-7000-8000-0000000000d1";
@@ -20,6 +21,8 @@ const TMPL_A = "8f200000-0000-7000-8000-0000000000e1";
 const TMPL_AV = "8f200000-0000-7000-8000-0000000000e2";
 const TMPL_B = "8f200000-0000-7000-8000-0000000000e3";
 const TMPL_BV = "8f200000-0000-7000-8000-0000000000e4";
+const TMPL_C = "8f200000-0000-7000-8000-0000000000e5";
+const TMPL_CV = "8f200000-0000-7000-8000-0000000000e6";
 const LEVEL_ID = "8f200000-0000-7000-8000-0000000000f1";
 
 let app: FastifyInstance;
@@ -56,21 +59,25 @@ async function cleanup() {
   });
   // keep personal tenant for other tests? delete only test tenants
   await prisma.exerciseTemplateVersionQuestion.deleteMany({
-    where: { templateVersionId: { in: [TMPL_AV, TMPL_BV] } },
+    where: { templateVersionId: { in: [TMPL_AV, TMPL_BV, TMPL_CV] } },
   });
   await prisma.exerciseTemplateVersionContent.deleteMany({
-    where: { templateVersionId: { in: [TMPL_AV, TMPL_BV] } },
+    where: { templateVersionId: { in: [TMPL_AV, TMPL_BV, TMPL_CV] } },
   });
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
     await tx.questionVersion.deleteMany({ where: { id: QV_ID } });
-    await tx.exerciseTemplateVersion.deleteMany({ where: { id: { in: [TMPL_AV, TMPL_BV] } } });
+    await tx.exerciseTemplateVersion.deleteMany({
+      where: { id: { in: [TMPL_AV, TMPL_BV, TMPL_CV] } },
+    });
     await tx.contentVersion.deleteMany({ where: { id: CV_ID } });
   });
   await prisma.question.deleteMany({ where: { id: Q_ID } });
-  await prisma.exerciseTemplate.deleteMany({ where: { id: { in: [TMPL_A, TMPL_B] } } });
+  await prisma.exerciseTemplate.deleteMany({
+    where: { id: { in: [TMPL_A, TMPL_B, TMPL_C] } },
+  });
   await prisma.content.deleteMany({ where: { id: CONTENT_ID } });
-  await prisma.skill.deleteMany({ where: { id: { in: [SKILL_A, SKILL_B] } } });
+  await prisma.skill.deleteMany({ where: { id: { in: [SKILL_A, SKILL_B, SKILL_C] } } });
   await prisma.level.deleteMany({ where: { id: LEVEL_ID } });
   // personal tenant will be cleaned via user delete cascade? ensure
   if (personalTenantId) {
@@ -104,6 +111,13 @@ describe.sequential("learning path", () => {
       data: [
         { id: SKILL_A, code: "PATH_A", name: "Path A", category: "MAIN_IDEA", displayOrder: 1 },
         { id: SKILL_B, code: "PATH_B", name: "Path B", category: "DETAIL", displayOrder: 2 },
+        {
+          id: SKILL_C,
+          code: "PATH_C",
+          name: "Path C",
+          category: "INFERENCE",
+          displayOrder: 3,
+        },
       ],
     });
     await prisma.level.create({
@@ -183,6 +197,14 @@ describe.sequential("learning path", () => {
           skillId: SKILL_B,
           status: "PUBLISHED",
         },
+        {
+          id: TMPL_C,
+          contentId: CONTENT_ID,
+          title: "Tmpl C",
+          type: "COMPREHENSION",
+          skillId: SKILL_C,
+          status: "PUBLISHED",
+        },
       ],
     });
     await prisma.exerciseTemplateVersion.createMany({
@@ -200,6 +222,13 @@ describe.sequential("learning path", () => {
           version: 1,
           status: "PUBLISHED",
           publishedAt: new Date(Date.now() + 1000),
+        },
+        {
+          id: TMPL_CV,
+          templateId: TMPL_C,
+          version: 1,
+          status: "PUBLISHED",
+          publishedAt: new Date(Date.now() + 2000),
         },
       ],
     });
@@ -304,6 +333,38 @@ describe.sequential("learning path", () => {
     expect(nodes.filter((n: any) => n.status === "completed").length).toBeGreaterThanOrEqual(1);
     expect(nodes.some((n: any) => n.status === "active")).toBe(true);
     await prisma.exerciseSession.delete({ where: { id: sess.id } });
+    await prisma.studentProgress.deleteMany({ where: { studentId: userId, skillId: SKILL_A } });
+  });
+  it("blocks skipping a locked future node", async () => {
+    await prisma.studentProgress.create({
+      data: {
+        tenantId: personalTenantId,
+        studentId: userId,
+        skillId: SKILL_A,
+        periodStart: new Date("2026-02-02"),
+        periodEnd: new Date("2026-02-08"),
+        sessionCount: 1,
+        attemptCount: 1,
+      },
+    });
+    const path = await app.inject({
+      method: "GET",
+      url: "/student/learning-path",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const locked = path.json().data.nodes.find((n: any) => n.status === "locked");
+    expect(locked?.templateVersionId).toBe(TMPL_CV);
+
+    const start = await app.inject({
+      method: "POST",
+      url: "/student/exercises/start",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        templateVersionId: TMPL_CV,
+        clientSessionId: "locked-path-test",
+      },
+    });
+    expect(start.statusCode).toBe(403);
     await prisma.studentProgress.deleteMany({ where: { studentId: userId, skillId: SKILL_A } });
   });
   it("personal context", async () => {
