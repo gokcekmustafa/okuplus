@@ -136,9 +136,16 @@ jobs:
             }
 
             const indexes = await prisma.$queryRaw`
-              SELECT to_regclass(${"public.\"Badge_category_status_displayOrder_idx\""})::text AS index_name
+              SELECT EXISTS (
+                SELECT 1
+                FROM pg_catalog.pg_class c
+                JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = ${"public"}
+                  AND c.relname = ${"Badge_category_status_displayOrder_idx"}
+                  AND c.relkind = ${"i"}
+              ) AS index_exists
             `;
-            if (indexes[0]?.index_name !== "Badge_category_status_displayOrder_idx") {
+            if (!indexes[0]?.index_exists) {
               throw new Error("Badge achievement metadata index is missing");
             }
             console.log("PRODUCTION_RECOVERY_SCHEMA=PASS");
