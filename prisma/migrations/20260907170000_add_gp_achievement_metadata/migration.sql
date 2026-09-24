@@ -11,7 +11,9 @@ CREATE TYPE "AchievementCategory" AS ENUM (
 
 CREATE TYPE "AchievementKind" AS ENUM ('BADGE', 'TROPHY');
 
-ALTER TYPE "PointEventType" ADD VALUE 'TRAINING_SESSION_COMPLETED' BEFORE 'CORRECT_ANSWER';
+-- The preceding training-session migration adds this label on a clean database.
+-- Keep this release artifact safe for databases where the label already exists.
+ALTER TYPE "PointEventType" ADD VALUE IF NOT EXISTS 'TRAINING_SESSION_COMPLETED' BEFORE 'CORRECT_ANSWER';
 
 ALTER TABLE "Badge"
   ADD COLUMN "category" "AchievementCategory" NOT NULL DEFAULT 'TRAINING',
