@@ -74,9 +74,11 @@ jobs:
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_FILE, "utf8"));
           const target = "20260907170000_add_gp_achievement_metadata";
           const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
+          const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
           const targetFailures = failed.filter((entry) => entry?.name === target);
           const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
           const targetFingerprint = report.targetIdentityFingerprint;
+          const targetAlreadyApplied = targetFailures.length === 0 && !pending.includes(target);
 
           if (report.target?.environment !== "PRODUCTION") {
             throw new Error("production target environment verification failed");
@@ -84,13 +86,16 @@ jobs:
           if (targetFingerprint !== process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT) {
             throw new Error("production target fingerprint verification failed");
           }
-          if (targetFailures.length !== 1 || unexpectedFailures.length !== 0) {
+          if (unexpectedFailures.length !== 0) {
             throw new Error("unexpected production migration failure state");
           }
-          if (targetFailures[0].appliedStepsCount !== 0) {
+          if (!targetAlreadyApplied && targetFailures.length !== 1) {
+            throw new Error("unexpected production migration failure state");
+          }
+          if (!targetAlreadyApplied && targetFailures[0].appliedStepsCount !== 0) {
             throw new Error("target migration has applied steps and cannot be resolved by this workflow");
           }
-          console.log("PRODUCTION_RECOVERY_TARGET=PASS");
+          console.log(`PRODUCTION_RECOVERY_TARGET=PASS; alreadyApplied=${targetAlreadyApplied}`);
           NODE
 
           npx tsx -e '
@@ -160,7 +165,40 @@ jobs:
       - name: Resolve only the targeted production migration as applied
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: npx prisma migrate resolve --applied 20260907170000_add_gp_achievement_metadata --schema=prisma/schema.prisma
+        shell: bash
+        run: |
+          set -euo pipefail
+          fingerprint_file="$RUNNER_TEMP/production-recovery-resolve-check.json"
+          npx tsx scripts/db-fingerprint.ts >"$fingerprint_file"
+
+          should_resolve=$(FINGERPRINT_FILE="$fingerprint_file" node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_FILE, "utf8"));
+          const target = "20260907170000_add_gp_achievement_metadata";
+          const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
+          const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
+          const targetFailures = failed.filter((entry) => entry?.name === target);
+          const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
+          const targetAlreadyApplied = targetFailures.length === 0 && !pending.includes(target);
+
+          if (unexpectedFailures.length !== 0) throw new Error("unexpected production migration failure state");
+          if (targetAlreadyApplied) {
+            console.log("false");
+          } else {
+            if (targetFailures.length !== 1 || targetFailures[0].appliedStepsCount !== 0) {
+              throw new Error("target migration cannot be safely resolved by this workflow");
+            }
+            console.log("true");
+          }
+          NODE
+          )
+
+          if [ "$should_resolve" = "true" ]; then
+            npx prisma migrate resolve --applied 20260907170000_add_gp_achievement_metadata --schema=prisma/schema.prisma
+          else
+            echo "PRODUCTION_RECOVERY_RESOLVE=SKIPPED_ALREADY_APPLIED"
+          fi
 
       - name: Verify production recovery result
         shell: bash
