@@ -136,7 +136,7 @@ jobs:
             }
 
             const indexes = await prisma.$queryRaw`
-              SELECT to_regclass(${"public.\"Badge_category_status_displayOrder_idx\""}) AS index_name
+              SELECT to_regclass(${"public.\"Badge_category_status_displayOrder_idx\""})::text AS index_name
             `;
             if (indexes[0]?.index_name !== "Badge_category_status_displayOrder_idx") {
               throw new Error("Badge achievement metadata index is missing");
