@@ -4743,9 +4743,24 @@ textarea:focus-visible {
   box-shadow: 0 22px 60px rgba(32, 62, 114, 0.12);
 }
 
+.guest-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.guest-topbar .guest-brand-mark {
+  margin-bottom: 0;
+}
+
+.guest-topbar .btn {
+  min-height: 42px;
+}
+
 .guest-header {
   max-width: 620px;
-  margin: 0 auto 32px;
+  margin: 28px auto 32px;
   text-align: center;
 }
 
@@ -4831,6 +4846,42 @@ textarea:focus-visible {
 
 .guest-state p {
   margin: 0 0 22px;
+}
+
+.guest-intro {
+  border-color: #d3e0f2;
+  background: linear-gradient(145deg, #f8fbff, #ffffff);
+}
+
+.guest-intro-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 18px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #159a83);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.guest-intro h2 {
+  margin-top: 16px;
+}
+
+.guest-start-btn {
+  min-width: min(100%, 250px);
+  min-height: 52px;
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.guest-intro-note {
+  margin: 14px 0 0 !important;
+  color: #6a7890;
+  font-size: 13px;
 }
 
 .guest-loader {

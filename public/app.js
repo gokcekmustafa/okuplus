@@ -357,6 +357,7 @@ function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar
 
 function setGuestPhase(phase) {
   const sections = {
+    intro: "guest-intro",
     loading: "guest-loading",
     error: "guest-error",
     question: "guest-question-view",
@@ -371,6 +372,11 @@ function showGuest() {
   $("view-app")?.classList.add("hidden");
   $("view-guest")?.classList.remove("hidden");
   closeSidebar();
+}
+
+function showGuestLanding() {
+  showGuest();
+  setGuestPhase("intro");
 }
 
 function showGuestLoading(
@@ -830,8 +836,9 @@ async function logout(refreshToken, tenantId) {
  */
 async function restoreSession() {
   const { accessToken, refreshToken, tenantId } = getStoredTokens();
-  if (!accessToken || !refreshToken) {
-    void startGuestDiagnostic();
+  if (!accessToken) {
+    if (refreshToken) clearStoredSession();
+    showGuestLanding();
     return;
   }
 
@@ -846,7 +853,13 @@ async function restoreSession() {
     }
   }
 
-  // Access token geçersiz: refresh dene.
+  // Access token geçersiz: varsa refresh token ile yenile.
+  if (!refreshToken) {
+    clearStoredSession();
+    showGuestLanding();
+    return;
+  }
+
   try {
     const tokens = await refreshTokens(refreshToken, tenantId);
     localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
@@ -857,7 +870,7 @@ async function restoreSession() {
   } catch (_e) {
     void _e;
     clearStoredSession();
-    void startGuestDiagnostic();
+    showGuestLanding();
   }
 }
 
@@ -3354,6 +3367,8 @@ function showLoginForm() {
 $("show-signup-btn").addEventListener("click", showSignupForm);
 $("show-login-btn").addEventListener("click", showLoginForm);
 $("guest-answer-submit")?.addEventListener("click", () => void submitGuestAnswer());
+$("guest-start")?.addEventListener("click", () => void startGuestDiagnostic());
+$("guest-header-login-btn")?.addEventListener("click", showLogin);
 $("guest-retry")?.addEventListener("click", () => {
   void startGuestDiagnostic();
 });
