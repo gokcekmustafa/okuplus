@@ -78,7 +78,7 @@ jobs:
           const targetFailures = failed.filter((entry) => entry?.name === target);
           const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
           const targetFingerprint = report.targetIdentityFingerprint;
-          const targetAlreadyApplied = targetFailures.length === 0 && !pending.includes(target);
+          const targetAlreadyApplied = !pending.includes(target) && targetFailures.every((entry) => entry?.rolledBack);
 
           if (report.target?.environment !== "PRODUCTION") {
             throw new Error("production target environment verification failed");
@@ -180,7 +180,7 @@ jobs:
           const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
           const targetFailures = failed.filter((entry) => entry?.name === target);
           const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
-          const targetAlreadyApplied = targetFailures.length === 0 && !pending.includes(target);
+          const targetAlreadyApplied = !pending.includes(target) && targetFailures.every((entry) => entry?.rolledBack);
 
           if (unexpectedFailures.length !== 0) throw new Error("unexpected production migration failure state");
           if (targetAlreadyApplied) {
