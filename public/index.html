@@ -121,10 +121,16 @@
         <header class="guest-header">
           <div class="guest-brand-mark" aria-hidden="true">Oku+</div>
           <p class="guest-eyebrow">KISA BAŞLANGIÇ TANISI</p>
-          <h1>Okuma yolculuğuna başlayalım</h1>
+          <h1>Okuma gücünü birlikte keşfedelim</h1>
           <p>
-            Birkaç kısa soruyla sana uygun başlangıcı birlikte keşfedelim. Hesap açman gerekmiyor.
+            Sekiz kısa soruyu yanıtla; sana uygun başlangıç noktasını birlikte bulalım. Hesap açman
+            gerekmiyor.
           </p>
+          <div class="guest-trust-row" aria-label="Tanı bilgileri">
+            <span>8 kısa soru</span>
+            <span>Hesap gerekmez</span>
+            <span>Sonuç anında</span>
+          </div>
         </header>
 
         <section id="guest-loading" class="guest-state" aria-live="polite">
@@ -168,6 +174,10 @@
 
           <p id="guest-question-meta" class="guest-question-meta"></p>
           <h2 id="guest-question-heading">Soruyu yanıtla</h2>
+          <p class="guest-question-help">
+            En iyi seçeneği işaretle. Her soru için bir yanıt hakkın var; sonrasında kısa geri
+            bildirimi göreceksin.
+          </p>
           <p id="guest-question-prompt" class="guest-question-prompt"></p>
           <div
             id="guest-answer-list"
@@ -176,6 +186,21 @@
             aria-label="Cevap seçenekleri"
           ></div>
           <p id="guest-question-error" class="error hidden" role="alert"></p>
+          <section
+            id="guest-answer-feedback"
+            class="guest-answer-feedback hidden"
+            role="status"
+            aria-live="polite"
+            aria-labelledby="guest-feedback-title"
+          >
+            <p id="guest-feedback-title" class="guest-feedback-title"></p>
+            <p id="guest-feedback-message" class="guest-feedback-message"></p>
+            <div id="guest-feedback-correct" class="guest-feedback-correct hidden">
+              <strong>Doğru cevap</strong>
+              <ul id="guest-feedback-correct-list"></ul>
+            </div>
+            <p id="guest-feedback-explanation" class="guest-feedback-explanation hidden"></p>
+          </section>
           <button id="guest-answer-submit" type="button" class="btn btn-primary" disabled>
             Devam et
           </button>
@@ -197,7 +222,7 @@
             öğrenci hesabındaki seviyeni değiştirmez.
           </p>
           <div class="guest-result-actions">
-            <p>Öğrenme yoluna devam etmek için hesap oluştur veya giriş yap.</p>
+            <p>Sonucun burada hazır. İstersen hesabınla kaydedip öğrenme yoluna bağlayabilirsin.</p>
             <div class="guest-result-buttons">
               <button id="guest-signup-btn" type="button" class="btn btn-primary">Kayıt ol</button>
               <button id="guest-login-btn" type="button" class="btn btn-secondary">
@@ -583,7 +608,17 @@
                 <h2 id="guest-diagnostic-home-title">Kısa tanı sonucuna göre hazırız.</h2>
                 <p id="guest-diagnostic-home-summary" class="muted"></p>
               </div>
-              <span id="guest-diagnostic-home-level" class="guest-diagnostic-home-level"></span>
+              <div class="guest-diagnostic-home-actions">
+                <span id="guest-diagnostic-home-level" class="guest-diagnostic-home-level"></span>
+                <button
+                  id="guest-diagnostic-home-path"
+                  type="button"
+                  class="btn btn-secondary btn-sm"
+                  aria-controls="learning-path-card"
+                >
+                  Öğrenme yoluna git →
+                </button>
+              </div>
             </section>
             <section
               id="today-card"
