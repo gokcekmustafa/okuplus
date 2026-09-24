@@ -149,7 +149,14 @@
             <span id="guest-progress-label">1 / 1</span>
             <span id="guest-progress-status" class="muted" role="status"></span>
           </div>
-          <div class="guest-progress-track" aria-hidden="true">
+          <div
+            class="guest-progress-track"
+            role="progressbar"
+            aria-label="Tanı ilerlemesi"
+            aria-valuemin="0"
+            aria-valuemax="0"
+            aria-valuenow="0"
+          >
             <span id="guest-progress-value"></span>
           </div>
 
@@ -183,12 +190,13 @@
           <h2 id="guest-result-heading">Başlangıç seviyen için önerimiz</h2>
           <p id="guest-result-level" class="guest-result-level"></p>
           <p id="guest-result-copy" class="guest-result-copy"></p>
+          <p id="guest-result-count" class="guest-result-count"></p>
           <p class="guest-result-disclaimer">
             Bu kısa tanı yalnızca başlangıç için bir öneridir. Resmî seviye ataması yapmaz ve
             öğrenci hesabındaki seviyeni değiştirmez.
           </p>
           <div class="guest-result-actions">
-            <p>İlerlemeni kaydetmek için hesap oluştur veya giriş yap.</p>
+            <p>Öğrenme yoluna devam etmek için hesap oluştur veya giriş yap.</p>
             <div class="guest-result-buttons">
               <button id="guest-signup-btn" type="button" class="btn btn-primary">Kayıt ol</button>
               <button id="guest-login-btn" type="button" class="btn btn-secondary">

@@ -34,7 +34,7 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain("__Host-oku_guest_csrf");
     expect(app).toContain("sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY");
     expect(app).not.toContain("oku.guestToken");
-    expect(index).toContain("İlerlemeni kaydetmek için hesap oluştur veya giriş yap.");
+    expect(index).toContain("Öğrenme yoluna devam etmek için hesap oluştur veya giriş yap.");
     expect(index).toContain('id="guest-signup-btn"');
     expect(index).toContain('id="guest-login-btn"');
     expect(index).toContain('id="login-form"');
@@ -45,6 +45,8 @@ describe("guest-first diagnostic frontend", () => {
     expect(index).toContain('id="guest-loading"');
     expect(index).toContain('id="guest-error"');
     expect(index).toContain('id="guest-result-view"');
+    expect(index).toContain('id="guest-result-count"');
+    expect(index).toContain('role="progressbar"');
     expect(index).toContain("Bu kısa tanı yalnızca başlangıç için bir öneridir.");
     expect(styles).toContain(".guest-shell");
     expect(styles).toContain(".guest-answer-option");

@@ -4848,12 +4848,20 @@ textarea:focus-visible {
 }
 
 .guest-result-copy,
+.guest-result-count,
 .guest-result-disclaimer {
   max-width: 540px;
   margin: 0 auto;
   color: #52637e;
   font-size: 17px;
   line-height: 1.6;
+}
+
+.guest-result-count {
+  margin-top: 14px;
+  color: #159a83;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .guest-result-disclaimer {

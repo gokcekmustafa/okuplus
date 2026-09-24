@@ -327,8 +327,10 @@ function showGuestLoading(
 
 function guestErrorMessage(error) {
   if (error?.status === 409)
-    return "Tanı koruması kısa süreli bir bekleme istiyor. Biraz sonra tekrar dene.";
+    return "Tanı oturumun şu anda işleniyor. Birkaç saniye bekleyip tekrar dene.";
   if (error?.status === 429) return "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar dene.";
+  if (!error?.status && (error?.name === "TypeError" || error?.message === "Failed to fetch"))
+    return "Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene.";
   if (error?.status >= 500) return "Tanı şu anda kullanılamıyor. Lütfen biraz sonra tekrar dene.";
   if (error?.status === 400) return "Tanı isteği tamamlanamadı. Lütfen tekrar dene.";
   return "Tanı oturumun sona ermiş olabilir. Yeni bir tanı başlatmayı deneyebilirsin.";
@@ -343,6 +345,7 @@ function showGuestError(error, retryLabel = "Tekrar dene") {
   setGuestPhase("error");
   $("guest-error-message").textContent = guestErrorMessage(error);
   $("guest-retry").textContent = retryLabel;
+  requestAnimationFrame(() => $("guest-retry")?.focus({ preventScroll: true }));
 }
 
 function guestSkillLabel(skill) {
@@ -372,7 +375,10 @@ function renderGuestQuestion() {
   const progress = total > 0 ? Math.round(((position - 1) / total) * 100) : 0;
   $("guest-question-view").dataset.questionType = question.questionType || "";
   $("guest-progress-label").textContent = `${position} / ${total}`;
-  $("guest-progress-status").textContent = "Kısa ve dikkatli yanıtla.";
+  $("guest-progress-status").textContent =
+    position === total ? "Son sorudasın." : "Kısa ve dikkatli yanıtla.";
+  $("guest-progress-track").setAttribute("aria-valuemax", String(total));
+  $("guest-progress-track").setAttribute("aria-valuenow", String(position - 1));
   $("guest-progress-value").style.width = `${progress}%`;
   $("guest-question-meta").textContent = `${guestSkillLabel(question.skill)}${
     guestDifficultyLabel(question.difficulty)
@@ -439,6 +445,10 @@ function renderGuestResult(result) {
   $("guest-result-copy").textContent =
     copyByKey[result?.recommendationCopyKey] ||
     "Bu sonuç, ilk adımını seçmene yardımcı olan kısa bir öneridir.";
+  const questionCount = guestDiagnosticState.questionCount || guestDiagnosticState.questions.length;
+  $("guest-result-count").textContent = questionCount
+    ? `${questionCount} soruluk tanıyı tamamladın.`
+    : "Tanıyı tamamladın.";
 }
 
 async function loadGuestResult() {
@@ -3170,7 +3180,6 @@ $("show-signup-btn").addEventListener("click", showSignupForm);
 $("show-login-btn").addEventListener("click", showLoginForm);
 $("guest-answer-submit")?.addEventListener("click", () => void submitGuestAnswer());
 $("guest-retry")?.addEventListener("click", () => {
-  clearStoredGuestSession();
   void startGuestDiagnostic();
 });
 $("guest-signup-btn")?.addEventListener("click", () => {
