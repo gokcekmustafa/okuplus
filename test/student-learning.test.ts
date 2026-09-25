@@ -180,6 +180,7 @@ describe.sequential("student learning", () => {
       data: {
         id: TMPL_ID,
         contentId: CONTENT_ID,
+        skillId: SKILL_ID,
         title: "Learn Tmpl",
         type: "COMPREHENSION",
         status: "PUBLISHED",
