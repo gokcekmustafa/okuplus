@@ -344,9 +344,10 @@ describe.sequential("student learning", () => {
   it("6 history contains active session", async () => {
     const r = await app.inject({
       method: "GET",
-      url: "/student/history",
+      url: "/student/history?page=1&pageSize=50",
       headers: { authorization: `Bearer ${accessToken}` },
     });
+    expect(r.statusCode).toBe(200);
     const ids = r.json().data.items.map((i: any) => i.id);
     expect(ids).toContain(activeSessionId);
   });
@@ -386,13 +387,14 @@ describe.sequential("student learning", () => {
     // answer and complete
     const q = await app.inject({
       method: "GET",
-      url: `/admin/exercise-sessions/${activeSessionId}/questions`,
+      url: `/student/sessions/${activeSessionId}/questions`,
       headers: { authorization: `Bearer ${accessToken}` },
     });
-    const qvId = q.json().data[0]?.questionVersionId || QV_ID;
+    expect(q.statusCode).toBe(200);
+    const qvId = q.json().data.questions[0]?.questionVersionId || QV_ID;
     await app.inject({
       method: "POST",
-      url: `/admin/questions/${qvId}/attempts`,
+      url: `/student/questions/${qvId}/attempts`,
       headers: { authorization: `Bearer ${accessToken}` },
       payload: {
         sessionId: activeSessionId,
@@ -402,7 +404,7 @@ describe.sequential("student learning", () => {
     });
     await app.inject({
       method: "POST",
-      url: `/admin/exercise-sessions/${activeSessionId}/complete`,
+      url: `/student/sessions/${activeSessionId}/complete`,
       headers: { authorization: `Bearer ${accessToken}` },
       payload: {},
     });
