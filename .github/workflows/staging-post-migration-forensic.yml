@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Staging source ref to inspect
+        description: Prisma source ref to inspect; database remains staging
         required: true
         default: staging
         type: choice
         options:
           - staging
+          - master
 
 permissions:
   contents: read
@@ -39,7 +40,14 @@ jobs:
           TARGET_REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
-          test "$TARGET_REF" = "staging"
+          case "$TARGET_REF" in
+            staging|master)
+              ;;
+            *)
+              echo "Unsupported source ref: $TARGET_REF"
+              exit 1
+              ;;
+          esac
 
       - name: Checkout selected staging ref
         uses: actions/checkout@v4
