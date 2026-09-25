@@ -117,9 +117,14 @@
 
     <!-- ================= Guest Diagnostic ================= -->
     <main id="view-guest" class="guest-shell hidden">
-      <div class="guest-card card">
+      <div id="guest-diagnostic-card" class="guest-card card">
+        <div class="guest-topbar">
+          <div class="guest-brand-mark" aria-label="Oku+">Oku+</div>
+          <button id="guest-header-login-btn" type="button" class="btn btn-secondary btn-sm">
+            Giriş yap
+          </button>
+        </div>
         <header class="guest-header">
-          <div class="guest-brand-mark" aria-hidden="true">Oku+</div>
           <p class="guest-eyebrow">KISA BAŞLANGIÇ TANISI</p>
           <h1>Okuma gücünü birlikte keşfedelim</h1>
           <p>
@@ -132,6 +137,23 @@
             <span>Sonuç anında</span>
           </div>
         </header>
+
+        <section
+          id="guest-intro"
+          class="guest-state guest-intro"
+          aria-labelledby="guest-intro-title"
+        >
+          <div class="guest-intro-icon" aria-hidden="true">✦</div>
+          <h2 id="guest-intro-title">Hazır olduğunda başlayalım</h2>
+          <p class="muted">
+            Kısa tanı, sana uygun ilk adımı önermek için hazırlanır. Hesap açmadan
+            tamamlayabilirsin.
+          </p>
+          <button id="guest-start" type="button" class="btn btn-primary guest-start-btn">
+            Tanılamayı Başlat
+          </button>
+          <p class="guest-intro-note">8 kısa soru · Yaklaşık 2 dakika</p>
+        </section>
 
         <section id="guest-loading" class="guest-state" aria-live="polite">
           <div class="guest-loader" aria-hidden="true"></div>

@@ -114,7 +114,12 @@ describe.sequential("student learning", () => {
     otherUserId = ou.id;
     await provisionPersonalContext(otherUserId);
     await prisma.skill.create({
-      data: { id: SKILL_ID, code: "LEARN_SKILL", name: "Learn Skill", category: "COMPREHENSION" },
+      data: {
+        id: SKILL_ID,
+        code: "STUDENT_PATH_SKILL",
+        name: "Student Path Skill",
+        category: "COMPREHENSION",
+      },
     });
     await prisma.level.create({
       data: {

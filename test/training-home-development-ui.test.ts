@@ -7,7 +7,7 @@ const styles = readFileSync("public/styles.css", "utf8");
 
 describe("training home and development UI", () => {
   it("renders the daily training home states", () => {
-    expect(index).toContain("Bugünkü Antrenmanın");
+    expect(index).toContain("Bugün ne öğreneceksin?");
     expect(index).toContain('id="daily-training-progress"');
     expect(index).toContain('role="progressbar"');
     expect(index).toContain('id="daily-training-gp"');
@@ -64,7 +64,7 @@ describe("training home and development UI", () => {
     expect(index).toContain('data-page="lessons" data-student');
     expect(index).toContain('data-page="progress" data-student-primary');
     expect(index).toContain('data-page="settings" data-student-primary');
-    expect(index).toContain("Bugünkü Antrenmanın");
+    expect(index).toContain("Bugün ne öğreneceksin?");
     expect(index).toContain("Öğren");
     expect(index).toContain("Geri bildirim");
     expect(app).toContain("formatStudentError");
