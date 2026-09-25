@@ -422,7 +422,11 @@ jobs:
 
           const sanitizedDiffLines = diffText
             .split(/\r?\n/u)
-            .filter((line) => line.trim().length > 0)
+            .filter(
+              (line) =>
+                line.trim().length > 0 &&
+                !/^No difference detected\.$/iu.test(line.trim()),
+            )
             .map(sanitizeLine);
           const objects = objectsFromDiff(sanitizedDiffLines)
             .map((object) => ({

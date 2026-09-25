@@ -61,6 +61,13 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).toContain("Renamed index");
   });
 
+  it("treats Prisma's no-difference output as an empty diff", () => {
+    expect(workflow).toContain("!/^No difference detected\\.$/iu.test(line.trim()),");
+    expect(workflow).toContain("const diffAvailable = sanitizedDiffLines.length > 0;");
+    expect(workflow).toContain("const realUnexpectedDrift = !diffAvailable");
+    expect(workflow).toContain('diffExplainedByFoundation === "YES"');
+  });
+
   it("does not publish raw credentials or database connection details", () => {
     expect(workflow).not.toMatch(/echo\s+.*(?:DATABASE_URL|PASSWORD|TOKEN)/iu);
     expect(workflow).not.toContain("set -x");
