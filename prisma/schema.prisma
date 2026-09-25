@@ -218,6 +218,38 @@ enum AssessmentStatus {
   ARCHIVED
 }
 
+enum LearningAreaCode {
+  FAST_READING
+  READING_COMPREHENSION
+  COMMON
+}
+
+enum LearningPathStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LearningStepType {
+  TEACHING
+  SMALL_STUDY
+  PRACTICE
+  REINFORCEMENT
+  ASSESSMENT
+}
+
+enum LearningStepSource {
+  SYSTEM_DRIVEN
+  TEACHER_ASSIGNED
+}
+
+enum LearningStepProgressStatus {
+  LOCKED
+  ACTIVE
+  IN_PROGRESS
+  COMPLETED
+}
+
 enum GuestDiagnosticSessionStatus {
   IN_PROGRESS
   COMPLETED
@@ -458,6 +490,7 @@ model User {
   assessmentResults        AssessmentResult[]
   baselines                StudentBaseline[]
   lessonProgress           StudentLessonProgress[]
+  learningStepProgresses   StudentLearningStepProgress[]
   createdContents          Content[]                 @relation("ContentCreatedBy")
   createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
   reviewedContentVersions  ContentVersion[]          @relation("ContentVersionReviewedBy")
@@ -562,6 +595,10 @@ model Tenant {
   assessmentResults        AssessmentResult[]
   baselines                 StudentBaseline[]
   lessonProgress            StudentLessonProgress[]
+  learningPaths             LearningPath[]
+  learningUnits             LearningUnit[]
+  learningSteps             LearningStep[]
+  learningStepProgress     StudentLearningStepProgress[]
   consents                 Consent[]
   auditLogs                AuditLog[]
   attempts                 Attempt[]
@@ -783,6 +820,8 @@ model Level {
   targetLevelProfiles  StudentProfile[]   @relation("TargetLevel")
   assessments          Assessment[]
   results              AssessmentResult[]
+  learningStepMinimumLevels LearningStep[]     @relation("LearningStepMinimumLevel")
+  learningStepMaximumLevels LearningStep[]     @relation("LearningStepMaximumLevel")
 }
 
 // ============ İÇERİK ============
@@ -848,6 +887,7 @@ model ContentVersion {
   templateContents        ExerciseTemplateVersionContent[]
   sessionContents         SessionContentVersion[]
   lessonProgress           StudentLessonProgress[]
+  learningSteps           LearningStep[]
 
   @@unique([contentId, version])
   @@index([contentId, status])
@@ -980,6 +1020,7 @@ model ExerciseTemplateVersion {
   sessions  ExerciseSession[]
   trainingSessionItems TrainingSessionItem[]
   guestDiagnosticSessions GuestDiagnosticSession[]          @relation("GuestDiagnosticSource")
+  learningSteps LearningStep[]
 
   @@unique([templateId, version])
   @@index([templateId, status])
@@ -1152,6 +1193,8 @@ model Assignment {
   template   ExerciseTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   teacherId  String
   teacher    User             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  learningStepId String?
+  learningStep   LearningStep?    @relation(fields: [learningStepId], references: [id], onDelete: SetNull)
   title      String
   dueDate    DateTime?
   status     AssignmentStatus @default(DRAFT)
@@ -1165,6 +1208,7 @@ model Assignment {
   @@index([classId, status])
   @@index([teacherId, status])
   @@index([templateId])
+  @@index([learningStepId])
 }
 
 // ============ OTURUM / İLERLEME ============
@@ -1441,6 +1485,7 @@ model Assessment {
 
   sessions ExerciseSession[]
   results  AssessmentResult[]
+  learningSteps LearningStep[]
 
   @@index([tenantId, status])
 }
@@ -1496,6 +1541,111 @@ model StudentLessonProgress {
 
   @@unique([tenantId, studentId, contentVersionId])
   @@index([studentId, tenantId, completedAt])
+}
+
+// ============ ÖĞRENME YOLU ============
+// Curriculum kayıtları platform genelinde (tenantId NULL) veya tenant'a özel
+// olabilir. Öğrenci ilerlemesi ayrı tabloda tutulur; curriculum değişmez.
+
+model LearningPath {
+  id        String             @id @default(dbgenerated("uuidv7()"))
+  tenantId  String?
+  tenant    Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  code      String
+  title     String
+  area      LearningAreaCode
+  status    LearningPathStatus @default(DRAFT)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  deletedAt DateTime?
+
+  units LearningUnit[]
+
+  @@index([tenantId, status])
+  @@index([area, status])
+}
+
+model LearningUnit {
+  id        String             @id @default(dbgenerated("uuidv7()"))
+  tenantId  String?
+  tenant    Tenant?            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pathId    String
+  path      LearningPath       @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  code      String
+  title     String
+  position  Int
+  status    LearningPathStatus @default(DRAFT)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  steps LearningStep[]
+
+  @@unique([pathId, position])
+  @@unique([pathId, code])
+  @@index([tenantId, status])
+}
+
+model LearningStep {
+  id                        String                   @id @default(dbgenerated("uuidv7()"))
+  tenantId                  String?
+  tenant                    Tenant?                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  unitId                    String
+  unit                      LearningUnit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  stableKey                 String
+  title                     String
+  position                  Int
+  type                      LearningStepType
+  source                    LearningStepSource       @default(SYSTEM_DRIVEN)
+  status                    LearningPathStatus       @default(DRAFT)
+  isActive                  Boolean                  @default(true)
+  prerequisiteStepId        String?
+  prerequisiteStep          LearningStep?            @relation("LearningStepPrerequisite", fields: [prerequisiteStepId], references: [id], onDelete: SetNull)
+  dependentSteps            LearningStep[]           @relation("LearningStepPrerequisite")
+  minimumLevelId            String?
+  minimumLevel              Level?                   @relation("LearningStepMinimumLevel", fields: [minimumLevelId], references: [id], onDelete: SetNull)
+  maximumLevelId            String?
+  maximumLevel              Level?                   @relation("LearningStepMaximumLevel", fields: [maximumLevelId], references: [id], onDelete: SetNull)
+  contentVersionId          String?
+  contentVersion            ContentVersion?          @relation(fields: [contentVersionId], references: [id], onDelete: SetNull)
+  exerciseTemplateVersionId String?
+  exerciseTemplateVersion   ExerciseTemplateVersion? @relation(fields: [exerciseTemplateVersionId], references: [id], onDelete: SetNull)
+  assessmentId              String?
+  assessment                Assessment?              @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  completionRule            Json                     @default("{}")
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  assignments Assignment[]
+  progress    StudentLearningStepProgress[]
+
+  @@unique([unitId, stableKey])
+  @@unique([unitId, position])
+  @@index([tenantId, status, isActive])
+  @@index([exerciseTemplateVersionId])
+  @@index([contentVersionId])
+  @@index([assessmentId])
+  @@index([prerequisiteStepId])
+}
+
+/// Öğrenci ilerlemesi curriculum'dan bağımsızdır ve tenant scope'unda tutulur.
+model StudentLearningStepProgress {
+  id             String                     @id @default(dbgenerated("uuidv7()"))
+  tenantId       String
+  tenant         Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId      String
+  student        User                       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  learningStepId String
+  learningStep   LearningStep               @relation(fields: [learningStepId], references: [id], onDelete: Restrict)
+  status         LearningStepProgressStatus @default(LOCKED)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  lastActivityAt DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  @@unique([tenantId, studentId, learningStepId])
+  @@index([studentId, tenantId, status])
+  @@index([learningStepId, status])
 }
 
 // ============ GAMIFICATION ============

@@ -29,8 +29,11 @@ describe("student dashboard release 0.4", () => {
   it("shows quota, next step, recent activity and accessible responsive states", () => {
     expect(index).toContain('id="today-card"');
     expect(index).toContain('id="home-insights"');
+    expect(index).toContain('id="learning-path-summary"');
     expect(app).toContain("renderTrainingHome(data)");
     expect(app).toContain("renderHomeInsights(data)");
+    expect(app).toContain("learningPathCommonDetail(pathGroups)");
+    expect(app).toContain("aggregateProgress.completed");
     expect(app).toContain("data.nextAction");
     expect(styles).toContain(".training-home-card");
     expect(styles).toContain("@media (max-width: 700px)");
