@@ -18,6 +18,11 @@ import {
   type ProgramExercise,
   type ProgramQuestion,
 } from "../src/curriculum/education-v2-p0-program.js";
+import {
+  assertLiveCatalogTargetIdentity,
+  parseCatalogTargetUrl,
+  type CatalogTarget,
+} from "../src/curriculum/catalog-target-verification.js";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -35,13 +40,7 @@ const PRODUCTION_WRITE_CONFIRMATION =
   "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE";
 
 type TargetEnvironment = "TEST" | "STAGING" | "PRODUCTION";
-type Target = {
-  url: string;
-  environment: TargetEnvironment;
-  database: string;
-  host: string;
-  port: string;
-};
+type Target = CatalogTarget;
 
 type Plan = {
   content: ProgramContent;
@@ -89,26 +88,6 @@ function wordCount(body: string): number {
   return body.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function parseTargetUrl(raw: string): Omit<Target, "environment"> {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    fail(`${DATABASE_ENV} geçerli bir PostgreSQL URL'i değil`);
-  }
-  if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") {
-    fail(`${DATABASE_ENV} PostgreSQL olmalı`);
-  }
-  const database = decodeURIComponent(parsed.pathname.replace(/^\/+/, "").split("/")[0] ?? "");
-  if (!database) fail("hedef veritabanı adı boş");
-  return {
-    url: raw,
-    database,
-    host: parsed.hostname,
-    port: parsed.port || "5432",
-  };
-}
-
 function readTarget(): Target | null {
   const environment = process.env[TARGET_ENV]?.trim().toUpperCase();
   const databaseEnv = environment === "PRODUCTION" ? PRODUCTION_DATABASE_ENV : DATABASE_ENV;
@@ -119,7 +98,7 @@ function readTarget(): Target | null {
   if (environment !== "TEST" && environment !== "STAGING" && environment !== "PRODUCTION") {
     fail(`${TARGET_ENV} yalnızca TEST, STAGING veya açıkça korunan PRODUCTION olabilir`);
   }
-  const target = parseTargetUrl(rawUrl);
+  const target = parseCatalogTargetUrl(rawUrl, environment as TargetEnvironment);
   if (environment === "TEST" && target.database !== "oku_plus_test") {
     fail(`TEST yalnızca oku_plus_test hedefleyebilir (${target.database})`);
   }
@@ -265,17 +244,13 @@ async function applySeedPlatformContext(tx: Prisma.TransactionClient): Promise<v
 }
 
 function assertIdentity(target: Target, identity: DbIdentity): void {
-  if (identity.database !== target.database) {
-    fail(`database kimliği eşleşmiyor: URL=${target.database}, connection=${identity.database}`);
+  try {
+    assertLiveCatalogTargetIdentity(target, identity);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : "database kimliği eşleşmiyor");
   }
   if (String(identity.port ?? "") !== target.port) {
     fail(`port eşleşmiyor: URL=${target.port}, connection=${identity.port}`);
-  }
-  const expectedHost = normalizeHost(target.host);
-  const actualHost = normalizeHost(identity.host);
-  const local = new Set(["127.0.0.1", "::1", "localhost"]);
-  if (expectedHost !== actualHost && !(local.has(expectedHost) && local.has(actualHost))) {
-    fail(`host eşleşmiyor: URL=${target.host}, connection=${identity.host}`);
   }
 }
 
