@@ -10,12 +10,11 @@ const PASSWORD = "question-test-pass-123!";
 const SUPER_ADMIN_ID = "99999996-0000-7000-8000-000000000001";
 const CONTENT_EDITOR_ID = "99999996-0000-7000-8000-000000000002";
 const NORMAL_USER_ID = "99999996-0000-7000-8000-000000000003";
-const CONTENT_REVIEWER_ID = "99999996-0000-7000-8000-000000000004";
 const TENANT_A = "99999996-0000-7000-8000-0000000000a1";
 const TENANT_B = "99999996-0000-7000-8000-0000000000b1";
 const CONTENT_A = "99999996-0000-7000-8000-0000000000c1";
 const CONTENT_B = "99999996-0000-7000-8000-0000000000c2";
-const USERS = [SUPER_ADMIN_ID, CONTENT_EDITOR_ID, NORMAL_USER_ID, CONTENT_REVIEWER_ID];
+const USERS = [SUPER_ADMIN_ID, CONTENT_EDITOR_ID, NORMAL_USER_ID];
 const CONTENTS = [CONTENT_A, CONTENT_B];
 
 function payload(type: string, position: number): Record<string, unknown> {
@@ -114,7 +113,6 @@ describe("question admin", () => {
   const headers = async (email: string) => ({ authorization: `Bearer ${await login(email)}` });
   const adminHeaders = () => headers("questions-super@example.com");
   const editorHeaders = () => headers("questions-editor@example.com");
-  const reviewerHeaders = () => headers("questions-reviewer@example.com");
   const userHeaders = () => headers("questions-user@example.com");
 
   const createQuestion = async (type: string, position: number, contentId = CONTENT_A) => {
@@ -126,51 +124,6 @@ describe("question admin", () => {
     });
     expect(response.statusCode).toBe(200);
     return response.json().data;
-  };
-
-  const approveQuestionVersion = async (versionId: string) => {
-    const approved = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${versionId}/approve`,
-      headers: await reviewerHeaders(),
-    });
-    expect(approved.statusCode).toBe(200);
-  };
-
-  const approveAndPublishQuestionVersion = async (versionId: string) => {
-    await approveQuestionVersion(versionId);
-
-    const version = await app.inject({
-      method: "GET",
-      url: `/admin/questions/versions/${versionId}`,
-      headers: await adminHeaders(),
-    });
-    expect(version.statusCode).toBe(200);
-    const questionId = version.json().data.questionId as string;
-
-    const reviewedParent = await app.inject({
-      method: "PATCH",
-      url: `/admin/questions/${questionId}/status`,
-      headers: await adminHeaders(),
-      payload: { status: "REVIEW" },
-    });
-    expect(reviewedParent.statusCode).toBe(200);
-
-    const approvedParent = await app.inject({
-      method: "PATCH",
-      url: `/admin/questions/${questionId}/status`,
-      headers: await reviewerHeaders(),
-      payload: { status: "APPROVED" },
-    });
-    expect(approvedParent.statusCode).toBe(200);
-
-    const published = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${versionId}/publish`,
-      headers: await reviewerHeaders(),
-    });
-    expect(published.statusCode).toBe(200);
-    return published;
   };
 
   beforeAll(async () => {
@@ -192,13 +145,6 @@ describe("question admin", () => {
           displayName: "Soru Editör",
           passwordHash,
           platformRole: "CONTENT_EDITOR",
-        },
-        {
-          id: CONTENT_REVIEWER_ID,
-          email: "questions-reviewer@example.com",
-          displayName: "Soru İnceleyici",
-          passwordHash,
-          platformRole: "CONTENT_REVIEWER",
         },
         {
           id: NORMAL_USER_ID,
@@ -377,7 +323,15 @@ describe("question admin", () => {
         })
       ).statusCode,
     ).toBe(400);
-    await approveAndPublishQuestionVersion(v1.id);
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: `/admin/questions/versions/${v1.id}/publish`,
+          headers: await adminHeaders(),
+        })
+      ).statusCode,
+    ).toBe(200);
     expect(
       (
         await app.inject({
@@ -398,120 +352,35 @@ describe("question admin", () => {
     expect(v2.json().data.version).toBe(2);
   });
 
-  it("Soru sürümü yayınında parent soru APPROVED değilse erken reddeder", async () => {
-    const question = await createQuestion("MULTIPLE_CHOICE", 90);
-    const version = question.versions[0];
-    const reviewed = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${version.id}/review`,
-      headers: await adminHeaders(),
-    });
-    expect(reviewed.statusCode).toBe(200);
-    await approveQuestionVersion(version.id);
-
-    const draftPublish = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${version.id}/publish`,
-      headers: await reviewerHeaders(),
-    });
-    expect(draftPublish.statusCode).toBe(400);
-    expect(draftPublish.json().error.message).toContain("APPROVED");
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: `/admin/questions/versions/${version.id}`,
-          headers: await adminHeaders(),
-        })
-      ).json().data.status,
-    ).toBe("APPROVED");
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: `/admin/questions/${question.id}`,
-          headers: await adminHeaders(),
-        })
-      ).json().data.status,
-    ).toBe("DRAFT");
-
-    const reviewedParent = await app.inject({
-      method: "PATCH",
-      url: `/admin/questions/${question.id}/status`,
-      headers: await adminHeaders(),
-      payload: { status: "REVIEW" },
-    });
-    expect(reviewedParent.statusCode).toBe(200);
-
-    const reviewPublish = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${version.id}/publish`,
-      headers: await reviewerHeaders(),
-    });
-    expect(reviewPublish.statusCode).toBe(400);
-    expect(reviewPublish.json().error.message).toContain("APPROVED");
-    expect(
-      (
-        await app.inject({
-          method: "GET",
-          url: `/admin/questions/${question.id}`,
-          headers: await adminHeaders(),
-        })
-      ).json().data.status,
-    ).toBe("REVIEW");
-
-    const approvedParent = await app.inject({
-      method: "PATCH",
-      url: `/admin/questions/${question.id}/status`,
-      headers: await reviewerHeaders(),
-      payload: { status: "APPROVED" },
-    });
-    expect(approvedParent.statusCode).toBe(200);
-
-    const published = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${version.id}/publish`,
-      headers: await reviewerHeaders(),
-    });
-    expect(published.statusCode).toBe(200);
-    expect(published.json().data.status).toBe("PUBLISHED");
-  });
-
-  it("yayınlanmış soruda APPROVED yeni sürüm yayınlanabilir ve eski sürüm immutable kalır", async () => {
-    const question = await createQuestion("MULTIPLE_CHOICE", 91);
+  it("yayınlanmış parent altında onaylı yeni soru sürümü yayınlanır", async () => {
+    const question = await createQuestion("MULTIPLE_CHOICE", 92);
     const firstVersion = question.versions[0];
-    const reviewedFirst = await app.inject({
+    const firstPublished = await app.inject({
       method: "POST",
-      url: `/admin/questions/versions/${firstVersion.id}/review`,
+      url: `/admin/questions/versions/${firstVersion.id}/publish`,
       headers: await adminHeaders(),
     });
-    expect(reviewedFirst.statusCode).toBe(200);
-    await approveAndPublishQuestionVersion(firstVersion.id);
+    expect(firstPublished.statusCode).toBe(200);
 
     const nextVersion = await app.inject({
       method: "POST",
       url: `/admin/questions/${question.id}/versions`,
       headers: await adminHeaders(),
-      payload: { hint: "Yeni güvenli ipucu" },
+      payload: { hint: "Yeni ipucu" },
     });
     expect(nextVersion.statusCode).toBe(200);
     const nextVersionId = nextVersion.json().data.id as string;
-
-    const reviewed = await app.inject({
-      method: "POST",
-      url: `/admin/questions/versions/${nextVersionId}/review`,
-      headers: await adminHeaders(),
+    await prisma.questionVersion.update({
+      where: { id: nextVersionId },
+      data: { status: "APPROVED" },
     });
-    expect(reviewed.statusCode).toBe(200);
-    await approveQuestionVersion(nextVersionId);
 
     const published = await app.inject({
       method: "POST",
       url: `/admin/questions/versions/${nextVersionId}/publish`,
-      headers: await reviewerHeaders(),
+      headers: await adminHeaders(),
     });
     expect(published.statusCode).toBe(200);
-    expect(published.json().data.status).toBe("PUBLISHED");
 
     const versions = await app.inject({
       method: "GET",

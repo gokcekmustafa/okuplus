@@ -1,6 +1,10 @@
 import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
+import {
+  assertLearningStepAccessible,
+  markLearningStepInProgress,
+} from "../learning-path/index.js";
 
 export interface StudentAssignmentListItem {
   id: string;
@@ -9,6 +13,7 @@ export interface StudentAssignmentListItem {
   teacherName: string;
   templateTitle: string;
   templateType: string;
+  learningStepId: string | null;
   dueDate: Date | null;
   status: string;
   assignedAt: Date | null;
@@ -36,6 +41,7 @@ export interface StudentAssignmentDetail {
   teacherName: string;
   templateTitle: string;
   templateType: string;
+  learningStepId: string | null;
   dueDate: Date | null;
   status: string;
   assignedAt: Date | null;
@@ -54,6 +60,7 @@ const VISIBLE_STATUSES = ["SCHEDULED", "ACTIVE", "CLOSED"] as const;
 const STUDENT_ASSIGNMENT_SELECT = {
   id: true,
   title: true,
+  learningStepId: true,
   dueDate: true,
   status: true,
   assignedAt: true,
@@ -165,6 +172,7 @@ export async function listStudentAssignments(
       teacherName: r.teacher.displayName,
       templateTitle: r.template.title,
       templateType: r.template.type,
+      learningStepId: r.learningStepId,
       dueDate: r.dueDate,
       status: r.status,
       assignedAt: r.assignedAt,
@@ -233,6 +241,7 @@ export async function getStudentAssignment(
     teacherName: row.teacher.displayName,
     templateTitle: row.template.title,
     templateType: row.template.type,
+    learningStepId: row.learningStepId,
     dueDate: row.dueDate,
     status: row.status,
     assignedAt: row.assignedAt,
@@ -266,6 +275,7 @@ export async function startAssignmentSession(
       tenantId: true,
       classId: true,
       templateId: true,
+      learningStepId: true,
       status: true,
     },
   });
@@ -297,6 +307,10 @@ export async function startAssignmentSession(
     return { sessionId: existingSession.id, isNew: false };
   }
 
+  if (assignment.learningStepId && actor.tenantId && actor.platformRole === null) {
+    await assertLearningStepAccessible(actor, assignment.learningStepId);
+  }
+
   const created = await prisma.exerciseSession.create({
     data: {
       tenantId: assignment.tenantId,
@@ -309,6 +323,10 @@ export async function startAssignmentSession(
     },
     select: { id: true },
   });
+
+  if (assignment.learningStepId && actor.tenantId && actor.platformRole === null) {
+    await markLearningStepInProgress(actor, assignment.learningStepId).catch(() => {});
+  }
 
   return { sessionId: created.id, isNew: true };
 }

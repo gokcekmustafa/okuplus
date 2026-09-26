@@ -121,19 +121,19 @@ describe.sequential("8G-10 pilot readiness", () => {
   it("pilot access flag and allowlist enforce edilir", () => {
     expect(
       isPilotAccessAllowed(
-        { NODE_ENV: "test", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: EMAIL_A },
+        { APP_ENV: "test", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: EMAIL_A },
         { id: STUDENT_A, email: EMAIL_A },
       ),
     ).toBe(true);
     expect(
       isPilotAccessAllowed(
-        { NODE_ENV: "test", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: EMAIL_A },
+        { APP_ENV: "test", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: EMAIL_A },
         { id: STUDENT_B, email: EMAIL_B },
       ),
     ).toBe(false);
     expect(
       isPilotAccessAllowed(
-        { NODE_ENV: "production", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: "" },
+        { APP_ENV: "production", PILOT_MODE: "on", PILOT_STUDENT_ACCESS: "" },
         { id: STUDENT_A, email: EMAIL_A },
       ),
     ).toBe(false);

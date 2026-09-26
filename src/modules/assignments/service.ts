@@ -38,6 +38,7 @@ const ASSIGNMENT_LIST_SELECT = {
   tenantId: true,
   classId: true,
   templateId: true,
+  learningStepId: true,
   teacherId: true,
   title: true,
   dueDate: true,
@@ -57,6 +58,7 @@ export interface AssignmentListItem {
   className: string;
   classStatus: string;
   templateId: string;
+  learningStepId: string | null;
   templateTitle: string;
   templateType: string;
   templateStatus: string;
@@ -125,6 +127,7 @@ export async function listAssignments(query: ListAssignmentsQuery): Promise<Assi
       className: cls.name,
       classStatus: cls.status,
       templateId: a.templateId,
+      learningStepId: a.learningStepId,
       templateTitle: template.title,
       templateType: template.type,
       templateStatus: template.status,
@@ -198,11 +201,35 @@ export async function createAssignment(
     throw validationError("Şablon bu kuruma ait değil");
   }
 
+  if (input.learningStepId) {
+    const step = await prisma.learningStep.findFirst({
+      where: {
+        id: input.learningStepId,
+        OR: [{ tenantId: null }, { tenantId: cls.tenantId }],
+        status: "PUBLISHED",
+        isActive: true,
+        unit: { path: { status: "PUBLISHED", deletedAt: null } },
+      },
+      select: { id: true, exerciseTemplateVersionId: true },
+    });
+    if (!step) throw validationError("Öğrenme adımı bu kurum için kullanılabilir değil");
+    if (step.exerciseTemplateVersionId) {
+      const version = await prisma.exerciseTemplateVersion.findUnique({
+        where: { id: step.exerciseTemplateVersionId },
+        select: { templateId: true },
+      });
+      if (version?.templateId !== input.templateId) {
+        throw validationError("Ödev şablonu öğrenme adımıyla eşleşmiyor");
+      }
+    }
+  }
+
   const created = await prisma.assignment.create({
     data: {
       tenantId: cls.tenantId,
       classId: input.classId,
       templateId: input.templateId,
+      learningStepId: input.learningStepId ?? null,
       teacherId: input.teacherId,
       title: input.title,
       dueDate: input.dueDate ?? null,
@@ -313,6 +340,7 @@ export async function listClassAssignments(classId: string): Promise<AssignmentL
     className: cls.name,
     classStatus: cls.status,
     templateId: a.templateId,
+    learningStepId: a.learningStepId,
     templateTitle: template.title,
     templateType: template.type,
     templateStatus: template.status,
@@ -349,6 +377,7 @@ function toAssignmentItem(
     tenantId: string;
     classId: string;
     templateId: string;
+    learningStepId: string | null;
     teacherId: string;
     title: string;
     dueDate: Date | null;
@@ -369,6 +398,7 @@ function toAssignmentItem(
     className: row.class.name,
     classStatus: row.class.status,
     templateId: row.templateId,
+    learningStepId: row.learningStepId,
     templateTitle: row.template.title,
     templateType: row.template.type,
     templateStatus: row.template.status,

@@ -1,0 +1,694 @@
+name: Staging migration recovery resolve
+
+on:
+  workflow_dispatch:
+    inputs:
+      resolve_confirm:
+        description: Type APPLY to reconcile the targeted failed staging migration history
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-migration-recovery-resolve
+  cancel-in-progress: false
+
+jobs:
+  staging-migration-recovery-resolve:
+    name: Resolve targeted staging migration history
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      APP_ENV: staging
+      NODE_ENV: test
+      RESOLVE_CONFIRM: ${{ inputs.resolve_confirm }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+      DB_FINGERPRINT_ENVIRONMENT: ${{ vars.DB_FINGERPRINT_ENVIRONMENT }}
+      DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+      EXPECTED_STAGING_FINGERPRINT: 18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38
+      TARGET_MIGRATION: 20260907160000_add_training_session_completed_point_event
+      NEXT_KNOWN_STAGING_MIGRATION: 20260914100000_add_learning_experience_foundation
+    steps:
+      - name: Verify master ref and explicit confirmation
+        shell: bash
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_REF" = "refs/heads/master"
+          test "$APP_ENV" = "staging"
+          test "$NODE_ENV" = "test"
+          test "$RESOLVE_CONFIRM" = "APPLY"
+
+      - name: Checkout master workflow revision
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema=prisma/schema.prisma
+
+      - name: Verify staging fingerprint and targeted recovery preconditions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$DB_FINGERPRINT_ENVIRONMENT" = "STAGING"
+          test -n "$DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test "$DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT" = "$EXPECTED_STAGING_FINGERPRINT"
+
+          fingerprint_output="$RUNNER_TEMP/staging-resolve-fingerprint-before.json"
+          fingerprint_error="$RUNNER_TEMP/staging-resolve-fingerprint-before.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging fingerprint precheck failed" >&2
+            exit 1
+          fi
+
+          precheck_log="$RUNNER_TEMP/staging-resolve-precheck.log"
+          set +e
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
+            npx tsx -e '
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { PrismaClient } from "@prisma/client";
+          import { assertTargetIdentityFingerprint, providerForHost } from "./scripts/db-fingerprint-contract.ts";
+
+          const recoveryTargetMigration = "20260907160000_add_training_session_completed_point_event";
+          const recoveryOutputPath = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+          async function main() {
+          const targetMigration = "20260907160000_add_training_session_completed_point_event";
+          const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
+          const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
+          const outputPath = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+          const sanitizeRuntimeMessage = (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            return message
+              .replace(/(?:postgres(?:ql)?):\/\/\S+/giu, "[REDACTED_DATABASE_URL]")
+              .replace(/(?:https?|file):\/\/\S+/giu, "[REDACTED_URL]")
+              .replace(/(?:password|passwd|pwd|secret|token|cookie|authorization|database_url)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+              .replace(/\b(?:[a-z0-9-]+\.)+neon\.tech\b/giu, "[REDACTED_HOST]")
+              .replace(/\s+/gu, " ")
+              .trim()
+              .slice(0, 400);
+          };
+          const safeErrorCode = (error) => {
+            const code = error && typeof error.code === "string" ? error.code : null;
+            return code && /^(?:P\d{4}|ERR_[A-Z0-9_]+)$/u.test(code) ? code : null;
+          };
+          const safeErrorType = (error) => {
+            const type = error?.constructor?.name;
+            return typeof type === "string" && /^[A-Za-z][A-Za-z0-9]*$/u.test(type) ? type : "UnknownError";
+          };
+          const runtimeFailure = (operation, error) => {
+            writeFileSync(
+              outputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration,
+                  failedChecks: ["precheckRuntimeError"],
+                  runtimeFailure: {
+                    operation,
+                    errorType: safeErrorType(error),
+                    errorCode: safeErrorCode(error),
+                    message: sanitizeRuntimeMessage(error),
+                  },
+                  safeToResolveApplied: false,
+                },
+                null,
+                2,
+              ),
+            );
+            throw new Error("staging precheck runtime error");
+          };
+          const safeFailure = (failedChecks, pendingMigrations = null, targetFingerprintValue = null) => {
+            writeFileSync(
+              outputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration,
+                  targetFingerprint:
+                    typeof targetFingerprintValue === "string" && /^[a-f0-9]{64}$/u.test(targetFingerprintValue)
+                      ? targetFingerprintValue
+                      : null,
+                  pendingMigrations,
+                  failedChecks,
+                  safeToResolveApplied: false,
+                },
+                null,
+                2,
+              ),
+            );
+            throw new Error("staging resolve precondition failed");
+          };
+
+          let report;
+          try {
+            report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+          } catch {
+            safeFailure(["fingerprintJson"]);
+          }
+
+          const targetFingerprint = report.targetIdentityFingerprint;
+          const pending = report.migrations?.pending;
+          const failed = report.migrations?.failed;
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string") ? pending : null;
+          const failedMigrations = Array.isArray(failed) && failed.every((entry) => entry && typeof entry.name === "string") ? failed : null;
+          const allowedPending = [targetMigration, nextKnownMigration];
+          const unexpectedPendingMigrations = pendingMigrations?.filter((name) => !allowedPending.includes(name)) ?? null;
+          const unexpectedFailedMigrations = failedMigrations?.filter((entry) => entry.name !== targetMigration) ?? null;
+
+          let fingerprintUrl;
+          try {
+            fingerprintUrl = new URL(process.env.DB_FINGERPRINT_DATABASE_URL);
+          } catch {
+            safeFailure(["fingerprintUrl"]);
+          }
+          let databaseUrl;
+          try {
+            databaseUrl = new URL(process.env.DATABASE_URL);
+          } catch {
+            safeFailure(["databaseUrl"]);
+          }
+          let targetFingerprintValid = false;
+          try {
+            targetFingerprintValid = assertTargetIdentityFingerprint(targetFingerprint) === expectedFingerprint;
+          } catch {
+            targetFingerprintValid = false;
+          }
+          const checks = {
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: targetFingerprintValid,
+            stagingProvider: providerForHost(fingerprintUrl.hostname) === "NEON",
+            databaseProvider: providerForHost(databaseUrl.hostname) === "NEON",
+            databaseUrlMatchesFingerprintTarget:
+              databaseUrl.hostname === fingerprintUrl.hostname &&
+              databaseUrl.pathname === fingerprintUrl.pathname,
+            pendingMigrationsShape: pendingMigrations !== null,
+            failedMigrationsShape: failedMigrations !== null,
+            targetPending: pendingMigrations?.includes(targetMigration) === true,
+            targetFailed: failedMigrations?.some((entry) => entry.name === targetMigration) === true,
+            noUnexpectedPendingMigrations: unexpectedPendingMigrations?.length === 0,
+            noUnexpectedFailedMigrations: unexpectedFailedMigrations?.length === 0,
+          };
+
+          const initialFailedChecks = Object.entries(checks)
+            .filter(([, passed]) => !passed)
+            .map(([name]) => name);
+          if (initialFailedChecks.length > 0) safeFailure(initialFailedChecks, pendingMigrations, targetFingerprint);
+
+          let prisma;
+          try {
+            prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          } catch (error) {
+            runtimeFailure("prismaClientInit", error);
+          }
+          try {
+            let identityRows;
+            try {
+              identityRows = await prisma.$queryRaw`
+                SELECT current_database() AS database, current_user AS current_user
+              `;
+            } catch (error) {
+              runtimeFailure("databaseIdentityQuery", error);
+            }
+            let enumRows;
+            try {
+              enumRows = await prisma.$queryRaw`
+                SELECT t.typname AS type_name, e.enumlabel AS enum_label
+                FROM pg_type t
+                JOIN pg_namespace n ON n.oid = t.typnamespace
+                LEFT JOIN pg_enum e ON e.enumtypid = t.oid
+                WHERE n.nspname = ${"public"} AND t.typname = ${"PointEventType"}
+                ORDER BY e.enumsortorder
+              `;
+            } catch (error) {
+              runtimeFailure("pointEventTypeEnumQuery", error);
+            }
+            let migrationRows;
+            try {
+              migrationRows = await prisma.$queryRaw`
+                SELECT migration_name, applied_steps_count, started_at, finished_at,
+                       rolled_back_at, logs IS NOT NULL AS logs_present
+                FROM public."_prisma_migrations"
+                WHERE migration_name = ${targetMigration}
+              `;
+            } catch (error) {
+              runtimeFailure("prismaMigrationsQuery", error);
+            }
+            const identity = identityRows[0];
+            const enumTypeExists = enumRows.length > 0;
+            const enumLabelPresent = enumRows.some((row) => row.enum_label === "TRAINING_SESSION_COMPLETED");
+            const migration = migrationRows.length === 1 ? migrationRows[0] : null;
+            Object.assign(checks, {
+              databaseIdentityAvailable: Boolean(identity?.database && identity?.current_user),
+              databaseIdentityMatchesFingerprint:
+                Boolean(identity?.database && identity?.current_user) &&
+                identity.database === report.database?.database &&
+                identity.current_user === report.database?.currentUser,
+              enumTypeExists,
+              enumLabelPresent,
+              targetMigrationRecordUnique: migration !== null,
+              targetMigrationIncomplete: migration?.applied_steps_count === 0 && migration.finished_at === null && migration.rolled_back_at === null,
+              targetMigrationHasError: migration?.logs_present === true,
+            });
+
+            const failedChecks = Object.entries(checks)
+              .filter(([, passed]) => !passed)
+              .map(([name]) => name);
+            if (failedChecks.length > 0) safeFailure(failedChecks, pendingMigrations, targetFingerprint);
+
+            writeFileSync(
+              outputPath,
+              JSON.stringify(
+                {
+                  result: "PASS",
+                  environment: "STAGING",
+                  targetFingerprint,
+                  targetMigration,
+                  pendingMigrations,
+                  unexpectedPendingMigrations,
+                  unexpectedFailedMigrations,
+                  enum: { typeName: "PointEventType", typeExists: enumTypeExists, labelPresent: enumLabelPresent },
+                  historyBefore: {
+                    state: "FAILED_OR_INCOMPLETE",
+                    recordCount: migrationRows.length,
+                    appliedStepsCount: migration.applied_steps_count,
+                    finishedAt: migration.finished_at,
+                    rolledBackAt: migration.rolled_back_at,
+                    logsPresent: migration.logs_present,
+                  },
+                  checks,
+                  safeToResolveApplied: true,
+                },
+                null,
+                2,
+              ),
+            );
+          } catch (error) {
+            if (error instanceof Error && error.message === "staging resolve precondition failed") throw error;
+            if (error instanceof Error && error.message === "staging precheck runtime error") throw error;
+            runtimeFailure("readOnlyPrecheck", error);
+          } finally {
+            await prisma.$disconnect();
+          }
+          }
+          main().catch((error) => {
+            if (error instanceof Error && ["staging resolve precondition failed", "staging precheck runtime error"].includes(error.message)) {
+              process.exitCode = 1;
+              return;
+            }
+            writeFileSync(
+              recoveryOutputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration: recoveryTargetMigration,
+                  failedChecks: ["precheckRuntimeError"],
+                  runtimeFailure: {
+                    operation: "moduleLoadOrEval",
+                    errorType: "UnknownError",
+                    errorCode: null,
+                    message: "runtime failed before the guarded precheck handler",
+                  },
+                  safeToResolveApplied: false,
+                },
+                null,
+                2,
+              ),
+            );
+            process.exitCode = 1;
+          });
+          ' >"$RUNNER_TEMP/staging-resolve-precheck.log" 2>&1
+          precheck_exit=$?
+          set -e
+          if test "$precheck_exit" -ne 0; then
+            reason="PRECHECK_RUNTIME_ERROR"
+            if grep -Eqi "Top-level await is currently not supported" "$precheck_log"; then
+              reason="TSX_EVAL_TOP_LEVEL_AWAIT_UNSUPPORTED"
+            elif grep -Eqi "staging resolve precondition failed" "$precheck_log"; then
+              reason="STAGING_PRECONDITION_FAILED"
+            elif grep -Eqi "ERR_MODULE_NOT_FOUND|Cannot find module" "$precheck_log"; then
+              reason="MODULE_LOAD_FAILED"
+            elif grep -Eqi "PrismaClient|P1001|P1000|Can't reach database" "$precheck_log"; then
+              reason="READ_ONLY_PRISMA_PRECHECK_FAILED"
+            fi
+            echo "staging recovery precheck failed; reason=$reason; exitCode=$precheck_exit; diagnostics=staging-resolve-precheck.json" >&2
+            node --input-type=module <<'NODE'
+            import { existsSync, readFileSync } from "node:fs";
+
+            const path = `${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`;
+            if (existsSync(path)) {
+              try {
+                const report = JSON.parse(readFileSync(path, "utf8"));
+                const failure = report.runtimeFailure;
+                if (failure) {
+                  console.error(`staging recovery diagnostic; operation=${failure.operation ?? "UNKNOWN"}; errorType=${failure.errorType ?? "UnknownError"}; errorCode=${failure.errorCode ?? "NONE"}; message=${failure.message ?? "NOT_AVAILABLE"}`);
+                }
+              } catch {
+                console.error("staging recovery diagnostic unavailable; reason=SANITIZED_METADATA_PARSE_FAILED");
+              }
+            } else if (existsSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.log`)) {
+              const output = readFileSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.log`, "utf8");
+              const reason = /ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/iu.test(output)
+                ? "MODULE_LOAD_FAILED"
+                : /Transform failed|top-level await/iu.test(output)
+                  ? "TSX_EVAL_RUNTIME_ERROR"
+                  : "PRECHECK_RUNTIME_ERROR";
+              console.error(`staging recovery diagnostic; operation=moduleLoadOrEval; errorType=RuntimeError; errorCode=${reason}; message=guarded precheck failed before structured diagnostics`);
+            }
+          NODE
+            exit "$precheck_exit"
+          fi
+
+      - name: Resolve only the targeted staging migration
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve_output="$RUNNER_TEMP/staging-resolve-command.log"
+          if ! npx prisma migrate resolve --applied 20260907160000_add_training_session_completed_point_event \
+            --schema=prisma/schema.prisma >"$resolve_output" 2>&1; then
+            echo "targeted staging migration resolve failed" >&2
+            exit 1
+          fi
+
+      - name: Verify resolved staging migration history
+        id: postcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_status="$RUNNER_TEMP/staging-resolve-migrate-status.log"
+          set +e
+          npx prisma migrate status --schema=prisma/schema.prisma >"$migration_status" 2>&1
+          migration_status_exit=$?
+          set -e
+          if test "$migration_status_exit" -gt 1; then
+            echo "staging migration status verification failed" >&2
+            exit 1
+          fi
+
+          fingerprint_output="$RUNNER_TEMP/staging-resolve-fingerprint-after.json"
+          fingerprint_error="$RUNNER_TEMP/staging-resolve-fingerprint-after.err"
+          if ! npx tsx scripts/db-fingerprint.ts >"$fingerprint_output" 2>"$fingerprint_error"; then
+            echo "staging post-resolve fingerprint verification failed" >&2
+            exit 1
+          fi
+
+          postcheck_log="$RUNNER_TEMP/staging-resolve-postcheck.log"
+          set +e
+          MIGRATE_STATUS_EXIT="$migration_status_exit" \
+          FINGERPRINT_OUTPUT="$fingerprint_output" \
+            npx tsx -e '
+          import { readFileSync, writeFileSync } from "node:fs";
+          import { PrismaClient } from "@prisma/client";
+          import { assertTargetIdentityFingerprint } from "./scripts/db-fingerprint-contract.ts";
+
+          const recoveryTargetMigration = "20260907160000_add_training_session_completed_point_event";
+          const recoveryOutputPath = `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`;
+          const sanitizeRuntimeMessage = (error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            return message
+              .replace(/(?:postgres(?:ql)?):\/\/\S+/giu, "[REDACTED_DATABASE_URL]")
+              .replace(/(?:https?|file):\/\/\S+/giu, "[REDACTED_URL]")
+              .replace(/(?:password|passwd|pwd|secret|token|cookie|authorization|database_url)\s*[:=]\s*\S+/giu, "$1=[REDACTED]")
+              .replace(/\b(?:[a-z0-9-]+\.)+neon\.tech\b/giu, "[REDACTED_HOST]")
+              .replace(/\s+/gu, " ")
+              .trim()
+              .slice(0, 400);
+          };
+          const safeErrorCode = (error) => {
+            const code = error && typeof error.code === "string" ? error.code : null;
+            return code && /^(?:P\d{4}|ERR_[A-Z0-9_]+)$/u.test(code) ? code : null;
+          };
+          const safeErrorType = (error) => {
+            const type = error?.constructor?.name;
+            return typeof type === "string" && /^[A-Za-z][A-Za-z0-9]*$/u.test(type) ? type : "UnknownError";
+          };
+          const writeFailure = (failure) => {
+            writeFileSync(
+              recoveryOutputPath,
+              JSON.stringify(
+                {
+                  result: "FAIL",
+                  environment: "STAGING",
+                  targetMigration: recoveryTargetMigration,
+                  migrateDeploy: "NOT_RUN",
+                  ...failure,
+                },
+                null,
+                2,
+              ),
+            );
+          };
+          const runtimeFailure = (operation, error) => {
+            writeFailure({
+              failureClass: "RUNTIME",
+              failedChecks: ["postcheckRuntimeError"],
+              runtimeFailure: {
+                operation,
+                errorType: safeErrorType(error),
+                errorCode: safeErrorCode(error),
+                message: sanitizeRuntimeMessage(error),
+              },
+            });
+            throw new Error("staging resolve postcheck runtime error");
+          };
+          async function main() {
+          const expectedFingerprint = "18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38";
+          const targetMigration = "20260907160000_add_training_session_completed_point_event";
+          const nextKnownMigration = "20260914100000_add_learning_experience_foundation";
+          let report;
+          let precheck;
+          try {
+            report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
+            precheck = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/staging-resolve-precheck.json`, "utf8"));
+          } catch (error) {
+            runtimeFailure("postcheckInputJson", error);
+          }
+          const pending = report.migrations?.pending;
+          const failed = report.migrations?.failed;
+          const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string") ? pending : null;
+          const failedMigrations = Array.isArray(failed) && failed.every((entry) => entry && typeof entry.name === "string") ? failed : null;
+          let targetFingerprintValid = false;
+          try {
+            targetFingerprintValid = assertTargetIdentityFingerprint(report.targetIdentityFingerprint) === expectedFingerprint;
+          } catch {
+            targetFingerprintValid = false;
+          }
+          const checks = {
+            targetEnvironment: report.target?.environment === "STAGING",
+            targetFingerprint: targetFingerprintValid,
+            pendingMigrationsShape: pendingMigrations !== null,
+            failedMigrationsShape: failedMigrations !== null,
+            targetNotPending: pendingMigrations?.includes(targetMigration) === false,
+            targetNotFailed: failedMigrations?.some((entry) => entry.name === targetMigration) === false,
+            migrationStatusAcceptable:
+              Number(process.env.MIGRATE_STATUS_EXIT) === 0 ||
+              (Number(process.env.MIGRATE_STATUS_EXIT) === 1 &&
+                pendingMigrations?.every((name) => name === nextKnownMigration) === true),
+            enumTypeExists: precheck?.enum?.typeExists === true,
+            enumLabelPresent: precheck?.enum?.labelPresent === true,
+          };
+          let prisma;
+          try {
+            prisma = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } });
+          } catch (error) {
+            runtimeFailure("prismaClientInit", error);
+          }
+          try {
+            let migrationRows;
+            try {
+              migrationRows = await prisma.$queryRaw`
+                SELECT migration_name, applied_steps_count, finished_at, rolled_back_at
+                FROM public."_prisma_migrations"
+                WHERE migration_name = ${targetMigration}
+              `;
+            } catch (error) {
+              runtimeFailure("prismaMigrationsQuery", error);
+            }
+            const migration = migrationRows.length === 1 ? migrationRows[0] : null;
+            const historyAfter = migration
+              ? {
+                  state: migration.finished_at !== null && migration.rolled_back_at === null ? "APPLIED" : "NOT_APPLIED",
+                  recordCount: migrationRows.length,
+                  appliedStepsCount: migration.applied_steps_count,
+                  finishedAt: migration.finished_at,
+                  rolledBackAt: migration.rolled_back_at,
+                }
+              : null;
+            Object.assign(checks, {
+              targetMigrationRecordUnique: migration !== null,
+              targetMigrationApplied: migration?.finished_at !== null && migration?.rolled_back_at === null,
+            });
+            const failedChecks = Object.entries(checks)
+              .filter(([, passed]) => !passed)
+              .map(([name]) => name);
+            if (failedChecks.length > 0) {
+              writeFailure({
+                failureClass: "VALIDATION",
+                targetFingerprint: report.targetIdentityFingerprint,
+                pendingMigrations,
+                failedMigrations,
+                enum: { typeName: "PointEventType", typeExists: checks.enumTypeExists, labelPresent: checks.enumLabelPresent },
+                historyAfter,
+                checks,
+                failedChecks,
+                migrateStatusExit: Number(process.env.MIGRATE_STATUS_EXIT),
+              });
+              throw new Error("staging resolve postcheck validation failed");
+            }
+            writeFileSync(
+              `${process.env.RUNNER_TEMP}/staging-resolve-postcheck.json`,
+              JSON.stringify(
+                {
+                  result: "PASS",
+                  failureClass: "NONE",
+                  environment: "STAGING",
+                  targetFingerprint: report.targetIdentityFingerprint,
+                  targetMigration,
+                  enum: { typeName: "PointEventType", typeExists: checks.enumTypeExists, labelPresent: checks.enumLabelPresent },
+                  historyAfter,
+                  pendingMigrations,
+                  failedMigrations,
+                  checks,
+                  migrateStatusExit: Number(process.env.MIGRATE_STATUS_EXIT),
+                  migrateDeploy: "NOT_RUN",
+                },
+                null,
+                2,
+              ),
+            );
+          } finally {
+            try {
+              await prisma.$disconnect();
+            } catch (error) {
+              runtimeFailure("prismaDisconnect", error);
+            }
+          }
+          }
+          main().catch((error) => {
+            if (error instanceof Error && ["staging resolve postcheck validation failed", "staging resolve postcheck runtime error"].includes(error.message)) {
+              process.exitCode = 1;
+              return;
+            }
+            writeFailure({
+              failureClass: "RUNTIME",
+              failedChecks: ["postcheckRuntimeError"],
+              runtimeFailure: {
+                operation: "uncaughtPostcheck",
+                errorType: safeErrorType(error),
+                errorCode: safeErrorCode(error),
+                message: sanitizeRuntimeMessage(error),
+              },
+            });
+            process.exitCode = 1;
+          });
+          ' >"$RUNNER_TEMP/staging-resolve-postcheck.log" 2>&1
+          postcheck_exit=$?
+          set -e
+          if test "$postcheck_exit" -ne 0; then
+            echo "staging post-resolve verification failed; exitCode=$postcheck_exit" >&2
+            exit "$postcheck_exit"
+          fi
+
+      - name: Publish sanitized staging recovery summary
+        if: always()
+        shell: bash
+        env:
+          RESOLVE_OUTCOME: ${{ steps.resolve.outcome }}
+          POSTCHECK_OUTCOME: ${{ steps.postcheck.outcome }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { existsSync, readFileSync } from "node:fs";
+
+          const readJson = (path) => {
+            if (!existsSync(path)) return null;
+            try {
+              return JSON.parse(readFileSync(path, "utf8"));
+            } catch {
+              return null;
+            }
+          };
+          const temp = process.env.RUNNER_TEMP;
+          const precheck = readJson(`${temp}/staging-resolve-precheck.json`);
+          const postcheck = readJson(`${temp}/staging-resolve-postcheck.json`);
+          const formatList = (value) => Array.isArray(value) ? (value.length ? value.join(", ") : "NONE") : "NOT_AVAILABLE";
+          const checks = postcheck?.checks ?? precheck?.checks ?? {};
+          const runtimeFailure = precheck?.runtimeFailure ?? postcheck?.runtimeFailure ?? null;
+          const flag = (value) => value === true ? "PASS" : value === false ? "FAIL" : "NOT_AVAILABLE";
+          const confirmationBinding = process.env.RESOLVE_CONFIRM === "APPLY" ? "PASS" : "FAIL";
+          const fingerprintBinding =
+            process.env.DB_FINGERPRINT_ENVIRONMENT === "STAGING" &&
+            /^[a-f0-9]{64}$/u.test(process.env.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT ?? "")
+              ? "PASS"
+              : "FAIL";
+          const databaseBinding = process.env.DATABASE_URL && process.env.DB_FINGERPRINT_DATABASE_URL ? "PASS" : "FAIL";
+
+          console.log("## Staging migration recovery resolve");
+          console.log("- targetEnvironment: STAGING");
+          console.log(`- targetFingerprint: ${postcheck?.targetFingerprint ?? precheck?.targetFingerprint ?? "NOT_AVAILABLE"}`);
+          console.log("- targetMigration: 20260907160000_add_training_session_completed_point_event");
+          console.log(`- confirmation: ${confirmationBinding === "PASS" ? "ACCEPTED" : "NOT_ACCEPTED"}`);
+          console.log(`- confirmationBinding: ${confirmationBinding}`);
+          console.log(`- fingerprintBinding: ${fingerprintBinding}`);
+          console.log(`- databaseBinding: ${databaseBinding}`);
+          console.log(`- databaseIdentity: ${flag(checks.databaseIdentityMatchesFingerprint)}`);
+          console.log(`- precheck: ${precheck?.result ?? "NOT_AVAILABLE"}`);
+          console.log(`- enumTypeExists: ${precheck?.enum?.typeExists === true ? "YES" : precheck?.enum?.typeExists === false ? "NO" : "NOT_AVAILABLE"}`);
+          console.log(`- enumLabelPresent: ${precheck?.enum?.labelPresent === true ? "YES" : precheck?.enum?.labelPresent === false ? "NO" : "NOT_AVAILABLE"}`);
+          console.log(`- historyBefore: ${precheck?.historyBefore?.state ?? "NOT_AVAILABLE"}`);
+          console.log(`- pendingBefore: ${formatList(precheck?.pendingMigrations)}`);
+          console.log(`- unexpectedPendingBefore: ${formatList(precheck?.unexpectedPendingMigrations)}`);
+          console.log(`- resolve: ${process.env.RESOLVE_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- postcheck: ${postcheck?.result ?? process.env.POSTCHECK_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- postcheckFailureClass: ${postcheck?.failureClass ?? "NONE"}`);
+          console.log(`- postcheckFailedChecks: ${formatList(postcheck?.failedChecks)}`);
+          if (runtimeFailure) {
+            console.log(`- runtimeFailure.operation: ${runtimeFailure.operation ?? "UNKNOWN"}`);
+            console.log(`- runtimeFailure.errorType: ${runtimeFailure.errorType ?? "UnknownError"}`);
+            console.log(`- runtimeFailure.errorCode: ${runtimeFailure.errorCode ?? "NONE"}`);
+            console.log(`- runtimeFailure.message: ${runtimeFailure.message ?? "NOT_AVAILABLE"}`);
+          } else {
+            console.log("- runtimeFailure: NONE");
+          }
+          console.log(`- historyAfter: ${postcheck?.historyAfter?.state ?? "NOT_AVAILABLE"}`);
+          console.log(`- appliedStepsAfter: ${postcheck?.historyAfter?.appliedStepsCount ?? "NOT_AVAILABLE"}`);
+          console.log(`- finishedAtAfter: ${postcheck?.historyAfter?.finishedAt === null ? "NULL" : postcheck?.historyAfter?.finishedAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- rolledBackAtAfter: ${postcheck?.historyAfter?.rolledBackAt === null ? "NULL" : postcheck?.historyAfter?.rolledBackAt ? "PRESENT" : "NOT_AVAILABLE"}`);
+          console.log(`- enumTypeExistsAfter: ${postcheck?.enum?.typeExists === true ? "YES" : postcheck?.enum?.typeExists === false ? "NO" : "NOT_AVAILABLE"}`);
+          console.log(`- enumLabelPresentAfter: ${postcheck?.enum?.labelPresent === true ? "YES" : postcheck?.enum?.labelPresent === false ? "NO" : "NOT_AVAILABLE"}`);
+          console.log(`- pendingAfter: ${formatList(postcheck?.pendingMigrations)}`);
+          console.log(`- failedAfter: ${formatList(postcheck?.failedMigrations?.map((entry) => entry.name))}`);
+          console.log("- migrateDeploy: NOT_RUN");
+          for (const [key, value] of Object.entries(checks)) console.log(`- check.${key}: ${value ? "PASS" : "FAIL"}`);
+          console.log("- productionTouched: NO");
+          console.log("- stagingDatabaseWrite: TARGETED_RESOLVE_ONLY");
+          NODE
+
+      - name: Upload sanitized recovery metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-migration-recovery-summary
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/staging-resolve-precheck.json
+            ${{ runner.temp }}/staging-resolve-postcheck.json

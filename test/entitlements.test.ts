@@ -320,6 +320,14 @@ describe.sequential("8H-1 entitlement architecture", () => {
   });
 
   it("handles timezone date boundaries and idempotent usage", async () => {
+    await prisma.entitlementUsage.deleteMany({
+      where: {
+        userId: USER_ID,
+        tenantId: PERSONAL_TENANT_ID,
+        feature: ENTITLEMENT_FEATURES.PRACTICE,
+      },
+    });
+
     expect(entitlementUsageDate(new Date("2026-09-02T21:30:00.000Z"), "UTC")).toBe("2026-09-02");
     expect(entitlementUsageDate(new Date("2026-09-02T21:30:00.000Z"), "Europe/Istanbul")).toBe(
       "2026-09-03",

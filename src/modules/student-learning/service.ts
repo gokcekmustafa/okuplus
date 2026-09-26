@@ -16,6 +16,12 @@ import {
   toTrainingRuntimeConfig,
 } from "../training/runtime.js";
 import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+import {
+  assertLearningTemplateAccessible,
+  getStudentLearningPath,
+  getNextLearningStep,
+  markLearningStepInProgressForTemplate,
+} from "../learning-path/index.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -64,6 +70,15 @@ export interface TodayResponse {
     startedAt: Date;
   } | null;
   nextAction: { type: string; label: string; id: string | null; title: string | null };
+  nextLearningStep: {
+    id: string;
+    type: string;
+    title: string;
+    unitTitle: string;
+    templateVersionId: string | null;
+    contentVersionId: string | null;
+    assessmentId: string | null;
+  } | null;
   recentActivity: Array<{ id: string; type: string; title: string; completedAt: Date | null }>;
   review: StudentReviewResponse | null;
 }
@@ -92,6 +107,7 @@ export async function getToday(actor: {
     assignments,
     assessments,
     templateVersion,
+    nextLearningStep,
     review,
   ] = await Promise.all([
     prisma.exerciseSession.count({
@@ -251,6 +267,7 @@ export async function getToday(actor: {
       .then(
         (versions) => versions.find((version) => isTrainingVersionConfig(version.config)) ?? null,
       ),
+    getNextLearningStep(actor),
     tenantId ? getStudentReview(actor) : Promise.resolve(null),
   ]);
 
@@ -268,6 +285,25 @@ export async function getToday(actor: {
       label: "Ödeve Başla",
       id: assignments.id,
       title: assignments.title,
+    };
+  else if (nextLearningStep)
+    nextAction = {
+      type: "LEARNING_STEP",
+      label:
+        nextLearningStep.type === "TEACHING"
+          ? "Derse Başla"
+          : nextLearningStep.type === "SMALL_STUDY"
+            ? "Küçük çalışmaya başla"
+            : nextLearningStep.type === "REINFORCEMENT"
+              ? "Pekiştirmeye Başla"
+              : nextLearningStep.type === "ASSESSMENT"
+                ? "Değerlendirmeye Başla"
+                : "Uygulamaya Başla",
+      id:
+        nextLearningStep.type === "PRACTICE" || nextLearningStep.type === "REINFORCEMENT"
+          ? nextLearningStep.templateVersionId
+          : nextLearningStep.id,
+      title: nextLearningStep.title,
     };
   else if (assessments)
     nextAction = {
@@ -308,6 +344,7 @@ export async function getToday(actor: {
     pointsToday: pointsTodayAgg._sum.points ?? 0,
     isFirstTrainingDay: tenantId ? !previousTrainingSession : false,
     placementHandoff: Boolean(placementResult),
+    nextLearningStep,
     dailyGoal: {
       status: dailyGoalStatus(dailyTrainingSession?.status),
       totalItems: dailyGoalTotal,
@@ -358,6 +395,13 @@ export async function getLearningPath(actor: {
   platformRole: PlatformRole | null;
 }) {
   assertStudentActor(actor);
+  const persistedPath = await getStudentLearningPath(actor);
+  if (persistedPath) {
+    return {
+      ...persistedPath,
+      today: await getToday(actor).catch(() => null),
+    };
+  }
   const tenantId = actor.tenantId;
   // parallel base data
   const [allSkills, studentProgress, level, today] = await Promise.all([
@@ -476,10 +520,7 @@ export async function getLearningPath(actor: {
       else if (!foundActive) {
         status = "active";
         foundActive = true;
-      } else status = "available";
-      const isCurrent =
-        today?.nextAction?.id === tv.id ||
-        (today?.activeSession?.templateVersionId === tv.id && status === "active");
+      } else status = "locked";
       nodes.push({
         id: tv.id,
         type: "TEMPLATE",
@@ -488,7 +529,7 @@ export async function getLearningPath(actor: {
         status,
         progress: isCompleted ? { sessionCount: 1, accuracy: null } : null,
         templateVersionId: tv.id,
-        isCurrent: isCurrent || status === "active",
+        isCurrent: status === "active",
       });
     }
     if (nodes.length === 0) {
@@ -508,16 +549,6 @@ export async function getLearningPath(actor: {
     const hasMultipleTemplateNodes = Array.from(templatesBySkill.values()).some(
       (templates) => templates.length > 1,
     );
-    let activeSkillId: string | null = null;
-    if (today?.activeSession?.templateVersionId) {
-      const atv = await prisma.exerciseTemplateVersion
-        .findUnique({
-          where: { id: today.activeSession.templateVersionId },
-          select: { template: { select: { skillId: true } } },
-        })
-        .catch(() => null);
-      activeSkillId = atv?.template.skillId ?? null;
-    }
     if (hasMultipleTemplateNodes) {
       const templateVersionIds = Array.from(templatesBySkill.values())
         .flat()
@@ -545,11 +576,7 @@ export async function getLearningPath(actor: {
           else if (!foundActive) {
             status = "active";
             foundActive = true;
-          } else status = "available";
-          const isCurrent =
-            today?.nextAction?.id === template.templateVersionId ||
-            today?.activeSession?.templateVersionId === template.templateVersionId ||
-            (activeSkillId === skill.id && status === "active");
+          } else status = "locked";
           nodes.push({
             id: template.templateVersionId,
             type: "CONTENT",
@@ -558,16 +585,9 @@ export async function getLearningPath(actor: {
             status,
             progress: isCompleted ? { sessionCount: 1, accuracy: null } : null,
             templateVersionId: template.templateVersionId,
-            isCurrent,
+            isCurrent: status === "active",
           });
         }
-      }
-      if (
-        !nodes.some((node) => node.status === "active") &&
-        nodes.some((node) => node.status === "available")
-      ) {
-        const firstAvailable = nodes.find((node) => node.status === "available");
-        if (firstAvailable) firstAvailable.status = "active";
       }
     } else {
       let foundActive = false;
@@ -581,10 +601,8 @@ export async function getLearningPath(actor: {
         else if (!foundActive && hasTemplate) {
           status = "active";
           foundActive = true;
-        } else if (hasTemplate) status = "available";
+        } else if (hasTemplate) status = "locked";
         else status = "locked";
-        let isCurrent = status === "active";
-        if (activeSkillId && activeSkillId === s.id) isCurrent = true;
         nodes.push({
           id: s.id,
           type: "SKILL",
@@ -595,15 +613,8 @@ export async function getLearningPath(actor: {
             ? { sessionCount: prog.sessionCount, accuracy: prog.accuracy ?? null }
             : null,
           templateVersionId: template?.templateVersionId ?? null,
-          isCurrent,
+          isCurrent: status === "active",
         });
-      }
-      if (
-        !nodes.some((node) => node.status === "active") &&
-        nodes.some((node) => node.status === "available")
-      ) {
-        const firstAvailable = nodes.find((node) => node.status === "available");
-        if (firstAvailable) firstAvailable.status = "active";
       }
     }
   }
@@ -619,6 +630,42 @@ export async function getLearningPath(actor: {
     nodes,
     today,
   };
+}
+
+async function assertLearningPathTemplateAccessible(
+  actor: { userId: string; tenantId: string; platformRole: PlatformRole | null },
+  templateVersionId: string,
+) {
+  const persistedPath = await getStudentLearningPath(actor);
+  if (persistedPath) {
+    await assertLearningTemplateAccessible(actor, templateVersionId);
+    return;
+  }
+
+  // Backward-compatible fallback until a published curriculum exists. The
+  // legacy projection is still strict: a template outside the visible path
+  // or a locked node is never accepted.
+  const legacyPath = await getLearningPath(actor);
+  const node = (legacyPath.nodes ?? []).find(
+    (item) => item.templateVersionId === templateVersionId,
+  );
+  if (!node) throw forbiddenError("Bu egzersiz öğrenme yolunda bulunmuyor");
+  if (node.status !== "locked") return;
+
+  const resumable = await prisma.exerciseSession.findFirst({
+    where: {
+      tenantId: actor.tenantId,
+      studentId: actor.userId,
+      templateVersionId,
+      context: "INDIVIDUAL",
+      sessionType: "PRACTICE",
+      status: "IN_PROGRESS",
+      assignmentId: null,
+      assessmentId: null,
+    },
+    select: { id: true },
+  });
+  if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
 }
 
 export async function getHistory(
@@ -656,7 +703,11 @@ export async function getHistory(
 
 export async function startPersonalExercise(
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
-  input: { templateVersionId?: string; clientSessionId?: string },
+  input: {
+    templateVersionId?: string;
+    clientSessionId?: string;
+    enforceLearningPathOrder?: boolean;
+  },
 ) {
   const tenantId = actor.tenantId;
   if (!tenantId || actor.platformRole !== null) {
@@ -704,11 +755,17 @@ export async function startPersonalExercise(
     if (tv.template.tenantId && tv.template.tenantId !== tenantId)
       throw forbiddenError("Şablon tenant uyuşmazlığı");
     selectedTemplateConfig = tv.config;
+    if (input.enforceLearningPathOrder) {
+      await assertLearningPathTemplateAccessible(
+        { userId: actor.userId, tenantId, platformRole: actor.platformRole },
+        templateVersionId,
+      );
+    }
   }
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
     await loadTrainingRuntimeGraph(templateVersionId!, actor);
   }
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const requestLockKey = `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
     await tx.$queryRaw`
       SELECT 1::int AS acquired
@@ -771,6 +828,10 @@ export async function startPersonalExercise(
     });
     return { sessionId: created.id, isNew: true };
   });
+  if (result.isNew) {
+    await markLearningStepInProgressForTemplate(actor, templateVersionId).catch(() => {});
+  }
+  return result;
 }
 
 export async function getStudentSession(

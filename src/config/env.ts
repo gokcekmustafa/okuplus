@@ -1,5 +1,20 @@
 import { z } from "zod";
 
+export const APP_ENV_VALUES = ["development", "test", "staging", "production"] as const;
+const VERCEL_ENV_VALUES = ["development", "preview", "production"] as const;
+const DEFAULT_DEV_JWT_SECRET = "oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef";
+
+const PLACEHOLDER_SECRET_PATTERNS = [
+  /change[-_ ]?me/iu,
+  /default/iu,
+  /dev[-_ ]?only/iu,
+  /example/iu,
+  /password/iu,
+  /placeholder/iu,
+  /secret/iu,
+  /test/iu,
+];
+
 function isExplicitOriginAllowlist(value: string): boolean {
   return value.split(",").every((candidate) => {
     const origin = candidate.trim();
@@ -23,8 +38,9 @@ function isExplicitOriginAllowlist(value: string): boolean {
 }
 
 const envSchema = z.object({
-  APP_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
+  APP_ENV: z.enum(APP_ENV_VALUES).default("development"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  VERCEL_ENV: z.enum(VERCEL_ENV_VALUES).optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   HOST: z.string().min(1).default("0.0.0.0"),
   BODY_LIMIT_BYTES: z.coerce
@@ -53,9 +69,20 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).max(10_000).default(120),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(5).max(1000).default(60),
+  RATE_LIMIT_AUTH_IDENTIFIER_MAX: z.coerce.number().int().min(5).max(1000).default(20),
   RATE_LIMIT_BILLING_MAX: z.coerce.number().int().min(5).max(1000).default(60),
   RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().int().min(10).max(5000).default(120),
   RATE_LIMIT_PILOT_MAX: z.coerce.number().int().min(5).max(1000).default(60),
+  RATE_LIMIT_MAX_KEYS: z.coerce.number().int().min(100).max(100_000).default(10_000),
+  UPSTASH_REDIS_REST_URL: z.string().trim().default(""),
+  UPSTASH_REDIS_REST_TOKEN: z.string().trim().default(""),
+  GUEST_RATE_LIMIT_NAMESPACE: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9](?:[A-Za-z0-9:_-]*[A-Za-z0-9])?$/u)
+    .default("okuplus:guest"),
   JWT_SECRET: z
     .string()
     .min(32, "JWT_SECRET en az 32 karakter olmalı")
@@ -64,13 +91,6 @@ const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(300).default(604800),
   AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
   AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
-  STAGING_OPERATOR_AUTH_SECRET: z.string().max(256).default(""),
-  // Explicit opt-in for the staging-only full student E2E fixture. The
-  // legacy value is a single email; the plural value is a comma-separated
-  // allowlist. Both are validated below and are never accepted outside
-  // APP_ENV=staging.
-  STAGING_E2E_PREMIUM_EMAIL: z.string().trim().toLowerCase().default(""),
-  STAGING_E2E_PREMIUM_EMAILS: z.string().default(""),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),
@@ -94,92 +114,158 @@ export { envSchema };
 
 export type RawEnv = Record<string, string | undefined>;
 
-const stagingSyntheticEmailPattern = /^[^@\s]+@[^@\s]+\.invalid$/u;
+function resolveAppEnvironment(raw: RawEnv): RawEnv {
+  if (raw.APP_ENV !== undefined) return raw;
 
-export function parseStagingE2EPremiumEmails(value: string | undefined): string[] {
-  const entries = (value ?? "")
-    .split(",")
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  if (entries.some((email) => email.length > 254 || !stagingSyntheticEmailPattern.test(email))) {
-    throw new Error(
-      "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAILS yalnızca .invalid synthetic öğrenci hesapları içerebilir",
-    );
-  }
-  return [...new Set(entries)];
+  if (raw.VERCEL_ENV === "preview") return { ...raw, APP_ENV: "staging" };
+  if (raw.VERCEL_ENV === "production") return { ...raw, APP_ENV: "production" };
+  if (raw.VERCEL_ENV === "development") return { ...raw, APP_ENV: "development" };
+
+  // Preserve the existing local/CI test inference when Vercel is absent.
+  if (raw.NODE_ENV === "test") return { ...raw, APP_ENV: "test" };
+
+  return raw;
 }
 
-export function configuredStagingE2EPremiumEmails(
-  input: {
-    emailList?: string;
-    legacyEmail?: string;
-  } = {},
-): string[] {
-  const emailList = parseStagingE2EPremiumEmails(input.emailList);
-  if (emailList.length > 0) return emailList;
-  return parseStagingE2EPremiumEmails(input.legacyEmail);
-}
-
-function validateStagingOperatorSecret(env: Env): void {
-  const secret = env.STAGING_OPERATOR_AUTH_SECRET;
+function hasStrongJwtSecret(value: string): boolean {
   if (
-    secret !== "" &&
-    (env.APP_ENV !== "staging" || secret.length < 32 || secret.trim() !== secret)
+    value === DEFAULT_DEV_JWT_SECRET ||
+    PLACEHOLDER_SECRET_PATTERNS.some((pattern) => pattern.test(value))
   ) {
-    throw new Error(
-      "Geçersiz ortam değişkenleri: STAGING_OPERATOR_AUTH_SECRET yalnızca staging'de güçlü bir process secret olarak kullanılabilir",
-    );
+    return false;
   }
+
+  const characterClasses = [/[a-z]/u, /[A-Z]/u, /[0-9]/u, /[^A-Za-z0-9]/u].filter((pattern) =>
+    pattern.test(value),
+  ).length;
+  return characterClasses >= 3 && !/(.)\1{7,}/u.test(value);
 }
 
-function validateStagingE2EPremiumEmails(env: Env): void {
-  const legacyEmail = env.STAGING_E2E_PREMIUM_EMAIL;
-  const emailList = env.STAGING_E2E_PREMIUM_EMAILS;
-  if (env.APP_ENV !== "staging" && (legacyEmail !== "" || emailList.trim() !== "")) {
-    throw new Error(
-      "Geçersiz ortam değişkenleri: staging E2E premium allowlist yalnızca staging'de kullanılabilir",
+function hasExplicitHttpsOrigins(value: string): boolean {
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return (
+    origins.length > 0 &&
+    origins.every((origin) => {
+      if (!isExplicitOriginAllowlist(origin)) return false;
+      try {
+        return new URL(origin).protocol === "https:";
+      } catch {
+        return false;
+      }
+    })
+  );
+}
+
+function hasConfiguredIyzico(raw: Env): boolean {
+  return [
+    raw.IYZICO_API_KEY,
+    raw.IYZICO_SECRET_KEY,
+    raw.IYZICO_BASE_URL,
+    raw.IYZICO_MERCHANT_ID,
+    raw.IYZICO_SUBSCRIPTION_PLAN_MONTHLY,
+    raw.IYZICO_SUBSCRIPTION_PLAN_YEARLY,
+    raw.IYZICO_CHECKOUT_CALLBACK_URL,
+  ].some((value) => value.trim() !== "");
+}
+
+function hasUnsafeProductionClientIds(value: string): boolean {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .some(
+      (item) =>
+        item.length < 3 ||
+        /\s/u.test(item) ||
+        !/^[A-Za-z0-9._:-]+$/u.test(item) ||
+        /(?:development|example|localhost|placeholder|staging|test)/iu.test(item),
     );
+}
+
+function validateSecurityEnvironment(env: Env): void {
+  const issues: string[] = [];
+
+  if (env.APP_ENV === "production" && env.NODE_ENV !== "production") {
+    issues.push("APP_ENV=production için NODE_ENV=production olmalı");
   }
-  if (legacyEmail !== "") {
-    let legacyEntries: string[];
-    try {
-      legacyEntries = parseStagingE2EPremiumEmails(legacyEmail);
-    } catch {
-      throw new Error(
-        "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAIL tek bir .invalid synthetic öğrenci hesabı olmalı",
+  if (env.APP_ENV === "staging" && env.NODE_ENV !== "production") {
+    issues.push("APP_ENV=staging için NODE_ENV=production olmalı");
+  }
+  if (env.APP_ENV === "test" && env.NODE_ENV !== "test") {
+    issues.push("APP_ENV=test için NODE_ENV=test olmalı");
+  }
+  if (env.APP_ENV === "development" && env.NODE_ENV === "production") {
+    issues.push("NODE_ENV=production ile APP_ENV=development birlikte kullanılamaz");
+  }
+
+  const productionLike = env.APP_ENV === "staging" || env.APP_ENV === "production";
+  if (productionLike && !hasStrongJwtSecret(env.JWT_SECRET)) {
+    issues.push("JWT_SECRET staging/production için güçlü ve placeholder olmayan bir değer olmalı");
+  }
+  if (
+    productionLike &&
+    env.AUTH_COOKIE_TRANSPORT === "on" &&
+    env.AUTH_ORIGIN_ENFORCEMENT !== "on"
+  ) {
+    issues.push("cookie transport staging/production için AUTH_ORIGIN_ENFORCEMENT=on gerektirir");
+  }
+
+  if (env.APP_ENV === "production") {
+    if (!hasExplicitHttpsOrigins(env.CORS_ORIGIN)) {
+      issues.push("production CORS_ORIGIN en az bir explicit HTTPS origin içermeli");
+    }
+    if (env.AUTH_COOKIE_TRANSPORT !== "on") {
+      issues.push(
+        "production AUTH_COOKIE_TRANSPORT=on olmalı; insecure/legacy fallback reddedildi",
       );
     }
-    if (legacyEntries.length !== 1 || legacyEntries[0] !== legacyEmail) {
-      throw new Error(
-        "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAIL tek bir .invalid synthetic öğrenci hesabı olmalı",
-      );
+    if (env.AUTH_ORIGIN_ENFORCEMENT !== "on") {
+      issues.push("production AUTH_ORIGIN_ENFORCEMENT=on olmalı");
+    }
+    if (env.PILOT_MODE !== "off" || env.PILOT_STUDENT_ACCESS.trim() !== "") {
+      issues.push("production pilot/bypass ayarları kapalı olmalı");
+    }
+    if (hasConfiguredIyzico(env)) {
+      issues.push("production için mevcut sandbox-only iyzico adapter ayarlanamaz");
+    }
+    if (hasUnsafeProductionClientIds(env.GOOGLE_OIDC_CLIENT_IDS)) {
+      issues.push("GOOGLE_OIDC_CLIENT_IDS production client ID içermeli");
+    }
+    if (hasUnsafeProductionClientIds(env.APPLE_OIDC_CLIENT_IDS)) {
+      issues.push("APPLE_OIDC_CLIENT_IDS production client ID içermeli");
     }
   }
-  if (emailList.trim() !== "") parseStagingE2EPremiumEmails(emailList);
+
+  if (issues.length > 0) {
+    throw new Error(`Güvenlik açısından geçersiz ortam değişkenleri: ${issues.join("; ")}`);
+  }
 }
 
 export function parseEnv(raw: RawEnv): Env {
-  const result = envSchema.safeParse(raw);
+  const input = resolveAppEnvironment(raw);
+  const result = envSchema.safeParse(input);
   if (!result.success) {
     const issues = result.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
       .join("; ");
     throw new Error(`Geçersiz ortam değişkenleri: ${issues}`);
   }
-  validateStagingOperatorSecret(result.data);
-  validateStagingE2EPremiumEmails(result.data);
-  if (
-    result.data.NODE_ENV === "production" &&
-    result.data.JWT_SECRET === "oku-plus-dev-only-jwt-secret-change-me-0123456789abcdef"
-  ) {
-    throw new Error("Geçersiz ortam değişkenleri: production JWT_SECRET varsayılan değer olamaz");
-  }
+  validateSecurityEnvironment(result.data);
 
   // Vitest intentionally reuses one injected loopback IP across many suites.
   // Keep test fixtures from tripping the production baseline while allowing
   // security tests to opt into a deliberately small explicit limit.
-  if (result.data.NODE_ENV === "test" && raw.RATE_LIMIT_AUTH_MAX === undefined) {
-    return { ...result.data, RATE_LIMIT_AUTH_MAX: 1000 };
+  if (result.data.NODE_ENV === "test") {
+    return {
+      ...result.data,
+      ...(raw.RATE_LIMIT_AUTH_MAX === undefined ? { RATE_LIMIT_AUTH_MAX: 1000 } : {}),
+      ...(raw.RATE_LIMIT_AUTH_IDENTIFIER_MAX === undefined
+        ? { RATE_LIMIT_AUTH_IDENTIFIER_MAX: 1000 }
+        : {}),
+    };
   }
 
   return result.data;

@@ -9,8 +9,9 @@ const code = source.slice(
     source.indexOf("function insightScope()"),
   ),
 );
-function harness() {
+function harness(missingIds: string[] = []) {
   const elements = new Map<string, ReturnType<typeof element>>();
+  const missing = new Set(missingIds);
   function element() {
     return {
       textContent: "",
@@ -28,9 +29,10 @@ function harness() {
     if (!elements.has(id)) elements.set(id, element());
     return elements.get(id)!;
   };
+  const lookup = (id: string) => (missing.has(id) ? null : get(id));
   const storage = new Map<string, string>();
   const context = createContext({
-    $: get,
+    $: lookup,
     escapeHtml: (s: string) => s.replaceAll("<", "&lt;"),
     getStoredTokens: () => ({ accessToken: "token", tenantId: "personal" }),
     insightsIdentity: "student:personal",
@@ -98,6 +100,13 @@ describe("progress/gamification production UI helpers", () => {
     await load;
     expect(h.get("progress-summary").innerHTML).toBe("");
     expect(h.get("progress-skills").innerHTML).toBe("");
+  });
+  it("tolerates optional development containers missing from the page", async () => {
+    const h = harness(["development-comparison", "development-journey-summary"]);
+    h.run(
+      `insightApi=(path)=>path==='progress'?Promise.resolve({summary:{sessionCount:0,accuracy:null,attemptCount:0,correctCount:0,scoredCount:0},training:{skills:[]},development:[],items:[]}):path==='gamification'?Promise.resolve({totalPoints:0,currentDays:0,longestDays:0,badges:[],trophies:[],recentPointEvents:[],categoryProgress:{},nextTargets:[]}):path.startsWith('history')?Promise.resolve({page:1,total:0,pageSize:5,items:[]}):Promise.resolve({currentLevel:null,overallProgress:{completed:0,total:0,percent:0}})`,
+    );
+    await expect(h.run("loadProgress()")).resolves.toBeUndefined();
   });
   it("shows only earned badges and handles missing description without claiming success", () => {
     const h = harness();

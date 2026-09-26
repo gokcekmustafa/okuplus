@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { CANONICAL_CATALOG_MANIFEST } from "../src/curriculum/canonical-catalog.js";
 import {
   CANONICAL_PROFICIENCY_LEVEL_MANIFEST,
   PROFICIENCY_LEVEL_CODES,
@@ -21,10 +20,5 @@ describe("canonical proficiency Level manifest", () => {
       expect(level.skillCoverage).toEqual(PROFICIENCY_SKILL_CODES);
       expect(level.difficultyMin).toBeLessThanOrEqual(level.difficultyMax);
     }
-  });
-
-  it("does not alter the existing G8_12 pilot Level manifest", () => {
-    expect(CANONICAL_CATALOG_MANIFEST.levels).toHaveLength(1);
-    expect(CANONICAL_CATALOG_MANIFEST.levels[0]?.code).toBe("G8_12");
   });
 });

@@ -6,7 +6,6 @@ import {
 } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, validationError } from "../../lib/errors.js";
-import { configuredStagingE2EPremiumEmails } from "../../config/env.js";
 import {
   calendarDateKey,
   calendarDayBounds,
@@ -217,38 +216,6 @@ async function currentGrant(
   });
 }
 
-/**
- * Staging full E2E için açıkça opt-in edilmiş, gerçek bir premium entitlement
- * provider'ı. Bu yol yalnız APP_ENV=staging ve .invalid synthetic hesap için
- * aktiftir; production'da veya platform kullanıcılarında asla çalışmaz.
- * Gerçek bir entitlement varsa her zaman gerçek grant önceliklidir.
- */
-async function hasStagingE2EPremiumEntitlement(
-  actor: EntitlementActor,
-  client: EntitlementDb,
-): Promise<boolean> {
-  const configuredEmails = configuredStagingE2EPremiumEmails({
-    emailList: process.env.STAGING_E2E_PREMIUM_EMAILS,
-    legacyEmail: process.env.STAGING_E2E_PREMIUM_EMAIL,
-  });
-  if (
-    process.env.APP_ENV !== "staging" ||
-    configuredEmails.length === 0 ||
-    actor.platformRole !== null
-  ) {
-    return false;
-  }
-  const user = await client.user.findUnique({
-    where: { id: actor.userId },
-    select: { email: true, status: true, deletedAt: true },
-  });
-  return (
-    user?.status === "ACTIVE" &&
-    user.deletedAt === null &&
-    configuredEmails.includes(user.email?.trim().toLowerCase() ?? "")
-  );
-}
-
 async function usageCounts(
   actor: EntitlementActor,
   tenantId: string,
@@ -276,16 +243,15 @@ async function loadSnapshot(
   const context = await resolveScope(actor, client);
   const timezone = configuredCalendarTimezone();
   const usageDate = entitlementUsageDate(now, timezone);
-  const [grant, counts, stagingE2EPremium] = await Promise.all([
+  const [grant, counts] = await Promise.all([
     // 8H-2 deliberately keeps Premium personal-only. Organization scope is
     // still resolved and quota-protected, but has no active Premium grant.
     context.scope === "PERSONAL"
       ? currentGrant(actor, context.scope, context.tenantId, now, client)
       : Promise.resolve(null),
     usageCounts(actor, context.tenantId, usageDate, client),
-    hasStagingE2EPremiumEntitlement(actor, client),
   ]);
-  const plan = grant?.plan ?? (stagingE2EPremium ? "PLAN_PREMIUM" : "PLAN_FREE");
+  const plan = grant?.plan ?? "PLAN_FREE";
   const policies = PLAN_POLICIES[plan];
   const features = Object.fromEntries(
     (Object.keys(ENTITLEMENT_FEATURES) as Array<keyof typeof ENTITLEMENT_FEATURES>).map((key) => {
@@ -315,7 +281,7 @@ async function loadSnapshot(
       code: plan,
       label: planLabel(plan),
       active: true,
-      source: grant?.source ?? (stagingE2EPremium ? "STAGING_E2E_PREMIUM" : "DEFAULT"),
+      source: grant?.source ?? "DEFAULT",
       effectiveAt: grant?.effectiveAt.toISOString() ?? null,
       expiresAt: grant?.expiresAt?.toISOString() ?? null,
     },
@@ -386,8 +352,7 @@ async function recordUsageInTransactionCore(
     context.scope === "PERSONAL"
       ? await currentGrant(actor, context.scope, context.tenantId, now, tx)
       : null;
-  const stagingE2EPremium = grant === null && (await hasStagingE2EPremiumEntitlement(actor, tx));
-  const plan = grant?.plan ?? (stagingE2EPremium ? "PLAN_PREMIUM" : "PLAN_FREE");
+  const plan = grant?.plan ?? "PLAN_FREE";
   const policy = PLAN_POLICIES[plan][feature];
 
   if (!policy.allowed) {

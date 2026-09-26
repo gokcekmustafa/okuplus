@@ -5,7 +5,7 @@ import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 import { ScryptPasswordHasher } from "../src/modules/auth/index.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
-import { CANONICAL_PLACEMENT_IDENTITY } from "../src/modules/assessments/canonical-selector.js";
+import { canonicalPlacementAssessmentConfig } from "../src/curriculum/canonical-placement-assessment.js";
 
 const PASSWORD = "onboarding-pass-123!";
 const EMAIL = "onboard-8d@example.com";
@@ -197,11 +197,10 @@ describe.sequential("onboarding", () => {
         type: "PLACEMENT",
         status: "PUBLISHED",
         config: {
+          ...canonicalPlacementAssessmentConfig(),
+          canonicalActive: true,
           templateId: TMPL_ID,
           templateVersionId: TMPL_VID,
-          canonicalManifestId: CANONICAL_PLACEMENT_IDENTITY.manifestId,
-          canonicalManifestVersion: CANONICAL_PLACEMENT_IDENTITY.manifestVersion,
-          canonicalActive: true,
         },
       },
     });

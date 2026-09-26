@@ -11,7 +11,6 @@ import {
   type SocialTokenVerifier,
 } from "./modules/auth/index.js";
 import { authRoutes } from "./modules/auth/routes.js";
-import { stagingOperatorRoutes } from "./modules/auth/staging-operator-routes.js";
 import { createCookieCsrfGuard } from "./modules/auth/csrf.js";
 import { assessmentAdminRoutes, assessmentStudentRoutes } from "./modules/assessments/index.js";
 import { assignmentAdminRoutes, assignmentStudentRoutes } from "./modules/assignments/index.js";
@@ -39,6 +38,7 @@ import { templateAdminRoutes } from "./modules/templates/index.js";
 import { tenantAdminRoutes } from "./modules/tenant/index.js";
 import { trainingStudentRoutes } from "./modules/training/index.js";
 import { userAdminRoutes } from "./modules/users/index.js";
+import { guestDiagnosticRoutes } from "./modules/guest-diagnostic/index.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { staticPlugin } from "./plugins/static.js";
@@ -55,6 +55,10 @@ export async function buildApp(
     requestTimeout: env.REQUEST_TIMEOUT_MS,
     keepAliveTimeout: env.KEEP_ALIVE_TIMEOUT_MS,
     return503OnClosing: true,
+    // Do not trust client-supplied forwarding headers. A deployment that
+    // needs real client-IP attribution must configure a verified proxy layer
+    // explicitly before enabling a trusted-proxy policy.
+    trustProxy: false,
   });
   const authProvider = new JwtAuthProvider({
     jwtSecret: env.JWT_SECRET,
@@ -93,15 +97,6 @@ export async function buildApp(
     enforceAuthOrigin: env.AUTH_ORIGIN_ENFORCEMENT === "on",
     cookieAuthEnabled: env.AUTH_COOKIE_TRANSPORT === "on",
   });
-  if (env.APP_ENV === "staging") {
-    await app.register(stagingOperatorRoutes, {
-      authProvider,
-      appEnv: env.APP_ENV,
-      operatorSecret: env.STAGING_OPERATOR_AUTH_SECRET,
-      csrfSecret: env.JWT_SECRET,
-      allowedOrigins,
-    });
-  }
   await app.register(tenantAdminRoutes, { authProvider });
   await app.register(userAdminRoutes, { authProvider });
   await app.register(studentAdminRoutes, { authProvider });
@@ -129,6 +124,7 @@ export async function buildApp(
   await app.register(baselineStudentRoutes, { authProvider });
   await app.register(lessonStudentRoutes, { authProvider });
   await app.register(trainingStudentRoutes, { authProvider });
+  await app.register(guestDiagnosticRoutes, { env, authProvider });
   await app.register(staticPlugin);
   return app;
 }

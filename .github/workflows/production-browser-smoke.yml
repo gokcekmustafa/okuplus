@@ -1,0 +1,49 @@
+name: Manual production read-only browser smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-browser-smoke
+  cancel-in-progress: false
+
+jobs:
+  production-browser-smoke:
+    name: Read-only browser smoke on canonical production domains
+    runs-on: ubuntu-latest
+    environment: production-smoke
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      PRODUCTION_SMOKE_BASE_URL: https://okuplus.vercel.app
+      PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
+      PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
+      CHROME_PATH: /usr/bin/chromium
+    steps:
+      - name: Checkout selected production release
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Locate Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v chromium || command -v google-chrome || command -v chromium-browser || true)"
+          test -n "$browser"
+          printf 'CHROME_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
+
+      - name: Run read-only production browser smoke
+        shell: bash
+        run: npx tsx scripts/run-production-browser-smoke.ts

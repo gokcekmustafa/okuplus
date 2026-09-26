@@ -4,6 +4,10 @@ import { notFoundError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor } from "../student-learning/policy.js";
+import {
+  assertLearningContentAccessible,
+  completeLearningStepForContentVersion,
+} from "../learning-path/index.js";
 import { parseLessonMetadata, type LessonMetadata } from "./contract.js";
 
 export type LessonActor = {
@@ -142,6 +146,7 @@ export async function getStudentLesson(id: string, actor: LessonActor) {
 export async function completeStudentLesson(id: string, actor: LessonActor) {
   assertActor(actor);
   const lesson = await getStudentLesson(id, actor);
+  await assertLearningContentAccessible(actor, lesson.contentVersionId);
   const completedAt = new Date();
   try {
     await withTenantContext(actor, async (tx) => {
@@ -162,5 +167,6 @@ export async function completeStudentLesson(id: string, actor: LessonActor) {
       throw error;
     }
   }
+  await completeLearningStepForContentVersion(actor, lesson.contentVersionId).catch(() => {});
   return getStudentLesson(id, actor);
 }

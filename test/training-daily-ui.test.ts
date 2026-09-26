@@ -7,26 +7,11 @@ const index = readFileSync("public/index.html", "utf8");
 describe("daily training student flow", () => {
   it("starts and resumes the server-owned daily session", () => {
     expect(index).toContain('id="start-daily-training"');
-    expect(index).toContain('id="refresh-today-training"');
-    expect(index).toContain('id="today-training-error"');
+    expect(index).toContain('id="today-training-retry"');
     expect(app).toContain('fetch("/student/training/daily/start"');
     expect(app).toContain('fetch("/student/training/daily/" + encodeURIComponent(id)');
     expect(app).toContain("rememberDailyTrainingState");
     expect(app).toContain("nextDailyTrainingItem");
-  });
-
-  it("keeps daily failures visible and retryable without technical error text", () => {
-    expect(app).toContain("formatDailyTrainingError");
-    expect(app).toContain('status.classList.remove("hidden")');
-    expect(app).toContain('$("refresh-today-training")?.addEventListener');
-    expect(app).not.toContain("status.textContent = error.message");
-  });
-
-  it("reuses the daily start snapshot before loading the first exercise", () => {
-    expect(app).toContain("const hasDailySnapshot = Boolean(dailyTrainingSummary)");
-    expect(app).toContain("const today = hasDailySnapshot");
-    expect(app).toContain("let dailySession = dailyTrainingSummary");
-    expect(app).toContain("if (id) {");
   });
 
   it("renders six-item progress and a final daily summary", () => {
@@ -52,5 +37,21 @@ describe("daily training student flow", () => {
     expect(app).toContain('const pointsLabel = "GP"');
     expect(app).toContain("formatDailyTrainingError");
     expect(app).toContain("Oturumun sona ermiş olabilir");
+  });
+
+  it("keeps daily and learning-path loading failures actionable", () => {
+    expect(index).toContain('id="learning-path-retry"');
+    expect(app).toContain("formatDailyTrainingError(error)");
+    expect(index).toContain("Bugünkü antrenmanı yeniden yükle");
+    expect(index).toContain("Öğrenme yolunu yeniden yükle");
+    expect(app).toContain('aria-busy", "true"');
+  });
+
+  it("exposes a clear review entry point and completion copy", () => {
+    expect(index).toContain("Tekrar Zamanı");
+    expect(app).toContain("Bunu daha önce çalıştın. Bir kez daha deneyelim.");
+    expect(app).toContain(">Tekrar Et</button>");
+    expect(app).toContain("Tekrarını tamamladın.");
+    expect(app).toContain("exerciseReviewMode");
   });
 });

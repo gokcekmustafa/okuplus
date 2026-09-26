@@ -2,12 +2,6 @@ import { execFileSync } from "node:child_process";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import {
-  assertCatalogEnvironmentSafety,
-  assertLiveCatalogTargetIdentity,
-  parseCatalogTargetUrl,
-  targetFingerprint,
-} from "../src/curriculum/catalog-target-verification.js";
 
 export type MigrationRow = {
   id: string;
@@ -202,6 +196,12 @@ function migrationGitMetadata(name: string): GitMetadata {
 }
 
 async function main(): Promise<void> {
+  const {
+    assertCatalogEnvironmentSafety,
+    assertLiveCatalogTargetIdentity,
+    parseCatalogTargetUrl,
+    targetFingerprint,
+  } = await import("../src/curriculum/catalog-target-verification.js");
   const outputPath = requiredEnvironment("FORENSIC_OUTPUT");
   const fingerprintOutputPath = requiredEnvironment("FINGERPRINT_OUTPUT");
   const expectedFingerprint = requiredEnvironment("EXPECTED_STAGING_FINGERPRINT");

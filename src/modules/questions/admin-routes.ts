@@ -12,20 +12,15 @@ import {
   getQuestion,
   getQuestionVersion,
   listQuestionByContent,
-  listQuestionAudit,
-  listQuestionAuthors,
   listQuestions,
   listQuestionVersions,
-  approveQuestionVersion,
   publishQuestionVersion,
-  retireQuestionVersion,
   reviewQuestionVersion,
   updateContentQuestions,
   updateQuestion,
   updateQuestionStatus,
   updateQuestionVersion,
 } from "./service.js";
-import type { ContentMutationActor } from "../contents/lifecycle.js";
 import {
   createAttemptSchema,
   createQuestionSchema,
@@ -43,14 +38,6 @@ function readParamId(request: FastifyRequest, label: string, key = "id"): string
     throw validationError(`${label} kimliği gerekli`);
   }
   return id;
-}
-
-function actorFromRequest(request: FastifyRequest): ContentMutationActor {
-  return {
-    userId: request.authUser!.id,
-    tenantId: request.tenantContext?.tenantId ?? null,
-    platformRole: request.authUser!.platformRole ?? null,
-  };
 }
 
 /**
@@ -71,256 +58,155 @@ function actorFromRequest(request: FastifyRequest): ContentMutationActor {
  *  GET    /admin/question-versions/:id          — soru sürümü detayı
  *  PATCH  /admin/question-versions/:id          — taslak sürüm düzenle (PUBLISHED immutable)
  *  POST   /admin/question-versions/:id/review   — DRAFT → REVIEW
- *  POST   /admin/question-versions/:id/approve   — REVIEW → APPROVED
- *  POST   /admin/question-versions/:id/publish   — APPROVED → PUBLISHED
- *  POST   /admin/question-versions/:id/retire    — PUBLISHED → RETIRED
+ *  POST   /admin/question-versions/:id/publish  — DRAFT/REVIEW → PUBLISHED
  *
  * LİSTELEME:
- *  içerik/versiyon/beceri/yazar/zorluk filtreleri, search, sort ve sayfalama.
+ *  içerik bazlı (contentId) filtreler, optional search, etc.
  */
 export async function questionAdminRoutes(
   app: FastifyInstance,
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const { authProvider } = opts;
-  const platformRead = [
-    requireAuth(authProvider),
-    requirePlatformRole([
-      "SUPER_ADMIN",
-      "CONTENT_EDITOR",
-      "CONTENT_REVIEWER",
-      "SUPPORT",
-      "ANALYST",
-    ]),
-  ];
-  const contentEditor = [
+  const platformContent = [
     requireAuth(authProvider),
     requirePlatformRole(["SUPER_ADMIN", "CONTENT_EDITOR"]),
-  ];
-  const lifecycleReviewer = [
-    requireAuth(authProvider),
-    requirePlatformRole(["SUPER_ADMIN", "CONTENT_REVIEWER"]),
-  ];
-  const lifecycleMutation = [
-    requireAuth(authProvider),
-    requirePlatformRole(["SUPER_ADMIN", "CONTENT_EDITOR", "CONTENT_REVIEWER"]),
   ];
 
   // ---- Soru Sürümleri ----
 
-  app.get("/admin/questions/versions/:versionId", { preHandler: platformRead }, async (request) =>
-    ok(await getQuestionVersion(readParamId(request, "Soru sürümü", "versionId"))),
+  app.get(
+    "/admin/questions/versions/:versionId",
+    { preHandler: platformContent },
+    async (request) =>
+      ok(await getQuestionVersion(readParamId(request, "Soru sürümü", "versionId"))),
   );
 
   app.patch(
     "/admin/questions/versions/:versionId",
-    { preHandler: contentEditor },
+    { preHandler: platformContent },
     async (request) => {
       const input = updateQuestionVersionSchema.parse(request.body);
       return ok(
-        await updateQuestionVersion(
-          readParamId(request, "Soru sürümü", "versionId"),
-          input,
-          actorFromRequest(request),
-        ),
+        await updateQuestionVersion(readParamId(request, "Soru sürümü", "versionId"), input),
       );
     },
   );
 
   app.post(
     "/admin/questions/versions/:versionId/review",
-    { preHandler: contentEditor },
+    { preHandler: platformContent },
     async (request) =>
-      ok(
-        await reviewQuestionVersion(
-          readParamId(request, "Soru sürümü", "versionId"),
-          actorFromRequest(request),
-        ),
-      ),
+      ok(await reviewQuestionVersion(readParamId(request, "Soru sürümü", "versionId"))),
   );
 
   app.post(
     "/admin/questions/versions/:versionId/publish",
-    { preHandler: lifecycleReviewer },
+    { preHandler: platformContent },
     async (request) =>
-      ok(
-        await publishQuestionVersion(
-          readParamId(request, "Soru sürümü", "versionId"),
-          actorFromRequest(request),
-        ),
-      ),
-  );
-
-  app.post(
-    "/admin/questions/versions/:versionId/approve",
-    { preHandler: lifecycleReviewer },
-    async (request) =>
-      ok(
-        await approveQuestionVersion(
-          readParamId(request, "Soru sürümü", "versionId"),
-          actorFromRequest(request),
-        ),
-      ),
+      ok(await publishQuestionVersion(readParamId(request, "Soru sürümü", "versionId"))),
   );
 
   // Geriye dönük uyumluluk için önceki question-versions yolları korunur.
 
-  app.get("/admin/question-versions/:id", { preHandler: platformRead }, async (request) => {
+  app.get("/admin/question-versions/:id", { preHandler: platformContent }, async (request) => {
     return ok(await getQuestionVersion(readParamId(request, "Soru sürümü")));
   });
 
-  app.patch("/admin/question-versions/:id", { preHandler: contentEditor }, async (request) => {
+  app.patch("/admin/question-versions/:id", { preHandler: platformContent }, async (request) => {
     const input = updateQuestionVersionSchema.parse(request.body);
-    return ok(
-      await updateQuestionVersion(
-        readParamId(request, "Soru sürümü"),
-        input,
-        actorFromRequest(request),
-      ),
-    );
+    return ok(await updateQuestionVersion(readParamId(request, "Soru sürümü"), input));
   });
 
   app.post(
     "/admin/question-versions/:id/review",
-    { preHandler: contentEditor },
+    { preHandler: platformContent },
     async (request) => {
-      return ok(
-        await reviewQuestionVersion(readParamId(request, "Soru sürümü"), actorFromRequest(request)),
-      );
+      return ok(await reviewQuestionVersion(readParamId(request, "Soru sürümü")));
     },
   );
 
-  app.get("/admin/questions/:id/versions", { preHandler: platformRead }, async (request) => {
+  app.get("/admin/questions/:id/versions", { preHandler: platformContent }, async (request) => {
     return ok(await listQuestionVersions(readParamId(request, "Soru")));
   });
 
-  app.post("/admin/questions/:id/versions", { preHandler: contentEditor }, async (request) => {
+  app.post("/admin/questions/:id/versions", { preHandler: platformContent }, async (request) => {
     const input = createQuestionVersionSchema.parse(request.body);
     return ok(
-      await createQuestionVersion(readParamId(request, "Soru"), input, actorFromRequest(request)),
+      await createQuestionVersion(readParamId(request, "Soru"), input, request.authUser?.id),
     );
   });
 
   app.post(
     "/admin/question-versions/:id/publish",
-    { preHandler: lifecycleReviewer },
+    { preHandler: platformContent },
     async (request) => {
-      return ok(
-        await publishQuestionVersion(
-          readParamId(request, "Soru sürümü"),
-          actorFromRequest(request),
-        ),
-      );
+      return ok(await publishQuestionVersion(readParamId(request, "Soru sürümü")));
     },
-  );
-
-  app.post(
-    "/admin/question-versions/:id/approve",
-    { preHandler: lifecycleReviewer },
-    async (request) =>
-      ok(
-        await approveQuestionVersion(
-          readParamId(request, "Soru sürümü"),
-          actorFromRequest(request),
-        ),
-      ),
-  );
-
-  app.post(
-    "/admin/questions/versions/:versionId/retire",
-    { preHandler: lifecycleReviewer },
-    async (request) =>
-      ok(
-        await retireQuestionVersion(
-          readParamId(request, "Soru sürümü", "versionId"),
-          actorFromRequest(request),
-        ),
-      ),
-  );
-
-  app.post(
-    "/admin/question-versions/:id/retire",
-    { preHandler: lifecycleReviewer },
-    async (request) =>
-      ok(
-        await retireQuestionVersion(readParamId(request, "Soru sürümü"), actorFromRequest(request)),
-      ),
   );
 
   // ---- Sorular ----
 
-  app.get("/admin/questions/authors", { preHandler: platformRead }, async () => {
-    return ok(await listQuestionAuthors());
-  });
-
-  app.get("/admin/questions", { preHandler: platformRead }, async (request) => {
+  app.get("/admin/questions", { preHandler: platformContent }, async (request) => {
     const query = listQuestionsQuerySchema.parse(request.query);
     return ok(await listQuestions(query));
   });
 
-  app.post("/admin/questions", { preHandler: contentEditor }, async (request) => {
+  app.post("/admin/questions", { preHandler: platformContent }, async (request) => {
     const input = createQuestionSchema.parse(request.body);
-    return ok(await createQuestion(input, actorFromRequest(request)));
+    return ok(await createQuestion(input, request.authUser?.id));
   });
 
   app.post(
     "/admin/contents/:contentId/questions",
-    { preHandler: contentEditor },
+    { preHandler: platformContent },
     async (request) => {
       const contentId = readParamId(request, "İçerik", "contentId");
       const body = request.body as Record<string, unknown>;
       // URL kapsamı güvenilir kaynaktır; istemcinin gönderdiği contentId yok sayılır.
       const input = createQuestionSchema.parse({ ...body, contentId });
-      return ok(await createQuestion(input, actorFromRequest(request)));
+      return ok(await createQuestion(input, request.authUser?.id));
     },
   );
 
-  app.get("/admin/questions/:id", { preHandler: platformRead }, async (request) => {
+  app.get("/admin/questions/:id", { preHandler: platformContent }, async (request) => {
     return ok(await getQuestion(readParamId(request, "Soru")));
   });
 
-  app.get("/admin/questions/:id/audit", { preHandler: platformRead }, async (request) => {
-    return ok(await listQuestionAudit(readParamId(request, "Soru")));
-  });
-
-  app.patch("/admin/questions/:id", { preHandler: contentEditor }, async (request) => {
+  app.patch("/admin/questions/:id", { preHandler: platformContent }, async (request) => {
     const input = updateQuestionSchema.parse(request.body);
-    return ok(await updateQuestion(readParamId(request, "Soru"), input, actorFromRequest(request)));
+    return ok(await updateQuestion(readParamId(request, "Soru"), input));
   });
 
-  app.patch("/admin/questions/:id/status", { preHandler: lifecycleMutation }, async (request) => {
+  app.patch("/admin/questions/:id/status", { preHandler: platformContent }, async (request) => {
     const input = updateQuestionStatusSchema.parse(request.body);
-    return ok(
-      await updateQuestionStatus(readParamId(request, "Soru"), input, actorFromRequest(request)),
-    );
+    return ok(await updateQuestionStatus(readParamId(request, "Soru"), input));
   });
 
-  app.delete("/admin/questions/:id", { preHandler: contentEditor }, async (request) => {
-    return ok(await deleteQuestion(readParamId(request, "Soru"), actorFromRequest(request)));
+  app.delete("/admin/questions/:id", { preHandler: platformContent }, async (request) => {
+    return ok(await deleteQuestion(readParamId(request, "Soru")));
   });
 
   // ---- İçerik-Soru ilişkileri ----
 
   app.put(
     "/admin/contents/:contentId/questions",
-    { preHandler: contentEditor },
+    { preHandler: platformContent },
     async (request) => {
       const input = updateContentQuestionsSchema.parse(request.body);
-      return ok(
-        await updateContentQuestions(
-          readParamId(request, "İçerik", "contentId"),
-          input,
-          actorFromRequest(request),
-        ),
-      );
+      return ok(await updateContentQuestions(readParamId(request, "İçerik", "contentId"), input));
     },
   );
 
   // ---- İçerik Bazlı Soru Listesi (içerikdetayda göstermek için) ----
 
-  app.get("/admin/contents/:contentId/questions", { preHandler: platformRead }, async (request) => {
-    return ok(await listQuestionByContent(readParamId(request, "İçerik", "contentId")));
-  });
+  app.get(
+    "/admin/contents/:contentId/questions",
+    { preHandler: platformContent },
+    async (request) => {
+      return ok(await listQuestionByContent(readParamId(request, "İçerik", "contentId")));
+    },
+  );
 
   // ---- Attempt (cevap gönderimi) ----
   // POST /admin/questions/:questionVersionId/attempts  { sessionId, answer, clientAttemptId, timeSpentMs? }

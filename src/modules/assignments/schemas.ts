@@ -19,6 +19,7 @@ const titleSchema = z
 export const createAssignmentSchema = z.object({
   classId: z.string().trim().min(1, "Sınıf gerekli"),
   templateId: z.string().trim().min(1, "Şablon gerekli"),
+  learningStepId: z.string().trim().min(1).nullable().optional(),
   teacherId: z.string().trim().min(1, "Öğretmen gerekli"),
   title: titleSchema,
   dueDate: z.coerce.date().nullable().optional(),
