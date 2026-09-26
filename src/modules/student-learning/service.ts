@@ -16,6 +16,12 @@ import {
   toTrainingRuntimeConfig,
 } from "../training/runtime.js";
 import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+import {
+  assertLearningTemplateAccessible,
+  getStudentLearningPath,
+  getNextLearningStep,
+  markLearningStepInProgressForTemplate,
+} from "../learning-path/index.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -64,6 +70,15 @@ export interface TodayResponse {
     startedAt: Date;
   } | null;
   nextAction: { type: string; label: string; id: string | null; title: string | null };
+  nextLearningStep: {
+    id: string;
+    type: string;
+    title: string;
+    unitTitle: string;
+    templateVersionId: string | null;
+    contentVersionId: string | null;
+    assessmentId: string | null;
+  } | null;
   recentActivity: Array<{ id: string; type: string; title: string; completedAt: Date | null }>;
   review: StudentReviewResponse | null;
 }
@@ -92,6 +107,7 @@ export async function getToday(actor: {
     assignments,
     assessments,
     templateVersion,
+    nextLearningStep,
     review,
   ] = await Promise.all([
     prisma.exerciseSession.count({
@@ -251,6 +267,7 @@ export async function getToday(actor: {
       .then(
         (versions) => versions.find((version) => isTrainingVersionConfig(version.config)) ?? null,
       ),
+    getNextLearningStep(actor),
     tenantId ? getStudentReview(actor) : Promise.resolve(null),
   ]);
 
@@ -268,6 +285,25 @@ export async function getToday(actor: {
       label: "Ödeve Başla",
       id: assignments.id,
       title: assignments.title,
+    };
+  else if (nextLearningStep)
+    nextAction = {
+      type: "LEARNING_STEP",
+      label:
+        nextLearningStep.type === "TEACHING"
+          ? "Derse Başla"
+          : nextLearningStep.type === "SMALL_STUDY"
+            ? "Küçük çalışmaya başla"
+            : nextLearningStep.type === "REINFORCEMENT"
+              ? "Pekiştirmeye Başla"
+              : nextLearningStep.type === "ASSESSMENT"
+                ? "Değerlendirmeye Başla"
+                : "Uygulamaya Başla",
+      id:
+        nextLearningStep.type === "PRACTICE" || nextLearningStep.type === "REINFORCEMENT"
+          ? nextLearningStep.templateVersionId
+          : nextLearningStep.id,
+      title: nextLearningStep.title,
     };
   else if (assessments)
     nextAction = {
@@ -308,6 +344,7 @@ export async function getToday(actor: {
     pointsToday: pointsTodayAgg._sum.points ?? 0,
     isFirstTrainingDay: tenantId ? !previousTrainingSession : false,
     placementHandoff: Boolean(placementResult),
+    nextLearningStep,
     dailyGoal: {
       status: dailyGoalStatus(dailyTrainingSession?.status),
       totalItems: dailyGoalTotal,
@@ -358,6 +395,13 @@ export async function getLearningPath(actor: {
   platformRole: PlatformRole | null;
 }) {
   assertStudentActor(actor);
+  const persistedPath = await getStudentLearningPath(actor);
+  if (persistedPath) {
+    return {
+      ...persistedPath,
+      today: await getToday(actor).catch(() => null),
+    };
+  }
   const tenantId = actor.tenantId;
   // parallel base data
   const [allSkills, studentProgress, level, today] = await Promise.all([
@@ -592,11 +636,22 @@ async function assertLearningPathTemplateAccessible(
   actor: { userId: string; tenantId: string; platformRole: PlatformRole | null },
   templateVersionId: string,
 ) {
-  const learningPath = await getLearningPath(actor);
-  const node = learningPath.nodes.find((item) => item.templateVersionId === templateVersionId);
-  if (!node || node.status !== "locked") return;
+  const persistedPath = await getStudentLearningPath(actor);
+  if (persistedPath) {
+    await assertLearningTemplateAccessible(actor, templateVersionId);
+    return;
+  }
 
-  // An existing session may be resumed, but a new session cannot skip ahead.
+  // Backward-compatible fallback until a published curriculum exists. The
+  // legacy projection is still strict: a template outside the visible path
+  // or a locked node is never accepted.
+  const legacyPath = await getLearningPath(actor);
+  const node = (legacyPath.nodes ?? []).find(
+    (item) => item.templateVersionId === templateVersionId,
+  );
+  if (!node) throw forbiddenError("Bu egzersiz öğrenme yolunda bulunmuyor");
+  if (node.status !== "locked") return;
+
   const resumable = await prisma.exerciseSession.findFirst({
     where: {
       tenantId: actor.tenantId,
@@ -610,8 +665,7 @@ async function assertLearningPathTemplateAccessible(
     },
     select: { id: true },
   });
-  if (resumable) return;
-  throw forbiddenError("Bu öğrenme adımı henüz açık değil");
+  if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
 }
 
 export async function getHistory(
@@ -711,7 +765,7 @@ export async function startPersonalExercise(
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
     await loadTrainingRuntimeGraph(templateVersionId!, actor);
   }
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const requestLockKey = `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
     await tx.$queryRaw`
       SELECT 1::int AS acquired
@@ -774,6 +828,10 @@ export async function startPersonalExercise(
     });
     return { sessionId: created.id, isNew: true };
   });
+  if (result.isNew) {
+    await markLearningStepInProgressForTemplate(actor, templateVersionId).catch(() => {});
+  }
+  return result;
 }
 
 export async function getStudentSession(

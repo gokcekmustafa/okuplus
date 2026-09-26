@@ -20,6 +20,7 @@ import {
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
+import { completeLearningStepForSession } from "../learning-path/index.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -736,6 +737,13 @@ export async function completeExerciseSession(
 
   if (session.trainingSessionItem) {
     await syncTrainingSessionItem(id);
+  }
+
+  if (session.tenantId) {
+    await completeLearningStepForSession(
+      { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
+      { templateVersionId: session.templateVersionId, assessmentId: session.assessmentId },
+    ).catch(() => {});
   }
 
   // Progress aggregation session transaction'ı dışında kalır; ancak completion
