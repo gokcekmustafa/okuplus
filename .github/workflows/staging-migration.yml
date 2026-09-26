@@ -4,12 +4,29 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Staging branch/ref to migrate
+        description: Source ref to migrate into staging
         required: true
         default: staging
         type: choice
         options:
           - staging
+          - master
+      seed_mode:
+        description: Optional explicitly approved staging seed
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - education-v2-p0
+      education_v2_level_code:
+        description: Existing Level code required only for the Education V2 seed
+        required: false
+        type: string
+      seed_confirmation:
+        description: Type I_HAVE_REVIEWED_EDUCATION_V2_P0 only for the approved staging seed
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -33,15 +50,30 @@ jobs:
       DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
       EXPECTED_STAGING_FINGERPRINT: 18b7c0ef4791f6596fe2e61879df641fb14e5a7f88e3d06c88f634c17af13b38
     steps:
-      - name: Verify staging ref
+      - name: Verify selected source ref and optional seed approval
         shell: bash
         env:
           TARGET_REF: ${{ inputs.ref }}
+          SEED_MODE: ${{ inputs.seed_mode }}
+          LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          SEED_CONFIRMATION: ${{ inputs.seed_confirmation }}
         run: |
           set -euo pipefail
-          test "$TARGET_REF" = "staging"
+          case "$TARGET_REF" in
+            staging|master) ;;
+            *) echo "unsupported source ref" >&2; exit 1 ;;
+          esac
+          case "$SEED_MODE" in
+            none) ;;
+            education-v2-p0)
+              test "$TARGET_REF" = "master"
+              test -n "$LEVEL_CODE"
+              test "$SEED_CONFIRMATION" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+              ;;
+            *) echo "unsupported seed mode" >&2; exit 1 ;;
+          esac
 
-      - name: Checkout selected staging ref
+      - name: Checkout selected source ref
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
@@ -77,6 +109,7 @@ jobs:
           fi
 
           EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            TARGET_REF="${{ inputs.ref }}" \
             FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx -e '
           import { readFileSync, writeFileSync } from "node:fs";
@@ -93,7 +126,14 @@ jobs:
           const failed = report.migrations?.failed;
           const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
-          const allowedPendingMigrationPolicy = [completedPointEvent, foundation];
+          const learningPathDomain = "20260925100000_add_learning_path_domain";
+          const commonLearningArea = "20260925110000_add_common_learning_area";
+          const allowedPendingMigrationPolicy = [
+            completedPointEvent,
+            foundation,
+            learningPathDomain,
+            commonLearningArea,
+          ];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
@@ -217,6 +257,7 @@ jobs:
           fi
 
           EXPECTED_STAGING_FINGERPRINT="$EXPECTED_STAGING_FINGERPRINT" \
+            TARGET_REF="${{ inputs.ref }}" \
             FINGERPRINT_OUTPUT="$fingerprint_output" \
             npx tsx -e '
           import { readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -233,7 +274,14 @@ jobs:
           const failed = report.migrations?.failed;
           const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
-          const allowedPendingMigrationPolicy = [completedPointEvent, foundation];
+          const learningPathDomain = "20260925100000_add_learning_path_domain";
+          const commonLearningArea = "20260925110000_add_common_learning_area";
+          const allowedPendingMigrationPolicy = [
+            completedPointEvent,
+            foundation,
+            learningPathDomain,
+            commonLearningArea,
+          ];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
             : null;
@@ -253,6 +301,9 @@ jobs:
             .filter((entry) => entry.isDirectory())
             .map((entry) => entry.name)
             .sort();
+          const expectedMigrationNames = process.env.TARGET_REF === "master"
+            ? [foundation, learningPathDomain, commonLearningArea]
+            : [foundation];
           const checks = {
             migrationStatusCurrent: report.status === "PASS",
             targetEnvironment: report.target?.environment === "STAGING",
@@ -260,7 +311,7 @@ jobs:
             pendingMigrationsShape: pendingMigrations !== null,
             noPendingMigrations: pendingMigrations !== null && pendingMigrations.length === 0,
             noFailedMigrations: Array.isArray(failed) && failed.length === 0,
-            expectedMigrationApplied: appliedMigrationNames.includes(foundation),
+            expectedMigrationApplied: expectedMigrationNames.every((name) => appliedMigrationNames.includes(name)),
             migrationCountsMatch:
               report.migrations?.appliedCount === report.migrations?.repositoryCount,
           };
@@ -310,12 +361,42 @@ jobs:
           console.log("staging migration=PASS schema=PASS schemaDrift=FALSE");
           '
 
+      - name: Apply Education V2 P0 staging seed
+        id: seed
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+          npx tsx scripts/seed-education-v2-p0.ts --apply
+
+      - name: Verify Education V2 P0 staging seed
+        id: seed-verify
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run
+
       - name: Publish sanitized staging migration summary
         if: always()
         shell: bash
         env:
           APPLY_OUTCOME: ${{ steps.apply.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SEED_OUTCOME: ${{ steps.seed.outcome }}
+          SEED_VERIFY_OUTCOME: ${{ steps.seed-verify.outcome }}
         run: |
           set -euo pipefail
           node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
@@ -345,6 +426,8 @@ jobs:
             Array.isArray(names) ? (names.length ? names.join(", ") : "NONE") : "NOT_AVAILABLE";
 
           console.log("## Staging database migration");
+          console.log(`- sourceRef: ${{ inputs.ref }}`);
+          console.log(`- educationV2Seed: ${{ inputs.seed_mode }}`);
           console.log(`- targetEnvironment: ${safe?.environment ?? "STAGING"}`);
           console.log(`- targetFingerprint: ${safe?.fingerprint ?? "NOT_AVAILABLE"}`);
           console.log(`- migrationHistoryCount: ${safe?.migrationHistoryCount ?? "NOT_AVAILABLE"}`);
@@ -359,6 +442,8 @@ jobs:
           console.log(`- schemaDrift: ${verification?.schemaDrift === false ? "false" : "NOT_VERIFIED"}`);
           console.log(`- migrateDeploy: ${process.env.APPLY_OUTCOME === "success" ? "PASS" : process.env.APPLY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- verification: ${process.env.VERIFY_OUTCOME === "success" ? "PASS" : process.env.VERIFY_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- seed: ${process.env.SEED_OUTCOME === "success" ? "PASS" : process.env.SEED_OUTCOME ?? "NOT_RUN"}`);
+          console.log(`- seedVerification: ${process.env.SEED_VERIFY_OUTCOME === "success" ? "PASS" : process.env.SEED_VERIFY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- result: ${verification?.result ?? "FAIL_OR_NOT_RUN"}`);
           console.log(`- preconditionResult: ${postcondition?.result ?? precondition?.result ?? "NOT_VERIFIED"}`);
           for (const [key, value] of Object.entries(checks)) console.log(`- precondition.${key}: ${value ? "PASS" : "FAIL"}`);

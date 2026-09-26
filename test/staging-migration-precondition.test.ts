@@ -20,8 +20,12 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("pendingMigrations,");
     expect(workflow).toContain("allowedPendingMigrations,");
     expect(workflow).toContain("unexpectedPendingMigrations,");
+    expect(workflow).toContain("const allowedPendingMigrationPolicy = [");
     expect(workflow).toContain(
-      "const allowedPendingMigrationPolicy = [completedPointEvent, foundation]",
+      'const learningPathDomain = "20260925100000_add_learning_path_domain"',
+    );
+    expect(workflow).toContain(
+      'const commonLearningArea = "20260925110000_add_common_learning_area"',
     );
     expect(workflow).toContain("20260907160000_add_training_session_completed_point_event");
     expect(workflow).toContain("pendingMigrations.length <= allowedPendingMigrationPolicy.length");
@@ -30,6 +34,8 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("pendingMigrationsShape: pendingMigrations !== null");
     expect(workflow).toContain("pendingMigrations=${formatMigrationList(");
     expect(workflow).toContain("unexpectedPendingMigrations=${formatMigrationList(");
+    expect(workflow).toContain('test "$TARGET_REF" = "master"');
+    expect(workflow).toContain('test "$SEED_CONFIRMATION" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"');
   });
 
   it("keeps staging credentials explicitly bound in the same job", () => {
