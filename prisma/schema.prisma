@@ -1643,7 +1643,7 @@ model StudentLearningStepProgress {
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
-  @@unique([tenantId, studentId, learningStepId])
+  @@unique([tenantId, studentId, learningStepId], map: "StudentLearningStepProgress_tenantId_studentId_learningStepId_k")
   @@index([studentId, tenantId, status])
   @@index([learningStepId, status])
 }
