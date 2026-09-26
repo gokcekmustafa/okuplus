@@ -8,6 +8,10 @@ import {
 const baseEnv = {
   NODE_ENV: "test",
   DATABASE_URL: "postgresql://test:test@localhost:5432/test",
+  JWT_SECRET: "Q7!mZ2_rT8xL4pN6vC9kH3aW5eJ1sB0dF4yK8uP",
+  CORS_ORIGIN: "https://staging.example.test",
+  AUTH_COOKIE_TRANSPORT: "on",
+  AUTH_ORIGIN_ENFORCEMENT: "on",
 };
 
 describe("staging E2E entitlement configuration", () => {
@@ -72,6 +76,7 @@ describe("staging E2E entitlement configuration", () => {
       parseEnv({
         ...baseEnv,
         APP_ENV: appEnv,
+        NODE_ENV: appEnv === "production" ? "production" : "test",
         STAGING_E2E_PREMIUM_EMAIL: email,
       }),
     ).toThrow(/STAGING_E2E_PREMIUM_EMAIL|premium allowlist/u);
@@ -92,6 +97,7 @@ describe("staging E2E entitlement configuration", () => {
       parseEnv({
         ...baseEnv,
         APP_ENV: "production",
+        NODE_ENV: "production",
         STAGING_E2E_PREMIUM_EMAILS: "fresh@e2e.invalid",
       }),
     ).toThrow("premium allowlist");

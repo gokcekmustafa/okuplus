@@ -2,6 +2,12 @@ name: Staging authenticated E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      student_email:
+        description: "Optional .invalid synthetic student email; defaults to vars.STAGING_STUDENT_EMAIL"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -15,8 +21,7 @@ jobs:
       APP_ENV: staging
       NODE_ENV: test
       BASE_URL: ${{ vars.BASE_URL }}
-      STAGING_STUDENT_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
-      STAGING_E2E_PREMIUM_EMAIL: ${{ vars.STAGING_STUDENT_EMAIL }}
+      STAGING_STUDENT_EMAIL: ${{ inputs.student_email || vars.STAGING_STUDENT_EMAIL }}
       STAGING_STUDENT_PASSWORD: ${{ secrets.STAGING_STUDENT_PASSWORD }}
     steps:
       - name: Checkout staging
@@ -33,6 +38,10 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
 
+      - name: Prepare sanitized E2E output directory
+        shell: bash
+        run: mkdir -p .e2e-output
+
       - name: Validate staging configuration
         shell: bash
         run: |
@@ -46,8 +55,8 @@ jobs:
           }
           if (!process.env.STAGING_STUDENT_EMAIL?.trim()) throw new Error("STAGING_STUDENT_EMAIL is not configured");
           if (!process.env.STAGING_STUDENT_PASSWORD) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
-          if (process.env.STAGING_E2E_PREMIUM_EMAIL?.trim().toLowerCase() !== process.env.STAGING_STUDENT_EMAIL.trim().toLowerCase()) {
-            throw new Error("staging synthetic entitlement identity is not aligned");
+          if (!/^[^@\s]+@[^@\s]+\.invalid$/u.test(process.env.STAGING_STUDENT_EMAIL.trim().toLowerCase())) {
+            throw new Error("STAGING_STUDENT_EMAIL must be a .invalid synthetic email");
           }
           console.log("staging configuration=present");
           NODE
@@ -82,9 +91,18 @@ jobs:
           set -e
           PROVISION_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
-          const raw = readFileSync(".e2e-output/provision.raw", "utf8").trim();
-          let result;
-          try { result = JSON.parse(raw); } catch { result = { status: "FAIL" }; }
+          const raw = readFileSync(".e2e-output/provision.raw", "utf8");
+          const errorOutput = readFileSync(".e2e-output/provision.stderr", "utf8");
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };
           const summary = {
             status: result.status === "PASS" ? "PASS" : "FAIL",
             account: result.account === "CREATED" || result.account === "EXISTING" ? result.account : "UNKNOWN",
@@ -94,9 +112,18 @@ jobs:
             error: typeof result.message === "string" ? result.message.slice(0, 200) : "provisioning failed",
             productionTouched: "NO",
           };
+          const redact = (value) => String(value)
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
+            .slice(0, 200);
+          summary.error = redact(summary.error);
           writeFileSync(".e2e-output/staging-provision-summary.json", JSON.stringify(summary, null, 2));
           console.log(`provisioning=${summary.status} account=${summary.account} error=${summary.error}`);
-          if (summary.status !== "PASS" || Number(process.env.PROVISION_EXIT_CODE) !== 0) process.exit(1);
+          if (summary.status !== "PASS" || Number(process.env.PROVISION_EXIT_CODE) !== 0) {
+            const diagnostic = redact(summary.error);
+            console.log(`::error title=Staging provisioner failure::${diagnostic}`);
+            process.exit(1);
+          }
           NODE
           rm -f .e2e-output/provision.raw .e2e-output/provision.stderr
 
@@ -111,11 +138,25 @@ jobs:
           E2E_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
           const raw = readFileSync(".e2e-output/e2e.raw", "utf8");
-          let result = null;
-          const rootStart = raw.lastIndexOf("\n{\n");
-          try {
-            result = JSON.parse((rootStart >= 0 ? raw.slice(rootStart + 1) : raw).trim());
-          } catch { result = { status: "FAIL" }; }
+          const errorOutput = readFileSync(".e2e-output/e2e.stderr", "utf8");
+          const parseJson = (text) => {
+            const trimmed = text.trim();
+            const rootStart = text.lastIndexOf("\n{\n");
+            const candidates = [trimmed, rootStart >= 0 ? text.slice(rootStart + 1).trim() : ""];
+            for (const candidate of candidates) {
+              if (!candidate) continue;
+              try {
+                const parsed = JSON.parse(candidate);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };
+          const redact = (value) => String(value)
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
+            .slice(0, 200);
           const items = Array.isArray(result.items) ? result.items.map((item) => ({
             position: item.position,
             family: item.family,
@@ -137,6 +178,16 @@ jobs:
             adaptiveSelection: result.adaptiveSelection ?? "NOT_RUN",
             publishedContent: result.publishedContent ?? "NOT_RUN",
             finalState: result.finalState ?? "NOT_RUN",
+            teaching: result.teaching ?? "NOT_RUN",
+            baseline: result.baseline ?? "NOT_RUN",
+            development: result.development ?? "NOT_RUN",
+            trend: result.trend ?? "NOT_RUN",
+            history: result.history ?? "NOT_RUN",
+            concurrency: result.concurrency ?? "NOT_RUN",
+            telemetry: result.telemetry ?? "NOT_RUN",
+            dataIntegrity: result.dataIntegrity ?? "NOT_RUN",
+            security: result.security ?? "NOT_RUN",
+            wrongAnswerRetry: result.wrongAnswerRetry ?? "NOT_RUN",
             quotaLimit: result.quotaLimit ?? null,
             quotaUsedAtStart: result.quotaUsedAtStart ?? null,
             quotaRemainingAtStart: result.quotaRemainingAtStart ?? null,
@@ -147,6 +198,12 @@ jobs:
             networkErrors: result.networkErrors ?? 0,
             duplicateAnswerRequests: result.duplicateAnswerRequests ?? 0,
             timings: result.timings ?? null,
+            error:
+              typeof result.error === "string"
+                ? redact(result.error)
+                : Array.isArray(result.bugs) && typeof result.bugs[0] === "string"
+                  ? redact(result.bugs[0])
+                  : null,
             items,
             productionTouched: "NO",
           };
@@ -158,9 +215,80 @@ jobs:
           console.log(`consoleErrors=${safe.consoleErrors}`);
           console.log(`networkErrors=${safe.networkErrors}`);
           console.log(`duplicateAnswerRequests=${safe.duplicateAnswerRequests}`);
+          if (safe.error) console.log(`e2e.error=${safe.error}`);
           if (Number(process.env.E2E_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
           NODE
           rm -f .e2e-output/e2e.raw .e2e-output/e2e.stderr
+
+      - name: Run authenticated pilot closure smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          npx tsx scripts/browser-staging-pilot-closure.ts > .e2e-output/pilot-closure.raw 2> .e2e-output/pilot-closure.stderr
+          exit_code=$?
+          set -e
+          PILOT_CLOSURE_EXIT_CODE="$exit_code" node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const raw = readFileSync(".e2e-output/pilot-closure.raw", "utf8");
+          const errorOutput = readFileSync(".e2e-output/pilot-closure.stderr", "utf8");
+          const parseJson = (text) => {
+            for (const line of text.trim().split("\n").reverse()) {
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed && typeof parsed === "object") return parsed;
+              } catch {}
+            }
+            return null;
+          };
+          const result = parseJson(raw) ?? parseJson(errorOutput) ?? { status: "FAIL" };
+          const redact = (value) => String(value)
+            .replace(/https?:\/\/\S+/gu, "[url]")
+            .replace(/(?:password|token|cookie|authorization)\s*[:=]?\s*\S+/giu, "[redacted]")
+            .slice(0, 240);
+          const safe = {
+            status: result.status === "PASS" ? "PASS" : "FAIL",
+            auth: result.auth === "PASS" ? "PASS" : "FAIL",
+            mobile: Array.isArray(result.mobile) ? result.mobile : [],
+            support: result.support === "PASS" ? "PASS" : "FAIL",
+            bugReport: result.bugReport === "PASS" ? "PASS" : "FAIL",
+            telemetry: Array.isArray(result.telemetry) ? result.telemetry : [],
+            consoleErrors: Number(result.consoleErrors ?? 0),
+            pageErrors: Number(result.pageErrors ?? 0),
+            networkErrors: Number(result.networkErrors ?? 0),
+            unexpectedHttpErrors: Number(result.unexpectedHttpErrors ?? 0),
+            error: typeof result.message === "string" ? redact(result.message) : null,
+            productionTouched: "NO",
+          };
+          writeFileSync(".e2e-output/pilot-closure-summary.json", JSON.stringify(safe, null, 2));
+          console.log(`pilotClosure=${safe.status} mobile=${safe.mobile.join(",")}`);
+          console.log(`support=${safe.support} bugReport=${safe.bugReport}`);
+          console.log(`consoleErrors=${safe.consoleErrors}`);
+          console.log(`pageErrors=${safe.pageErrors}`);
+          console.log(`networkErrors=${safe.networkErrors}`);
+          console.log(`unexpectedHttpErrors=${safe.unexpectedHttpErrors}`);
+          if (safe.error) console.log(`pilotClosure.error=${safe.error}`);
+          if (Number(process.env.PILOT_CLOSURE_EXIT_CODE) !== 0 || safe.status === "FAIL") process.exit(1);
+          NODE
+          rm -f .e2e-output/pilot-closure.raw .e2e-output/pilot-closure.stderr
+
+      - name: Verify E2E secret redaction
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readdir, readFile } from "node:fs/promises";
+          const secret = process.env.STAGING_STUDENT_PASSWORD;
+          if (!secret) throw new Error("STAGING_STUDENT_PASSWORD is not configured");
+          const entries = await readdir(".e2e-output", { withFileTypes: true });
+          for (const entry of entries) {
+            if (!entry.isFile()) continue;
+            const contents = await readFile(`.e2e-output/${entry.name}`, "utf8");
+            if (contents.includes(secret)) throw new Error(`secret found in ${entry.name}`);
+          }
+          console.log("secret-redaction=PASS");
+          NODE
 
       - name: Publish sanitized E2E summary
         if: always()
@@ -188,11 +316,26 @@ jobs:
           else
             echo "- e2e.status: NOT_RUN" >> "$GITHUB_STEP_SUMMARY"
           fi
+          if test -f .e2e-output/pilot-closure-summary.json; then
+            node --input-type=module <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          import { readFileSync } from "node:fs";
+          const result = JSON.parse(readFileSync(".e2e-output/pilot-closure-summary.json", "utf8"));
+          for (const [key, value] of Object.entries(result)) {
+            console.log(`- pilotClosure.${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`);
+          }
+          NODE
+          else
+            echo "- pilotClosure.status: NOT_RUN" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Upload sanitized E2E artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: staging-e2e-summary
-          path: .e2e-output/*-summary.json
-          if-no-files-found: ignore
+          path: |
+            .e2e-output/staging-provision-summary.json
+            .e2e-output/staging-e2e-summary.json
+            .e2e-output/pilot-closure-summary.json
+          if-no-files-found: warn
+          retention-days: 14

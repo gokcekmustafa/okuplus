@@ -91,6 +91,11 @@ const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(300).default(604800),
   AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
   AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
+  STAGING_OPERATOR_AUTH_SECRET: z.string().max(256).default(""),
+  // Staging-only synthetic accounts used by the authenticated E2E workflow.
+  // These values are never accepted outside APP_ENV=staging.
+  STAGING_E2E_PREMIUM_EMAIL: z.string().trim().toLowerCase().default(""),
+  STAGING_E2E_PREMIUM_EMAILS: z.string().default(""),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),
@@ -113,6 +118,67 @@ export type Env = z.infer<typeof envSchema>;
 export { envSchema };
 
 export type RawEnv = Record<string, string | undefined>;
+
+const stagingSyntheticEmailPattern = /^[^@\s]+@[^@\s]+\.invalid$/u;
+
+export function parseStagingE2EPremiumEmails(value: string | undefined): string[] {
+  const entries = (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  if (entries.some((email) => email.length > 254 || !stagingSyntheticEmailPattern.test(email))) {
+    throw new Error(
+      "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAILS yalnızca .invalid synthetic öğrenci hesapları içerebilir",
+    );
+  }
+  return [...new Set(entries)];
+}
+
+export function configuredStagingE2EPremiumEmails(
+  input: { emailList?: string; legacyEmail?: string } = {},
+): string[] {
+  const emailList = parseStagingE2EPremiumEmails(input.emailList);
+  if (emailList.length > 0) return emailList;
+  return parseStagingE2EPremiumEmails(input.legacyEmail);
+}
+
+function validateStagingOperatorSecret(env: Env): void {
+  const secret = env.STAGING_OPERATOR_AUTH_SECRET;
+  if (
+    secret !== "" &&
+    (env.APP_ENV !== "staging" || secret.length < 32 || secret.trim() !== secret)
+  ) {
+    throw new Error(
+      "Geçersiz ortam değişkenleri: STAGING_OPERATOR_AUTH_SECRET yalnızca staging'de güçlü bir process secret olarak kullanılabilir",
+    );
+  }
+}
+
+function validateStagingE2EPremiumEmails(env: Env): void {
+  const legacyEmail = env.STAGING_E2E_PREMIUM_EMAIL;
+  const emailList = env.STAGING_E2E_PREMIUM_EMAILS;
+  if (env.APP_ENV !== "staging" && (legacyEmail !== "" || emailList.trim() !== "")) {
+    throw new Error(
+      "Geçersiz ortam değişkenleri: staging E2E premium allowlist yalnızca staging'de kullanılabilir",
+    );
+  }
+  if (legacyEmail !== "") {
+    let legacyEntries: string[];
+    try {
+      legacyEntries = parseStagingE2EPremiumEmails(legacyEmail);
+    } catch {
+      throw new Error(
+        "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAIL tek bir .invalid synthetic öğrenci hesabı olmalı",
+      );
+    }
+    if (legacyEntries.length !== 1 || legacyEntries[0] !== legacyEmail) {
+      throw new Error(
+        "Geçersiz ortam değişkenleri: STAGING_E2E_PREMIUM_EMAIL tek bir .invalid synthetic öğrenci hesabı olmalı",
+      );
+    }
+  }
+  if (emailList.trim() !== "") parseStagingE2EPremiumEmails(emailList);
+}
 
 function resolveAppEnvironment(raw: RawEnv): RawEnv {
   if (raw.APP_ENV !== undefined) return raw;
@@ -191,7 +257,9 @@ function validateSecurityEnvironment(env: Env): void {
   if (env.APP_ENV === "production" && env.NODE_ENV !== "production") {
     issues.push("APP_ENV=production için NODE_ENV=production olmalı");
   }
-  if (env.APP_ENV === "staging" && env.NODE_ENV !== "production") {
+  // Unit tests may exercise the staging configuration with NODE_ENV=test;
+  // deployed Preview/Staging remains production-grade with NODE_ENV=production.
+  if (env.APP_ENV === "staging" && env.NODE_ENV !== "production" && env.NODE_ENV !== "test") {
     issues.push("APP_ENV=staging için NODE_ENV=production olmalı");
   }
   if (env.APP_ENV === "test" && env.NODE_ENV !== "test") {
@@ -254,6 +322,8 @@ export function parseEnv(raw: RawEnv): Env {
     throw new Error(`Geçersiz ortam değişkenleri: ${issues}`);
   }
   validateSecurityEnvironment(result.data);
+  validateStagingOperatorSecret(result.data);
+  validateStagingE2EPremiumEmails(result.data);
 
   // Vitest intentionally reuses one injected loopback IP across many suites.
   // Keep test fixtures from tripping the production baseline while allowing
