@@ -695,7 +695,10 @@ async function main(): Promise<void> {
   }
   if (!target) fail("seed hedefi okunamadı");
 
-  const prisma = new PrismaClient({ datasources: { db: { url: target.url } } });
+  const prisma = new PrismaClient({
+    datasources: { db: { url: target.url } },
+    transactionOptions: { maxWait: 20_000, timeout: 120_000 },
+  });
   try {
     await prisma.$connect();
     const identity = await readIdentity(prisma);
