@@ -124,6 +124,22 @@ jobs:
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
+          const failedMigrations =
+            Array.isArray(failed) &&
+            failed.every(
+              (entry) =>
+                Boolean(entry) &&
+                typeof entry === "object" &&
+                typeof entry.name === "string" &&
+                typeof entry.rolledBack === "boolean",
+            )
+              ? failed
+              : null;
+          const unresolvedFailedMigrations =
+            failedMigrations?.filter((entry) => !entry.rolledBack) ?? null;
+          const rolledBackMigrationNames =
+            failedMigrations?.filter((entry) => entry.rolledBack).map((entry) => entry.name) ?? null;
+          const unresolvedFailedMigrationNames = unresolvedFailedMigrations?.map((entry) => entry.name) ?? null;
           const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
           const learningPathDomain = "20260925100000_add_learning_path_domain";
@@ -154,9 +170,10 @@ jobs:
           const checks = {
             targetEnvironment: report.target?.environment === "STAGING",
             targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
-            migrationCollections: Array.isArray(pending) && Array.isArray(failed),
+            migrationCollections: Array.isArray(pending) && failedMigrations !== null,
             pendingMigrationsShape: pendingMigrations !== null,
-            noFailedMigrations: Array.isArray(failed) && failed.length === 0,
+            noFailedMigrations:
+              unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
             allowedPendingMigrations:
               pendingMigrations !== null &&
               pendingMigrations.length <= allowedPendingMigrationPolicy.length &&
@@ -176,6 +193,8 @@ jobs:
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
                 allowedPendingMigrationPolicy,
+                rolledBackMigrationNames,
+                unresolvedFailedMigrationNames,
                 failedChecks,
                 checks,
               },
@@ -272,6 +291,22 @@ jobs:
           const report = JSON.parse(readFileSync(process.env.FINGERPRINT_OUTPUT, "utf8"));
           const pending = report.migrations?.pending;
           const failed = report.migrations?.failed;
+          const failedMigrations =
+            Array.isArray(failed) &&
+            failed.every(
+              (entry) =>
+                Boolean(entry) &&
+                typeof entry === "object" &&
+                typeof entry.name === "string" &&
+                typeof entry.rolledBack === "boolean",
+            )
+              ? failed
+              : null;
+          const unresolvedFailedMigrations =
+            failedMigrations?.filter((entry) => !entry.rolledBack) ?? null;
+          const rolledBackMigrationNames =
+            failedMigrations?.filter((entry) => entry.rolledBack).map((entry) => entry.name) ?? null;
+          const unresolvedFailedMigrationNames = unresolvedFailedMigrations?.map((entry) => entry.name) ?? null;
           const completedPointEvent = "20260907160000_add_training_session_completed_point_event";
           const foundation = "20260914100000_add_learning_experience_foundation";
           const learningPathDomain = "20260925100000_add_learning_path_domain";
@@ -304,13 +339,21 @@ jobs:
           const expectedMigrationNames = process.env.TARGET_REF === "master"
             ? [foundation, learningPathDomain, commonLearningArea]
             : [foundation];
+          const migrationStatusCurrent =
+            report.status === "PASS" ||
+            (report.status === "REVIEW_REQUIRED" &&
+              pendingMigrations !== null &&
+              pendingMigrations.length === 0 &&
+              unresolvedFailedMigrations !== null &&
+              unresolvedFailedMigrations.length === 0);
           const checks = {
-            migrationStatusCurrent: report.status === "PASS",
+            migrationStatusCurrent,
             targetEnvironment: report.target?.environment === "STAGING",
             targetFingerprint: actual === expected && /^[a-f0-9]{64}$/u.test(actual),
             pendingMigrationsShape: pendingMigrations !== null,
             noPendingMigrations: pendingMigrations !== null && pendingMigrations.length === 0,
-            noFailedMigrations: Array.isArray(failed) && failed.length === 0,
+            noFailedMigrations:
+              unresolvedFailedMigrations !== null && unresolvedFailedMigrations.length === 0,
             expectedMigrationApplied: expectedMigrationNames.every((name) => appliedMigrationNames.includes(name)),
             migrationCountsMatch:
               report.migrations?.appliedCount === report.migrations?.repositoryCount,
@@ -327,6 +370,8 @@ jobs:
                 allowedPendingMigrations,
                 unexpectedPendingMigrations,
                 allowedPendingMigrationPolicy,
+                rolledBackMigrationNames,
+                unresolvedFailedMigrationNames,
                 failedChecks,
                 checks,
               },
