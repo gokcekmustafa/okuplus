@@ -254,9 +254,24 @@ async function findPublishedTemplate(
       const metadata = parseLessonMetadata(entry.contentVersion.metadata);
       return metadata?.skillCode === lesson.skillCode;
     });
+    const academicStages = new Set(
+      candidate.contents.flatMap((entry) => {
+        const metadata = parseLessonMetadata(entry.contentVersion.metadata);
+        return metadata?.contractVersion === 2 &&
+          metadata.skillCode === lesson.skillCode &&
+          metadata.area === lesson.area &&
+          metadata.stage
+          ? [metadata.stage]
+          : [];
+      }),
+    );
+    const hasCompleteAcademicLessonContent = lesson.stages.every((stage) =>
+      academicStages.has(stage.stage),
+    );
     return (
       contentIds.size > 0 &&
       hasSkillLessonContent &&
+      hasCompleteAcademicLessonContent &&
       candidate.questions.length > 0 &&
       candidate.questions.every(
         (entry) =>

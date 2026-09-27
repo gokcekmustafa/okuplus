@@ -10,6 +10,10 @@ const lessonSeed = readFileSync(
   new URL("../scripts/seed-education-v2-p0-lessons.ts", import.meta.url),
   "utf8",
 );
+const provisioner = readFileSync(
+  new URL("../scripts/provision-education-v2-p0-learning-path.ts", import.meta.url),
+  "utf8",
+);
 
 describe("staging migration precondition diagnostics", () => {
   it("reports named checks without weakening the fail-closed gate", () => {
@@ -120,5 +124,11 @@ describe("staging migration precondition diagnostics", () => {
 
   it("keeps the academic lesson transaction open for the full provisioning graph", () => {
     expect(lessonSeed).toContain("transactionOptions: { maxWait: 20_000, timeout: 120_000 }");
+  });
+
+  it("selects the complete academic-v2 graph over the legacy base graph", () => {
+    expect(provisioner).toContain("metadata?.contractVersion === 2");
+    expect(provisioner).toContain("hasCompleteAcademicLessonContent");
+    expect(provisioner).toContain("lesson.stages.every");
   });
 });
