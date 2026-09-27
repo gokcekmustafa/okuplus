@@ -135,4 +135,8 @@ describe("staging migration precondition diagnostics", () => {
   it("keeps the persistent path provisioning transaction open for graph discovery", () => {
     expect(provisioner).toContain("transactionOptions: { maxWait: 20_000, timeout: 120_000 }");
   });
+
+  it("assigns unique positions within each area unit", () => {
+    expect(provisioner).toContain("lessonIndex * lesson.stages.length + displayOrder + 1");
+  });
 });

@@ -594,12 +594,15 @@ async function main(): Promise<void> {
       for (const lesson of ACADEMIC_P0_LESSONS) {
         const unitId = ids.get(`${lesson.area}:unit`)!;
         const stageIds: string[] = [];
+        const lessonIndex = ACADEMIC_P0_LESSONS.filter(
+          (candidate) => candidate.area === lesson.area,
+        ).findIndex((candidate) => candidate.lessonKey === lesson.lessonKey);
         for (const [displayOrder, stage] of lesson.stages.entries()) {
           const step: ProvisionStep = {
             code: `${lesson.skillCode}_${stage.stage}`,
             title: stage.title,
             type: stage.stage,
-            displayOrder: displayOrder + 1,
+            displayOrder: lessonIndex * lesson.stages.length + displayOrder + 1,
             skillId: skillByCode.get(lesson.skillCode),
             contentVersionId:
               stage.stage === "PRACTICE"
