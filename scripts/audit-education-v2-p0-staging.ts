@@ -343,7 +343,7 @@ function skillTemplateCandidates(rows: TemplateRow[], lesson: AcademicLesson): T
       runtime.config.family === lesson.practiceBinding.family &&
       runtime.config.competency === lesson.skillCode &&
       runtime.config.interactionType === "MULTIPLE_CHOICE" &&
-      runtime.config.versionConfig.rendererKey === lesson.practiceBinding.rendererKey &&
+      runtime.config.rendererKey === lesson.practiceBinding.rendererKey &&
       ["FOUNDATION", "DEVELOPING"].includes(runtime.config.difficulty) &&
       runtime.config.contentRequirement === "REQUIRED" &&
       runtime.config.questionRequirement === "REQUIRED"
