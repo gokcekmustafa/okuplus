@@ -13,9 +13,11 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).not.toMatch(/^\s+pull_request:/mu);
     expect(workflow).toContain("environment: staging");
     expect(workflow).toContain("ref: ${{ inputs.ref }}");
-    expect(workflow).toMatch(/options:\s*\n\s+- staging\s*\n\s+- master/u);
+    expect(workflow).toMatch(
+      /options:\s*\n\s+- staging\s*\n\s+- master\s*\n\s+- codex\/education-v2-p0-release-candidate/u,
+    );
     expect(workflow).toContain('case "$TARGET_REF" in');
-    expect(workflow).toContain("staging|master)");
+    expect(workflow).toContain("staging|master|codex/education-v2-p0-release-candidate)");
   });
 
   it("binds staging credentials and preserves the fingerprint guard", () => {

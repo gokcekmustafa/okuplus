@@ -11,6 +11,7 @@ on:
         options:
           - staging
           - master
+          - codex/education-v2-p0-release-candidate
 
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$TARGET_REF" in
-            staging|master)
+            staging|master|codex/education-v2-p0-release-candidate)
               ;;
             *)
               echo "Unsupported source ref: $TARGET_REF"
