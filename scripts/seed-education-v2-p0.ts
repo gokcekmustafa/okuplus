@@ -26,6 +26,7 @@ import {
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
+const contentOnly = args.has("--content-only");
 const DATABASE_ENV = "EDUCATION_V2_P0_DATABASE_URL";
 const PRODUCTION_DATABASE_ENV = "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL";
 const PRODUCTION_DATABASE_NAME_ENV = "EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME";
@@ -283,7 +284,7 @@ function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
   });
 }
 
-function allStableIds(plans: Plan[]): string[] {
+function allStableIds(plans: Plan[], includeLearningPath: boolean): string[] {
   const ids = plans.flatMap((plan) => [
     plan.contentId,
     plan.contentVersionId,
@@ -291,9 +292,11 @@ function allStableIds(plans: Plan[]): string[] {
     ...(plan.exerciseTemplateVersionId ? [plan.exerciseTemplateVersionId] : []),
     ...plan.questions.flatMap((question) => [question.id, question.versionId]),
   ]);
-  for (const path of EDUCATION_V2_P0_PROGRAM.paths) {
-    ids.push(getProgramIds("path", path.key), getProgramIds("unit", path.unitCode));
-    ids.push(...path.steps.map((step) => getProgramIds("step", `${path.key}-${step.key}`)));
+  if (includeLearningPath) {
+    for (const path of EDUCATION_V2_P0_PROGRAM.paths) {
+      ids.push(getProgramIds("path", path.key), getProgramIds("unit", path.unitCode));
+      ids.push(...path.steps.map((step) => getProgramIds("step", `${path.key}-${step.key}`)));
+    }
   }
   ids.push(
     ...EDUCATION_V2_P0_PROGRAM.assessments.map((assessment) =>
@@ -306,8 +309,9 @@ function allStableIds(plans: Plan[]): string[] {
 async function inspectStableRows(
   prisma: Prisma.TransactionClient,
   plans: Plan[],
+  includeLearningPath: boolean,
 ): Promise<"CREATE" | "NOOP" | "CONFLICT"> {
-  const ids = allStableIds(plans);
+  const ids = allStableIds(plans, includeLearningPath);
   const [
     contents,
     contentVersions,
@@ -385,6 +389,7 @@ async function createProgram(
   tx: Prisma.TransactionClient,
   plans: Plan[],
   levelId: string,
+  includeLearningPath: boolean,
 ): Promise<void> {
   const contentVersionByKey = new Map<string, string>();
   const templateVersionByKey = new Map<string, string>();
@@ -547,6 +552,8 @@ async function createProgram(
     assessmentIds.set(assessment.key, id);
   }
 
+  if (!includeLearningPath) return;
+
   const stepIds = new Map<string, string>();
   for (const path of EDUCATION_V2_P0_PROGRAM.paths) {
     for (const step of path.steps) {
@@ -683,7 +690,7 @@ async function main(): Promise<void> {
             (total, exercise) => total + exercise.questions.length,
             0,
           ),
-          pathCount: EDUCATION_V2_P0_PROGRAM.paths.length,
+          pathCount: contentOnly ? 0 : EDUCATION_V2_P0_PROGRAM.paths.length,
           assessmentCount: EDUCATION_V2_P0_PROGRAM.assessments.length,
           target: safeSummary(null),
         },
@@ -723,7 +730,7 @@ async function main(): Promise<void> {
         return { id: `pending-${code}`, code };
       });
       const plans = planRecords(skillRowsForPlan);
-      const mode = await inspectStableRows(tx, plans);
+      const mode = await inspectStableRows(tx, plans, !contentOnly);
       return { level, skillPlan, mode };
     });
     const { level, skillPlan, mode } = inspection;
@@ -763,7 +770,7 @@ async function main(): Promise<void> {
             stableRecordState: mode,
             contentCount: EDUCATION_V2_P0_PROGRAM.content.length,
             exerciseCount: EDUCATION_V2_P0_PROGRAM.exercises.length,
-            pathCount: EDUCATION_V2_P0_PROGRAM.paths.length,
+            pathCount: contentOnly ? 0 : EDUCATION_V2_P0_PROGRAM.paths.length,
             assessmentCount: EDUCATION_V2_P0_PROGRAM.assessments.length,
           },
           null,
@@ -776,7 +783,7 @@ async function main(): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await applySeedPlatformContext(tx);
       const ensuredSkills = await ensureProgramSkills(tx, skillCodes);
-      await createProgram(tx, planRecords(ensuredSkills), level.id);
+      await createProgram(tx, planRecords(ensuredSkills), level.id, !contentOnly);
     });
     console.log(
       JSON.stringify(
@@ -791,7 +798,7 @@ async function main(): Promise<void> {
           },
           contentCount: EDUCATION_V2_P0_PROGRAM.content.length,
           exerciseCount: EDUCATION_V2_P0_PROGRAM.exercises.length,
-          pathCount: EDUCATION_V2_P0_PROGRAM.paths.length,
+          pathCount: contentOnly ? 0 : EDUCATION_V2_P0_PROGRAM.paths.length,
           assessmentCount: EDUCATION_V2_P0_PROGRAM.assessments.length,
         },
         null,

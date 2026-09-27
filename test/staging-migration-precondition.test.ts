@@ -89,14 +89,19 @@ describe("staging migration precondition diagnostics", () => {
   });
 
   it("seeds the published P0 content graph before discovering and provisioning the path", () => {
-    const contentSeed = workflow.indexOf("scripts/seed-education-v2-p0.ts --dry-run");
+    const contentSeed = workflow.indexOf(
+      "scripts/seed-education-v2-p0.ts --dry-run --content-only",
+    );
+    const lessonSeed = workflow.indexOf("scripts/seed-education-v2-p0-lessons.ts --dry-run");
     const discovery = workflow.indexOf("id: education-v2-discovery");
     const provisioning = workflow.indexOf("id: seed");
 
     expect(contentSeed).toBeGreaterThan(-1);
-    expect(workflow).toContain("scripts/seed-education-v2-p0.ts --apply");
+    expect(workflow).toContain("scripts/seed-education-v2-p0.ts --apply --content-only");
+    expect(lessonSeed).toBeGreaterThan(contentSeed);
+    expect(workflow).toContain("scripts/seed-education-v2-p0-lessons.ts --apply");
     expect(workflow).toContain("EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}");
-    expect(contentSeed).toBeLessThan(discovery);
+    expect(lessonSeed).toBeLessThan(discovery);
     expect(discovery).toBeLessThan(provisioning);
   });
 });

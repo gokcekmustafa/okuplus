@@ -482,8 +482,29 @@ jobs:
           test -n "$EDUCATION_V2_P0_DATABASE_URL"
           test -n "$EDUCATION_V2_P0_LEVEL_CODE"
           test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
-          npx tsx scripts/seed-education-v2-p0.ts --dry-run
-          npx tsx scripts/seed-education-v2-p0.ts --apply
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run --content-only
+          npx tsx scripts/seed-education-v2-p0.ts --apply --content-only
+
+      - name: Seed Education V2 P0 academic lesson content
+        id: education-v2-lesson-seed
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --dry-run
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --apply
 
       - name: Discover Education V2 P0 staging records
         id: education-v2-discovery
