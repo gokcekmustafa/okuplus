@@ -20,6 +20,11 @@ describe("staging migration workflow environment contract", () => {
     expect(workflow).toContain(
       "DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}",
     );
+    expect(workflow).toContain(
+      "EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}",
+    );
+    expect(workflow).toContain("codex/education-v2-p0-release-candidate");
+    expect(workflow).toContain("20260927100000_add_persistent_learning_path");
   });
 
   it("remains manual-only and does not expose secret values", () => {

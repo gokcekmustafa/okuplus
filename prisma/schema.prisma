@@ -236,6 +236,8 @@ enum LearningStepType {
   PRACTICE
   REINFORCEMENT
   ASSESSMENT
+  MEASUREMENT
+  NEXT_LEARNING
 }
 
 enum LearningStepSource {
@@ -248,6 +250,7 @@ enum LearningStepProgressStatus {
   ACTIVE
   IN_PROGRESS
   COMPLETED
+  NOT_STARTED
 }
 
 enum GuestDiagnosticSessionStatus {
@@ -491,6 +494,7 @@ model User {
   baselines                StudentBaseline[]
   lessonProgress           StudentLessonProgress[]
   learningStepProgresses   StudentLearningStepProgress[]
+  learningPathEnrollments  StudentLearningPath[]
   createdContents          Content[]                 @relation("ContentCreatedBy")
   createdContentVersions   ContentVersion[]          @relation("ContentVersionCreatedBy")
   reviewedContentVersions  ContentVersion[]          @relation("ContentVersionReviewedBy")
@@ -599,6 +603,7 @@ model Tenant {
   learningUnits             LearningUnit[]
   learningSteps             LearningStep[]
   learningStepProgress     StudentLearningStepProgress[]
+  learningPathEnrollments   StudentLearningPath[]
   consents                 Consent[]
   auditLogs                AuditLog[]
   attempts                 Attempt[]
@@ -802,6 +807,7 @@ model Skill {
   contentSkills   ContentSkill[]
   studentProgress StudentProgress[]
   templates       ExerciseTemplate[]
+  learningSteps   LearningStep[]
 }
 
 model Level {
@@ -820,6 +826,7 @@ model Level {
   targetLevelProfiles  StudentProfile[]   @relation("TargetLevel")
   assessments          Assessment[]
   results              AssessmentResult[]
+  learningPaths        LearningPath[]
   learningStepMinimumLevels LearningStep[]     @relation("LearningStepMinimumLevel")
   learningStepMaximumLevels LearningStep[]     @relation("LearningStepMaximumLevel")
 }
@@ -1226,6 +1233,8 @@ model ExerciseSession {
   assignment        Assignment?             @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
   assessmentId      String?
   assessment        Assessment?             @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  learningStepId    String?
+  learningStep      LearningStep?           @relation(fields: [learningStepId], references: [id], onDelete: SetNull)
   context           SessionContext          @default(INDIVIDUAL)
   sessionType       SessionType             @default(PRACTICE)
   status            SessionStatus           @default(IN_PROGRESS)
@@ -1245,6 +1254,7 @@ model ExerciseSession {
   @@index([studentId, tenantId, startedAt])
   @@index([assignmentId])
   @@index([templateVersionId])
+  @@index([learningStepId])
   @@index([tenantId, status])
 }
 
@@ -1554,15 +1564,21 @@ model LearningPath {
   code      String
   title     String
   area      LearningAreaCode
+  levelId   String?
+  level     Level?             @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  version   Int                @default(1)
   status    LearningPathStatus @default(DRAFT)
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
   deletedAt DateTime?
 
   units LearningUnit[]
+  enrollments StudentLearningPath[]
 
   @@index([tenantId, status])
   @@index([area, status])
+  @@unique([code, version])
+  @@index([levelId, status])
 }
 
 model LearningUnit {
@@ -1611,12 +1627,17 @@ model LearningStep {
   exerciseTemplateVersion   ExerciseTemplateVersion? @relation(fields: [exerciseTemplateVersionId], references: [id], onDelete: SetNull)
   assessmentId              String?
   assessment                Assessment?              @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+  skillId                   String?
+  skill                     Skill?                   @relation(fields: [skillId], references: [id], onDelete: SetNull)
   completionRule            Json                     @default("{}")
+  metadata                  Json?
   createdAt                 DateTime                 @default(now())
   updatedAt                 DateTime                 @updatedAt
 
   assignments Assignment[]
   progress    StudentLearningStepProgress[]
+  currentEnrollments StudentLearningPath[] @relation("CurrentLearningStep")
+  exerciseSessions ExerciseSession[]
 
   @@unique([unitId, stableKey])
   @@unique([unitId, position])
@@ -1640,12 +1661,37 @@ model StudentLearningStepProgress {
   startedAt      DateTime?
   completedAt    DateTime?
   lastActivityAt DateTime?
+  attemptCount   Int                      @default(0)
+  score          Float?
+  accuracy       Float?
+  evidence       Json?
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
 
   @@unique([tenantId, studentId, learningStepId], map: "StudentLearningStepProgress_tenantId_studentId_learningStepId_k")
   @@index([studentId, tenantId, status])
   @@index([learningStepId, status])
+}
+
+/// Öğrencinin global öğrenme yollarındaki tenant-scoped enrollment durumu.
+/// Eski StudentLearningStepProgress kayıtları korunur; bu tablo yalnızca P0
+/// yol başına mevcut adımı kalıcı olarak izler.
+model StudentLearningPath {
+  id             String       @id @default(dbgenerated("uuidv7()"))
+  tenantId       String
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId      String
+  student        User         @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  learningPathId String
+  learningPath   LearningPath @relation(fields: [learningPathId], references: [id], onDelete: Restrict)
+  currentStepId  String?
+  currentStep    LearningStep? @relation("CurrentLearningStep", fields: [currentStepId], references: [id], onDelete: SetNull)
+  startedAt      DateTime     @default(now())
+  completedAt    DateTime?
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([tenantId, studentId, learningPathId])
+  @@index([studentId, tenantId, updatedAt])
 }
 
 // ============ GAMIFICATION ============

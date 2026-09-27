@@ -21,6 +21,11 @@ import {
 import { syncTrainingSessionItem } from "../training/daily-session.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
 import { completeLearningStepForSession } from "../learning-path/index.js";
+import {
+  completeLearningStep,
+  completeLearningStepForAssessment,
+  completeLearningStepForTemplate,
+} from "../student-learning/persistent-path.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -29,6 +34,7 @@ export interface ExerciseSessionDetail {
   templateVersionId: string;
   assignmentId: string | null;
   assessmentId: string | null;
+  learningStepId: string | null;
   context: string;
   sessionType: string;
   status: string;
@@ -63,6 +69,7 @@ const SESSION_SELECT = {
   templateVersionId: true,
   assignmentId: true,
   assessmentId: true,
+  learningStepId: true,
   context: true,
   sessionType: true,
   status: true,
@@ -385,6 +392,7 @@ export async function listQuestionsForSession(
       studentId: true,
       templateVersionId: true,
       assessmentId: true,
+      learningStepId: true,
       context: true,
       status: true,
       templateVersion: {
@@ -540,6 +548,7 @@ export async function completeExerciseSession(
       tenantId: true,
       studentId: true,
       assessmentId: true,
+      learningStepId: true,
       status: true,
       templateVersionId: true,
       templateVersion: {
@@ -740,6 +749,30 @@ export async function completeExerciseSession(
   }
 
   if (session.tenantId) {
+    const learningActor = {
+      userId: session.studentId,
+      tenantId: session.tenantId,
+      platformRole: null,
+    } as const;
+    if (session.learningStepId) {
+      await completeLearningStep(
+        session.learningStepId,
+        learningActor,
+        scoreSummary as Prisma.InputJsonValue,
+      ).catch(() => {});
+    } else if (session.assessmentId) {
+      await completeLearningStepForAssessment(
+        session.assessmentId,
+        learningActor,
+        scoreSummary as Prisma.InputJsonValue,
+      ).catch(() => {});
+    } else {
+      await completeLearningStepForTemplate(
+        session.templateVersionId,
+        learningActor,
+        scoreSummary as Prisma.InputJsonValue,
+      ).catch(() => {});
+    }
     await completeLearningStepForSession(
       { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
       { templateVersionId: session.templateVersionId, assessmentId: session.assessmentId },
@@ -764,6 +797,7 @@ function toSessionDetail(row: any): ExerciseSessionDetail {
     templateVersionId: row.templateVersionId,
     assignmentId: row.assignmentId,
     assessmentId: row.assessmentId ?? null,
+    learningStepId: row.learningStepId ?? null,
     context: row.context,
     sessionType: row.sessionType,
     status: row.status,

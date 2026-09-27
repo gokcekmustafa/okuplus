@@ -44,7 +44,7 @@ type PublishedPath = {
 
 type StepProgressRow = {
   learningStepId: string;
-  status: "LOCKED" | "ACTIVE" | "IN_PROGRESS" | "COMPLETED";
+  status: "LOCKED" | "ACTIVE" | "IN_PROGRESS" | "COMPLETED" | "NOT_STARTED";
   completedAt: Date | null;
   sessionCount: number;
   accuracy: number | null;
