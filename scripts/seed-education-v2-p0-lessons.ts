@@ -420,6 +420,7 @@ async function main(): Promise<void> {
 
   const prisma = new PrismaClient({
     datasources: { db: { url: targetInfo.target.url } },
+    transactionOptions: { maxWait: 20_000, timeout: 120_000 },
   });
   const approvedPrisma = new PrismaClient({
     datasources: { db: { url: targetInfo.approvedTarget.url } },

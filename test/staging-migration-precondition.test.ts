@@ -6,6 +6,10 @@ const workflow = readFileSync(
   "utf8",
 );
 const p0Seed = readFileSync(new URL("../scripts/seed-education-v2-p0.ts", import.meta.url), "utf8");
+const lessonSeed = readFileSync(
+  new URL("../scripts/seed-education-v2-p0-lessons.ts", import.meta.url),
+  "utf8",
+);
 
 describe("staging migration precondition diagnostics", () => {
   it("reports named checks without weakening the fail-closed gate", () => {
@@ -112,5 +116,9 @@ describe("staging migration precondition diagnostics", () => {
     expect(p0Seed).toContain("if (!planKeysToCreate.has(plan.content.key)) continue;");
     expect(p0Seed).toContain('if (mode === "CONFLICT")');
     expect(p0Seed).toContain("assessmentKeysToCreate");
+  });
+
+  it("keeps the academic lesson transaction open for the full provisioning graph", () => {
+    expect(lessonSeed).toContain("transactionOptions: { maxWait: 20_000, timeout: 120_000 }");
   });
 });
