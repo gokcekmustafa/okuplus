@@ -468,6 +468,23 @@ jobs:
           console.log("staging migration=PASS schema=PASS schemaDrift=FALSE");
           '
 
+      - name: Seed Education V2 P0 published content graph
+        id: education-v2-content-seed
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run
+          npx tsx scripts/seed-education-v2-p0.ts --apply
+
       - name: Discover Education V2 P0 staging records
         id: education-v2-discovery
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}

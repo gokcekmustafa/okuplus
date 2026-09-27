@@ -26,7 +26,7 @@ describe("staging migration workflow environment contract", () => {
     expect(
       (workflow.match(/EDUCATION_V2_P0_DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/gu) ?? [])
         .length,
-    ).toBe(3);
+    ).toBe(4);
     expect(workflow).not.toContain(
       "EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}",
     );

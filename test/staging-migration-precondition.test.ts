@@ -87,4 +87,16 @@ describe("staging migration precondition diagnostics", () => {
       "DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}",
     );
   });
+
+  it("seeds the published P0 content graph before discovering and provisioning the path", () => {
+    const contentSeed = workflow.indexOf("scripts/seed-education-v2-p0.ts --dry-run");
+    const discovery = workflow.indexOf("id: education-v2-discovery");
+    const provisioning = workflow.indexOf("id: seed");
+
+    expect(contentSeed).toBeGreaterThan(-1);
+    expect(workflow).toContain("scripts/seed-education-v2-p0.ts --apply");
+    expect(workflow).toContain("EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}");
+    expect(contentSeed).toBeLessThan(discovery);
+    expect(discovery).toBeLessThan(provisioning);
+  });
 });
