@@ -9,6 +9,8 @@ const validEnvironment = {
   EDUCATION_V2_P0_ENVIRONMENT: "STAGING",
   EDUCATION_V2_P0_DATABASE_URL:
     "postgresql://readonly:masked@ep-staging.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+  DB_FINGERPRINT_DATABASE_URL:
+    "postgresql://operator:masked@ep-staging.eu-central-1.aws.neon.tech/neondb?sslmode=require",
   [EDUCATION_V2_APPROVED_FINGERPRINT_ENV]: "a".repeat(64),
 };
 

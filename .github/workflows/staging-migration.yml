@@ -473,6 +473,7 @@ jobs:
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
           EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
@@ -501,6 +502,7 @@ jobs:
         id: seed
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
         env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
           EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
@@ -521,6 +523,7 @@ jobs:
         id: seed-verify
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
         env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}

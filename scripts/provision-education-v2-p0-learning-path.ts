@@ -12,6 +12,7 @@ import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
   assertLiveCatalogTargetIdentity,
+  assertSameCatalogDatabaseTarget,
   parseCatalogTargetUrl,
 } from "../src/curriculum/catalog-target-verification.js";
 
@@ -68,9 +69,6 @@ function assertTarget(): {
     fail("bu provisioning komutu yalnızca STAGING ortamında çalıştırılabilir");
   }
   const url = requiredEnv("EDUCATION_V2_P0_DATABASE_URL");
-  if (process.env.DATABASE_URL?.trim() === url) {
-    fail("EDUCATION_V2_P0_DATABASE_URL genel DATABASE_URL ile aynı olamaz");
-  }
   const levelCode = requiredEnv("EDUCATION_V2_P0_LEVEL_CODE");
   const approvedFingerprint = requiredEnv("EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT");
   const confirmation = process.env.I_HAVE_REVIEWED_EDUCATION_V2_P0?.trim();
@@ -90,14 +88,37 @@ async function assertProvisioningTarget(
   approvedFingerprint: string,
 ): Promise<void> {
   const target = parseCatalogTargetUrl(url, REQUIRED_ENVIRONMENT);
+  const approvedTargetUrl = requiredEnv("DB_FINGERPRINT_DATABASE_URL");
+  const approvedTarget = parseCatalogTargetUrl(approvedTargetUrl, REQUIRED_ENVIRONMENT);
   assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+  assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
+  if (target.provider !== "NEON" || approvedTarget.provider !== "NEON") {
+    fail("staging ve onaylı kontrol hedefleri Neon olmalı");
+  }
   const rows = await client.$queryRaw<Array<{ database: string; db_user: string }>>`
     SELECT current_database() AS database, current_user AS db_user
   `;
   const identity = rows[0];
   if (!identity) fail("provisioning hedef database kimliği okunamadı");
   assertLiveCatalogTargetIdentity(target, identity);
-  assertApprovedTargetFingerprint(target, identity, approvedFingerprint);
+  assertSameCatalogDatabaseTarget(approvedTarget, target);
+
+  const approvedClient = new PrismaClient({
+    datasources: { db: { url: approvedTargetUrl } },
+  });
+  try {
+    const approvedRows = await approvedClient.$queryRaw<
+      Array<{ database: string; db_user: string }>
+    >`
+      SELECT current_database() AS database, current_user AS db_user
+    `;
+    const approvedIdentity = approvedRows[0];
+    if (!approvedIdentity) fail("onaylı staging database kimliği okunamadı");
+    assertLiveCatalogTargetIdentity(approvedTarget, approvedIdentity);
+    assertApprovedTargetFingerprint(approvedTarget, approvedIdentity, approvedFingerprint);
+  } finally {
+    await approvedClient.$disconnect();
+  }
 }
 
 async function withPlatformContext<T>(

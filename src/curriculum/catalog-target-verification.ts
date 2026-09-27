@@ -104,6 +104,26 @@ export function assertApprovedTargetFingerprint(
   }
 }
 
+/**
+ * Allow a separately provisioned application role to use the same approved
+ * catalog database without weakening the independent fingerprint check on the
+ * control connection. The role/user is intentionally not compared here; the
+ * candidate URL still has its own live database/user identity check.
+ */
+export function assertSameCatalogDatabaseTarget(
+  approved: Pick<CatalogTarget, "provider" | "host" | "port" | "database">,
+  candidate: Pick<CatalogTarget, "provider" | "host" | "port" | "database">,
+): void {
+  const sameTarget =
+    approved.provider === candidate.provider &&
+    approved.host === candidate.host &&
+    approved.port === candidate.port &&
+    approved.database === candidate.database;
+  if (!sameTarget) {
+    throw new Error("hedef URL onaylı staging veritabanıyla eşleşmiyor");
+  }
+}
+
 export function assertCatalogEnvironmentSafety(
   target: Pick<CatalogTarget, "environment" | "host" | "database">,
   options: { rejectTestDatabase: boolean },

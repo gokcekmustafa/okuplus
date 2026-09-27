@@ -4,6 +4,7 @@ import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
   assertLiveCatalogTargetIdentity,
+  assertSameCatalogDatabaseTarget,
   parseCatalogTargetUrl,
 } from "../src/curriculum/catalog-target-verification.js";
 
@@ -129,15 +130,19 @@ async function main(): Promise<void> {
   if (!REQUIRED_LEVEL_CODE) fail("EDUCATION_V2_P0_LEVEL_CODE gerekli");
 
   const url = requiredEnv("EDUCATION_V2_P0_DATABASE_URL");
-  if (process.env.DATABASE_URL?.trim() === url) {
-    fail("EDUCATION_V2_P0_DATABASE_URL genel DATABASE_URL ile aynı olamaz");
-  }
+  const approvedTargetUrl = requiredEnv("DB_FINGERPRINT_DATABASE_URL");
   const approvedFingerprint = requiredEnv("EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT");
   const target = parseCatalogTargetUrl(url, REQUIRED_ENVIRONMENT);
+  const approvedTarget = parseCatalogTargetUrl(approvedTargetUrl, REQUIRED_ENVIRONMENT);
   assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+  assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
   if (target.provider !== "NEON") fail("staging hedefi Neon olmalı");
+  if (approvedTarget.provider !== "NEON") fail("onaylı staging hedefi Neon olmalı");
 
   const prisma = new PrismaClient({ datasources: { db: { url } } });
+  const approvedPrisma = new PrismaClient({
+    datasources: { db: { url: approvedTargetUrl } },
+  });
   try {
     const identityRows = await prisma.$queryRaw<Array<{ database: string; db_user: string }>>`
       SELECT current_database() AS database, current_user AS db_user
@@ -145,7 +150,17 @@ async function main(): Promise<void> {
     const identity = identityRows[0];
     if (!identity) fail("staging database kimliği okunamadı");
     assertLiveCatalogTargetIdentity(target, identity);
-    assertApprovedTargetFingerprint(target, identity, approvedFingerprint);
+    assertSameCatalogDatabaseTarget(approvedTarget, target);
+
+    const approvedIdentityRows = await approvedPrisma.$queryRaw<
+      Array<{ database: string; db_user: string }>
+    >`
+      SELECT current_database() AS database, current_user AS db_user
+    `;
+    const approvedIdentity = approvedIdentityRows[0];
+    if (!approvedIdentity) fail("onaylı staging database kimliği okunamadı");
+    assertLiveCatalogTargetIdentity(approvedTarget, approvedIdentity);
+    assertApprovedTargetFingerprint(approvedTarget, approvedIdentity, approvedFingerprint);
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.platform_role', 'CONTENT_EDITOR', true)`;
@@ -242,6 +257,7 @@ async function main(): Promise<void> {
     );
   } finally {
     await prisma.$disconnect();
+    await approvedPrisma.$disconnect();
   }
 }
 

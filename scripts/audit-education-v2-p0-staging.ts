@@ -6,6 +6,7 @@ import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
   assertLiveCatalogTargetIdentity,
+  assertSameCatalogDatabaseTarget,
   parseCatalogTargetUrl,
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
@@ -32,6 +33,7 @@ export type AuditStatus = "READY" | "BLOCKED" | "UNVERIFIED";
 
 export type AuditConfig = {
   target: CatalogTarget;
+  approvedTarget: CatalogTarget;
   approvedFingerprint: string;
   commonReinforcementTemplateVersionId: string;
   commonAssessmentId: string;
@@ -160,6 +162,7 @@ export function readAuditConfiguration(
   }
 
   const rawUrl = requiredValue(environment, "EDUCATION_V2_P0_DATABASE_URL");
+  const approvedTargetUrl = requiredValue(environment, "DB_FINGERPRINT_DATABASE_URL");
   const approvedFingerprint = requiredValue(environment, EDUCATION_V2_APPROVED_FINGERPRINT_ENV);
   const commonReinforcementTemplateVersionId = requiredValue(
     environment,
@@ -167,6 +170,7 @@ export function readAuditConfiguration(
   );
   const commonAssessmentId = requiredValue(environment, EDUCATION_V2_COMMON_ASSESSMENT_ENV);
   let target: CatalogTarget | null = null;
+  let approvedTarget: CatalogTarget | null = null;
 
   if (!rawUrl) {
     reasons.push("EDUCATION_V2_P0_DATABASE_URL eksik");
@@ -179,6 +183,20 @@ export function readAuditConfiguration(
       }
     } catch (error) {
       reasons.push(`staging hedefi reddedildi: ${safeError(error)}`);
+    }
+  }
+
+  if (!approvedTargetUrl) {
+    reasons.push("DB_FINGERPRINT_DATABASE_URL eksik");
+  } else {
+    try {
+      approvedTarget = parseCatalogTargetUrl(approvedTargetUrl, REQUIRED_ENVIRONMENT);
+      assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
+      if (approvedTarget.provider !== "NEON") {
+        reasons.push("onaylı staging kontrolü için Neon PostgreSQL hedefi gerekli");
+      }
+    } catch (error) {
+      reasons.push(`onaylı staging kontrol hedefi reddedildi: ${safeError(error)}`);
     }
   }
 
@@ -196,6 +214,7 @@ export function readAuditConfiguration(
 
   if (
     !target ||
+    !approvedTarget ||
     reasons.length > 0 ||
     !approvedFingerprint ||
     !commonReinforcementTemplateVersionId ||
@@ -208,6 +227,7 @@ export function readAuditConfiguration(
     status: "READY",
     config: {
       target,
+      approvedTarget,
       approvedFingerprint,
       commonReinforcementTemplateVersionId,
       commonAssessmentId,
@@ -219,6 +239,7 @@ export function verifyTargetIdentity(
   target: CatalogTarget,
   identity: IdentityRow,
   approvedFingerprint: string,
+  approvedTarget: CatalogTarget = target,
 ): string[] {
   const reasons: string[] = [];
   try {
@@ -228,10 +249,18 @@ export function verifyTargetIdentity(
     reasons.push("staging database identity beklenen hedefle eşleşmiyor");
   }
   try {
-    assertApprovedTargetFingerprint(target, identity, approvedFingerprint);
+    assertSameCatalogDatabaseTarget(approvedTarget, target);
   } catch (error) {
     void error;
-    reasons.push("staging target fingerprint eşleşmiyor");
+    reasons.push("staging hedefi onaylı veritabanıyla eşleşmiyor");
+  }
+  if (target === approvedTarget) {
+    try {
+      assertApprovedTargetFingerprint(target, identity, approvedFingerprint);
+    } catch (error) {
+      void error;
+      reasons.push("staging target fingerprint eşleşmiyor");
+    }
   }
   return reasons;
 }
@@ -647,6 +676,9 @@ export function evaluateAuditStatuses(statuses: AuditStatus[]): AuditStatus {
 
 export async function runAudit(config: AuditConfig): Promise<Record<string, unknown>> {
   const prisma = new PrismaClient({ datasources: { db: { url: config.target.url } } });
+  const approvedPrisma = new PrismaClient({
+    datasources: { db: { url: config.approvedTarget.url } },
+  });
   try {
     const identityRows = await prisma.$queryRaw<IdentityRow[]>(Prisma.sql`
       SELECT current_database() AS database, current_user AS db_user
@@ -655,11 +687,31 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
     if (!identity) {
       return { status: "UNVERIFIED", reason: "staging database identity okunamadı" };
     }
-    const identityErrors = verifyTargetIdentity(
-      config.target,
-      identity,
-      config.approvedFingerprint,
-    );
+    const approvedIdentityRows = await approvedPrisma.$queryRaw<IdentityRow[]>(Prisma.sql`
+      SELECT current_database() AS database, current_user AS db_user
+    `);
+    const approvedIdentity = approvedIdentityRows[0];
+    const identityErrors = approvedIdentity
+      ? verifyTargetIdentity(
+          config.target,
+          identity,
+          config.approvedFingerprint,
+          config.approvedTarget,
+        )
+      : ["onaylı staging database kimliği okunamadı"];
+    if (approvedIdentity) {
+      try {
+        assertLiveCatalogTargetIdentity(config.approvedTarget, approvedIdentity);
+        assertApprovedTargetFingerprint(
+          config.approvedTarget,
+          approvedIdentity,
+          config.approvedFingerprint,
+        );
+      } catch (error) {
+        void error;
+        identityErrors.push("onaylı staging target fingerprint eşleşmiyor");
+      }
+    }
     if (identityErrors.length > 0) {
       return { status: "UNVERIFIED", reason: identityErrors.join("; ") };
     }
@@ -842,6 +894,7 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
     return { status: "UNVERIFIED", reason: safeError(error) };
   } finally {
     await prisma.$disconnect();
+    await approvedPrisma.$disconnect();
   }
 }
 
