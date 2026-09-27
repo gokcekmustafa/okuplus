@@ -185,6 +185,30 @@ jobs:
           }
           NODE
 
+      - name: Compare staging connection identities (read-only)
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          comparison_output="$RUNNER_TEMP/staging-connection-comparison.json"
+          comparison_error="$RUNNER_TEMP/staging-connection-comparison.err"
+          set +e
+          npx tsx scripts/compare-staging-connection-identities.ts >"$comparison_output" 2>"$comparison_error"
+          comparison_exit=$?
+          set -e
+          if test -f "$comparison_output"; then
+            cat "$comparison_output" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if test "$comparison_exit" -ne 0; then
+            echo "staging connection identity comparison failed" >&2
+            sed -n '1,20p' "$comparison_error" >&2
+            exit "$comparison_exit"
+          fi
+
       - name: Collect read-only staging status, history, and schema diff
         id: collect
         shell: bash
