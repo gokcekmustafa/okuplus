@@ -468,6 +468,35 @@ jobs:
           console.log("staging migration=PASS schema=PASS schemaDrift=FALSE");
           '
 
+      - name: Discover Education V2 P0 staging records
+        id: education-v2-discovery
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          discovery_output="$RUNNER_TEMP/education-v2-p0-discovery.json"
+          npx tsx scripts/discover-education-v2-p0-staging-records.ts > "$discovery_output"
+          reinforcement_id="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.reinforcementTemplateVersionId);' "$discovery_output")"
+          assessment_id="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.assessmentId);' "$discovery_output")"
+          test -n "$reinforcement_id"
+          test -n "$assessment_id"
+          echo "::add-mask::$reinforcement_id"
+          echo "::add-mask::$assessment_id"
+          {
+            echo "EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID=$reinforcement_id"
+            echo "EDUCATION_V2_COMMON_ASSESSMENT_ID=$assessment_id"
+          } >> "$GITHUB_ENV"
+          echo "Education V2 common records discovered and verified from staging." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Apply Education V2 P0 staging seed
         id: seed
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
@@ -477,8 +506,6 @@ jobs:
           EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
           I_HAVE_REVIEWED_EDUCATION_V2_P0: ${{ inputs.seed_confirmation }}
-          EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ secrets.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID || vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
-          EDUCATION_V2_COMMON_ASSESSMENT_ID: ${{ secrets.EDUCATION_V2_COMMON_ASSESSMENT_ID || vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
         run: |
           set -euo pipefail
           test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
@@ -498,8 +525,6 @@ jobs:
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
           EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
-          EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ secrets.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID || vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
-          EDUCATION_V2_COMMON_ASSESSMENT_ID: ${{ secrets.EDUCATION_V2_COMMON_ASSESSMENT_ID || vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
         run: |
           set -euo pipefail
           test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
