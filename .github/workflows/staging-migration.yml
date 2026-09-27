@@ -262,12 +262,70 @@ jobs:
             --to-schema-datamodel prisma/schema.prisma >"$schema_diff" 2>&1
           schema_diff_exit=$?
           set -e
+
+          SCHEMA_DIFF_OUTPUT="$schema_diff" \
+            SCHEMA_DIFF_EXIT="$schema_diff_exit" \
+            MIGRATION_STATUS_OUTPUT="$migration_status" \
+            node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const diffText = readFileSync(process.env.SCHEMA_DIFF_OUTPUT, "utf8");
+          const statusText = readFileSync(process.env.MIGRATION_STATUS_OUTPUT, "utf8");
+          const diffExit = Number(process.env.SCHEMA_DIFF_EXIT);
+          const sanitizeLine = (line) => {
+            if (/postgres(?:ql)?:\/\/|database_url|password|token|secret|cookie|authorization/iu.test(line)) {
+              return "[REDACTED_SENSITIVE_LINE]";
+            }
+            return line
+              .replace(/'(?:''|[^'])*'/gu, "'[REDACTED_LITERAL]'")
+              .replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/gu, "[REDACTED_TOKEN]")
+              .slice(0, 500);
+          };
+          const diffLines = diffText
+            .split(/\r?\n/u)
+            .map((line) => line.trimEnd())
+            .filter((line) => line.trim().length > 0 && !/^No difference detected\.$/iu.test(line.trim()));
+          const categories = { added: [], removed: [], changed: [], other: [] };
+          for (const line of diffLines) {
+            const bucket = /^\s*\[\+\]/u.test(line)
+              ? "added"
+              : /^\s*\[-\]/u.test(line)
+                ? "removed"
+                : /^\s*\[\*\]/u.test(line)
+                  ? "changed"
+                  : "other";
+            if (categories[bucket].length < 50) categories[bucket].push(sanitizeLine(line));
+          }
+          const statusSummary = statusText
+            .split(/\r?\n/u)
+            .filter((line) => /up to date|following migration|failed|pending|database schema|no migration/iu.test(line))
+            .slice(0, 20)
+            .map(sanitizeLine);
+          const result = diffLines.length === 0 ? "NO_DIFFERENCE" : diffExit === 2 ? "DRIFT" : "ERROR";
+          const summary = {
+            result,
+            exitCode: diffExit,
+            lineCount: diffLines.length,
+            categories,
+            migrationStatusSummary: statusSummary,
+          };
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-schema-diff-summary.json`,
+            JSON.stringify(summary, null, 2),
+          );
+          console.error(`schemaDiffResult=${result}; schemaDiffLineCount=${diffLines.length}`);
+          for (const [category, lines] of Object.entries(categories)) {
+            if (lines.length > 0) console.error(`schemaDiff.${category}=${JSON.stringify(lines)}`);
+          }
+          if (statusSummary.length > 0) console.error(`migrationStatusSummary=${JSON.stringify(statusSummary)}`);
+          NODE
+
           if test "$schema_diff_exit" -eq 2; then
-            echo "staging schema drift detected" >&2
+            echo "staging schema drift detected; see sanitized schema diff summary" >&2
             exit 1
           fi
           if test "$schema_diff_exit" -ne 0; then
-            echo "staging schema drift check failed" >&2
+            echo "staging schema diff command failed; see sanitized schema diff summary" >&2
             exit 1
           fi
 
@@ -466,6 +524,7 @@ jobs:
           const precondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-precondition.json`);
           const postcondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`);
           const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
+          const schemaDiff = readJson(`${process.env.RUNNER_TEMP}/staging-schema-diff-summary.json`);
           const safe = verification ?? preflight;
           const applied = verification?.appliedMigrationNames ?? [];
           const checks = postcondition?.checks ?? precondition?.checks ?? {};
@@ -499,6 +558,11 @@ jobs:
           console.log(`- rolledBackMigrations: ${verification?.rolledBackMigrations ?? preflight?.rolledBackMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- schema: ${verification?.schema ?? "NOT_VERIFIED"}`);
           console.log(`- schemaDrift: ${verification?.schemaDrift === false ? "false" : "NOT_VERIFIED"}`);
+          console.log(`- schemaDiffResult: ${schemaDiff?.result ?? "NOT_RUN"}`);
+          console.log(`- schemaDiffLineCount: ${schemaDiff?.lineCount ?? "NOT_RUN"}`);
+          for (const category of ["added", "removed", "changed", "other"]) {
+            console.log(`- schemaDiff.${category}: ${schemaDiff?.categories?.[category]?.length ?? "NOT_RUN"}`);
+          }
           console.log(`- migrateDeploy: ${process.env.APPLY_OUTCOME === "success" ? "PASS" : process.env.APPLY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- verification: ${process.env.VERIFY_OUTCOME === "success" ? "PASS" : process.env.VERIFY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- seed: ${process.env.SEED_OUTCOME === "success" ? "PASS" : process.env.SEED_OUTCOME ?? "NOT_RUN"}`);
@@ -508,3 +572,11 @@ jobs:
           for (const [key, value] of Object.entries(checks)) console.log(`- precondition.${key}: ${value ? "PASS" : "FAIL"}`);
           console.log(`- failedPreconditions: ${(postcondition?.failedChecks ?? precondition?.failedChecks ?? []).join(", ") || "NONE"}`);
           NODE
+
+      - name: Upload sanitized staging schema diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-schema-diagnostics
+          path: ${{ runner.temp }}/staging-schema-diff-summary.json
+          if-no-files-found: ignore

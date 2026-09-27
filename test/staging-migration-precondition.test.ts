@@ -11,6 +11,11 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("const failedChecks = Object.entries(checks)");
     expect(workflow).toContain("staging-migration-precondition.json");
     expect(workflow).toContain("staging-migration-postcondition.json");
+    expect(workflow).toContain("staging-schema-diff-summary.json");
+    expect(workflow).toContain("schemaDiffResult=");
+    expect(workflow).toContain("schemaDiffLineCount");
+    expect(workflow).toContain('["added", "removed", "changed", "other"]');
+    expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("throw new Error(");
     expect(workflow).toContain("staging precondition failed:");
     expect(workflow).not.toContain("continue-on-error");
