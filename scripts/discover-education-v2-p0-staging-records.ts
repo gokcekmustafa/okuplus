@@ -187,7 +187,7 @@ async function main(): Promise<void> {
           AND et."deletedAt" IS NULL
           AND et."tenantId" IS NULL
           AND et."skillId" IS NULL
-        ORDER BY etv.publishedAt ASC NULLS LAST, etv.id ASC
+        ORDER BY etv."publishedAt" ASC NULLS LAST, etv.id ASC
       `);
       const templateCandidates: TemplateCandidate[] = [];
       for (const row of templateRows) {
