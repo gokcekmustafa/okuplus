@@ -43,6 +43,15 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain('test "$SEED_CONFIRMATION" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"');
   });
 
+  it("defines the persistent path migration in every inline verification scope", () => {
+    const declarations = workflow.match(
+      /const persistentLearningPath = "20260927100000_add_persistent_learning_path"/g,
+    );
+    expect(declarations).toHaveLength(2);
+    expect(workflow).toContain("expectedMigrationNames.every");
+    expect(workflow).toContain("persistentLearningPath]");
+  });
+
   it("ignores only rolled-back history and still blocks unresolved failures", () => {
     expect(workflow).toContain("const failedMigrations =");
     expect(workflow).toContain('typeof entry.rolledBack === "boolean"');

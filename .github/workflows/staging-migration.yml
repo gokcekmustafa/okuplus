@@ -372,6 +372,7 @@ jobs:
           const foundation = "20260914100000_add_learning_experience_foundation";
           const learningPathDomain = "20260925100000_add_learning_path_domain";
           const commonLearningArea = "20260925110000_add_common_learning_area";
+          const persistentLearningPath = "20260927100000_add_persistent_learning_path";
           const allowedPendingMigrationPolicy = [
             completedPointEvent,
             foundation,
