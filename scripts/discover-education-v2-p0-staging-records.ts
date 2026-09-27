@@ -221,6 +221,11 @@ async function main(): Promise<void> {
           templateCandidates.push({ ...row, graph });
         }
       }
+      if (templateCandidates.length === 0) {
+        fail(
+          `P0 ortak reinforcement için ${REQUIRED_REINFORCEMENT_TEMPLATE_VERSION_ID} kimliğine sahip, yayınlanmış ve PHRASE_CHUNKING sözleşmeli tek graph bulunamadı`,
+        );
+      }
       const reinforcement = chooseExactlyOne(
         "ortak reinforcement template version",
         templateCandidates,
@@ -257,6 +262,11 @@ async function main(): Promise<void> {
             graph,
           });
         }
+      }
+      if (assessmentCandidates.length === 0) {
+        fail(
+          `P0 ortak assessment için ${REQUIRED_ASSESSMENT_ID} kimliğine sahip, yayınlanmış ve graph'ı hazır kayıt bulunamadı`,
+        );
       }
       const assessment = chooseExactlyOne("ortak assessment", assessmentCandidates);
 

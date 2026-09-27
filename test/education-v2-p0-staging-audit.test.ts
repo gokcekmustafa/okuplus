@@ -85,4 +85,19 @@ describe("education V2 staging read-only audit", () => {
     );
     expect(source).toContain("$queryRaw");
   });
+
+  it("discovers the P0 common graph by its manifest identity and runtime contract", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(
+        new URL("../scripts/discover-education-v2-p0-staging-records.ts", import.meta.url),
+        "utf8",
+      ),
+    );
+    expect(source).toContain('templateVersionId("common-reinforcement")');
+    expect(source).toContain('getProgramIds("assessment", "common-assessment")');
+    expect(source).toContain('resolved.config.family === "PHRASE_CHUNKING"');
+    expect(source).toContain('resolved.config.competency === "FAST_CHUNKING"');
+    expect(source).toContain('resolved.config.rendererKey === "QUESTION_PHRASE_CHUNKING"');
+    expect(source).not.toContain('AND et."skillId" IS NULL');
+  });
 });
