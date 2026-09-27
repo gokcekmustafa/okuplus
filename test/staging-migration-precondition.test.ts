@@ -139,4 +139,9 @@ describe("staging migration precondition diagnostics", () => {
   it("assigns unique positions within each area unit", () => {
     expect(provisioner).toContain("lessonIndex * lesson.stages.length + displayOrder + 1");
   });
+
+  it("compares existing learning steps without treating their identity as mutable data", () => {
+    expect(provisioner).toContain("const { id, ...existingValues } = existing;");
+    expect(provisioner).toContain("isDeepStrictEqual(existingValues, immutable)");
+  });
 });

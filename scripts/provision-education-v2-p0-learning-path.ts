@@ -458,9 +458,10 @@ async function ensureStep(
     metadata: step.metadata ?? null,
   };
   if (existing) {
-    if (!isDeepStrictEqual(existing, immutable))
+    const { id, ...existingValues } = existing;
+    if (!isDeepStrictEqual(existingValues, immutable))
       fail(`mevcut LearningStep çakışıyor: ${step.code}`);
-    return existing.id;
+    return id;
   }
   if (!apply) return `dry-run:step:${unitId}:${step.code}`;
   const created = await tx.learningStep.create({
