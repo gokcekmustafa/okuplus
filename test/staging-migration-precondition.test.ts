@@ -5,6 +5,7 @@ const workflow = readFileSync(
   new URL("../.github/workflows/staging-migration.yml", import.meta.url),
   "utf8",
 );
+const p0Seed = readFileSync(new URL("../scripts/seed-education-v2-p0.ts", import.meta.url), "utf8");
 
 describe("staging migration precondition diagnostics", () => {
   it("reports named checks without weakening the fail-closed gate", () => {
@@ -103,5 +104,13 @@ describe("staging migration precondition diagnostics", () => {
     expect(workflow).toContain("EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}");
     expect(lessonSeed).toBeLessThan(discovery);
     expect(discovery).toBeLessThan(provisioning);
+  });
+
+  it("allows only complete additive graphs while preserving the conflict guard", () => {
+    expect(p0Seed).toContain('"CREATE" | "ADDITIVE" | "NOOP" | "CONFLICT"');
+    expect(p0Seed).toContain("planKeysToCreate");
+    expect(p0Seed).toContain("if (!planKeysToCreate.has(plan.content.key)) continue;");
+    expect(p0Seed).toContain('if (mode === "CONFLICT")');
+    expect(p0Seed).toContain("assessmentKeysToCreate");
   });
 });

@@ -77,6 +77,13 @@ type SkillPlan = {
   missing: (typeof EDUCATION_V2_P0_SKILL_MANIFEST)[number][];
 };
 
+type StableInspection = {
+  mode: "CREATE" | "ADDITIVE" | "NOOP" | "CONFLICT";
+  planKeysToCreate: string[];
+  assessmentKeysToCreate: string[];
+  createLearningPath: boolean;
+};
+
 function fail(message: string): never {
   throw new Error(`Education V2 P0 seed reddedildi: ${message}`);
 }
@@ -284,72 +291,110 @@ function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
   });
 }
 
-function allStableIds(plans: Plan[], includeLearningPath: boolean): string[] {
-  const ids = plans.flatMap((plan) => [
-    plan.contentId,
-    plan.contentVersionId,
-    ...(plan.exerciseTemplateId ? [plan.exerciseTemplateId] : []),
-    ...(plan.exerciseTemplateVersionId ? [plan.exerciseTemplateVersionId] : []),
-    ...plan.questions.flatMap((question) => [question.id, question.versionId]),
-  ]);
-  if (includeLearningPath) {
-    for (const path of EDUCATION_V2_P0_PROGRAM.paths) {
-      ids.push(getProgramIds("path", path.key), getProgramIds("unit", path.unitCode));
-      ids.push(...path.steps.map((step) => getProgramIds("step", `${path.key}-${step.key}`)));
-    }
-  }
-  ids.push(
-    ...EDUCATION_V2_P0_PROGRAM.assessments.map((assessment) =>
-      getProgramIds("assessment", assessment.key),
-    ),
-  );
-  return ids;
-}
-
 async function inspectStableRows(
   prisma: Prisma.TransactionClient,
   plans: Plan[],
   includeLearningPath: boolean,
-): Promise<"CREATE" | "NOOP" | "CONFLICT"> {
-  const ids = allStableIds(plans, includeLearningPath);
-  const [
-    contents,
-    contentVersions,
-    templates,
-    templateVersions,
-    questions,
-    questionVersions,
-    paths,
-    units,
-    steps,
-    assessments,
-  ] = await Promise.all([
-    prisma.content.count({ where: { id: { in: ids } } }),
-    prisma.contentVersion.count({ where: { id: { in: ids } } }),
-    prisma.exerciseTemplate.count({ where: { id: { in: ids } } }),
-    prisma.exerciseTemplateVersion.count({ where: { id: { in: ids } } }),
-    prisma.question.count({ where: { id: { in: ids } } }),
-    prisma.questionVersion.count({ where: { id: { in: ids } } }),
-    prisma.learningPath.count({ where: { id: { in: ids } } }),
-    prisma.learningUnit.count({ where: { id: { in: ids } } }),
-    prisma.learningStep.count({ where: { id: { in: ids } } }),
-    prisma.assessment.count({ where: { id: { in: ids } } }),
-  ]);
-  const counts = [
-    contents,
-    contentVersions,
-    templates,
-    templateVersions,
-    questions,
-    questionVersions,
-    paths,
-    units,
-    steps,
-    assessments,
-  ];
-  if (counts.every((count) => count === 0)) return "CREATE";
-  if (counts.every((count) => count > 0)) return "NOOP";
-  return "CONFLICT";
+): Promise<StableInspection> {
+  const planStates = await Promise.all(
+    plans.map(async (plan): Promise<"MISSING" | "EXISTING" | "CONFLICT"> => {
+      const [content, contentVersion, template, templateVersion, questions, questionVersions] =
+        await Promise.all([
+          prisma.content.count({ where: { id: plan.contentId } }),
+          prisma.contentVersion.count({ where: { id: plan.contentVersionId } }),
+          plan.exerciseTemplateId
+            ? prisma.exerciseTemplate.count({ where: { id: plan.exerciseTemplateId } })
+            : Promise.resolve(0),
+          plan.exerciseTemplateVersionId
+            ? prisma.exerciseTemplateVersion.count({
+                where: { id: plan.exerciseTemplateVersionId },
+              })
+            : Promise.resolve(0),
+          prisma.question.count({ where: { id: { in: plan.questions.map((q) => q.id) } } }),
+          prisma.questionVersion.count({
+            where: { id: { in: plan.questions.map((q) => q.versionId) } },
+          }),
+        ]);
+      const counts = [
+        content,
+        contentVersion,
+        template,
+        templateVersion,
+        questions,
+        questionVersions,
+      ];
+      const expected = [
+        1,
+        1,
+        plan.exerciseTemplateId ? 1 : 0,
+        plan.exerciseTemplateVersionId ? 1 : 0,
+        plan.questions.length,
+        plan.questions.length,
+      ];
+      if (counts.every((count) => count === 0)) return "MISSING";
+      if (counts.every((count, index) => count === expected[index])) return "EXISTING";
+      return "CONFLICT";
+    }),
+  );
+  if (planStates.some((state) => state === "CONFLICT")) {
+    return {
+      mode: "CONFLICT",
+      planKeysToCreate: [],
+      assessmentKeysToCreate: [],
+      createLearningPath: false,
+    };
+  }
+
+  const assessmentStates = await Promise.all(
+    EDUCATION_V2_P0_PROGRAM.assessments.map(async (assessment) => {
+      const id = getProgramIds("assessment", assessment.key);
+      return (await prisma.assessment.count({ where: { id } })) === 0 ? "MISSING" : "EXISTING";
+    }),
+  );
+  const assessmentKeysToCreate = EDUCATION_V2_P0_PROGRAM.assessments
+    .filter((_, index) => assessmentStates[index] === "MISSING")
+    .map((assessment) => assessment.key);
+
+  let createLearningPath = false;
+  if (includeLearningPath) {
+    const ids = EDUCATION_V2_P0_PROGRAM.paths.flatMap((path) => [
+      getProgramIds("path", path.key),
+      getProgramIds("unit", path.unitCode),
+      ...path.steps.map((step) => getProgramIds("step", `${path.key}-${step.key}`)),
+    ]);
+    const existingCount = await Promise.all([
+      prisma.learningPath.count({ where: { id: { in: ids } } }),
+      prisma.learningUnit.count({ where: { id: { in: ids } } }),
+      prisma.learningStep.count({ where: { id: { in: ids } } }),
+    ]);
+    const expectedCount = EDUCATION_V2_P0_PROGRAM.paths.reduce(
+      (total, path) => total + 2 + path.steps.length,
+      0,
+    );
+    const actualCount = existingCount.reduce((total, count) => total + count, 0);
+    if (actualCount === 0) createLearningPath = true;
+    else if (actualCount !== expectedCount) {
+      return {
+        mode: "CONFLICT",
+        planKeysToCreate: [],
+        assessmentKeysToCreate: [],
+        createLearningPath: false,
+      };
+    }
+  }
+
+  const planKeysToCreate = plans
+    .filter((_, index) => planStates[index] === "MISSING")
+    .map((plan) => plan.content.key);
+  const hasExisting = planStates.some((state) => state === "EXISTING");
+  const hasMissing =
+    planKeysToCreate.length > 0 || assessmentKeysToCreate.length > 0 || createLearningPath;
+  return {
+    mode: !hasMissing ? "NOOP" : hasExisting ? "ADDITIVE" : "CREATE",
+    planKeysToCreate,
+    assessmentKeysToCreate,
+    createLearningPath,
+  };
 }
 
 function answerFor(question: ProgramQuestion): Prisma.InputJsonValue {
@@ -390,6 +435,9 @@ async function createProgram(
   plans: Plan[],
   levelId: string,
   includeLearningPath: boolean,
+  planKeysToCreate: Set<string>,
+  assessmentKeysToCreate: Set<string>,
+  createLearningPath: boolean,
 ): Promise<void> {
   const contentVersionByKey = new Map<string, string>();
   const templateVersionByKey = new Map<string, string>();
@@ -397,6 +445,14 @@ async function createProgram(
   const publishedAt = new Date();
 
   for (const plan of plans) {
+    contentVersionByKey.set(plan.content.key, plan.contentVersionId);
+    if (plan.exerciseTemplateVersionId && plan.exercise) {
+      templateVersionByKey.set(plan.exercise.key, plan.exerciseTemplateVersionId);
+    }
+  }
+
+  for (const plan of plans) {
+    if (!planKeysToCreate.has(plan.content.key)) continue;
     const content = await tx.content.create({
       data: {
         id: plan.contentId,
@@ -508,6 +564,7 @@ async function createProgram(
   }
 
   for (const plan of plans) {
+    if (!planKeysToCreate.has(plan.content.key)) continue;
     await tx.contentVersion.update({
       where: { id: plan.contentVersionId },
       data: { status: "PUBLISHED", publishedAt },
@@ -539,6 +596,8 @@ async function createProgram(
   const assessmentIds = new Map<string, string>();
   for (const assessment of EDUCATION_V2_P0_PROGRAM.assessments) {
     const id = getProgramIds("assessment", assessment.key);
+    assessmentIds.set(assessment.key, id);
+    if (!assessmentKeysToCreate.has(assessment.key)) continue;
     await tx.assessment.create({
       data: {
         id,
@@ -549,10 +608,9 @@ async function createProgram(
         status: "PUBLISHED",
       },
     });
-    assessmentIds.set(assessment.key, id);
   }
 
-  if (!includeLearningPath) return;
+  if (!includeLearningPath || !createLearningPath) return;
 
   const stepIds = new Map<string, string>();
   for (const path of EDUCATION_V2_P0_PROGRAM.paths) {
@@ -730,10 +788,11 @@ async function main(): Promise<void> {
         return { id: `pending-${code}`, code };
       });
       const plans = planRecords(skillRowsForPlan);
-      const mode = await inspectStableRows(tx, plans, !contentOnly);
-      return { level, skillPlan, mode };
+      const stable = await inspectStableRows(tx, plans, !contentOnly);
+      return { level, skillPlan, stable };
     });
-    const { level, skillPlan, mode } = inspection;
+    const { level, skillPlan, stable } = inspection;
+    const { mode } = stable;
     if (mode === "CONFLICT")
       fail("program stable kayıtlarının bir kısmı mevcut; overwrite yapılmayacak");
     if (target.environment === "PRODUCTION") {
@@ -768,6 +827,9 @@ async function main(): Promise<void> {
               applyAction: skillPlan.missing.length > 0 ? "CREATE_MISSING_ONLY" : "NONE",
             },
             stableRecordState: mode,
+            planKeysToCreate: stable.planKeysToCreate,
+            assessmentKeysToCreate: stable.assessmentKeysToCreate,
+            createLearningPath: stable.createLearningPath,
             contentCount: EDUCATION_V2_P0_PROGRAM.content.length,
             exerciseCount: EDUCATION_V2_P0_PROGRAM.exercises.length,
             pathCount: contentOnly ? 0 : EDUCATION_V2_P0_PROGRAM.paths.length,
@@ -783,7 +845,15 @@ async function main(): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await applySeedPlatformContext(tx);
       const ensuredSkills = await ensureProgramSkills(tx, skillCodes);
-      await createProgram(tx, planRecords(ensuredSkills), level.id, !contentOnly);
+      await createProgram(
+        tx,
+        planRecords(ensuredSkills),
+        level.id,
+        !contentOnly,
+        new Set(stable.planKeysToCreate),
+        new Set(stable.assessmentKeysToCreate),
+        stable.createLearningPath,
+      );
     });
     console.log(
       JSON.stringify(
