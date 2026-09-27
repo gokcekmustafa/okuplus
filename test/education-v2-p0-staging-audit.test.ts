@@ -100,4 +100,14 @@ describe("education V2 staging read-only audit", () => {
     expect(source).toContain('resolved.config.rendererKey === "QUESTION_PHRASE_CHUNKING"');
     expect(source).not.toContain('AND et."skillId" IS NULL');
   });
+
+  it("selects the canonical academic lesson graph and validates assessment difficulty separately", async () => {
+    const source = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("../scripts/audit-education-v2-p0-staging.ts", import.meta.url), "utf8"),
+    );
+    expect(source).toContain("metadata?.contractVersion === 2");
+    expect(source).toContain("lesson.stages.every");
+    expect(source).toContain("expectedDifficulty");
+    expect(source).toContain('getProgramExercise("common-test").contract.difficulty');
+  });
 });

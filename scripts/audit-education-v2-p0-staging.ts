@@ -122,6 +122,7 @@ type GraphInput = {
   expectedSkillCode?: string;
   expectedFamily?: string;
   expectedRendererKey?: string;
+  expectedDifficulty?: string;
 };
 
 export type SkillAudit = {
@@ -316,8 +317,16 @@ function graphErrors(input: GraphInput): string[] {
       if (input.expectedRendererKey && runtime.config.rendererKey !== input.expectedRendererKey) {
         errors.push("runtime rendererKey beklenen renderer ile eşleşmiyor");
       }
-      if (!["FOUNDATION", "DEVELOPING"].includes(runtime.config.difficulty)) {
-        errors.push("runtime difficulty FOUNDATION veya DEVELOPING değil");
+      if (
+        input.expectedDifficulty
+          ? runtime.config.difficulty !== input.expectedDifficulty
+          : !["FOUNDATION", "DEVELOPING"].includes(runtime.config.difficulty)
+      ) {
+        errors.push(
+          input.expectedDifficulty
+            ? `runtime difficulty beklenen ${input.expectedDifficulty} değil`
+            : "runtime difficulty FOUNDATION veya DEVELOPING değil",
+        );
       }
       if (
         runtime.config.contentRequirement !== "REQUIRED" ||
@@ -334,9 +343,43 @@ function pathCode(area: "FAST_READING" | "READING_COMPREHENSION" | "COMMON"): st
   return `EDUCATION_V2_P0_${area === "FAST_READING" ? "FAST_READING" : area === "READING_COMPREHENSION" ? "READING_COMPREHENSION" : "COMMON"}_${EDUCATION_V2_LEVEL_CODE}`;
 }
 
-function skillTemplateCandidates(rows: TemplateRow[], lesson: AcademicLesson): TemplateRow[] {
+function templateContainsAcademicLesson(
+  templateVersionId: string,
+  contentRows: ContentRow[],
+  contentBindings: TemplateContentRow[],
+  lesson: AcademicLesson,
+): boolean {
+  const boundContentVersionIds = new Set(
+    contentBindings
+      .filter((binding) => binding.templateVersionId === templateVersionId)
+      .map((binding) => binding.contentVersionId),
+  );
+  const stages = new Set(
+    contentRows.flatMap((content) => {
+      if (!boundContentVersionIds.has(content.id)) return [];
+      const metadata = parseLessonMetadata(content.metadata);
+      return metadata?.contractVersion === 2 &&
+        metadata.skillCode === lesson.skillCode &&
+        metadata.area === lesson.area &&
+        typeof metadata.stage === "string"
+        ? [metadata.stage]
+        : [];
+    }),
+  );
+  return lesson.stages.every((stage) => stages.has(stage.stage));
+}
+
+function skillTemplateCandidates(
+  rows: TemplateRow[],
+  contentRows: ContentRow[],
+  contentBindings: TemplateContentRow[],
+  lesson: AcademicLesson,
+): TemplateRow[] {
   return rows.filter((row) => {
     if (row.skillCode !== lesson.skillCode) return false;
+    if (!templateContainsAcademicLesson(row.id, contentRows, contentBindings, lesson)) {
+      return false;
+    }
     const runtime = resolveTrainingRuntimeConfig("TRAINING", row.config);
     if (runtime.status !== "READY") return false;
     return (
@@ -515,6 +558,7 @@ function templateGraph(
   expectedSkillCode?: string,
   expectedFamily?: string,
   expectedRendererKey?: string,
+  expectedDifficulty?: string,
 ): { status: AuditStatus; reason?: string } {
   const errors = graphErrors({
     template,
@@ -527,6 +571,7 @@ function templateGraph(
     expectedSkillCode,
     expectedFamily,
     expectedRendererKey,
+    expectedDifficulty,
   });
   return errors.length === 0
     ? { status: "READY" }
@@ -766,7 +811,12 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
         contentRows.filter((candidate) => contentMatchesLesson(candidate, lesson, stage.stage)),
       );
       const stageCount = stageMatches.filter((matches) => matches.length === 1).length;
-      const candidates = skillTemplateCandidates(templateRows, lesson);
+      const candidates = skillTemplateCandidates(
+        templateRows,
+        contentRows,
+        contentBindings,
+        lesson,
+      );
       const template = candidates.length === 1 ? candidates[0]! : null;
       const contentTemplateLinksReady =
         template !== null &&
@@ -827,6 +877,7 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
           getProgramExercise("common-reinforcement").contract.competency,
           getProgramExercise("common-reinforcement").contract.family,
           getProgramExercise("common-reinforcement").contract.rendererKey,
+          getProgramExercise("common-reinforcement").contract.difficulty,
         )
       : { status: "BLOCKED" as const, reason: `${EDUCATION_V2_COMMON_REINFORCEMENT_ENV} eksik` };
     const assessmentRows = commonAssessmentId
@@ -849,6 +900,7 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
           getProgramExercise("common-test").contract.competency,
           getProgramExercise("common-test").contract.family,
           getProgramExercise("common-test").contract.rendererKey,
+          getProgramExercise("common-test").contract.difficulty,
         )
       : {
           status: "BLOCKED" as const,
