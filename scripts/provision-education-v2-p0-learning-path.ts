@@ -6,8 +6,12 @@ import {
   ACADEMIC_P0_LESSONS,
   type AcademicLesson,
 } from "../src/curriculum/academic-reading-p0.js";
+import { getProgramExercise } from "../src/curriculum/education-v2-p0-program.js";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
-import { resolveTrainingRuntimeConfig } from "../src/modules/training/exercise-contract.js";
+import {
+  resolveTrainingRuntimeConfig,
+  type TrainingExerciseVersionConfig,
+} from "../src/modules/training/exercise-contract.js";
 import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
@@ -229,7 +233,7 @@ async function findPublishedTemplate(
       config.family !== lesson.practiceBinding.family ||
       config.competency !== lesson.skillCode ||
       config.interactionType !== "MULTIPLE_CHOICE" ||
-      config.versionConfig.rendererKey !== lesson.practiceBinding.rendererKey ||
+      config.rendererKey !== lesson.practiceBinding.rendererKey ||
       !["FOUNDATION", "DEVELOPING"].includes(config.difficulty) ||
       config.contentRequirement !== "REQUIRED" ||
       config.questionRequirement !== "REQUIRED"
@@ -277,11 +281,13 @@ async function findPublishedTemplate(
 async function assertPublishedTemplateGraph(
   tx: Prisma.TransactionClient,
   id: string,
+  expectedConfig?: Pick<TrainingExerciseVersionConfig, "family" | "competency" | "difficulty">,
 ): Promise<void> {
   const version = await tx.exerciseTemplateVersion.findUnique({
     where: { id },
     select: {
       status: true,
+      config: true,
       template: { select: { status: true, deletedAt: true } },
       contents: {
         select: {
@@ -320,6 +326,17 @@ async function assertPublishedTemplateGraph(
     )
   ) {
     fail(`yayınlanmış exercise graph doğrulanamadı: ${id}`);
+  }
+  if (expectedConfig) {
+    const resolved = resolveTrainingRuntimeConfig("TRAINING", version.config);
+    if (
+      resolved.status !== "READY" ||
+      resolved.config.family !== expectedConfig.family ||
+      resolved.config.competency !== expectedConfig.competency ||
+      resolved.config.difficulty !== expectedConfig.difficulty
+    ) {
+      fail(`exercise graph beklenen Eğitim V2 sözleşmesiyle eşleşmiyor: ${id}`);
+    }
   }
 }
 
@@ -488,7 +505,11 @@ async function main(): Promise<void> {
         "EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID",
       );
       const assessmentId = requiredEnv("EDUCATION_V2_COMMON_ASSESSMENT_ID");
-      await assertPublishedTemplateGraph(tx, reinforcementTemplateId);
+      await assertPublishedTemplateGraph(
+        tx,
+        reinforcementTemplateId,
+        getProgramExercise("common-reinforcement").contract,
+      );
       const assessment = await tx.assessment.findUnique({
         where: { id: assessmentId },
         select: { status: true, deletedAt: true, config: true },
@@ -501,7 +522,11 @@ async function main(): Promise<void> {
           ? assessmentConfig.templateVersionId
           : null;
       if (!assessmentTemplateId) fail("ortak değerlendirme templateVersionId içermiyor");
-      await assertPublishedTemplateGraph(tx, assessmentTemplateId);
+      await assertPublishedTemplateGraph(
+        tx,
+        assessmentTemplateId,
+        getProgramExercise("common-test").contract,
+      );
 
       const paths = [
         {

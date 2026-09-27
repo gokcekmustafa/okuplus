@@ -7,9 +7,13 @@ import {
   assertSameCatalogDatabaseTarget,
   parseCatalogTargetUrl,
 } from "../src/curriculum/catalog-target-verification.js";
+import { getProgramIds, templateVersionId } from "../src/curriculum/education-v2-p0-program.js";
+import { resolveTrainingRuntimeConfig } from "../src/modules/training/exercise-contract.js";
 
 const REQUIRED_ENVIRONMENT = "STAGING" as const;
 const REQUIRED_LEVEL_CODE = process.env.EDUCATION_V2_P0_LEVEL_CODE?.trim();
+const REQUIRED_REINFORCEMENT_TEMPLATE_VERSION_ID = templateVersionId("common-reinforcement");
+const REQUIRED_ASSESSMENT_ID = getProgramIds("assessment", "common-assessment");
 
 type JsonRecord = Record<string, unknown>;
 
@@ -26,6 +30,7 @@ type TemplateCandidate = {
   templateId: string;
   title: string;
   type: string;
+  config: Prisma.JsonValue | null;
   graph: GraphStatus;
 };
 
@@ -65,6 +70,20 @@ function chooseExactlyOne<T extends { id: string }>(kind: string, candidates: T[
   const candidateIds = candidates.map((candidate) => candidate.id).join(", ");
   fail(
     `${kind} için birden fazla published aday var; rastgele seçim yapılmayacak: ${candidateIds}`,
+  );
+}
+
+function matchesCommonReinforcementContract(config: Prisma.JsonValue | null): boolean {
+  const resolved = resolveTrainingRuntimeConfig("TRAINING", config);
+  return (
+    resolved.status === "READY" &&
+    resolved.config.family === "PHRASE_CHUNKING" &&
+    resolved.config.competency === "FAST_CHUNKING" &&
+    resolved.config.interactionType === "MULTIPLE_CHOICE" &&
+    resolved.config.rendererKey === "QUESTION_PHRASE_CHUNKING" &&
+    resolved.config.difficulty === "DEVELOPING" &&
+    resolved.config.contentRequirement === "REQUIRED" &&
+    resolved.config.questionRequirement === "REQUIRED"
   );
 }
 
@@ -173,26 +192,34 @@ async function main(): Promise<void> {
       if (!level) fail(`Level bulunamadı: ${REQUIRED_LEVEL_CODE}`);
 
       const templateRows = await tx.$queryRaw<
-        Array<{ id: string; templateId: string; title: string; type: string }>
+        Array<{
+          id: string;
+          templateId: string;
+          title: string;
+          type: string;
+          config: Prisma.JsonValue | null;
+        }>
       >(Prisma.sql`
         SELECT
           etv.id,
           etv."templateId",
           et.title,
-          et.type::text AS type
+          et.type::text AS type,
+          etv.config
         FROM "ExerciseTemplateVersion" etv
         JOIN "ExerciseTemplate" et ON et.id = etv."templateId"
-        WHERE etv.status::text = 'PUBLISHED'
+        WHERE etv.id = ${REQUIRED_REINFORCEMENT_TEMPLATE_VERSION_ID}
+          AND etv.status::text = 'PUBLISHED'
           AND et.status::text = 'PUBLISHED'
           AND et."deletedAt" IS NULL
           AND et."tenantId" IS NULL
-          AND et."skillId" IS NULL
-        ORDER BY etv."publishedAt" ASC NULLS LAST, etv.id ASC
       `);
       const templateCandidates: TemplateCandidate[] = [];
       for (const row of templateRows) {
         const graph = await readGraph(tx, row.id);
-        if (graph.ready) templateCandidates.push({ ...row, graph });
+        if (graph.ready && matchesCommonReinforcementContract(row.config)) {
+          templateCandidates.push({ ...row, graph });
+        }
       }
       const reinforcement = chooseExactlyOne(
         "ortak reinforcement template version",
@@ -210,7 +237,8 @@ async function main(): Promise<void> {
       >(Prisma.sql`
         SELECT id, title, type::text AS type, "levelId", config
         FROM "Assessment"
-        WHERE status::text = 'PUBLISHED'
+        WHERE id = ${REQUIRED_ASSESSMENT_ID}
+          AND status::text = 'PUBLISHED'
           AND "deletedAt" IS NULL
           AND "tenantId" IS NULL
       `);

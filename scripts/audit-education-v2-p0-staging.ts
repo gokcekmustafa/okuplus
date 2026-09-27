@@ -15,6 +15,7 @@ import {
   ACADEMIC_P0_LESSONS,
   type AcademicLesson,
 } from "../src/curriculum/academic-reading-p0.js";
+import { getProgramExercise } from "../src/curriculum/education-v2-p0-program.js";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
 import { resolveTrainingRuntimeConfig } from "../src/modules/training/exercise-contract.js";
 
@@ -312,10 +313,7 @@ function graphErrors(input: GraphInput): string[] {
       if (input.expectedFamily && runtime.config.family !== input.expectedFamily) {
         errors.push("runtime family beklenen exercise ailesiyle eşleşmiyor");
       }
-      if (
-        input.expectedRendererKey &&
-        runtime.config.versionConfig.rendererKey !== input.expectedRendererKey
-      ) {
+      if (input.expectedRendererKey && runtime.config.rendererKey !== input.expectedRendererKey) {
         errors.push("runtime rendererKey beklenen renderer ile eşleşmiyor");
       }
       if (!["FOUNDATION", "DEVELOPING"].includes(runtime.config.difficulty)) {
@@ -822,7 +820,14 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
       ? (templateRows.find((row) => row.id === commonTemplateId) ?? null)
       : null;
     const commonGraph = commonTemplateId
-      ? templateGraph(commonTemplate, contentBindings, questionBindings)
+      ? templateGraph(
+          commonTemplate,
+          contentBindings,
+          questionBindings,
+          getProgramExercise("common-reinforcement").contract.competency,
+          getProgramExercise("common-reinforcement").contract.family,
+          getProgramExercise("common-reinforcement").contract.rendererKey,
+        )
       : { status: "BLOCKED" as const, reason: `${EDUCATION_V2_COMMON_REINFORCEMENT_ENV} eksik` };
     const assessmentRows = commonAssessmentId
       ? await readAssessments(prisma, commonAssessmentId)
@@ -837,7 +842,14 @@ export async function runAudit(config: AuditConfig): Promise<Record<string, unkn
       ? (templateRows.find((row) => row.id === assessmentTemplateId) ?? null)
       : null;
     const assessmentGraph = assessmentTemplateId
-      ? templateGraph(assessmentTemplate, contentBindings, questionBindings)
+      ? templateGraph(
+          assessmentTemplate,
+          contentBindings,
+          questionBindings,
+          getProgramExercise("common-test").contract.competency,
+          getProgramExercise("common-test").contract.family,
+          getProgramExercise("common-test").contract.rendererKey,
+        )
       : {
           status: "BLOCKED" as const,
           reason: "assessment templateVersionId eksik veya bulunamadı",
