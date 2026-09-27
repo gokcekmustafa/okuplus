@@ -472,7 +472,10 @@ async function ensureStep(
 
 async function main(): Promise<void> {
   const target = assertTarget();
-  const prisma = new PrismaClient({ datasources: { db: { url: target.url } } });
+  const prisma = new PrismaClient({
+    datasources: { db: { url: target.url } },
+    transactionOptions: { maxWait: 20_000, timeout: 120_000 },
+  });
   try {
     await assertProvisioningTarget(prisma, target.url, target.approvedFingerprint);
     const result = await withPlatformContext(prisma, async (tx) => {

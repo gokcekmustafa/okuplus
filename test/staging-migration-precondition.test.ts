@@ -131,4 +131,8 @@ describe("staging migration precondition diagnostics", () => {
     expect(provisioner).toContain("hasCompleteAcademicLessonContent");
     expect(provisioner).toContain("lesson.stages.every");
   });
+
+  it("keeps the persistent path provisioning transaction open for graph discovery", () => {
+    expect(provisioner).toContain("transactionOptions: { maxWait: 20_000, timeout: 120_000 }");
+  });
 });
