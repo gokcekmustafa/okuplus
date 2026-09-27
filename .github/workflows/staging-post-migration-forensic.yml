@@ -211,6 +211,20 @@ jobs:
             exit "$comparison_exit"
           fi
 
+      - name: Inspect Education V2 P0 provisioning permissions (read-only)
+        if: ${{ inputs.ref == 'codex/education-v2-p0-release-candidate' }}
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT: ${{ vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          permissions_output="$RUNNER_TEMP/education-v2-p0-permissions.json"
+          npx tsx scripts/inspect-education-v2-p0-provisioning-permissions.ts >"$permissions_output"
+          cat "$permissions_output"
+          cat "$permissions_output" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Collect read-only staging status, history, and schema diff
         id: collect
         shell: bash

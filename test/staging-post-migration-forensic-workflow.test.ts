@@ -79,4 +79,13 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).not.toContain("console.log(statusText)");
     expect(workflow).not.toContain("console.log(diffText)");
   });
+
+  it("checks Education V2 provisioning permissions through a read-only step", () => {
+    expect(workflow).toContain("Inspect Education V2 P0 provisioning permissions (read-only)");
+    expect(workflow).toContain(
+      "npx tsx scripts/inspect-education-v2-p0-provisioning-permissions.ts",
+    );
+    expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
+    expect(workflow).not.toMatch(/prisma migrate deploy|prisma migrate resolve|db push/iu);
+  });
 });
