@@ -101,6 +101,7 @@ describe("education V2 P0 forward migration contract", () => {
       ),
       "utf8",
     );
+    const schema = await readFile(new URL("../prisma/schema.prisma", import.meta.url), "utf8");
 
     expect(migration).not.toMatch(/\bDROP\s+(?:TABLE|TYPE|COLUMN|INDEX)\b/iu);
     expect(migration).not.toContain('CREATE TABLE "LearningPath"');
@@ -108,6 +109,7 @@ describe("education V2 P0 forward migration contract", () => {
     expect(migration).toContain("ADD VALUE IF NOT EXISTS 'NEXT_LEARNING'");
     expect(migration).toContain('ADD COLUMN IF NOT EXISTS "levelId"');
     expect(migration).toContain('ADD COLUMN IF NOT EXISTS "skillId"');
+    expect(schema).toContain("@@index([skillId])");
     expect(migration).toContain('ADD COLUMN IF NOT EXISTS "attemptCount"');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS "StudentLearningPath"');
     expect(migration).toContain('"prerequisiteStepId" IS NOT NULL');

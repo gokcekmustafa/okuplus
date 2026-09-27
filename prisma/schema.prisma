@@ -1646,6 +1646,7 @@ model LearningStep {
   @@index([contentVersionId])
   @@index([assessmentId])
   @@index([prerequisiteStepId])
+  @@index([skillId])
 }
 
 /// Öğrenci ilerlemesi curriculum'dan bağımsızdır ve tenant scope'unda tutulur.
