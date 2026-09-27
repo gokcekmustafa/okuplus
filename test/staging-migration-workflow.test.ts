@@ -23,6 +23,13 @@ describe("staging migration workflow environment contract", () => {
     expect(workflow).toContain(
       "EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}",
     );
+    expect(
+      (workflow.match(/EDUCATION_V2_P0_DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}/gu) ?? [])
+        .length,
+    ).toBe(3);
+    expect(workflow).not.toContain(
+      "EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.EDUCATION_V2_P0_DATABASE_URL }}",
+    );
     expect(workflow).toContain("codex/education-v2-p0-release-candidate");
     expect(workflow).toContain("20260927100000_add_persistent_learning_path");
   });
