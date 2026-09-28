@@ -24,10 +24,15 @@ const p0Provisioner = readFileSync(
 );
 
 describe("protected production migration forensics", () => {
-  it("is workflow_dispatch-only and master/protected-environment gated", () => {
+  it("is workflow_dispatch-only and approved-ref/protected-environment gated", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("name: production-migration");
-    expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/master"');
+    expect(workflow).toContain("source_ref:");
+    expect(workflow).toContain("master");
+    expect(workflow).toContain("codex/education-v2-p0-release-candidate");
+    expect(workflow).toContain('case "${SOURCE_REF}" in');
+    expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/${SOURCE_REF}"');
+    expect(workflow).toContain("ref: ${{ inputs.source_ref }}");
     expect(workflow).toContain('test "${CONFIRM_FORENSICS}" = "FORENSICS"');
     expect(workflow).not.toContain("push:");
     expect(workflow).not.toContain("pull_request:");
@@ -44,6 +49,17 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("PRODUCTION_CHECKSUM");
     expect(workflow).toContain("REPOSITORY_CHECKSUM");
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_PROVIDER");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_HOST");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_PORT");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_DATABASE");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_USER");
+    expect(workflow).toContain("targetIdentityDiagnostics");
+    expect(workflow).toContain("TARGET_IDENTITY_FIELDS");
+    expect(workflow).toContain(
+      "production target identity mismatch; see field-level diagnostic summary",
+    );
+    expect(workflow).toContain("if: always()");
     expect(workflow).toContain("HISTORICAL_CHECKSUM_ACKNOWLEDGEMENTS");
     expect(workflow).toContain("UNRESOLVED_CHECKSUM_MISMATCHES");
     expect(workflow).toContain("BACKFILL_TARGET_COUNT");
@@ -89,6 +105,14 @@ describe("protected production migration forensics", () => {
     expect(script).toContain('"I_HISTORICAL_CHECKSUM_ACKNOWLEDGED"');
     expect(script).toContain('"\\r\\n"');
     expect(script).toContain("current_database()");
+    expect(script).toContain("current_user");
+    expect(script).toContain("inet_server_addr()");
+    expect(script).toContain("inet_server_port()");
+    expect(script).toContain('"BLOCKED_TARGET_IDENTITY"');
+    expect(script).toContain('"UNVERIFIED"');
+    expect(script).toContain("maskIdentityValue");
+    expect(script).toContain("targetIdentityDiagnostics");
+    expect(script).not.toContain('throw new Error("production target identity mismatch")');
     expect(script).toContain("initSchemaCompatibility");
     expect(script).toContain('productionDbWrite: "NO"');
     expect(workflow).toContain('"migrationHistoryCount"');

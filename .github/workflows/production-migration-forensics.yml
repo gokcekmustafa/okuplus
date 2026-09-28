@@ -7,6 +7,14 @@ on:
         description: "Type FORENSICS to allow the protected read-only production history check"
         required: true
         type: string
+      source_ref:
+        description: "Approved source ref for the read-only forensics code"
+        required: true
+        default: master
+        type: choice
+        options:
+          - master
+          - codex/education-v2-p0-release-candidate
 
 permissions:
   contents: read
@@ -30,10 +38,10 @@ jobs:
       PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
 
     steps:
-      - name: Checkout selected master release
+      - name: Checkout selected approved release ref
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ inputs.source_ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -48,11 +56,19 @@ jobs:
         env:
           PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           CONFIRM_FORENSICS: ${{ inputs.confirm_forensics }}
+          SOURCE_REF: ${{ inputs.source_ref }}
         shell: bash
         run: |
           set -euo pipefail
           test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
-          test "${GITHUB_REF}" = "refs/heads/master"
+          case "${SOURCE_REF}" in
+            master|codex/education-v2-p0-release-candidate) ;;
+            *)
+              echo "FAIL: source ref is not approved for read-only forensics"
+              exit 1
+              ;;
+          esac
+          test "${GITHUB_REF}" = "refs/heads/${SOURCE_REF}"
           test "${APP_ENV}" = "production"
           test "${NODE_ENV}" = "production"
           test "${CONFIRM_FORENSICS}" = "FORENSICS"
@@ -101,6 +117,11 @@ jobs:
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
+          PRODUCTION_DB_APPROVED_PROVIDER: ${{ vars.PRODUCTION_DB_APPROVED_PROVIDER }}
+          PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+          PRODUCTION_DB_APPROVED_PORT: ${{ vars.PRODUCTION_DB_APPROVED_PORT }}
+          PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
+          PRODUCTION_DB_APPROVED_USER: ${{ vars.PRODUCTION_DB_APPROVED_USER }}
         shell: bash
         run: |
           set -euo pipefail
@@ -132,6 +153,8 @@ jobs:
             "schemaSummary",
             "migrationFileHistory",
             "initSchemaCompatibility",
+            "targetIdentityMatch",
+            "targetIdentityDiagnostics",
           ];
 
            for (const field of requiredFields) {
@@ -142,6 +165,23 @@ jobs:
            if (!report.releaseMigration1?.dataPreflight) {
              throw new Error("missing migration 1 data preflight output");
            }
+
+          const identityStatuses = ["MATCH", "MISMATCH", "UNVERIFIED"];
+          const identityDiagnostics = report.targetIdentityDiagnostics;
+          if (
+            typeof report.targetIdentityMatch !== "boolean" ||
+            !identityDiagnostics?.actual ||
+            !identityDiagnostics?.comparison ||
+            !identityDiagnostics?.neon ||
+            !["MATCH", "MISMATCH"].includes(identityDiagnostics.comparison.fingerprint)
+          ) {
+            throw new Error("invalid target identity diagnostics");
+          }
+          for (const field of ["provider", "host", "port", "database", "currentUser"]) {
+            if (!identityStatuses.includes(identityDiagnostics.comparison[field])) {
+              throw new Error(`invalid target identity status: ${field}`);
+            }
+          }
 
           const migrationSummary = (rows) => rows.map((row) => ({
             migrationName: row.migrationName,
@@ -223,6 +263,12 @@ jobs:
           };
 
           const safe = {
+            targetIdentityMatch: report.targetIdentityMatch ? "MATCH" : "MISMATCH",
+            targetIdentityDiagnostics: {
+              actual: identityDiagnostics.actual,
+              comparison: identityDiagnostics.comparison,
+              neon: identityDiagnostics.neon,
+            },
             migrationHistoryCount: report.migrationHistoryCount,
             initMigrationChecksumAudit,
             migrationFileHistory: {
@@ -269,6 +315,10 @@ jobs:
             "## Production migration forensics",
             "",
             "**PRODUCTION_DB:** CONNECTED_READ_ONLY = YES",
+            `**TARGET_IDENTITY:** ${safe.targetIdentityMatch}`,
+            `**TARGET_IDENTITY_FIELDS:** ${JSON.stringify(safe.targetIdentityDiagnostics.comparison)}`,
+            `**TARGET_IDENTITY_ACTUAL_MASKED:** ${JSON.stringify(safe.targetIdentityDiagnostics.actual)}`,
+            `**NEON_METADATA:** ${JSON.stringify(safe.targetIdentityDiagnostics.neon)}`,
             "",
             `**MIGRATION_HISTORY_COUNT:** ${safe.migrationHistoryCount}`,
             `**FAILED_MIGRATIONS:** ${JSON.stringify(safe.failedMigrations)}`,
@@ -324,6 +374,9 @@ jobs:
             "```",
           ];
           writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, "utf8");
+          if (safe.targetIdentityMatch !== "MATCH") {
+            throw new Error("production target identity mismatch; see field-level diagnostic summary");
+          }
           NODE
 
       - name: Upload sanitized forensic summary
@@ -332,3 +385,4 @@ jobs:
           name: production-migration-forensics-summary
           path: production-migration-forensics-summary.json
           if-no-files-found: error
+          if: always()
