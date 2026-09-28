@@ -41,6 +41,10 @@ describe("protected production migration forensics", () => {
   it("uses only the production secret through process environment", () => {
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
     expect(workflow).toContain("FORENSICS_OUTPUT_FILE");
+    expect(workflow).toContain("set +e");
+    expect(workflow).toContain("FORENSICS_EXIT_CODE=$?");
+    expect(workflow).toContain("SUMMARY_EXIT_CODE=$?");
+    expect(workflow).toContain("see the sanitized summary");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("production-migration-forensics-summary.json");
     expect(workflow).toContain('"migrationHistory"');

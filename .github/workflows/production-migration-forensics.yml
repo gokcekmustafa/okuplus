@@ -126,7 +126,9 @@ jobs:
         run: |
           set -euo pipefail
           FORENSICS_OUTPUT_FILE="${RUNNER_TEMP}/production-migration-forensics.json"
+          set +e
           npx tsx scripts/production-migration-forensics.ts > "${FORENSICS_OUTPUT_FILE}"
+          FORENSICS_EXIT_CODE=$?
 
           node --input-type=module - "${FORENSICS_OUTPUT_FILE}" <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
@@ -378,6 +380,12 @@ jobs:
             throw new Error("production target identity mismatch; see field-level diagnostic summary");
           }
           NODE
+          SUMMARY_EXIT_CODE=$?
+          set -e
+          if [ "${FORENSICS_EXIT_CODE}" -ne 0 ] || [ "${SUMMARY_EXIT_CODE}" -ne 0 ]; then
+            echo "Production forensics completed with a blocked or failed result; see the sanitized summary."
+            exit 1
+          fi
 
       - name: Upload sanitized forensic summary
         uses: actions/upload-artifact@v4
