@@ -47,6 +47,9 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("see the sanitized summary");
     expect(workflow).toContain("GITHUB_STEP_SUMMARY");
     expect(workflow).toContain("production-migration-forensics-summary.json");
+    expect(workflow).toMatch(
+      /- name: Upload sanitized forensic summary\s+if: always\(\)\s+uses: actions\/upload-artifact@v4/u,
+    );
     expect(workflow).toContain('"migrationHistory"');
     expect(workflow).toContain('"migrationFileHistory"');
     expect(workflow).toContain("initMigrationChecksumAudit");
