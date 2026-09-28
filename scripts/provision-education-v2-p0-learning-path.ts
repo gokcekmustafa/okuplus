@@ -20,8 +20,12 @@ import {
   parseCatalogTargetUrl,
 } from "../src/curriculum/catalog-target-verification.js";
 
-const REQUIRED_ENVIRONMENT = "STAGING";
-const REQUIRED_CONFIRMATION = "I_HAVE_REVIEWED_EDUCATION_V2_P0";
+const STAGING_CONFIRMATION = "I_HAVE_REVIEWED_EDUCATION_V2_P0";
+const PRODUCTION_CONFIRMATION = "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE";
+const PRODUCTION_DATABASE_NAME = "EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME";
+const PRODUCTION_DATABASE_HOST = "EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST";
+const PRODUCTION_RELEASE_ID = "EDUCATION_V2_P0_PRODUCTION_RELEASE_ID";
+const PRODUCTION_APPROVAL = "EDUCATION_V2_P0_PRODUCTION_APPROVAL";
 const PATH_VERSION = 1;
 const ASSESSMENT_MINIMUM_SCORE = 0.75;
 
@@ -46,6 +50,8 @@ type ProvisionStep = {
   metadata?: Prisma.InputJsonValue;
 };
 
+type TargetEnvironment = "STAGING" | "PRODUCTION";
+
 function fail(message: string): never {
   throw new Error(`Eğitim V2 P0 provisioning reddedildi: ${message}`);
 }
@@ -67,23 +73,48 @@ function assertTarget(): {
   levelCode: string;
   approvedFingerprint: string;
   apply: boolean;
+  environment: TargetEnvironment;
 } {
   const environment = requiredEnv("EDUCATION_V2_P0_ENVIRONMENT").toUpperCase();
-  if (environment !== REQUIRED_ENVIRONMENT) {
-    fail("bu provisioning komutu yalnızca STAGING ortamında çalıştırılabilir");
+  if (environment !== "STAGING" && environment !== "PRODUCTION") {
+    fail("provisioning yalnızca STAGING veya açıkça korunan PRODUCTION ortamında çalıştırılabilir");
   }
-  const url = requiredEnv("EDUCATION_V2_P0_DATABASE_URL");
+  const url = requiredEnv(
+    environment === "PRODUCTION"
+      ? "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL"
+      : "EDUCATION_V2_P0_DATABASE_URL",
+  );
   const levelCode = requiredEnv("EDUCATION_V2_P0_LEVEL_CODE");
   const approvedFingerprint = requiredEnv("EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT");
-  const confirmation = process.env.I_HAVE_REVIEWED_EDUCATION_V2_P0?.trim();
+  const confirmation =
+    process.env[
+      environment === "PRODUCTION" ? PRODUCTION_APPROVAL : "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+    ]?.trim();
   const apply = process.argv.includes("--apply");
-  if (apply && confirmation !== REQUIRED_CONFIRMATION) {
-    fail(`--apply için I_HAVE_REVIEWED_EDUCATION_V2_P0=${REQUIRED_CONFIRMATION} gerekli`);
+  const expectedConfirmation =
+    environment === "PRODUCTION" ? PRODUCTION_CONFIRMATION : STAGING_CONFIRMATION;
+  if (apply && confirmation !== expectedConfirmation) {
+    fail(`--apply için yayın onayı=${expectedConfirmation} gerekli`);
   }
   if (!apply && !process.argv.includes("--dry-run")) {
     fail("tam olarak --dry-run veya --apply seçilmeli");
   }
-  return { url, levelCode, approvedFingerprint, apply };
+  if (environment === "PRODUCTION") {
+    const target = parseCatalogTargetUrl(url, "PRODUCTION");
+    const expectedDatabase = requiredEnv(PRODUCTION_DATABASE_NAME);
+    const expectedHost = requiredEnv(PRODUCTION_DATABASE_HOST).toLowerCase().replace(/\.$/u, "");
+    requiredEnv(PRODUCTION_RELEASE_ID);
+    if (target.database !== expectedDatabase || target.host !== expectedHost) {
+      fail("production database kimliği beklenen hedefle eşleşmiyor");
+    }
+  }
+  return {
+    url,
+    levelCode,
+    approvedFingerprint,
+    apply,
+    environment: environment as TargetEnvironment,
+  };
 }
 
 async function assertProvisioningTarget(
@@ -91,13 +122,23 @@ async function assertProvisioningTarget(
   url: string,
   approvedFingerprint: string,
 ): Promise<void> {
-  const target = parseCatalogTargetUrl(url, REQUIRED_ENVIRONMENT);
+  const targetEnvironment = process.env.EDUCATION_V2_P0_ENVIRONMENT?.trim().toUpperCase();
+  if (targetEnvironment !== "STAGING" && targetEnvironment !== "PRODUCTION") {
+    fail("provisioning hedef ortamı geçersiz");
+  }
+  const target = parseCatalogTargetUrl(url, targetEnvironment);
   const approvedTargetUrl = requiredEnv("DB_FINGERPRINT_DATABASE_URL");
-  const approvedTarget = parseCatalogTargetUrl(approvedTargetUrl, REQUIRED_ENVIRONMENT);
+  const approvedTarget = parseCatalogTargetUrl(approvedTargetUrl, targetEnvironment);
   assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
   assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
-  if (target.provider !== "NEON" || approvedTarget.provider !== "NEON") {
+  if (
+    target.environment === "STAGING" &&
+    (target.provider !== "NEON" || approvedTarget.provider !== "NEON")
+  ) {
     fail("staging ve onaylı kontrol hedefleri Neon olmalı");
+  }
+  if (target.provider !== approvedTarget.provider) {
+    fail("hedef ve kontrol bağlantıları aynı sağlayıcıya ait olmalı");
   }
   const rows = await client.$queryRaw<Array<{ database: string; db_user: string }>>`
     SELECT current_database() AS database, current_user AS db_user

@@ -474,6 +474,8 @@ jobs:
         env:
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
           EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
         run: |

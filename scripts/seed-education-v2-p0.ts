@@ -19,7 +19,10 @@ import {
   type ProgramQuestion,
 } from "../src/curriculum/education-v2-p0-program.js";
 import {
+  assertApprovedTargetFingerprint,
+  assertCatalogEnvironmentSafety,
   assertLiveCatalogTargetIdentity,
+  assertSameCatalogDatabaseTarget,
   parseCatalogTargetUrl,
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
@@ -42,6 +45,10 @@ const PRODUCTION_WRITE_CONFIRMATION =
 
 type TargetEnvironment = "TEST" | "STAGING" | "PRODUCTION";
 type Target = CatalogTarget;
+type SeedTarget = Target & {
+  approvedTarget: Target;
+  approvedFingerprint: string;
+};
 
 type Plan = {
   content: ProgramContent;
@@ -96,7 +103,7 @@ function wordCount(body: string): number {
   return body.trim().split(/\s+/).filter(Boolean).length;
 }
 
-function readTarget(): Target | null {
+function readTarget(): SeedTarget | null {
   const environment = process.env[TARGET_ENV]?.trim().toUpperCase();
   const databaseEnv = environment === "PRODUCTION" ? PRODUCTION_DATABASE_ENV : DATABASE_ENV;
   const rawUrl = process.env[databaseEnv]?.trim();
@@ -107,6 +114,15 @@ function readTarget(): Target | null {
     fail(`${TARGET_ENV} yalnızca TEST, STAGING veya açıkça korunan PRODUCTION olabilir`);
   }
   const target = parseCatalogTargetUrl(rawUrl, environment as TargetEnvironment);
+  const approvedUrl = process.env.DB_FINGERPRINT_DATABASE_URL?.trim();
+  const approvedFingerprint = process.env.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT?.trim();
+  if (!approvedUrl || !approvedFingerprint) {
+    fail("DB_FINGERPRINT_DATABASE_URL ve EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT gerekli");
+  }
+  const approvedTarget = parseCatalogTargetUrl(approvedUrl, environment as TargetEnvironment);
+  assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
+  assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
+  assertSameCatalogDatabaseTarget(approvedTarget, target);
   if (environment === "TEST" && target.database !== "oku_plus_test") {
     fail(`TEST yalnızca oku_plus_test hedefleyebilir (${target.database})`);
   }
@@ -138,7 +154,12 @@ function readTarget(): Target | null {
   } else if (!dryRun && process.env.EDUCATION_V2_P0_ALLOW_WRITE !== WRITE_CONFIRMATION) {
     fail(`yazma onayı için EDUCATION_V2_P0_ALLOW_WRITE=${WRITE_CONFIRMATION} gerekli`);
   }
-  return { ...target, environment: environment as TargetEnvironment };
+  return {
+    ...target,
+    environment: environment as TargetEnvironment,
+    approvedTarget,
+    approvedFingerprint,
+  };
 }
 
 function readRequiredCodes(): { levelCode: string; skillCodes: string[] } {
@@ -768,6 +789,21 @@ async function main(): Promise<void> {
     await prisma.$connect();
     const identity = await readIdentity(prisma);
     assertIdentity(target, identity);
+    const approvedPrisma = new PrismaClient({
+      datasources: { db: { url: target.approvedTarget.url } },
+    });
+    try {
+      await approvedPrisma.$connect();
+      const approvedIdentity = await readIdentity(approvedPrisma);
+      assertIdentity(target.approvedTarget, approvedIdentity);
+      assertApprovedTargetFingerprint(
+        target.approvedTarget,
+        approvedIdentity,
+        target.approvedFingerprint,
+      );
+    } finally {
+      await approvedPrisma.$disconnect();
+    }
     const inspection = await prisma.$transaction(async (tx) => {
       await applySeedPlatformContext(tx);
       const [level, skills] = await Promise.all([
@@ -801,9 +837,9 @@ async function main(): Promise<void> {
           `PRODUCTION mevcut skill kataloğunda eksik kayıt var; otomatik skill oluşturma kapalı: ${skillPlan.missing.map((skill) => skill.code).join(", ")}`,
         );
       }
-      if (mode !== "CREATE") {
+      if (mode !== "CREATE" && mode !== "NOOP") {
         fail(
-          "PRODUCTION yalnızca tamamen yeni Education V2 P0 stable graph'ını oluşturabilir; mevcut kayıtlar değiştirilmeyecek",
+          "PRODUCTION yalnızca tamamen yeni veya eksiksiz mevcut Education V2 P0 stable graph'ını kabul eder; kısmi kayıtlar değiştirilmeyecek",
         );
       }
     }

@@ -26,10 +26,19 @@ const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
 const ENVIRONMENT = "EDUCATION_V2_P0_ENVIRONMENT";
 const DATABASE_URL = "EDUCATION_V2_P0_DATABASE_URL";
+const PRODUCTION_DATABASE_URL = "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL";
+const PRODUCTION_DATABASE_NAME = "EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME";
+const PRODUCTION_DATABASE_HOST = "EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST";
+const PRODUCTION_RELEASE_ID = "EDUCATION_V2_P0_PRODUCTION_RELEASE_ID";
+const PRODUCTION_APPROVAL = "EDUCATION_V2_P0_PRODUCTION_APPROVAL";
 const LEVEL_CODE = "EDUCATION_V2_P0_LEVEL_CODE";
 const APPROVED_DATABASE_URL = "DB_FINGERPRINT_DATABASE_URL";
 const APPROVED_FINGERPRINT = "EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT";
 const WRITE_CONFIRMATION = "I_HAVE_REVIEWED_EDUCATION_V2_P0";
+const PRODUCTION_WRITE_CONFIRMATION =
+  "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE";
+
+type TargetEnvironment = "STAGING" | "PRODUCTION";
 
 type Target = CatalogTarget;
 
@@ -76,18 +85,44 @@ function wordCount(body: string): number {
 
 function readTarget(): { target: Target; approvedTarget: Target; fingerprint: string } | null {
   const environment = process.env[ENVIRONMENT]?.trim().toUpperCase();
-  if (dryRun && !process.env[DATABASE_URL]?.trim()) return null;
-  if (environment !== "STAGING") fail(`${ENVIRONMENT}=STAGING gerekli`);
+  if (dryRun && !process.env[DATABASE_URL]?.trim() && environment !== "PRODUCTION") return null;
+  if (environment !== "STAGING" && environment !== "PRODUCTION") {
+    fail(`${ENVIRONMENT}=STAGING veya PRODUCTION gerekli`);
+  }
   required(LEVEL_CODE);
 
-  const target = parseCatalogTargetUrl(required(DATABASE_URL), "STAGING");
-  const approvedTarget = parseCatalogTargetUrl(required(APPROVED_DATABASE_URL), "STAGING");
+  const target = parseCatalogTargetUrl(
+    required(environment === "PRODUCTION" ? PRODUCTION_DATABASE_URL : DATABASE_URL),
+    environment as TargetEnvironment,
+  );
+  const approvedTarget = parseCatalogTargetUrl(
+    required(APPROVED_DATABASE_URL),
+    environment as TargetEnvironment,
+  );
   const fingerprint = required(APPROVED_FINGERPRINT);
   assertCatalogEnvironmentSafety(target, { rejectTestDatabase: true });
   assertCatalogEnvironmentSafety(approvedTarget, { rejectTestDatabase: true });
-  if (target.provider !== "NEON" || approvedTarget.provider !== "NEON")
+  if (
+    environment === "STAGING" &&
+    (target.provider !== "NEON" || approvedTarget.provider !== "NEON")
+  )
     fail("staging hedefi Neon olmalı");
-  if (!dryRun && process.env.EDUCATION_V2_P0_ALLOW_WRITE !== WRITE_CONFIRMATION) {
+  if (target.provider !== approvedTarget.provider) {
+    fail("hedef ve kontrol bağlantıları aynı sağlayıcıya ait olmalı");
+  }
+  if (environment === "PRODUCTION") {
+    const expectedDatabase = required(PRODUCTION_DATABASE_NAME);
+    const expectedHost = required(PRODUCTION_DATABASE_HOST).toLowerCase().replace(/\.$/u, "");
+    required(PRODUCTION_RELEASE_ID);
+    if (target.database !== expectedDatabase)
+      fail("production database beklenen kimlikle eşleşmiyor");
+    if (target.host !== expectedHost) fail("production database host beklenen kimlikle eşleşmiyor");
+    if (!dryRun && process.env[PRODUCTION_APPROVAL] !== PRODUCTION_WRITE_CONFIRMATION) {
+      fail(
+        `production yayın onayı için ${PRODUCTION_APPROVAL}=${PRODUCTION_WRITE_CONFIRMATION} gerekli`,
+      );
+    }
+  } else if (!dryRun && process.env.EDUCATION_V2_P0_ALLOW_WRITE !== WRITE_CONFIRMATION) {
     fail(`yazma onayı için EDUCATION_V2_P0_ALLOW_WRITE=${WRITE_CONFIRMATION} gerekli`);
   }
   return { target, approvedTarget, fingerprint };
@@ -391,9 +426,12 @@ async function ensureAcademicTemplateVersion(
   return "CREATED";
 }
 
-function safeSummary(identity: DbIdentity | null): Record<string, string> {
+function safeSummary(
+  identity: DbIdentity | null,
+  environment: TargetEnvironment = "STAGING",
+): Record<string, string> {
   return identity
-    ? { environment: "STAGING", database: identity.database, user: identity.db_user }
+    ? { environment, database: identity.database, user: identity.db_user }
     : { environment: "MANIFEST_ONLY", database: "NOT_CONNECTED", user: "NOT_CONNECTED" };
 }
 
@@ -500,7 +538,7 @@ async function main(): Promise<void> {
           status: "PASS",
           ...result,
           lessonContentCount: plans.length,
-          target: safeSummary(identity),
+          target: safeSummary(identity, targetInfo.target.environment),
           dbChanged: !dryRun,
         },
         null,

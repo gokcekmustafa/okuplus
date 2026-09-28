@@ -7,6 +7,31 @@ on:
         description: "Type MIGRATE to allow the protected production migration step"
         required: true
         type: string
+      seed_p0:
+        description: "Explicitly select the Education V2 P0 production seed"
+        required: true
+        type: choice
+        options:
+          - none
+          - education-v2-p0
+        default: none
+      education_v2_level_code:
+        description: "Existing production Level.code required only for Education V2 P0"
+        required: false
+        type: string
+        default: G8_12
+      education_v2_production_release_id:
+        description: "Approved immutable Education V2 P0 production release identifier"
+        required: false
+        type: string
+      education_v2_production_approval:
+        description: "Type I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE only for the approved production seed"
+        required: false
+        type: string
+      production_backup_confirmation:
+        description: "Confirm the approved production backup and rollback plan before any write"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -49,6 +74,15 @@ jobs:
           PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
           CONFIRM_MIGRATE: ${{ inputs.confirm_migrate }}
+          SEED_P0: ${{ inputs.seed_p0 }}
+          EDUCATION_V2_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
+          EDUCATION_V2_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
+          PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
+          COMMON_ASSESSMENT_ID: ${{ vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
         shell: bash
         run: |
           set -euo pipefail
@@ -73,6 +107,10 @@ jobs:
             echo "FAIL: explicit MIGRATE confirmation is required"
             exit 1
           }
+          test "${PRODUCTION_BACKUP_CONFIRMATION}" = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK" || {
+            echo "FAIL: approved production backup and rollback confirmation is required"
+            exit 1
+          }
           test -n "${PRODUCTION_DATABASE_URL}" || {
             echo "FAIL: production database secret is missing"
             exit 1
@@ -81,12 +119,29 @@ jobs:
             echo "FAIL: approved production database fingerprint is missing or invalid"
             exit 1
           }
+          test "${SEED_P0}" = "none" || test "${SEED_P0}" = "education-v2-p0" || {
+            echo "FAIL: unsupported production seed selection"
+            exit 1
+          }
+          if [ "${SEED_P0}" = "education-v2-p0" ]; then
+            test -n "${EDUCATION_V2_LEVEL_CODE}" || { echo "FAIL: Education V2 Level.code is missing"; exit 1; }
+            test -n "${EDUCATION_V2_PRODUCTION_RELEASE_ID}" || { echo "FAIL: Education V2 production release identifier is missing"; exit 1; }
+            test -n "${PRODUCTION_DATABASE_NAME}" || { echo "FAIL: production database name variable is missing"; exit 1; }
+            test -n "${PRODUCTION_DATABASE_HOST}" || { echo "FAIL: production database host variable is missing"; exit 1; }
+            test -n "${COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID}" || { echo "FAIL: approved common reinforcement template variable is missing"; exit 1; }
+            test -n "${COMMON_ASSESSMENT_ID}" || { echo "FAIL: approved common assessment variable is missing"; exit 1; }
+            test "${EDUCATION_V2_PRODUCTION_APPROVAL}" = "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE" || {
+              echo "FAIL: explicit Education V2 production editorial approval is required"
+              exit 1
+            }
+          fi
 
           if git grep -n -i -E 'DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE([[:space:]]|;)|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP' -- \
             prisma/migrations/20260905090000_add_exercise_template_version_config/migration.sql \
             prisma/migrations/20260907150000_add_training_session_models/migration.sql \
             prisma/migrations/20260914100000_add_learning_experience_foundation/migration.sql \
-            prisma/migrations/20260917120000_reconcile_release_0_6_schema/migration.sql; then
+            prisma/migrations/20260917120000_reconcile_release_0_6_schema/migration.sql \
+            prisma/migrations/20260927100000_add_persistent_learning_path/migration.sql; then
             echo "FAIL: destructive SQL found in the production candidate migrations"
             exit 1
           fi
@@ -214,7 +269,99 @@ jobs:
           echo "PRODUCTION_MIGRATIONS=CURRENT"
           echo "PRODUCTION_DB_IDENTITY_AFTER=PASS"
 
+      - name: Seed Education V2 P0 production published content graph
+        id: education-v2-content-seed
+        if: ${{ inputs.seed_p0 == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P0_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
+          EDUCATION_V2_P0_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "PRODUCTION"
+          test -n "$EDUCATION_V2_P0_PRODUCTION_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$EDUCATION_V2_P0_PRODUCTION_APPROVAL" = "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE"
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run --content-only
+          npx tsx scripts/seed-education-v2-p0.ts --apply --content-only
+
+      - name: Seed Education V2 P0 production academic lesson content
+        id: education-v2-lesson-seed
+        if: ${{ inputs.seed_p0 == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P0_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
+          EDUCATION_V2_P0_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --dry-run
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --apply
+
+      - name: Provision Education V2 P0 production persistent learning path
+        id: education-v2-provision
+        if: ${{ inputs.seed_p0 == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P0_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
+          EDUCATION_V2_P0_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
+          EDUCATION_V2_COMMON_ASSESSMENT_ID: ${{ vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --dry-run
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --apply
+
+      - name: Verify Education V2 P0 production postconditions
+        id: education-v2-verify
+        if: ${{ inputs.seed_p0 == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P0_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
+          EDUCATION_V2_P0_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
+          EDUCATION_V2_COMMON_ASSESSMENT_ID: ${{ vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run --content-only
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --dry-run
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --dry-run
+          echo "EDUCATION_V2_P0_PRODUCTION_POSTCONDITIONS=PASS"
+
       - name: Migration summary
+        if: always()
+        env:
+          P0_CONTENT_OUTCOME: ${{ steps.education-v2-content-seed.outcome }}
+          P0_LESSON_OUTCOME: ${{ steps.education-v2-lesson-seed.outcome }}
+          P0_PROVISION_OUTCOME: ${{ steps.education-v2-provision.outcome }}
+          P0_VERIFY_OUTCOME: ${{ steps.education-v2-verify.outcome }}
         run: |
           echo "PRODUCTION_MIGRATION=PASS"
+          echo "EDUCATION_V2_P0_CONTENT_SEED=${P0_CONTENT_OUTCOME:-NOT_RUN}"
+          echo "EDUCATION_V2_P0_LESSON_SEED=${P0_LESSON_OUTCOME:-NOT_RUN}"
+          echo "EDUCATION_V2_P0_PROVISION=${P0_PROVISION_OUTCOME:-NOT_RUN}"
+          echo "EDUCATION_V2_P0_VERIFY=${P0_VERIFY_OUTCOME:-NOT_RUN}"
           echo "PRODUCTION_SMOKE=NOT_RUN"

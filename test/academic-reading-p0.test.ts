@@ -116,15 +116,17 @@ describe("education V2 P0 forward migration contract", () => {
     expect(migration).toContain("? 'prerequisiteStepIds'");
   });
 
-  it("keeps provisioning fail-closed, idempotent and staging-only", async () => {
+  it("keeps provisioning fail-closed, idempotent and environment-gated", async () => {
     const provisioning = await readFile(
       new URL("../scripts/provision-education-v2-p0-learning-path.ts", import.meta.url),
       "utf8",
     );
 
-    expect(provisioning).toContain("environment !== REQUIRED_ENVIRONMENT");
-    expect(provisioning).toContain('REQUIRED_ENVIRONMENT = "STAGING"');
+    expect(provisioning).toContain('environment !== "STAGING" && environment !== "PRODUCTION"');
     expect(provisioning).toContain("I_HAVE_REVIEWED_EDUCATION_V2_P0");
+    expect(provisioning).toContain("I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE");
+    expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_URL");
+    expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST");
     expect(provisioning).toContain("assertApprovedTargetFingerprint");
     expect(provisioning).toContain("where: { code_version:");
     expect(provisioning).toContain("where: { pathId_code:");
