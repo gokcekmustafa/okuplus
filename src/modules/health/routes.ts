@@ -1,7 +1,33 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../lib/prisma.js";
+import { providerForHost, targetIdentityFingerprint } from "../../lib/db-fingerprint-contract.js";
+import { requireAuth } from "../../middleware/authenticate.js";
+import { requirePlatformRole } from "../../middleware/require-platform.js";
+import type { AuthProvider } from "../auth/index.js";
 
 type HealthDatabase = Pick<typeof prisma, "$queryRaw">;
+
+type DatabaseIdentityRow = {
+  database: string;
+  current_user: string;
+  server_address: string | null;
+  server_port: number | null;
+};
+
+type HealthRouteOptions = {
+  db?: HealthDatabase;
+  authProvider?: AuthProvider;
+  databaseUrl?: string;
+  identityDiagnosticEnabled?: boolean;
+};
+
+function endpointIdFromHost(host: string): string | null {
+  const label = host
+    .split(".", 1)[0]
+    ?.toLowerCase()
+    .replace(/-pooler$/u, "");
+  return label && /^ep-[a-z0-9-]+$/u.test(label) ? label : null;
+}
 
 /**
  * GET /health — proses sağlığı
@@ -10,7 +36,7 @@ type HealthDatabase = Pick<typeof prisma, "$queryRaw">;
  */
 export async function healthRoutes(
   app: FastifyInstance,
-  opts: { db?: HealthDatabase } = {},
+  opts: HealthRouteOptions = {},
 ): Promise<void> {
   const db = opts.db ?? prisma;
 
@@ -27,6 +53,68 @@ export async function healthRoutes(
       return reply.status(503).send({ status: "error", database: "down" });
     }
   });
+
+  if (opts.identityDiagnosticEnabled && opts.authProvider) {
+    app.get(
+      "/admin/diagnostics/production-db-identity",
+      {
+        preHandler: [requireAuth(opts.authProvider), requirePlatformRole(["SUPER_ADMIN"])],
+      },
+      async (request, reply) => {
+        const databaseUrl = opts.databaseUrl ?? process.env.DATABASE_URL;
+        if (!databaseUrl) {
+          return reply.status(503).send({ status: "unavailable", reason: "configuration" });
+        }
+
+        try {
+          const parsedUrl = new URL(databaseUrl);
+          const provider = providerForHost(parsedUrl.hostname);
+          const endpointId = endpointIdFromHost(parsedUrl.hostname);
+          if (!endpointId) {
+            return reply.status(503).send({ status: "unavailable", reason: "endpoint" });
+          }
+
+          const rows = await db.$queryRaw<DatabaseIdentityRow[]>`
+            SELECT
+              current_database() AS database,
+              current_user AS current_user,
+              inet_server_addr()::text AS server_address,
+              inet_server_port() AS server_port
+          `;
+          const identity = rows[0];
+          if (!identity) {
+            return reply.status(503).send({ status: "unavailable", reason: "identity" });
+          }
+
+          const port = parsedUrl.port || String(identity.server_port ?? 5432);
+          const targetFingerprint = targetIdentityFingerprint({
+            environment: "PRODUCTION",
+            provider,
+            host: parsedUrl.hostname,
+            port,
+            database: identity.database,
+            dbUser: identity.current_user,
+          });
+
+          return {
+            status: "ok",
+            environment: "PRODUCTION",
+            provider,
+            endpointId,
+            endpointKind: parsedUrl.hostname.includes("-pooler.") ? "POOLER" : "DIRECT",
+            database: identity.database,
+            currentUser: identity.current_user,
+            serverPort: identity.server_port,
+            serverAddressPresent: identity.server_address !== null,
+            targetFingerprint,
+          };
+        } catch {
+          request.log.error("Üretim veritabanı kimlik tanısı başarısız");
+          return reply.status(503).send({ status: "unavailable", reason: "database" });
+        }
+      },
+    );
+  }
 
   app.get("/ready", async (request, reply) => {
     try {
