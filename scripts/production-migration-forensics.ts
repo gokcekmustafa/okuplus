@@ -15,6 +15,35 @@ type IdentityRow = {
   database: string;
   schema: string;
   current_user: string;
+  server_address: string | null;
+  server_port: number | null;
+};
+
+type IdentityMatch = "MATCH" | "MISMATCH" | "UNVERIFIED";
+
+type TargetIdentityDiagnostics = {
+  actual: {
+    provider: string;
+    host: string;
+    port: string;
+    serverAddress: string;
+    serverPort: string;
+    database: string;
+    currentUser: string;
+  };
+  comparison: {
+    provider: IdentityMatch;
+    host: IdentityMatch;
+    port: IdentityMatch;
+    database: IdentityMatch;
+    currentUser: IdentityMatch;
+    fingerprint: "MATCH" | "MISMATCH";
+  };
+  neon: {
+    project: "UNVERIFIED";
+    branch: "UNVERIFIED";
+    reason: string;
+  };
 };
 
 type MigrationRow = {
@@ -104,6 +133,99 @@ function safeThrownMessage(error: unknown): string {
   return (
     safeErrorSummary(error instanceof Error ? error.message : String(error)) ?? "unknown error"
   );
+}
+
+function maskIdentityValue(value: string): string {
+  if (value.length <= 4) return "[MASKED]";
+  return `${value.slice(0, 2)}…${value.slice(-2)}`;
+}
+
+function maskHost(value: string): string {
+  const neonSuffix = ".neon.tech";
+  if (value.toLowerCase().endsWith(neonSuffix)) {
+    return `${value.slice(0, 3)}…${neonSuffix}`;
+  }
+  return maskIdentityValue(value);
+}
+
+function expectedIdentityValue(...names: string[]): string | null {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function identityMatch(
+  actual: string,
+  expected: string | null,
+  normalize = (value: string) => value,
+): IdentityMatch {
+  return expected === null
+    ? "UNVERIFIED"
+    : normalize(actual) === normalize(expected)
+      ? "MATCH"
+      : "MISMATCH";
+}
+
+function targetIdentityDiagnostics(
+  parsedUrl: URL,
+  identity: IdentityRow,
+  actualTarget: string,
+  approvedTarget: string,
+): TargetIdentityDiagnostics {
+  const provider = providerForHost(parsedUrl.hostname);
+  const port = parsedUrl.port || "5432";
+  const expectedProvider = expectedIdentityValue(
+    "PRODUCTION_DB_APPROVED_PROVIDER",
+    "PRODUCTION_DATABASE_PROVIDER",
+  );
+  const expectedHost = expectedIdentityValue(
+    "PRODUCTION_DB_APPROVED_HOST",
+    "PRODUCTION_DATABASE_HOST",
+  );
+  const expectedPort = expectedIdentityValue(
+    "PRODUCTION_DB_APPROVED_PORT",
+    "PRODUCTION_DATABASE_PORT",
+  );
+  const expectedDatabase = expectedIdentityValue(
+    "PRODUCTION_DB_APPROVED_DATABASE",
+    "PRODUCTION_DATABASE_NAME",
+  );
+  const expectedUser = expectedIdentityValue(
+    "PRODUCTION_DB_APPROVED_USER",
+    "PRODUCTION_DATABASE_USER",
+  );
+
+  return {
+    actual: {
+      provider,
+      host: maskHost(parsedUrl.hostname),
+      port,
+      serverAddress: identity.server_address
+        ? maskIdentityValue(identity.server_address)
+        : "UNAVAILABLE",
+      serverPort: identity.server_port === null ? "UNAVAILABLE" : String(identity.server_port),
+      database: maskIdentityValue(identity.database),
+      currentUser: maskIdentityValue(identity.current_user),
+    },
+    comparison: {
+      provider: identityMatch(provider, expectedProvider, (value) => value.toUpperCase()),
+      host: identityMatch(parsedUrl.hostname, expectedHost, (value) =>
+        value.toLowerCase().replace(/\.$/u, ""),
+      ),
+      port: identityMatch(port, expectedPort),
+      database: identityMatch(identity.database, expectedDatabase),
+      currentUser: identityMatch(identity.current_user, expectedUser),
+      fingerprint: actualTarget === approvedTarget ? "MATCH" : "MISMATCH",
+    },
+    neon: {
+      project: "UNVERIFIED",
+      branch: "UNVERIFIED",
+      reason:
+        "Neon project/branch metadata is not available from the PostgreSQL read-only identity query",
+    },
+  };
 }
 
 function dateValue(value: Date | null): string | null {
@@ -231,7 +353,9 @@ async function main(): Promise<void> {
         prisma.$queryRaw<IdentityRow[]>`
           SELECT current_database() AS database,
                  current_schema() AS schema,
-                 current_user AS current_user
+                 current_user AS current_user,
+                 inet_server_addr()::text AS server_address,
+                 inet_server_port() AS server_port
         `,
         prisma.$queryRaw<Array<{ migration_table: string | null }>>`
           SELECT to_regclass('public._prisma_migrations')::text AS migration_table
@@ -296,7 +420,8 @@ async function main(): Promise<void> {
       database: identity.database,
       dbUser: identity.current_user,
     });
-    if (actualTarget !== approved) throw new Error("production target identity mismatch");
+    const targetIdentityMatch = actualTarget === approved;
+    const targetIdentity = targetIdentityDiagnostics(parsedUrl, identity, actualTarget, approved);
 
     const migrationTableExists = Boolean(tableRows[0]?.migration_table);
     const migrations = migrationTableExists
@@ -624,9 +749,10 @@ async function main(): Promise<void> {
     console.log(
       JSON.stringify(
         {
-          forensics: "PASS",
+          forensics: targetIdentityMatch ? "PASS" : "BLOCKED_TARGET_IDENTITY",
           connectedReadOnly: true,
-          targetIdentityMatch: true,
+          targetIdentityMatch,
+          targetIdentityDiagnostics: targetIdentity,
           migrationTableExists,
           migrationHistoryCount: migrations.length,
           migrationHistory: migrations.map((row) => ({
