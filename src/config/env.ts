@@ -91,6 +91,9 @@ const envSchema = z.object({
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().min(300).default(604800),
   AUTH_COOKIE_TRANSPORT: z.enum(["off", "on"]).default("off"),
   AUTH_ORIGIN_ENFORCEMENT: z.enum(["off", "on"]).default("off"),
+  // Temporary, authenticated production target diagnostic. Keep disabled by
+  // default and remove after the Vercel/GitHub target comparison is complete.
+  PRODUCTION_IDENTITY_DIAGNOSTIC_ENABLED: z.enum(["off", "on"]).default("off"),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),

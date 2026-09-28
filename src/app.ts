@@ -88,7 +88,12 @@ export async function buildApp(
     }),
   );
   await app.register(tenantContextMiddleware);
-  await app.register(healthRoutes);
+  await app.register(healthRoutes, {
+    authProvider,
+    databaseUrl: env.DATABASE_URL,
+    identityDiagnosticEnabled:
+      env.APP_ENV === "production" && env.PRODUCTION_IDENTITY_DIAGNOSTIC_ENABLED === "on",
+  });
   await app.register(authRoutes, {
     authProvider,
     socialAuthService,
