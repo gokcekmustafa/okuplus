@@ -2191,6 +2191,7 @@ async function loadLearningPath() {
     if (scope !== insightScope()) return;
     container.setAttribute("aria-busy", "false");
     renderHomeInsights(data);
+    renderAcademicLearningModel(data.academicProgram);
     var pathGroups =
       Array.isArray(data.paths) && data.paths.length
         ? data.paths
@@ -2362,6 +2363,83 @@ async function loadLearningPath() {
       '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
     retryEl?.classList.remove("hidden");
   }
+}
+
+function academicStatusLabel(status) {
+  const labels = {
+    COMPLETED: "Tamamlandı",
+    ACTIVE: "Sıradaki adım",
+    LOCKED: "Ön koşul bekleniyor",
+    UNAVAILABLE: "İçerik henüz yayınlanmadı",
+  };
+  return labels[status] || "Hazırlanıyor";
+}
+
+function renderAcademicLearningModel(program) {
+  const target = $("learning-path-model");
+  if (!target) return;
+  if (!program?.areas?.length) {
+    target.innerHTML = "";
+    return;
+  }
+  const statusClass = (status) => `academic-step-${String(status || "").toLowerCase()}`;
+  const areaMarkup = program.areas
+    .map(
+      (area) => `
+        <section class="academic-area" aria-labelledby="academic-area-${escapeHtml(area.code)}">
+          <div class="academic-area-heading">
+            <div>
+              <p class="academic-area-kicker">EĞİTİM ALANI</p>
+              <h4 id="academic-area-${escapeHtml(area.code)}">${escapeHtml(area.title)}</h4>
+            </div>
+            <span class="academic-area-count">${area.skills.length} beceri</span>
+          </div>
+          <div class="academic-skill-list">
+            ${area.skills
+              .map(
+                (skill) => `
+                  <article class="academic-skill-card">
+                    <div class="academic-skill-heading">
+                      <div><strong>${escapeHtml(skill.title)}</strong><small>${escapeHtml(skill.skillCode)}</small></div>
+                      ${typeof skill.accuracy === "number" ? `<span class="academic-accuracy">${Math.round(skill.accuracy * 100)}% doğruluk</span>` : ""}
+                    </div>
+                    <p>${escapeHtml(skill.objective)}</p>
+                    <ol class="academic-stage-list" aria-label="${escapeHtml(skill.title)} aşamaları">
+                      ${skill.stages
+                        .map(
+                          (stage) =>
+                            `<li class="${statusClass(stage.status)}"><span aria-hidden="true"></span><span>${escapeHtml(stage.title)}</span><small>${escapeHtml(academicStatusLabel(stage.status))}</small></li>`,
+                        )
+                        .join("")}
+                    </ol>
+                  </article>`,
+              )
+              .join("")}
+          </div>
+        </section>`,
+    )
+    .join("");
+  const commonMarkup = (program.common?.stages || [])
+    .map(
+      (stage) =>
+        `<li class="${statusClass(stage.status)}"><span aria-hidden="true"></span><span>${escapeHtml(stage.title)}</span><small>${escapeHtml(academicStatusLabel(stage.status))}</small></li>`,
+    )
+    .join("");
+  const next = program.nextStep?.title
+    ? `<p class="academic-next-step"><strong>Sıradaki öğrenme adımı:</strong> ${escapeHtml(program.nextStep.title)}</p>`
+    : `<p class="academic-next-step">Yeni adım, mevcut ders ve alıştırma kanıtlarınla açılacak.</p>`;
+  target.innerHTML = `
+    <div class="academic-model-heading">
+      <div><p class="academic-area-kicker">ÖĞRENME MODELİ P0</p><h4>Önce öğret, sonra uygula</h4></div>
+      <span class="academic-model-status">${program.publicationStatus === "AUTHORING_ONLY" ? "İçerik yayına hazırlanıyor" : "İlerleme ile eşleşiyor"}</span>
+    </div>
+    <p class="academic-model-intro">İki alanda da Öğretim → Küçük çalışma → Uygulama adımlarıyla ilerle. Ortak pekiştirme, iki alanın uygulama kanıtından sonra açılır.</p>
+    <div class="academic-area-grid">${areaMarkup}</div>
+    <section class="academic-common" aria-labelledby="academic-common-title">
+      <div class="academic-area-heading"><div><p class="academic-area-kicker">ORTAK AKIŞ</p><h4 id="academic-common-title">Pekiştirme → Değerlendirme → Başarı ölçümü</h4></div></div>
+      <ol class="academic-stage-list academic-common-stage-list">${commonMarkup}</ol>
+    </section>
+    ${next}`;
 }
 
 window.resumeTodaySession = async function (id) {

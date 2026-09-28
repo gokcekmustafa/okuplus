@@ -16,6 +16,9 @@ import {
   toTrainingRuntimeConfig,
 } from "../training/runtime.js";
 import { assertStudentActor, STUDENT_LEARNING_SESSION_FILTER } from "./policy.js";
+import { parseLessonMetadata } from "../lessons/contract.js";
+import { buildAcademicProgram, type AcademicRuntimeSkill } from "./academic-program.js";
+import { getPersistentAcademicProgram, resolveLearningStepForTemplate } from "./persistent-path.js";
 import {
   assertLearningTemplateAccessible,
   getStudentLearningPath,
@@ -397,8 +400,11 @@ export async function getLearningPath(actor: {
   assertStudentActor(actor);
   const persistedPath = await getStudentLearningPath(actor);
   if (persistedPath) {
+    const academicProgram =
+      (await getPersistentAcademicProgram(actor).catch(() => null)) ?? buildAcademicProgram([]);
     return {
       ...persistedPath,
+      academicProgram,
       today: await getToday(actor).catch(() => null),
     };
   }
@@ -474,6 +480,44 @@ export async function getLearningPath(actor: {
       templatesBySkill.set(template.skillId, items);
     }
   }
+  const publishedLessonRows = await prisma.content.findMany({
+    where: {
+      deletedAt: null,
+      status: "PUBLISHED",
+      OR: [{ tenantId: null }, { tenantId: tenantId ?? undefined }],
+      currentVersion: { status: "PUBLISHED" },
+    },
+    select: { currentVersion: { select: { metadata: true } } },
+    take: 200,
+  });
+  const publishedLessonSkillCodes = new Set<string>();
+  for (const row of publishedLessonRows) {
+    const metadata = parseLessonMetadata(row.currentVersion?.metadata);
+    if (metadata) publishedLessonSkillCodes.add(metadata.skillCode);
+  }
+  const academicSkills: AcademicRuntimeSkill[] = [
+    "FAST_ATTENTION",
+    "FAST_RECOGNITION",
+    "FAST_CHUNKING",
+    "RC_MAIN_IDEA",
+    "RC_DETAIL",
+    "RC_INFERENCE",
+  ].map((code) => {
+    const skill = allSkills.find((candidate) => candidate.code === code);
+    const progress = skill ? progressMap.get(skill.id) : undefined;
+    return {
+      code,
+      name: skill?.name ?? code,
+      hasPublishedPractice: skill ? (templatesBySkill.get(skill.id)?.length ?? 0) > 0 : false,
+      practiceCompleted: Boolean(progress && progress.sessionCount > 0),
+      accuracy: progress?.accuracy ?? null,
+      lessonPublished: publishedLessonSkillCodes.has(code),
+      lessonCompleted: false,
+    };
+  });
+  const academicProgram =
+    (await getPersistentAcademicProgram(actor).catch(() => null)) ??
+    buildAcademicProgram(academicSkills);
   const nodes: Array<{
     id: string;
     type: string;
@@ -628,6 +672,7 @@ export async function getLearningPath(actor: {
       percent: total ? Math.round((completed / total) * 100) : 0,
     },
     nodes,
+    academicProgram,
     today,
   };
 }
@@ -765,6 +810,10 @@ export async function startPersonalExercise(
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
     await loadTrainingRuntimeGraph(templateVersionId!, actor);
   }
+  const learningStep = await resolveLearningStepForTemplate(templateVersionId!, actor);
+  if (learningStep.matched && !learningStep.unlocked) {
+    throw validationError("Bu uygulama için önceki öğrenme adımları tamamlanmalı");
+  }
   const result = await prisma.$transaction(async (tx) => {
     const requestLockKey = `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
     await tx.$queryRaw`
@@ -819,6 +868,7 @@ export async function startPersonalExercise(
         tenantId,
         studentId: actor.userId,
         templateVersionId: templateVersionId!,
+        learningStepId: learningStep.stepId,
         context: "INDIVIDUAL",
         sessionType: "PRACTICE",
         status: "IN_PROGRESS",

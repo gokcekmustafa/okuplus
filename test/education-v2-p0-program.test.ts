@@ -4,7 +4,9 @@ import {
   EDUCATION_V2_P0_PROGRAM,
   EDUCATION_V2_P0_PROGRAM_ID,
   EDUCATION_V2_P0_SKILL_MANIFEST,
+  getProgramIds,
   lessonMetadataFor,
+  templateVersionId,
 } from "../src/curriculum/education-v2-p0-program.js";
 
 describe("Education V2 P0 first program manifest", () => {
@@ -27,14 +29,14 @@ describe("Education V2 P0 first program manifest", () => {
   });
 
   it("gerçek yayın öncesi içerik sözleşmesini ve Türkçe ders metadata'sını doğrular", () => {
-    expect(EDUCATION_V2_P0_PROGRAM.content).toHaveLength(8);
-    expect(EDUCATION_V2_P0_PROGRAM.exercises).toHaveLength(6);
+    expect(EDUCATION_V2_P0_PROGRAM.content).toHaveLength(10);
+    expect(EDUCATION_V2_P0_PROGRAM.exercises).toHaveLength(8);
     expect(
       EDUCATION_V2_P0_PROGRAM.exercises.reduce(
         (total, exercise) => total + exercise.questions.length,
         0,
       ),
-    ).toBe(14);
+    ).toBe(18);
 
     const lessonContents = EDUCATION_V2_P0_PROGRAM.content.filter((content) => content.lesson);
     expect(lessonContents).toHaveLength(2);
@@ -79,6 +81,18 @@ describe("Education V2 P0 first program manifest", () => {
         expect(question.prompt).not.toMatch(/TODO|lorem ipsum/i);
       }
     }
+    expect(
+      EDUCATION_V2_P0_PROGRAM.exercises
+        .filter((exercise) => !exercise.key.startsWith("common-"))
+        .map((exercise) => exercise.skillCode),
+    ).toEqual([
+      "FAST_ATTENTION",
+      "FAST_RECOGNITION",
+      "FAST_CHUNKING",
+      "RC_DETAIL",
+      "RC_MAIN_IDEA",
+      "RC_INFERENCE",
+    ]);
   });
 
   it("ortak pekiştirmeyi iki bağımsız uygulamaya, testi de pekiştirmeye bağlar", () => {
@@ -134,5 +148,31 @@ describe("Education V2 P0 first program manifest", () => {
       "DETAIL",
       "INFERENCE",
     ]);
+  });
+
+  it("ortak exercise graph kimliklerini placement adaylarından ayırır", () => {
+    expect(templateVersionId("common-reinforcement")).toBe(
+      "edu-v2-p0-templateVersion-common-reinforcement-v1",
+    );
+    expect(getProgramIds("assessment", "common-assessment")).toBe(
+      "edu-v2-p0-assessment-common-assessment",
+    );
+    expect(templateVersionId("common-reinforcement")).not.toBe(
+      "canonical-template-version-oku-reading-placement-v1-v1",
+    );
+    expect(templateVersionId("common-reinforcement")).not.toBe(
+      "canonical-template-version-oku-reading-placement-v1-1-0-v1",
+    );
+
+    const reinforcement = EDUCATION_V2_P0_PROGRAM.exercises.find(
+      (exercise) => exercise.key === "common-reinforcement",
+    );
+    expect(reinforcement?.contract).toMatchObject({
+      family: "PHRASE_CHUNKING",
+      competency: "FAST_CHUNKING",
+      difficulty: "DEVELOPING",
+      interactionType: "MULTIPLE_CHOICE",
+      rendererKey: "QUESTION_PHRASE_CHUNKING",
+    });
   });
 });

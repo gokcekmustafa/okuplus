@@ -11,6 +11,7 @@ on:
         options:
           - staging
           - master
+          - codex/education-v2-p0-release-candidate
       seed_mode:
         description: Optional explicitly approved staging seed
         required: true
@@ -60,13 +61,13 @@ jobs:
         run: |
           set -euo pipefail
           case "$TARGET_REF" in
-            staging|master) ;;
+            staging|master|codex/education-v2-p0-release-candidate) ;;
             *) echo "unsupported source ref" >&2; exit 1 ;;
           esac
           case "$SEED_MODE" in
             none) ;;
             education-v2-p0)
-              test "$TARGET_REF" = "master"
+              test "$TARGET_REF" = "master" || test "$TARGET_REF" = "codex/education-v2-p0-release-candidate"
               test -n "$LEVEL_CODE"
               test "$SEED_CONFIRMATION" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
               ;;
@@ -144,11 +145,13 @@ jobs:
           const foundation = "20260914100000_add_learning_experience_foundation";
           const learningPathDomain = "20260925100000_add_learning_path_domain";
           const commonLearningArea = "20260925110000_add_common_learning_area";
+          const persistentLearningPath = "20260927100000_add_persistent_learning_path";
           const allowedPendingMigrationPolicy = [
             completedPointEvent,
             foundation,
             learningPathDomain,
             commonLearningArea,
+            persistentLearningPath,
           ];
           const pendingMigrations = Array.isArray(pending) && pending.every((name) => typeof name === "string")
             ? pending
@@ -259,12 +262,70 @@ jobs:
             --to-schema-datamodel prisma/schema.prisma >"$schema_diff" 2>&1
           schema_diff_exit=$?
           set -e
+
+          SCHEMA_DIFF_OUTPUT="$schema_diff" \
+            SCHEMA_DIFF_EXIT="$schema_diff_exit" \
+            MIGRATION_STATUS_OUTPUT="$migration_status" \
+            node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const diffText = readFileSync(process.env.SCHEMA_DIFF_OUTPUT, "utf8");
+          const statusText = readFileSync(process.env.MIGRATION_STATUS_OUTPUT, "utf8");
+          const diffExit = Number(process.env.SCHEMA_DIFF_EXIT);
+          const sanitizeLine = (line) => {
+            if (/postgres(?:ql)?:\/\/|database_url|password|token|secret|cookie|authorization/iu.test(line)) {
+              return "[REDACTED_SENSITIVE_LINE]";
+            }
+            return line
+              .replace(/'(?:''|[^'])*'/gu, "'[REDACTED_LITERAL]'")
+              .replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/gu, "[REDACTED_TOKEN]")
+              .slice(0, 500);
+          };
+          const diffLines = diffText
+            .split(/\r?\n/u)
+            .map((line) => line.trimEnd())
+            .filter((line) => line.trim().length > 0 && !/^No difference detected\.$/iu.test(line.trim()));
+          const categories = { added: [], removed: [], changed: [], other: [] };
+          for (const line of diffLines) {
+            const bucket = /^\s*\[\+\]/u.test(line)
+              ? "added"
+              : /^\s*\[-\]/u.test(line)
+                ? "removed"
+                : /^\s*\[\*\]/u.test(line)
+                  ? "changed"
+                  : "other";
+            if (categories[bucket].length < 50) categories[bucket].push(sanitizeLine(line));
+          }
+          const statusSummary = statusText
+            .split(/\r?\n/u)
+            .filter((line) => /up to date|following migration|failed|pending|database schema|no migration/iu.test(line))
+            .slice(0, 20)
+            .map(sanitizeLine);
+          const result = diffLines.length === 0 ? "NO_DIFFERENCE" : diffExit === 2 ? "DRIFT" : "ERROR";
+          const summary = {
+            result,
+            exitCode: diffExit,
+            lineCount: diffLines.length,
+            categories,
+            migrationStatusSummary: statusSummary,
+          };
+          writeFileSync(
+            `${process.env.RUNNER_TEMP}/staging-schema-diff-summary.json`,
+            JSON.stringify(summary, null, 2),
+          );
+          console.error(`schemaDiffResult=${result}; schemaDiffLineCount=${diffLines.length}`);
+          for (const [category, lines] of Object.entries(categories)) {
+            if (lines.length > 0) console.error(`schemaDiff.${category}=${JSON.stringify(lines)}`);
+          }
+          if (statusSummary.length > 0) console.error(`migrationStatusSummary=${JSON.stringify(statusSummary)}`);
+          NODE
+
           if test "$schema_diff_exit" -eq 2; then
-            echo "staging schema drift detected" >&2
+            echo "staging schema drift detected; see sanitized schema diff summary" >&2
             exit 1
           fi
           if test "$schema_diff_exit" -ne 0; then
-            echo "staging schema drift check failed" >&2
+            echo "staging schema diff command failed; see sanitized schema diff summary" >&2
             exit 1
           fi
 
@@ -311,6 +372,7 @@ jobs:
           const foundation = "20260914100000_add_learning_experience_foundation";
           const learningPathDomain = "20260925100000_add_learning_path_domain";
           const commonLearningArea = "20260925110000_add_common_learning_area";
+          const persistentLearningPath = "20260927100000_add_persistent_learning_path";
           const allowedPendingMigrationPolicy = [
             completedPointEvent,
             foundation,
@@ -336,8 +398,8 @@ jobs:
             .filter((entry) => entry.isDirectory())
             .map((entry) => entry.name)
             .sort();
-          const expectedMigrationNames = process.env.TARGET_REF === "master"
-            ? [foundation, learningPathDomain, commonLearningArea]
+          const expectedMigrationNames = ["master", "codex/education-v2-p0-release-candidate"].includes(process.env.TARGET_REF)
+            ? [foundation, learningPathDomain, commonLearningArea, persistentLearningPath]
             : [foundation];
           const migrationStatusCurrent =
             report.status === "PASS" ||
@@ -406,12 +468,14 @@ jobs:
           console.log("staging migration=PASS schema=PASS schemaDrift=FALSE");
           '
 
-      - name: Apply Education V2 P0 staging seed
-        id: seed
+      - name: Seed Education V2 P0 published content graph
+        id: education-v2-content-seed
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
         env:
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
           EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
         run: |
@@ -420,19 +484,96 @@ jobs:
           test -n "$EDUCATION_V2_P0_DATABASE_URL"
           test -n "$EDUCATION_V2_P0_LEVEL_CODE"
           test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
-          npx tsx scripts/seed-education-v2-p0.ts --apply
+          npx tsx scripts/seed-education-v2-p0.ts --dry-run --content-only
+          npx tsx scripts/seed-education-v2-p0.ts --apply --content-only
+
+      - name: Seed Education V2 P0 academic lesson content
+        id: education-v2-lesson-seed
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_P0_ALLOW_WRITE: ${{ inputs.seed_confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$DB_FINGERPRINT_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$EDUCATION_V2_P0_ALLOW_WRITE" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --dry-run
+          npx tsx scripts/seed-education-v2-p0-lessons.ts --apply
+
+      - name: Discover Education V2 P0 staging records
+        id: education-v2-discovery
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          discovery_output="$RUNNER_TEMP/education-v2-p0-discovery.json"
+          npx tsx scripts/discover-education-v2-p0-staging-records.ts > "$discovery_output"
+          reinforcement_id="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.reinforcementTemplateVersionId);' "$discovery_output")"
+          assessment_id="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(r.assessmentId);' "$discovery_output")"
+          test -n "$reinforcement_id"
+          test -n "$assessment_id"
+          echo "::add-mask::$reinforcement_id"
+          echo "::add-mask::$assessment_id"
+          {
+            echo "EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID=$reinforcement_id"
+            echo "EDUCATION_V2_COMMON_ASSESSMENT_ID=$assessment_id"
+          } >> "$GITHUB_ENV"
+          echo "Education V2 common records discovered and verified from staging." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply Education V2 P0 staging seed
+        id: seed
+        if: ${{ inputs.seed_mode == 'education-v2-p0' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
+          EDUCATION_V2_P0_ENVIRONMENT: STAGING
+          EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
+          EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          I_HAVE_REVIEWED_EDUCATION_V2_P0: ${{ inputs.seed_confirmation }}
+        run: |
+          set -euo pipefail
+          test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
+          test -n "$EDUCATION_V2_P0_DATABASE_URL"
+          test -n "$EDUCATION_V2_P0_LEVEL_CODE"
+          test "$I_HAVE_REVIEWED_EDUCATION_V2_P0" = "I_HAVE_REVIEWED_EDUCATION_V2_P0"
+          test -n "$EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID"
+          test -n "$EDUCATION_V2_COMMON_ASSESSMENT_ID"
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --dry-run
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --apply
 
       - name: Verify Education V2 P0 staging seed
         id: seed-verify
         if: ${{ inputs.seed_mode == 'education-v2-p0' }}
         env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.DB_FINGERPRINT_DATABASE_URL }}
           EDUCATION_V2_P0_ENVIRONMENT: STAGING
           EDUCATION_V2_P0_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           EDUCATION_V2_P0_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
+          EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT: ${{ vars.EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT || vars.DB_FINGERPRINT_APPROVED_TARGET_FINGERPRINT }}
         run: |
           set -euo pipefail
           test "$EDUCATION_V2_P0_ENVIRONMENT" = "STAGING"
-          npx tsx scripts/seed-education-v2-p0.ts --dry-run
+          test -n "$EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT"
+          npx tsx scripts/provision-education-v2-p0-learning-path.ts --dry-run
+          npx tsx scripts/audit-education-v2-p0-staging.ts
 
       - name: Publish sanitized staging migration summary
         if: always()
@@ -452,6 +593,7 @@ jobs:
           const precondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-precondition.json`);
           const postcondition = readJson(`${process.env.RUNNER_TEMP}/staging-migration-postcondition.json`);
           const verification = readJson(`${process.env.RUNNER_TEMP}/staging-migration-verification.json`);
+          const schemaDiff = readJson(`${process.env.RUNNER_TEMP}/staging-schema-diff-summary.json`);
           const safe = verification ?? preflight;
           const applied = verification?.appliedMigrationNames ?? [];
           const checks = postcondition?.checks ?? precondition?.checks ?? {};
@@ -485,6 +627,11 @@ jobs:
           console.log(`- rolledBackMigrations: ${verification?.rolledBackMigrations ?? preflight?.rolledBackMigrations ?? "NOT_VERIFIED"}`);
           console.log(`- schema: ${verification?.schema ?? "NOT_VERIFIED"}`);
           console.log(`- schemaDrift: ${verification?.schemaDrift === false ? "false" : "NOT_VERIFIED"}`);
+          console.log(`- schemaDiffResult: ${schemaDiff?.result ?? "NOT_RUN"}`);
+          console.log(`- schemaDiffLineCount: ${schemaDiff?.lineCount ?? "NOT_RUN"}`);
+          for (const category of ["added", "removed", "changed", "other"]) {
+            console.log(`- schemaDiff.${category}: ${schemaDiff?.categories?.[category]?.length ?? "NOT_RUN"}`);
+          }
           console.log(`- migrateDeploy: ${process.env.APPLY_OUTCOME === "success" ? "PASS" : process.env.APPLY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- verification: ${process.env.VERIFY_OUTCOME === "success" ? "PASS" : process.env.VERIFY_OUTCOME ?? "NOT_RUN"}`);
           console.log(`- seed: ${process.env.SEED_OUTCOME === "success" ? "PASS" : process.env.SEED_OUTCOME ?? "NOT_RUN"}`);
@@ -494,3 +641,11 @@ jobs:
           for (const [key, value] of Object.entries(checks)) console.log(`- precondition.${key}: ${value ? "PASS" : "FAIL"}`);
           console.log(`- failedPreconditions: ${(postcondition?.failedChecks ?? precondition?.failedChecks ?? []).join(", ") || "NONE"}`);
           NODE
+
+      - name: Upload sanitized staging schema diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-schema-diagnostics
+          path: ${{ runner.temp }}/staging-schema-diff-summary.json
+          if-no-files-found: ignore

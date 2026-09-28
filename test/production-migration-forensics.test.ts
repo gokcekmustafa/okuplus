@@ -13,6 +13,15 @@ const script = readFileSync(
   new URL("../scripts/production-migration-forensics.ts", import.meta.url),
   "utf8",
 );
+const p0Seed = readFileSync(new URL("../scripts/seed-education-v2-p0.ts", import.meta.url), "utf8");
+const p0LessonSeed = readFileSync(
+  new URL("../scripts/seed-education-v2-p0-lessons.ts", import.meta.url),
+  "utf8",
+);
+const p0Provisioner = readFileSync(
+  new URL("../scripts/provision-education-v2-p0-learning-path.ts", import.meta.url),
+  "utf8",
+);
 
 describe("protected production migration forensics", () => {
   it("is workflow_dispatch-only and master/protected-environment gated", () => {
@@ -123,5 +132,39 @@ describe("protected production migration forensics", () => {
   it("provides the schema validator with the required database URL without executing migration work", () => {
     expect(migrationWorkflow).toContain("name: Validate Prisma schema");
     expect(migrationWorkflow).toContain("DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}");
+  });
+
+  it("keeps Education V2 P0 production seeding explicitly selected and protected", () => {
+    expect(migrationWorkflow).toContain("seed_p0:");
+    expect(migrationWorkflow).toContain("production_backup_confirmation:");
+    expect(migrationWorkflow).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(migrationWorkflow).toContain("education-v2-p0");
+    expect(migrationWorkflow).toContain(
+      "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE",
+    );
+    expect(migrationWorkflow).toContain(
+      "prisma/migrations/20260927100000_add_persistent_learning_path/migration.sql",
+    );
+    expect(migrationWorkflow).toContain(
+      "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}",
+    );
+    expect(migrationWorkflow).toContain(
+      "EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}",
+    );
+    expect(migrationWorkflow).not.toContain(
+      "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL: ${{ secrets.DATABASE_URL }}",
+    );
+  });
+
+  it("keeps P0 production content, lesson and path writes target- and approval-gated", () => {
+    for (const source of [p0Seed, p0LessonSeed, p0Provisioner]) {
+      expect(source).toContain("PRODUCTION");
+      expect(source).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_URL");
+      expect(source).toContain("EDUCATION_V2_P0_PRODUCTION");
+      expect(source).toContain("assertApprovedTargetFingerprint");
+    }
+    expect(p0Seed).toContain('mode !== "CREATE" && mode !== "NOOP"');
+    expect(p0LessonSeed).toContain("PRODUCTION_DATABASE_NAME");
+    expect(p0Provisioner).toContain("PRODUCTION_DATABASE_HOST");
   });
 });

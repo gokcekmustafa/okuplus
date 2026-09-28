@@ -13,9 +13,11 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).not.toMatch(/^\s+pull_request:/mu);
     expect(workflow).toContain("environment: staging");
     expect(workflow).toContain("ref: ${{ inputs.ref }}");
-    expect(workflow).toMatch(/options:\s*\n\s+- staging\s*\n\s+- master/u);
+    expect(workflow).toMatch(
+      /options:\s*\n\s+- staging\s*\n\s+- master\s*\n\s+- codex\/education-v2-p0-release-candidate/u,
+    );
     expect(workflow).toContain('case "$TARGET_REF" in');
-    expect(workflow).toContain("staging|master)");
+    expect(workflow).toContain("staging|master|codex/education-v2-p0-release-candidate)");
   });
 
   it("binds staging credentials and preserves the fingerprint guard", () => {
@@ -76,5 +78,14 @@ describe("staging post-migration forensic workflow", () => {
     expect(workflow).toContain('logs: row.logs_present ? "PRESENT" : "NONE"');
     expect(workflow).not.toContain("console.log(statusText)");
     expect(workflow).not.toContain("console.log(diffText)");
+  });
+
+  it("checks Education V2 provisioning permissions through a read-only step", () => {
+    expect(workflow).toContain("Inspect Education V2 P0 provisioning permissions (read-only)");
+    expect(workflow).toContain(
+      "npx tsx scripts/inspect-education-v2-p0-provisioning-permissions.ts",
+    );
+    expect(workflow).toContain("DATABASE_URL: ${{ secrets.DATABASE_URL }}");
+    expect(workflow).not.toMatch(/prisma migrate deploy|prisma migrate resolve|db push/iu);
   });
 });
