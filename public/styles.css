@@ -6802,3 +6802,163 @@ textarea:focus-visible {
     right: 4px;
   }
 }
+
+/* Roadmap-first home: make the route the primary student experience. */
+.student-shell #learning-path-card {
+  min-height: calc(100vh - 132px);
+  margin: 0;
+  padding: 18px clamp(12px, 3vw, 28px) 76px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, #fbfcff 0%, #f4f8ff 72%, #eefaf7 100%);
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-path-heading,
+.student-shell #learning-path-card .learning-map-current {
+  display: none !important;
+}
+
+.student-shell #learning-path-card .learning-map-panel {
+  max-width: 620px;
+}
+
+.student-shell #learning-path-card .learning-map-panel-heading {
+  display: block;
+  margin: 0 auto 14px;
+  padding: 8px 6px 0;
+  text-align: left;
+}
+
+.student-shell #learning-path-card .learning-map-kicker {
+  margin-bottom: 4px;
+  color: #7167d6;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+
+.student-shell #learning-path-card .learning-map-panel-heading h4 {
+  margin: 0;
+  color: #18274b;
+  font-size: clamp(1.55rem, 5vw, 2rem);
+  letter-spacing: -0.035em;
+}
+
+.student-shell #learning-path-card .learning-map-panel-intro {
+  max-width: 31rem;
+  margin: 6px 0 8px;
+  color: #69758e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.student-shell .learning-map-level {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 4px;
+  padding: 4px 11px;
+  border: 1px solid #d9d8fa;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #5d55ba;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.student-shell #learning-path-card .learning-map-panel-count {
+  display: block;
+  width: fit-content;
+  margin: 12px 0 0;
+  padding: 7px 11px;
+  border: 1px solid #d9d8fa;
+  border-radius: 999px;
+  background: #ffffffb8;
+  color: #5c53b9;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.student-shell #learning-path-card .learning-map-window-note {
+  max-width: 23rem;
+  margin: 2px auto 3px;
+  color: #8790a8;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.student-shell #learning-path-card .learning-map-track {
+  padding-top: 10px;
+}
+
+.student-shell #learning-path-card .learning-map-track::before {
+  animation: okuplus-map-route 2.6s linear infinite;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-marker {
+  animation: okuplus-map-active 1.8s ease-in-out infinite;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node-copy {
+  border-color: #bdb7ff;
+  background: linear-gradient(135deg, #ffffff, #f8f6ff);
+  box-shadow: 0 12px 28px rgba(78, 68, 181, 0.14);
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node-action {
+  color: #5a50bd;
+  font-weight: 900;
+}
+
+.student-shell #learning-path-card .learning-map-step.locked .learning-map-marker {
+  filter: grayscale(0.45);
+}
+
+.student-shell .learning-map-step.kind-teaching .learning-map-marker {
+  background: linear-gradient(145deg, #f2a93b, #ef7d4a);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px #e88c36,
+    0 8px 18px rgba(230, 137, 53, 0.22);
+}
+
+.student-shell .learning-map-step.kind-small-study .learning-map-marker {
+  background: linear-gradient(145deg, #41c6a4, #258fc1);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px #42a996,
+    0 8px 18px rgba(48, 163, 157, 0.22);
+}
+
+@keyframes okuplus-map-route {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 31px;
+  }
+}
+
+@keyframes okuplus-map-active {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(105, 86, 221, 0.16),
+      0 8px 18px rgba(105, 86, 221, 0.25);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow:
+      0 0 0 10px rgba(105, 86, 221, 0),
+      0 10px 22px rgba(105, 86, 221, 0.3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-shell #learning-path-card .learning-map-track::before,
+  .student-shell #learning-path-card .learning-map-step.active .learning-map-marker {
+    animation: none;
+  }
+}

@@ -2058,7 +2058,11 @@ function learningPathNodeMeta(progress) {
 async function startLearningPathNode(node, button) {
   var tv = node?.templateVersionId;
   var type = node?.type;
-  if ((type === "TEACHING" || type === "SMALL_STUDY") && node?.contentVersionId) {
+  if (type === "TEACHING" || type === "SMALL_STUDY") {
+    if (!node?.contentVersionId) {
+      alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
+      return;
+    }
     preferredLessonContentVersionId = node.contentVersionId;
     navigate("lessons");
     return;
@@ -2250,6 +2254,12 @@ function learningPathMapKind(node) {
   if (node?.type === "PRACTICE") {
     return { className: "practice", label: "Uygulama", icon: "↻" };
   }
+  if (node?.type === "TEACHING") {
+    return { className: "teaching", label: "Öğrenme dersi", icon: "◒" };
+  }
+  if (node?.type === "SMALL_STUDY") {
+    return { className: "small-study", label: "Kısa çalışma", icon: "✦" };
+  }
   var skill = learningPathNodeSkill(node);
   if (skill?.startsWith("FAST_")) {
     return { className: "fast", label: "Hızlı okuma", icon: "⚡" };
@@ -2265,6 +2275,15 @@ function learningPathMapCurrentText(node, visualStatus) {
   if (visualStatus === "completed") return "Tamamlandı · İstersen tekrar edebilirsin";
   if (visualStatus === "locked") return "Önceki adımlar tamamlanınca açılır";
   return "Sıradaki durak için hazır";
+}
+
+function learningPathActionLabel(node, visualStatus) {
+  if (visualStatus === "locked") return "Kilitli";
+  if (visualStatus === "completed") return "Tekrar et";
+  if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
+  if (node?.type === "ASSESSMENT" || node?.type === "MEASUREMENT") return "Değerlendir";
+  if (node?.type === "REINFORCEMENT") return "Pekiştir";
+  return "Başla";
 }
 
 function renderLearningPathEmptyState(currentLevel) {
@@ -2321,7 +2340,7 @@ function learningPathMapWindow(entries, nodes) {
   };
 }
 
-function renderLearningPathMap(pathGroups) {
+function renderLearningPathMap(pathGroups, currentLevel) {
   var container = $("learning-path");
   var currentEl = $("learning-map-current");
   if (!container) return;
@@ -2378,12 +2397,15 @@ function renderLearningPathMap(pathGroups) {
   }
 
   var heading =
-    '<div class="learning-map-panel-heading"><div><p class="learning-map-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan</h4><p class="learning-map-panel-intro">' +
+    '<div class="learning-map-panel-heading"><div><p class="learning-map-kicker">ÖĞRENME HARİTAN</p><h4>Adım adım ilerle</h4><p class="learning-map-panel-intro">' +
     escapeHtml(
       currentNode
-        ? "Şimdi yalnızca bu durağa odaklan. Tamamladıkça harita ileri kayar."
+        ? "Aktif durağa dokun, öğrenme adımını tamamla; sonraki durak açılsın."
         : "Tamamladıkça yeni duraklar açılacak.",
     ) +
+    (currentLevel?.name
+      ? '<span class="learning-map-level">' + escapeHtml(currentLevel.name) + "</span>"
+      : "") +
     '</p></div><span class="learning-map-panel-count">' +
     escapeHtml(String(progress.completed || 0)) +
     "/" +
@@ -2414,14 +2436,7 @@ function renderLearningPathMap(pathGroups) {
       var unitLabel = node.unit?.title
         ? '<span class="path-node-unit">' + escapeHtml(node.unit.title) + "</span>"
         : "";
-      var actionLabel =
-        visualStatus === "active"
-          ? "Başla"
-          : visualStatus === "completed"
-            ? "Tekrar et"
-            : visualStatus === "locked"
-              ? "Kilitli"
-              : "Açık";
+      var actionLabel = learningPathActionLabel(node, visualStatus);
       var globalIndex = mapWindow.start + index;
       var stepNumber = globalIndex + 1;
       var phase = learningPathNodeRoadmapPhase(node);
@@ -2585,19 +2600,12 @@ async function loadLearningPath() {
       if (summaryEl) summaryEl.innerHTML = "";
       return;
     }
-    var nextNode = nodes.find(function (node) {
-      return node.status === "active";
-    });
     if (continueEl) {
-      continueEl.classList.toggle("hidden", !nextNode);
-      continueEl.disabled = false;
-      continueEl.onclick = nextNode
-        ? function () {
-            void startLearningPathNode(nextNode, continueEl);
-          }
-        : null;
+      continueEl.classList.add("hidden");
+      continueEl.disabled = true;
+      continueEl.onclick = null;
     }
-    renderLearningPathMap(pathGroups);
+    renderLearningPathMap(pathGroups, data.currentLevel);
   } catch (_e) {
     void _e;
     container.setAttribute("aria-busy", "false");
