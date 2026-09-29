@@ -5771,3 +5771,537 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Student learning map refresh: one clear next step, with separate real paths. */
+.student-shell #page-dashboard > #learning-path-card {
+  order: 1;
+}
+
+.student-shell #page-dashboard > #today-card {
+  order: 2;
+}
+
+.student-shell #learning-path-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid #d4dcff;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(132, 91, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 0% 100%, rgba(48, 189, 170, 0.1), transparent 32%),
+    linear-gradient(145deg, #ffffff 0%, #f8f9ff 56%, #f4fbfa 100%);
+  box-shadow: 0 22px 52px rgba(44, 48, 115, 0.1);
+}
+
+.student-shell #learning-path-card::before,
+.student-shell #learning-path-card::after {
+  position: absolute;
+  z-index: -1;
+  border: 1px solid rgba(91, 91, 214, 0.13);
+  border-radius: 999px;
+  content: "";
+  pointer-events: none;
+}
+
+.student-shell #learning-path-card::before {
+  top: -84px;
+  right: -70px;
+  width: 220px;
+  height: 220px;
+}
+
+.student-shell #learning-path-card::after {
+  top: -42px;
+  right: -28px;
+  width: 136px;
+  height: 136px;
+}
+
+.student-shell #learning-path-card .learning-path-heading {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 20px;
+}
+
+.student-shell #learning-path-card .learning-path-heading h3 {
+  font-size: clamp(1.55rem, 3vw, 2.1rem);
+  letter-spacing: -0.045em;
+}
+
+.student-shell #learning-path-card .learning-path-subtitle {
+  max-width: 46ch;
+  margin: 7px 0 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.student-shell #learning-path-card .learning-path-level {
+  display: inline-flex;
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid #e0e4ff;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #5556a9;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.student-shell #learning-path-card .learning-path-primary .btn-primary {
+  min-width: 154px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #655ce7 0%, #7d4be8 100%);
+  box-shadow: 0 10px 22px rgba(101, 92, 231, 0.26);
+}
+
+.student-shell .learning-map-switcher {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  margin: 0 0 12px;
+}
+
+.student-shell .learning-map-tab {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #e1e5f3;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #5e6678;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.student-shell .learning-map-tab:hover,
+.student-shell .learning-map-tab:focus-visible {
+  border-color: #bfc4ff;
+  background: #ffffff;
+  box-shadow: 0 8px 18px rgba(69, 73, 151, 0.1);
+  transform: translateY(-1px);
+}
+
+.student-shell .learning-map-tab.is-active {
+  border-color: #8177eb;
+  background: linear-gradient(135deg, #f0efff 0%, #ffffff 100%);
+  color: #34358e;
+  box-shadow: 0 9px 22px rgba(91, 91, 214, 0.12);
+}
+
+.student-shell .learning-map-tab-icon {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 12px;
+  background: #eceaff;
+  color: #6b55d8;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.student-shell .learning-map-tab:nth-child(2) .learning-map-tab-icon {
+  background: #e5f8f2;
+  color: #159477;
+}
+
+.student-shell .learning-map-tab-common .learning-map-tab-icon {
+  background: #fff4d7;
+  color: #ce8b00;
+}
+
+.student-shell .learning-map-tab span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.student-shell .learning-map-tab strong,
+.student-shell .learning-map-tab small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell .learning-map-tab strong {
+  font-size: 13px;
+}
+
+.student-shell .learning-map-tab small {
+  color: #8a92a3;
+  font-size: 11px;
+}
+
+.student-shell .learning-map-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  margin: 0 0 16px;
+  padding: 11px 14px;
+  border: 1px solid #dfe5f4;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.student-shell .learning-map-current-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.student-shell .learning-map-current-copy > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.student-shell .learning-map-current-copy strong {
+  color: #2c3561;
+  font-size: 13px;
+}
+
+.student-shell .learning-map-current-copy small {
+  overflow: hidden;
+  color: #7a8293;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell .learning-map-current-dot {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #675be8;
+  box-shadow: 0 0 0 3px #dcd8ff;
+}
+
+.student-shell .learning-map-current-progress,
+.student-shell .learning-map-panel-count {
+  flex: 0 0 auto;
+  color: #5a59b9;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.student-shell #learning-path-summary .learning-path-summary-item {
+  gap: 3px;
+  padding: 10px 12px;
+  border-color: #e2e6f4;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.student-shell #learning-path-summary .learning-path-summary-label {
+  font-size: 10px;
+}
+
+.student-shell #learning-path-summary .learning-path-summary-item strong {
+  font-size: 1rem;
+}
+
+.student-shell #learning-path-summary .learning-path-summary-progress,
+.student-shell #learning-path-summary .learning-path-summary-detail {
+  font-size: 11px;
+}
+
+.student-shell .learning-map-panel {
+  position: relative;
+}
+
+.student-shell .learning-map-panel-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  padding: 0 4px;
+}
+
+.student-shell .learning-map-panel-heading h4 {
+  margin: 0;
+  color: #252b4e;
+  font-size: 1.1rem;
+  letter-spacing: -0.025em;
+}
+
+.student-shell .learning-map-kicker {
+  margin: 0 0 4px;
+  color: #7b6add;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.student-shell .learning-map-track {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 8px;
+}
+
+.student-shell .learning-map-track::before {
+  position: absolute;
+  top: 38px;
+  bottom: 38px;
+  left: 28px;
+  width: 2px;
+  background: repeating-linear-gradient(to bottom, #d8dff2 0 7px, transparent 7px 12px);
+  content: "";
+}
+
+.student-shell .learning-map-step {
+  position: relative;
+  z-index: 1;
+}
+
+.student-shell .learning-map-node {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px 10px 5px;
+  border: 1px solid #e3e7f2;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 5px 14px rgba(53, 64, 114, 0.04);
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.student-shell .learning-map-node:not(:disabled):hover,
+.student-shell .learning-map-node:not(:disabled):focus-visible {
+  border-color: #b9b5f6;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(53, 64, 114, 0.1);
+  transform: translateX(2px);
+}
+
+.student-shell .learning-map-step.active .learning-map-node {
+  border-color: #8278ed;
+  background: linear-gradient(100deg, #f2f0ff 0%, #ffffff 72%);
+  box-shadow: 0 11px 26px rgba(101, 92, 231, 0.16);
+}
+
+.student-shell .learning-map-step.completed .learning-map-node {
+  border-color: #c8eadc;
+  background: linear-gradient(100deg, #f5fffb 0%, #ffffff 76%);
+}
+
+.student-shell .learning-map-step.locked .learning-map-node {
+  border-color: #e5e7ee;
+  background: rgba(247, 248, 251, 0.78);
+  opacity: 0.82;
+}
+
+.student-shell .learning-map-step.kind-checkpoint .learning-map-node,
+.student-shell .learning-map-step.kind-reinforcement .learning-map-node,
+.student-shell .learning-map-step.kind-measurement .learning-map-node {
+  border-style: dashed;
+}
+
+.student-shell .learning-map-marker {
+  align-self: center;
+  width: 46px;
+  height: 46px;
+  border: 4px solid #ffffff;
+  border-radius: 15px;
+  background: #eef1f9;
+  color: #81899c;
+  box-shadow:
+    0 0 0 1px #dbe1ef,
+    0 5px 10px rgba(49, 61, 110, 0.08);
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.student-shell .learning-map-step.completed .learning-map-marker {
+  background: #d6f3e5;
+  color: #118360;
+  box-shadow: 0 0 0 1px #b7e5d0;
+}
+
+.student-shell .learning-map-step.active .learning-map-marker {
+  background: linear-gradient(145deg, #765de9, #a05ae8);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px #7a70e2,
+    0 7px 16px rgba(105, 86, 221, 0.28);
+}
+
+.student-shell .learning-map-step.kind-checkpoint .learning-map-marker {
+  background: #fff0c7;
+  color: #c98500;
+  box-shadow: 0 0 0 1px #f3d889;
+}
+
+.student-shell .learning-map-step.kind-reinforcement .learning-map-marker {
+  background: #dff7f0;
+  color: #138b70;
+  box-shadow: 0 0 0 1px #bae8db;
+}
+
+.student-shell .learning-map-step.kind-level .learning-map-marker {
+  background: #e7edff;
+  color: #4269c9;
+  box-shadow: 0 0 0 1px #c9d6ff;
+}
+
+.student-shell .learning-map-node-copy {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  gap: 3px;
+}
+
+.student-shell .learning-map-node-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-shell .learning-map-node-top .path-node-status {
+  color: #667085;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-shell .learning-map-step.active .path-node-status {
+  color: #5c52c8;
+}
+
+.student-shell .learning-map-kind {
+  color: #9a6d09;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.student-shell
+  .learning-map-step:not(.kind-checkpoint):not(.kind-reinforcement):not(.kind-measurement)
+  .learning-map-kind {
+  color: #7e8799;
+}
+
+.student-shell .learning-map-node .path-node-label {
+  color: #253052;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.student-shell .learning-map-node-detail {
+  overflow: hidden;
+  color: #7a8293;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell .learning-map-node-action {
+  align-self: center;
+  color: #6d68bd;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.student-shell .learning-map-step.locked .learning-map-node-action {
+  color: #9ba2b2;
+}
+
+.student-shell .learning-map-empty {
+  padding: 28px 12px;
+  text-align: center;
+}
+
+.student-shell .learning-model-details {
+  margin-top: 16px;
+  border-top: 1px solid #e5e8f2;
+}
+
+.student-shell .learning-model-details > summary {
+  padding: 14px 4px 4px;
+  color: #5e61a9;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.student-shell .learning-model-details > summary::marker {
+  color: #8278ed;
+}
+
+.student-shell .learning-model-details[open] > summary {
+  padding-bottom: 12px;
+}
+
+@media (max-width: 700px) {
+  .student-shell .learning-map-switcher {
+    grid-template-columns: 1fr;
+  }
+
+  .student-shell .learning-map-tab {
+    min-height: 50px;
+  }
+
+  .student-shell .learning-map-tab small {
+    display: block;
+  }
+
+  .student-shell #learning-path-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .student-shell .learning-map-current {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .student-shell .learning-map-panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .student-shell .learning-map-node {
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .student-shell .learning-map-node-action {
+    display: none;
+  }
+
+  .student-shell .learning-map-marker {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+  }
+}

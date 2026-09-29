@@ -93,4 +93,17 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell #today-card.supporting-task-card");
     expect(styles).toContain(".student-shell #learning-path-card .learning-path-summary-item");
   });
+
+  it("shows separate data-driven learning maps without changing the path contract", () => {
+    expect(index).toContain('data-learning-area="FAST_READING"');
+    expect(index).toContain('data-learning-area="READING_COMPREHENSION"');
+    expect(index).toContain('data-learning-area="COMMON"');
+    expect(index).toContain('id="learning-map-current"');
+    expect(index).toContain('id="learning-model-details"');
+    expect(app).toContain("function renderLearningPathMap(pathGroups, requestedArea)");
+    expect(app).toContain("function learningPathMapKind(node)");
+    expect(app).toContain("studentLearningPathSelectedArea");
+    expect(styles).toContain(".student-shell .learning-map-track::before");
+    expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
+  });
 });
