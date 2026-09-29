@@ -200,163 +200,6 @@
   }
 }
 
-/* Guided single-roadmap presentation. */
-.student-shell .learning-map-switcher {
-  display: none !important;
-}
-
-.student-shell #learning-path-summary {
-  display: none !important;
-}
-
-.student-shell .learning-map-current {
-  margin-bottom: 14px;
-  border-color: #d7d5fb;
-  background: linear-gradient(100deg, rgba(244, 242, 255, 0.92), rgba(255, 255, 255, 0.78));
-}
-
-.student-shell .learning-map-current-copy strong {
-  color: #4d43ac;
-}
-
-.student-shell .learning-map-panel-heading {
-  align-items: flex-start;
-  margin-bottom: 10px;
-}
-
-.student-shell .learning-map-panel-intro {
-  margin: 4px 0 0;
-  color: #81889a;
-  font-size: 12px;
-}
-
-.student-shell .learning-map-track {
-  gap: 7px;
-  padding-top: 2px;
-}
-
-.student-shell .learning-map-track::before {
-  top: 47px;
-  bottom: 47px;
-  left: 30px;
-  background: repeating-linear-gradient(to bottom, #cdd4ed 0 9px, transparent 9px 15px);
-}
-
-.student-shell .learning-map-phase {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 11px 0 1px 4px;
-  color: #7078a1;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.student-shell .learning-map-phase::after {
-  width: 54px;
-  height: 1px;
-  background: #d8dcef;
-  content: "";
-}
-
-.student-shell .learning-map-step {
-  transition: transform 180ms ease;
-}
-
-.student-shell .learning-map-step.roadmap-left {
-  margin-right: 34px;
-}
-
-.student-shell .learning-map-step.roadmap-right {
-  margin-left: 34px;
-}
-
-.student-shell .learning-map-node {
-  min-height: 68px;
-  border-radius: 17px;
-}
-
-.student-shell .learning-map-step:not(.active) .learning-map-node-detail,
-.student-shell .learning-map-step:not(.active) .learning-map-node-action {
-  display: none;
-}
-
-.student-shell .learning-map-step:not(.active) .learning-map-node {
-  min-height: 58px;
-}
-
-.student-shell .learning-map-step.completed .learning-map-node {
-  box-shadow: none;
-}
-
-.student-shell .learning-map-step.completed .learning-map-node .path-node-label {
-  color: #356a59;
-}
-
-.student-shell .learning-map-step.active {
-  transform: scale(1.015);
-}
-
-.student-shell .learning-map-step.active .learning-map-node {
-  min-height: 84px;
-}
-
-.student-shell .learning-map-step.active .learning-map-node::after {
-  position: absolute;
-  top: 9px;
-  right: 10px;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: #ebe8ff;
-  color: #5e51c3;
-  content: "ŞİMDİ";
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.09em;
-}
-
-.student-shell .learning-map-step.active .learning-map-node-copy {
-  padding-right: 46px;
-}
-
-.student-shell .learning-map-step.kind-checkpoint .learning-map-node,
-.student-shell .learning-map-step.kind-measurement .learning-map-node {
-  background: linear-gradient(100deg, #fff9e7, #ffffff 76%);
-}
-
-.student-shell .learning-map-step.kind-reinforcement .learning-map-node {
-  background: linear-gradient(100deg, #effbf7, #ffffff 76%);
-}
-
-.student-shell .learning-map-step.kind-checkpoint .learning-map-kind,
-.student-shell .learning-map-step.kind-measurement .learning-map-kind {
-  color: #ad7706;
-}
-
-.student-shell .learning-map-step.kind-reinforcement .learning-map-kind {
-  color: #168c70;
-}
-
-@media (max-width: 700px) {
-  .student-shell .learning-map-step.roadmap-left,
-  .student-shell .learning-map-step.roadmap-right {
-    margin-right: 0;
-    margin-left: 0;
-  }
-
-  .student-shell .learning-map-step.active {
-    transform: none;
-  }
-
-  .student-shell .learning-map-step.active .learning-map-node-copy {
-    padding-right: 0;
-  }
-}
-
 * {
   box-sizing: border-box;
 }
@@ -6460,5 +6303,162 @@ textarea:focus-visible {
     width: 42px;
     height: 42px;
     border-radius: 13px;
+  }
+}
+
+/* Guided single-roadmap presentation. Keep this override after the legacy map rules. */
+.student-shell .learning-map-switcher {
+  display: none !important;
+}
+
+.student-shell #learning-path-summary {
+  display: none !important;
+}
+
+.student-shell .learning-map-current {
+  margin-bottom: 14px;
+  border-color: #d7d5fb;
+  background: linear-gradient(100deg, rgba(244, 242, 255, 0.92), rgba(255, 255, 255, 0.78));
+}
+
+.student-shell .learning-map-current-copy strong {
+  color: #4d43ac;
+}
+
+.student-shell .learning-map-panel-heading {
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.student-shell .learning-map-panel-intro {
+  margin: 4px 0 0;
+  color: #81889a;
+  font-size: 12px;
+}
+
+.student-shell .learning-map-track {
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.student-shell .learning-map-track::before {
+  top: 47px;
+  bottom: 47px;
+  left: 30px;
+  background: repeating-linear-gradient(to bottom, #cdd4ed 0 9px, transparent 9px 15px);
+}
+
+.student-shell .learning-map-phase {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 11px 0 1px 4px;
+  color: #7078a1;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.student-shell .learning-map-phase::after {
+  width: 54px;
+  height: 1px;
+  background: #d8dcef;
+  content: "";
+}
+
+.student-shell .learning-map-step {
+  transition: transform 180ms ease;
+}
+
+.student-shell .learning-map-step.roadmap-left {
+  margin-right: 34px;
+}
+
+.student-shell .learning-map-step.roadmap-right {
+  margin-left: 34px;
+}
+
+.student-shell .learning-map-node {
+  min-height: 68px;
+  border-radius: 17px;
+}
+
+.student-shell .learning-map-step:not(.active) .learning-map-node-detail,
+.student-shell .learning-map-step:not(.active) .learning-map-node-action {
+  display: none;
+}
+
+.student-shell .learning-map-step:not(.active) .learning-map-node {
+  min-height: 58px;
+}
+
+.student-shell .learning-map-step.completed .learning-map-node {
+  box-shadow: none;
+}
+
+.student-shell .learning-map-step.completed .learning-map-node .path-node-label {
+  color: #356a59;
+}
+
+.student-shell .learning-map-step.active {
+  transform: scale(1.015);
+}
+
+.student-shell .learning-map-step.active .learning-map-node {
+  min-height: 84px;
+}
+
+.student-shell .learning-map-step.active .learning-map-node::after {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #ebe8ff;
+  color: #5e51c3;
+  content: "ŞİMDİ";
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+
+.student-shell .learning-map-step.active .learning-map-node-copy {
+  padding-right: 46px;
+}
+
+.student-shell .learning-map-step.kind-checkpoint .learning-map-node,
+.student-shell .learning-map-step.kind-measurement .learning-map-node {
+  background: linear-gradient(100deg, #fff9e7, #ffffff 76%);
+}
+
+.student-shell .learning-map-step.kind-reinforcement .learning-map-node {
+  background: linear-gradient(100deg, #effbf7, #ffffff 76%);
+}
+
+.student-shell .learning-map-step.kind-checkpoint .learning-map-kind,
+.student-shell .learning-map-step.kind-measurement .learning-map-kind {
+  color: #ad7706;
+}
+
+.student-shell .learning-map-step.kind-reinforcement .learning-map-kind {
+  color: #168c70;
+}
+
+@media (max-width: 700px) {
+  .student-shell .learning-map-step.roadmap-left,
+  .student-shell .learning-map-step.roadmap-right {
+    margin-right: 0;
+    margin-left: 0;
+  }
+
+  .student-shell .learning-map-step.active {
+    transform: none;
+  }
+
+  .student-shell .learning-map-step.active .learning-map-node-copy {
+    padding-right: 0;
   }
 }
