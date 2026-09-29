@@ -2247,6 +2247,16 @@ function learningPathMapKind(node) {
   if (node?.type === "MEASUREMENT") {
     return { className: "measurement", label: "Başarı ölçümü", icon: "↗" };
   }
+  if (node?.type === "PRACTICE") {
+    return { className: "practice", label: "Uygulama", icon: "↻" };
+  }
+  var skill = learningPathNodeSkill(node);
+  if (skill?.startsWith("FAST_")) {
+    return { className: "fast", label: "Hızlı okuma", icon: "⚡" };
+  }
+  if (skill?.startsWith("RC_")) {
+    return { className: "comprehension", label: "Okuduğunu anlama", icon: "★" };
+  }
   return { className: "lesson", label: "Öğrenme adımı", icon: "•" };
 }
 
