@@ -113,4 +113,16 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-empty-state");
     expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
   });
+
+  it("keeps the student home focused on the roadmap", () => {
+    expect(styles).toContain(".student-shell #page-dashboard > #today-card");
+    expect(styles).toContain(".student-shell #page-dashboard > #entitlement-card");
+    expect(styles).toContain(".student-shell #page-dashboard > #review-card");
+    expect(styles).toContain(".student-shell #learning-path-card #learning-model-details");
+    expect(styles).toContain(".student-shell .learning-map-track::before");
+    expect(styles).toContain(".student-shell .learning-map-step.kind-fast");
+    expect(styles).toContain(".student-shell .learning-map-step.kind-comprehension");
+    expect(app).toContain('label: "Hızlı okuma", icon: "⚡"');
+    expect(app).toContain('label: "Okuduğunu anlama", icon: "★"');
+  });
 });
