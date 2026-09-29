@@ -888,6 +888,7 @@ function showDashboard(me) {
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("view-guest")?.classList.add("hidden");
+  setStudentMoreMenuOpen(false);
 
   const { user, tenantContext } = me;
   resetInsights();
@@ -2256,6 +2257,38 @@ function learningPathMapCurrentText(node, visualStatus) {
   return "Sıradaki durak için hazır";
 }
 
+function renderLearningPathEmptyState(currentLevel) {
+  var container = $("learning-path");
+  var currentEl = $("learning-map-current");
+  if (!container) return;
+  var hasLevel = Boolean(currentLevel);
+  var currentTitle = hasLevel ? "Öğrenme yolun hazırlanıyor" : "İlk durağını açalım";
+  var currentDetail = hasLevel
+    ? "Yayınlanmış ilk durak hazır olduğunda burada görünecek."
+    : "Seviyeni belirlediğinde sana uygun ilk durak burada açılacak.";
+  if (currentEl) {
+    currentEl.innerHTML =
+      '<div class="learning-map-current-copy"><span class="learning-map-current-dot learning-map-empty-dot" aria-hidden="true">◎</span><span><strong>' +
+      escapeHtml(currentTitle) +
+      "</strong><small>" +
+      escapeHtml(currentDetail) +
+      '</small></span></div><span class="learning-map-current-progress">Hazırlanıyor</span>';
+  }
+  container.innerHTML =
+    '<div class="learning-map-empty-state" role="status"><div class="learning-map-empty-route" aria-hidden="true"><span class="learning-map-empty-node is-first">1</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">2</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">3</span></div><div class="learning-map-empty-copy"><p class="learning-map-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan burada açılacak</h4><p>' +
+    escapeHtml(
+      hasLevel
+        ? "İlk içerikler yayınlandığında hızlı okuma, okuduğunu anlama ve değerlendirme duraklarını sırayla göreceksin."
+        : "Önce seviyeni belirleyelim; ardından hızlı okuma, okuduğunu anlama ve değerlendirme durakları sırayla açılacak.",
+    ) +
+    "</p>" +
+    (hasLevel
+      ? ""
+      : '<button type="button" class="btn btn-primary btn-sm" id="learning-map-start-placement">Seviyemi belirle <span aria-hidden="true">→</span></button>') +
+    "</div></div>";
+  $("learning-map-start-placement")?.addEventListener("click", () => navigate("assessments"));
+}
+
 function renderLearningPathMap(pathGroups) {
   var container = $("learning-path");
   var currentEl = $("learning-map-current");
@@ -2269,9 +2302,7 @@ function renderLearningPathMap(pathGroups) {
     }),
   );
   if (!entries.length) {
-    if (currentEl) currentEl.textContent = "";
-    container.innerHTML =
-      '<p class="muted learning-map-empty">Yakında yeni içerikler eklenecek.</p>';
+    renderLearningPathEmptyState(null);
     return;
   }
 
@@ -2501,10 +2532,7 @@ async function loadLearningPath() {
         : "Seviye belirlenmedi — Seviyemi Ölç ile öğren";
     if (!nodes.length) {
       continueEl?.classList.add("hidden");
-      var emptyMapStatus = $("learning-map-current");
-      if (emptyMapStatus) emptyMapStatus.textContent = "";
-      container.innerHTML =
-        '<p class="muted" style="text-align:center">Yakında yeni içerikler eklenecek.</p>';
+      renderLearningPathEmptyState(data.currentLevel);
       if (summaryEl) summaryEl.innerHTML = "";
       return;
     }
@@ -3278,16 +3306,12 @@ function navigate(page) {
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && isPlatformUser !== false) return;
 
-  const studentMoreMenu = $("student-more-menu");
+  setStudentMoreMenuOpen(false);
   const studentMoreToggle = $("student-more-toggle");
-  if (studentMoreMenu) studentMoreMenu.classList.add("hidden");
-  if (studentMoreToggle) {
-    studentMoreToggle.setAttribute("aria-expanded", "false");
-    studentMoreToggle.classList.toggle(
-      "active",
-      ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page),
-    );
-  }
+  studentMoreToggle?.classList.toggle(
+    "active",
+    ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page),
+  );
   document.querySelectorAll(".student-nav-more[open]").forEach(function (details) {
     details.removeAttribute("open");
   });
@@ -3368,6 +3392,16 @@ function navigate(page) {
     void loadGamification();
   }
   closeSidebar();
+}
+
+function setStudentMoreMenuOpen(open) {
+  const menu = $("student-more-menu");
+  const toggle = $("student-more-toggle");
+  if (!menu || !toggle) return;
+  menu.classList.toggle("hidden", !open);
+  menu.hidden = !open;
+  menu.setAttribute("aria-hidden", String(!open));
+  toggle.setAttribute("aria-expanded", String(open));
 }
 
 function closeSidebar() {
@@ -3910,11 +3944,20 @@ for (const item of document.querySelectorAll(".bottom-nav-item")) {
 
 $("student-more-toggle")?.addEventListener("click", () => {
   const menu = $("student-more-menu");
+  if (!menu) return;
+  setStudentMoreMenuOpen(menu.classList.contains("hidden"));
+});
+
+document.addEventListener("click", (event) => {
+  const menu = $("student-more-menu");
   const toggle = $("student-more-toggle");
-  if (!menu || !toggle) return;
-  const willOpen = menu.classList.contains("hidden");
-  menu.classList.toggle("hidden", !willOpen);
-  toggle.setAttribute("aria-expanded", String(willOpen));
+  if (!menu || menu.classList.contains("hidden")) return;
+  if (menu.contains(event.target) || toggle?.contains(event.target)) return;
+  setStudentMoreMenuOpen(false);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setStudentMoreMenuOpen(false);
 });
 
 for (const item of document.querySelectorAll("[data-student-menu-page]")) {

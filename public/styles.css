@@ -4445,6 +4445,10 @@ body {
   display: none !important;
 }
 
+.student-shell .student-more-menu[hidden] {
+  display: none !important;
+}
+
 .student-shell .student-more-menu button {
   border: 0;
   border-radius: 10px;
@@ -6242,6 +6246,69 @@ textarea:focus-visible {
   text-align: center;
 }
 
+.student-shell .learning-map-empty-state {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 20px;
+  margin-top: 4px;
+  padding: 18px;
+  border: 1px solid #dfe4f3;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.student-shell .learning-map-empty-route {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 84px;
+}
+
+.student-shell .learning-map-empty-node {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 13px;
+  background: #edf0fa;
+  color: #8992a9;
+  box-shadow: 0 0 0 1px #dce2f0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-shell .learning-map-empty-node.is-first {
+  background: #e9e7ff;
+  color: #6559d4;
+  box-shadow: 0 0 0 1px #c7c2ff;
+}
+
+.student-shell .learning-map-empty-line {
+  width: 28px;
+  height: 2px;
+  background: repeating-linear-gradient(to right, #cbd2e9 0 6px, transparent 6px 10px);
+}
+
+.student-shell .learning-map-empty-copy h4 {
+  margin: 0;
+  color: #2d355d;
+  font-size: 1rem;
+}
+
+.student-shell .learning-map-empty-copy > p:not(.learning-map-kicker) {
+  margin: 6px 0 12px;
+  color: #747d91;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.student-shell .learning-map-empty-copy .btn {
+  min-height: 38px;
+  border-radius: 12px;
+}
+
 .student-shell .learning-model-details {
   margin-top: 16px;
   border-top: 1px solid #e5e8f2;
@@ -6303,6 +6370,16 @@ textarea:focus-visible {
     width: 42px;
     height: 42px;
     border-radius: 13px;
+  }
+
+  .student-shell .learning-map-empty-state {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 16px;
+  }
+
+  .student-shell .learning-map-empty-route {
+    min-height: 58px;
   }
 }
 
