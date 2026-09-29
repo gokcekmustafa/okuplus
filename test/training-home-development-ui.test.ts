@@ -102,7 +102,7 @@ describe("training home and development UI", () => {
   it("shows one guided data-driven learning map without changing the path contract", () => {
     expect(index).toContain('id="learning-map-current"');
     expect(index).toContain('id="learning-model-details"');
-    expect(app).toContain("function renderLearningPathMap(pathGroups)");
+    expect(app).toContain("function renderLearningPathMap(pathGroups, currentLevel)");
     expect(app).toContain("GUIDED_LEARNING_SKILL_ORDER");
     expect(app).toContain("learningPathNodeRoadmapPhase");
     expect(app).toContain("function learningPathMapKind(node)");
@@ -114,7 +114,7 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-empty-state");
     expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
     expect(app).toContain("function learningPathMapWindow(entries, nodes)");
-    expect(app).toContain("Tamamladıkça harita ileri kayar.");
+    expect(app).toContain("Tamamladıkça yeni duraklar açılacak.");
     expect(styles).toContain(".student-shell .learning-map-window-note");
   });
 
@@ -128,6 +128,11 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-step.kind-comprehension");
     expect(app).toContain('label: "Hızlı okuma", icon: "⚡"');
     expect(app).toContain('label: "Okuduğunu anlama", icon: "★"');
+    expect(app).toContain('label: "Öğrenme dersi", icon: "◒"');
+    expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
+    expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
+    expect(app).toContain('continueEl.classList.add("hidden")');
+    expect(styles).toContain("@keyframes okuplus-map-active");
   });
 
   it("does not treat an empty published path as a usable roadmap", () => {
