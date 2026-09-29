@@ -2170,6 +2170,206 @@ function learningPathCommonDetail(pathGroups) {
   return "";
 }
 
+var studentLearningPathGroups = [];
+var studentLearningPathSelectedArea = "";
+
+function learningPathGroupArea(group) {
+  return group?.path?.area || "COMMON";
+}
+
+function learningPathDefaultArea(pathGroups) {
+  var currentGroup = pathGroups.find(function (group) {
+    return (group.nodes || []).some(function (node) {
+      return node.status === "active" || node.isCurrent;
+    });
+  });
+  if (currentGroup) return learningPathGroupArea(currentGroup);
+  var preferred = pathGroups.find(function (group) {
+    return learningPathGroupArea(group) === "FAST_READING";
+  });
+  return preferred ? "FAST_READING" : learningPathGroupArea(pathGroups[0]);
+}
+
+function learningPathMapKind(node) {
+  if (node?.type === "ASSESSMENT") {
+    return { className: "checkpoint", label: "Ölçme durağı", icon: "◆" };
+  }
+  if (node?.type === "REINFORCEMENT") {
+    return { className: "reinforcement", label: "Ortak pekiştirme", icon: "✦" };
+  }
+  if (node?.type === "PLACEMENT") {
+    return { className: "level", label: "Seviye belirleme", icon: "◎" };
+  }
+  if (node?.type === "MEASUREMENT") {
+    return { className: "measurement", label: "Başarı ölçümü", icon: "↗" };
+  }
+  return { className: "lesson", label: "Öğrenme adımı", icon: "•" };
+}
+
+function learningPathMapCurrentText(node, visualStatus) {
+  if (visualStatus === "active") return "Şimdi buradasın · Bu adımla devam et";
+  if (visualStatus === "completed") return "Tamamlandı · İstersen tekrar edebilirsin";
+  if (visualStatus === "locked") return "Önceki adımlar tamamlanınca açılır";
+  return "Sıradaki durak için hazır";
+}
+
+function renderLearningPathTabs(pathGroups, selectedArea) {
+  var areas = new Set(
+    pathGroups.map(function (group) {
+      return learningPathGroupArea(group);
+    }),
+  );
+  document.querySelectorAll(".learning-map-tab[data-learning-area]").forEach(function (tab) {
+    var area = tab.getAttribute("data-learning-area");
+    var visible = areas.has(area);
+    var selected = visible && area === selectedArea;
+    tab.classList.toggle("hidden", !visible);
+    tab.classList.toggle("is-active", selected);
+    tab.setAttribute("aria-selected", selected ? "true" : "false");
+    tab.tabIndex = selected ? 0 : -1;
+  });
+}
+
+function renderLearningPathMap(pathGroups, requestedArea) {
+  var container = $("learning-path");
+  var currentEl = $("learning-map-current");
+  if (!container) return;
+  var groups = Array.isArray(pathGroups) ? pathGroups : [];
+  var selectedGroup = groups.find(function (group) {
+    return learningPathGroupArea(group) === requestedArea;
+  });
+  if (!selectedGroup) selectedGroup = groups[0];
+  if (!selectedGroup) {
+    renderLearningPathTabs([], "");
+    if (currentEl) currentEl.textContent = "";
+    container.innerHTML =
+      '<p class="muted learning-map-empty">Yakında yeni içerikler eklenecek.</p>';
+    return;
+  }
+
+  var selectedArea = learningPathGroupArea(selectedGroup);
+  studentLearningPathSelectedArea = selectedArea;
+  renderLearningPathTabs(groups, selectedArea);
+  var areaLabel = learningPathAreaLabel(selectedArea, selectedGroup.path?.title);
+  var progress = learningPathGroupProgress(selectedGroup);
+  var percent = Number(progress.percent || 0);
+  var detail =
+    selectedArea === "COMMON"
+      ? learningPathCommonDetail(groups)
+      : "Adımlar sırayla açılır; her durak bir sonraki beceriye hazırlanır.";
+  if (currentEl) {
+    currentEl.innerHTML =
+      '<div class="learning-map-current-copy"><span class="learning-map-current-dot" aria-hidden="true"></span><span><strong>' +
+      escapeHtml(areaLabel) +
+      "</strong><small>" +
+      escapeHtml(detail || "Kendi hızında ilerle.") +
+      '</small></span></div><span class="learning-map-current-progress">' +
+      escapeHtml(String(progress.completed || 0)) +
+      "/" +
+      escapeHtml(String(progress.total || 0)) +
+      " · " +
+      escapeHtml(String(percent)) +
+      "%" +
+      "</span>";
+  }
+
+  var nodes = selectedGroup.nodes || [];
+  var heading =
+    '<div class="learning-map-panel-heading"><div><p class="learning-map-kicker">' +
+    (selectedArea === "COMMON" ? "BİRLİKTE TAMAMLANAN DURAKLAR" : "SENİN İLERLEME HARİTAN") +
+    "</p><h4>" +
+    escapeHtml(areaLabel) +
+    '</h4></div><span class="learning-map-panel-count">' +
+    escapeHtml(String(progress.completed || 0)) +
+    "/" +
+    escapeHtml(String(progress.total || 0)) +
+    " tamamlandı</span></div>";
+  var nodeMarkup = nodes
+    .map(function (node, index) {
+      var visualStatus = learningPathVisualStatus(node.status);
+      var kind = learningPathMapKind(node);
+      var label = node.label || node.code || "Öğrenme adımı";
+      var statusLabel = learningPathStatusLabel(visualStatus);
+      var meta = learningPathNodeMeta(node.progress);
+      var disabled = visualStatus === "locked" ? " disabled" : "";
+      var current = node.isCurrent ? ' aria-current="step"' : "";
+      var aria = label + " - " + statusLabel;
+      var unitLabel = node.unit?.title
+        ? '<span class="path-node-unit">' + escapeHtml(node.unit.title) + "</span>"
+        : "";
+      var actionLabel =
+        visualStatus === "active"
+          ? "Başla"
+          : visualStatus === "completed"
+            ? "Tekrar et"
+            : visualStatus === "locked"
+              ? "Kilitli"
+              : "Açık";
+      var stepNumber = index + 1;
+      return (
+        '<div class="path-node-item learning-map-step ' +
+        escapeHtml(visualStatus) +
+        " kind-" +
+        escapeHtml(kind.className) +
+        (node.isCurrent ? " is-current" : "") +
+        '" role="listitem" data-map-index="' +
+        stepNumber +
+        '"><button type="button" class="path-node learning-map-node ' +
+        escapeHtml(visualStatus) +
+        '" data-node-id="' +
+        escapeHtml(node.id) +
+        '" data-node-type="' +
+        escapeHtml(node.type || "") +
+        '" data-template="' +
+        escapeHtml(node.templateVersionId || "") +
+        '" aria-label="' +
+        escapeHtml(aria) +
+        '"' +
+        current +
+        disabled +
+        '><span class="path-node-marker learning-map-marker" aria-hidden="true"><span>' +
+        escapeHtml(
+          visualStatus === "completed" ? "✓" : visualStatus === "locked" ? "·" : kind.icon,
+        ) +
+        '</span></span><span class="path-node-copy learning-map-node-copy">' +
+        unitLabel +
+        '<span class="learning-map-node-top"><span class="path-node-status">' +
+        escapeHtml(statusLabel) +
+        '</span><span class="learning-map-kind">' +
+        escapeHtml(kind.label) +
+        '</span></span><span class="path-node-label">' +
+        escapeHtml(label) +
+        '</span><span class="learning-map-node-detail">' +
+        escapeHtml(learningPathMapCurrentText(node, visualStatus)) +
+        (meta ? " · " + escapeHtml(meta) : "") +
+        '</span></span><span class="path-node-action learning-map-node-action" aria-hidden="true">' +
+        (visualStatus === "locked" ? "🔒" : escapeHtml(actionLabel) + " →") +
+        "</span></button></div>"
+      );
+    })
+    .join("");
+  container.innerHTML =
+    '<div class="learning-map-panel" data-learning-panel="' +
+    escapeHtml(selectedArea) +
+    '">' +
+    heading +
+    '<div class="learning-map-track" role="list" aria-label="' +
+    escapeHtml(areaLabel) +
+    ' adımları">' +
+    nodeMarkup +
+    "</div></div>";
+
+  for (var btn of container.querySelectorAll(".path-node:not(:disabled)")) {
+    btn.addEventListener("click", function (e) {
+      var el = e.currentTarget;
+      var node = nodes.find(function (item) {
+        return item.id === el.getAttribute("data-node-id");
+      });
+      if (node) void startLearningPathNode(node, el);
+    });
+  }
+}
+
 async function loadLearningPath() {
   var container = $("learning-path");
   var progEl = $("learning-path-progress");
@@ -2196,6 +2396,13 @@ async function loadLearningPath() {
       Array.isArray(data.paths) && data.paths.length
         ? data.paths
         : [{ path: data.path, nodes: data.nodes || [] }];
+    studentLearningPathGroups = pathGroups;
+    var availableAreas = pathGroups.map(function (group) {
+      return learningPathGroupArea(group);
+    });
+    if (!availableAreas.includes(studentLearningPathSelectedArea)) {
+      studentLearningPathSelectedArea = learningPathDefaultArea(pathGroups);
+    }
     var nodes = pathGroups.flatMap(function (group) {
       return group.nodes || [];
     });
@@ -2255,6 +2462,9 @@ async function loadLearningPath() {
         : "Seviye belirlenmedi — Seviyemi Ölç ile öğren";
     if (!nodes.length) {
       continueEl?.classList.add("hidden");
+      renderLearningPathTabs([], "");
+      var emptyMapStatus = $("learning-map-current");
+      if (emptyMapStatus) emptyMapStatus.textContent = "";
       container.innerHTML =
         '<p class="muted" style="text-align:center">Yakında yeni içerikler eklenecek.</p>';
       if (summaryEl) summaryEl.innerHTML = "";
@@ -2272,89 +2482,7 @@ async function loadLearningPath() {
           }
         : null;
     }
-    container.innerHTML = pathGroups
-      .map(function (group) {
-        var groupNodes = group.nodes || [];
-        var area = group.path?.area;
-        var areaLabel = learningPathAreaLabel(area, group.path?.title);
-        var heading =
-          pathGroups.length > 1
-            ? '<h4 class="learning-path-area-title">' + escapeHtml(areaLabel) + "</h4>"
-            : "";
-        return (
-          heading +
-          groupNodes
-            .map(function (n) {
-              var visualStatus = learningPathVisualStatus(n.status);
-              var icon =
-                visualStatus === "completed"
-                  ? "✓"
-                  : visualStatus === "locked"
-                    ? "🔒"
-                    : visualStatus === "active"
-                      ? "▶"
-                      : "○";
-              var label = n.label || n.code || "Öğrenme adımı";
-              var statusLabel = learningPathStatusLabel(visualStatus);
-              var meta = learningPathNodeMeta(n.progress);
-              var disabled = visualStatus === "locked" ? " disabled" : "";
-              var current = n.isCurrent ? ' aria-current="step"' : "";
-              var aria = label + " - " + statusLabel;
-              var unitLabel = n.unit?.title
-                ? '<span class="path-node-unit">' + escapeHtml(n.unit.title) + "</span>"
-                : "";
-              var actionLabel =
-                visualStatus === "active"
-                  ? "Devam et"
-                  : visualStatus === "completed"
-                    ? "Tekrar et"
-                    : "Kilitli";
-              return (
-                '<div class="path-node-item ' +
-                escapeHtml(visualStatus) +
-                (n.isCurrent ? " is-current" : "") +
-                '" role="listitem">' +
-                '<button type="button" class="path-node ' +
-                escapeHtml(visualStatus) +
-                '" data-node-id="' +
-                escapeHtml(n.id) +
-                '" data-node-type="' +
-                escapeHtml(n.type) +
-                '" data-template="' +
-                escapeHtml(n.templateVersionId || "") +
-                '" aria-label="' +
-                escapeHtml(aria) +
-                '"' +
-                current +
-                disabled +
-                '><span class="path-node-marker" aria-hidden="true">' +
-                icon +
-                '</span><span class="path-node-copy">' +
-                unitLabel +
-                '<span class="path-node-status">' +
-                escapeHtml(statusLabel) +
-                '</span><span class="path-node-label">' +
-                escapeHtml(label) +
-                "</span>" +
-                (meta ? '<span class="path-node-meta">' + escapeHtml(meta) + "</span>" : "") +
-                '</span><span class="path-node-action" aria-hidden="true">' +
-                (visualStatus === "locked" ? "🔒" : escapeHtml(actionLabel) + " →") +
-                "</span></button></div>"
-              );
-            })
-            .join("")
-        );
-      })
-      .join("");
-    for (var btn of container.querySelectorAll(".path-node:not(:disabled)")) {
-      btn.addEventListener("click", function (e) {
-        var el = e.currentTarget;
-        var node = nodes.find(function (item) {
-          return item.id === el.getAttribute("data-node-id");
-        });
-        if (node) void startLearningPathNode(node, el);
-      });
-    }
+    renderLearningPathMap(pathGroups, studentLearningPathSelectedArea);
   } catch (_e) {
     void _e;
     container.setAttribute("aria-busy", "false");
@@ -10794,6 +10922,14 @@ function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
+  document.querySelectorAll(".learning-map-tab[data-learning-area]").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      var area = tab.getAttribute("data-learning-area");
+      if (!area || tab.classList.contains("hidden")) return;
+      studentLearningPathSelectedArea = area;
+      renderLearningPathMap(studentLearningPathGroups, area);
+    });
+  });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
   const createBtn = $("exercise-create-btn");
