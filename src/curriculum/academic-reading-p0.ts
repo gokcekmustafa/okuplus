@@ -17,6 +17,24 @@ export type AcademicSkillCode =
   | "RC_MAIN_IDEA"
   | "RC_DETAIL"
   | "RC_INFERENCE";
+
+/**
+ * Öğrencinin ana haritada izleyeceği P0 sırası.
+ * Her beceri kendi içinde Öğretim → Küçük çalışma → Uygulama olarak ilerler.
+ */
+export const ACADEMIC_P0_GUIDED_SKILL_ORDER = [
+  "FAST_ATTENTION",
+  "FAST_RECOGNITION",
+  "FAST_CHUNKING",
+  "RC_MAIN_IDEA",
+  "RC_DETAIL",
+  "RC_INFERENCE",
+] as const satisfies readonly AcademicSkillCode[];
+
+export function getAcademicP0GuidedSkillPrerequisite(skillCode: string): AcademicSkillCode | null {
+  const index = ACADEMIC_P0_GUIDED_SKILL_ORDER.indexOf(skillCode as AcademicSkillCode);
+  return index > 0 ? (ACADEMIC_P0_GUIDED_SKILL_ORDER[index - 1] ?? null) : null;
+}
 export type AcademicStage = "TEACHING" | "SMALL_STUDY" | "PRACTICE";
 export type AcademicMeasurementSignal =
   | "ACCURACY"

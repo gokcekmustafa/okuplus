@@ -94,16 +94,17 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell #learning-path-card .learning-path-summary-item");
   });
 
-  it("shows separate data-driven learning maps without changing the path contract", () => {
-    expect(index).toContain('data-learning-area="FAST_READING"');
-    expect(index).toContain('data-learning-area="READING_COMPREHENSION"');
-    expect(index).toContain('data-learning-area="COMMON"');
+  it("shows one guided data-driven learning map without changing the path contract", () => {
     expect(index).toContain('id="learning-map-current"');
     expect(index).toContain('id="learning-model-details"');
-    expect(app).toContain("function renderLearningPathMap(pathGroups, requestedArea)");
+    expect(app).toContain("function renderLearningPathMap(pathGroups)");
+    expect(app).toContain("GUIDED_LEARNING_SKILL_ORDER");
+    expect(app).toContain("learningPathNodeRoadmapPhase");
     expect(app).toContain("function learningPathMapKind(node)");
-    expect(app).toContain("studentLearningPathSelectedArea");
+    expect(app).not.toContain("studentLearningPathSelectedArea");
     expect(styles).toContain(".student-shell .learning-map-track::before");
+    expect(styles).toContain(".student-shell .learning-map-phase");
+    expect(styles).toContain(".student-shell .learning-map-step.roadmap-right");
     expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
   });
 });
