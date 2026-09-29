@@ -77,13 +77,17 @@ describe("training home and development UI", () => {
     expect(index).toContain("Gelişimim");
     expect(index).toContain("Profilim");
     expect(index).toContain('id="student-more-toggle"');
+    expect(index).toContain('class="student-more-menu hidden"');
+    expect(index).toContain('aria-hidden="true"');
     expect(index).toContain('data-student-menu-page="exercise"');
     expect(index).toContain('data-student-menu-page="assignments"');
     expect(index).toContain('data-student-menu-page="assessments"');
     expect(index).toContain('data-student-menu-page="badges"');
     expect(index).toContain('data-student-menu-page="billing-account"');
     expect(app).toContain('item.classList.toggle("hidden", isPlatform)');
-    expect(app).toContain('studentMoreToggle.setAttribute("aria-expanded", "false")');
+    expect(app).toContain("function setStudentMoreMenuOpen(open)");
+    expect(app).toContain("menu.hidden = !open");
+    expect(app).toContain('event.key === "Escape"');
     expect(app).toContain("data-student-menu-page");
   });
 
@@ -106,5 +110,7 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-phase");
     expect(styles).toContain(".student-shell .learning-map-step.roadmap-right");
     expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
+    expect(styles).toContain(".student-shell .learning-map-empty-state");
+    expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
   });
 });
