@@ -10370,8 +10370,7 @@ function exerciseFeedbackText(feedback) {
     return /^(Bu kez olmadı|Bu defa olmadı|Tekrar düşün)\.?$/.test(text) ? "" : feedback;
   }
   if (!feedback || typeof feedback !== "object") return "";
-  const explanation =
-    typeof feedback.explanation === "string" ? feedback.explanation.trim() : "";
+  const explanation = typeof feedback.explanation === "string" ? feedback.explanation.trim() : "";
   if (explanation) return explanation;
   const message = typeof feedback.message === "string" ? feedback.message.trim() : "";
   if (!message || /^(Bu kez olmadı|Bu defa olmadı|Tekrar düşün)\.?$/.test(message)) {
