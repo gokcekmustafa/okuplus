@@ -10364,6 +10364,21 @@ function syncExerciseDisclosures(root) {
     sync();
   });
 }
+function exerciseFeedbackText(feedback) {
+  if (typeof feedback === "string") {
+    const text = feedback.trim();
+    return /^(Bu kez olmadı|Bu defa olmadı|Tekrar düşün)\.?$/.test(text) ? "" : feedback;
+  }
+  if (!feedback || typeof feedback !== "object") return "";
+  const explanation =
+    typeof feedback.explanation === "string" ? feedback.explanation.trim() : "";
+  if (explanation) return explanation;
+  const message = typeof feedback.message === "string" ? feedback.message.trim() : "";
+  if (!message || /^(Bu kez olmadı|Bu defa olmadı|Tekrar düşün)\.?$/.test(message)) {
+    return "";
+  }
+  return message;
+}
 function showExerciseFeedback(data) {
   const el = $("exercise-attempt-feedback");
   const question = exerciseQuestions.find((q) => q.questionVersionId === data.questionVersionId);
@@ -10376,7 +10391,7 @@ function showExerciseFeedback(data) {
     : data.isCorrect === true
       ? "✓ Güzel yakaladın."
       : secondWrong
-        ? "Bu kez olmadı."
+        ? "Bu defa olmadı."
         : "Tekrar düşün.";
   const event = exerciseGamification?.recentPointEvents?.find(
     (e) => e.sourceType === "ATTEMPT" && e.sourceId === data.id,
@@ -10386,9 +10401,10 @@ function showExerciseFeedback(data) {
     secondWrong && data.correctAnswer != null
       ? `<div>Doğru cevap: ${escapeHtml(exerciseAnswerLabel(data.correctAnswer, question))}</div>`
       : "";
+  const feedbackText = exerciseFeedbackText(data.feedback);
   el.className = "feedback-panel " + kind;
   const disclosureSuffix = String(data.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
-  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${data.feedback ? `<div>${escapeHtml(typeof data.feedback === "string" ? data.feedback : JSON.stringify(data.feedback))}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
+  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${feedbackText ? `<div>${escapeHtml(feedbackText)}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
   el.style.display = "block";
   exerciseAwaitingNext = true;
@@ -10401,7 +10417,19 @@ function showExerciseFeedback(data) {
 }
 
 function exerciseAnswerLabel(answer, question) {
-  const values = Array.isArray(answer) ? answer : [answer];
+  const values = Array.isArray(answer)
+    ? answer
+    : answer && typeof answer === "object"
+      ? Array.isArray(answer.correctOptionIds)
+        ? answer.correctOptionIds
+        : Array.isArray(answer.answers)
+          ? answer.answers
+          : answer.answer != null && ["string", "number"].includes(typeof answer.answer)
+            ? [answer.answer]
+            : []
+      : answer == null
+        ? []
+        : [answer];
   const options = Array.isArray(question?.options) ? question.options : [];
   return values
     .map((value) => options.find((option) => option.id === value)?.text ?? String(value))
