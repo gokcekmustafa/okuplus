@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const app = readFileSync("public/app.js", "utf8");
 const index = readFileSync("public/index.html", "utf8");
 const styles = readFileSync("public/styles.css", "utf8");
+const learningPathService = readFileSync("src/modules/learning-path/service.ts", "utf8");
 
 describe("training home and development UI", () => {
   it("renders the daily training home states", () => {
@@ -112,6 +113,9 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
     expect(styles).toContain(".student-shell .learning-map-empty-state");
     expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
+    expect(app).toContain("function learningPathMapWindow(entries, nodes)");
+    expect(app).toContain("Tamamladıkça harita ileri kayar.");
+    expect(styles).toContain(".student-shell .learning-map-window-note");
   });
 
   it("keeps the student home focused on the roadmap", () => {
@@ -124,5 +128,12 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-step.kind-comprehension");
     expect(app).toContain('label: "Hızlı okuma", icon: "⚡"');
     expect(app).toContain('label: "Okuduğunu anlama", icon: "★"');
+  });
+
+  it("does not treat an empty published path as a usable roadmap", () => {
+    expect(learningPathService).toContain(
+      "const usableRows = rows.filter((row) => row.units.some((unit) => unit.steps.length > 0));",
+    );
+    expect(learningPathService).toContain("for (const row of usableRows)");
   });
 });

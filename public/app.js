@@ -2299,6 +2299,28 @@ function renderLearningPathEmptyState(currentLevel) {
   $("learning-map-start-placement")?.addEventListener("click", () => navigate("assessments"));
 }
 
+function learningPathMapWindow(entries, nodes) {
+  var visibleLimit = 7;
+  if (entries.length <= visibleLimit) {
+    return { entries: entries, start: 0, end: entries.length };
+  }
+  var focusIndex = nodes.findIndex(function (node) {
+    return node.status === "active";
+  });
+  if (focusIndex < 0) {
+    focusIndex = nodes.reduce(function (lastIndex, node, index) {
+      return node.status === "completed" ? index : lastIndex;
+    }, 0);
+  }
+  var maxStart = entries.length - visibleLimit;
+  var start = Math.min(Math.max(focusIndex - 2, 0), maxStart);
+  return {
+    entries: entries.slice(start, start + visibleLimit),
+    start: start,
+    end: Math.min(start + visibleLimit, entries.length),
+  };
+}
+
 function renderLearningPathMap(pathGroups) {
   var container = $("learning-path");
   var currentEl = $("learning-map-current");
@@ -2319,6 +2341,8 @@ function renderLearningPathMap(pathGroups) {
   var nodes = entries.map(function (entry) {
     return entry.node;
   });
+  var mapWindow = learningPathMapWindow(entries, nodes);
+  var visibleEntries = mapWindow.entries;
   var currentNode = nodes.find(function (node) {
     return node.status === "active";
   });
@@ -2356,14 +2380,27 @@ function renderLearningPathMap(pathGroups) {
   var heading =
     '<div class="learning-map-panel-heading"><div><p class="learning-map-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan</h4><p class="learning-map-panel-intro">' +
     escapeHtml(
-      currentNode ? "Şimdi yalnızca bu durağa odaklan." : "Tamamladıkça yeni duraklar açılacak.",
+      currentNode
+        ? "Şimdi yalnızca bu durağa odaklan. Tamamladıkça harita ileri kayar."
+        : "Tamamladıkça yeni duraklar açılacak.",
     ) +
     '</p></div><span class="learning-map-panel-count">' +
     escapeHtml(String(progress.completed || 0)) +
     "/" +
     escapeHtml(String(progress.total || 0)) +
-    " tamamlandı</span></div>";
-  var nodeMarkup = entries
+    " tamamlandı</span></div>" +
+    (visibleEntries.length < entries.length
+      ? '<p class="learning-map-window-note">' +
+        escapeHtml(
+          "Haritanın " +
+            String(mapWindow.start + 1) +
+            "–" +
+            String(mapWindow.end) +
+            ". durakları gösteriliyor; ilerledikçe sonraki duraklar görünür.",
+        ) +
+        "</p>"
+      : "");
+  var nodeMarkup = visibleEntries
     .map(function (entry, index) {
       var node = entry.node;
       var visualStatus = learningPathVisualStatus(node.status);
@@ -2385,9 +2422,11 @@ function renderLearningPathMap(pathGroups) {
             : visualStatus === "locked"
               ? "Kilitli"
               : "Açık";
-      var stepNumber = index + 1;
+      var globalIndex = mapWindow.start + index;
+      var stepNumber = globalIndex + 1;
       var phase = learningPathNodeRoadmapPhase(node);
-      var previousPhase = index > 0 ? learningPathNodeRoadmapPhase(entries[index - 1].node) : null;
+      var previousPhase =
+        globalIndex > 0 ? learningPathNodeRoadmapPhase(entries[globalIndex - 1].node) : null;
       var phaseMarker =
         phase !== previousPhase
           ? '<div class="learning-map-phase" aria-hidden="true"><span>' +

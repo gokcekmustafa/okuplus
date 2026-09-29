@@ -111,8 +111,13 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     select: PATH_SELECT,
   });
 
+  // A published shell without any published units/steps is not a usable
+  // learning path. Treat it as unavailable so the caller can use the
+  // backwards-compatible curriculum projection instead of rendering 0/0.
+  const usableRows = rows.filter((row) => row.units.some((unit) => unit.steps.length > 0));
+
   const pathsByArea = new Map<string, PublishedPath>();
-  for (const row of rows) {
+  for (const row of usableRows) {
     const current = pathsByArea.get(row.area);
     const isTenantSpecific = row.tenantId === actor.tenantId;
     const currentIsTenantSpecific = current?.tenantId === actor.tenantId;
