@@ -923,7 +923,7 @@ function showDashboard(me) {
     item.classList.toggle("hidden", isPlatform);
   }
   for (const item of document.querySelectorAll("[data-student-secondary]")) {
-    item.classList.toggle("hidden", !isPlatform);
+    item.classList.toggle("hidden", isPlatform);
   }
 
   // Student shell toggle
@@ -3112,6 +3112,17 @@ function navigate(page) {
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && isPlatformUser !== false) return;
 
+  const studentMoreMenu = $("student-more-menu");
+  const studentMoreToggle = $("student-more-toggle");
+  if (studentMoreMenu) studentMoreMenu.classList.add("hidden");
+  if (studentMoreToggle) {
+    studentMoreToggle.setAttribute("aria-expanded", "false");
+    studentMoreToggle.classList.toggle(
+      "active",
+      ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page),
+    );
+  }
+
   for (const name of PAGES) {
     $("page-" + name)?.classList.toggle("hidden", name !== page);
   }
@@ -3122,7 +3133,10 @@ function navigate(page) {
     if (active) item.setAttribute("aria-current", "page");
   }
   for (const item of document.querySelectorAll(".bottom-nav-item")) {
-    const active = (item.dataset.bottomPage || item.dataset.page) === page;
+    const active =
+      item.id === "student-more-toggle"
+        ? ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page)
+        : (item.dataset.bottomPage || item.dataset.page) === page;
     item.classList.toggle("active", active);
     item.toggleAttribute("aria-current", active);
     if (active) item.setAttribute("aria-current", "page");
@@ -3723,6 +3737,19 @@ for (const item of document.querySelectorAll(".nav-item")) {
 }
 for (const item of document.querySelectorAll(".bottom-nav-item")) {
   item.addEventListener("click", () => navigate(item.dataset.bottomPage || item.dataset.page));
+}
+
+$("student-more-toggle")?.addEventListener("click", () => {
+  const menu = $("student-more-menu");
+  const toggle = $("student-more-toggle");
+  if (!menu || !toggle) return;
+  const willOpen = menu.classList.contains("hidden");
+  menu.classList.toggle("hidden", !willOpen);
+  toggle.setAttribute("aria-expanded", String(willOpen));
+});
+
+for (const item of document.querySelectorAll("[data-student-menu-page]")) {
+  item.addEventListener("click", () => navigate(item.dataset.studentMenuPage));
 }
 
 $("sidebar-toggle").addEventListener("click", () => {

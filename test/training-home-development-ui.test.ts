@@ -70,4 +70,27 @@ describe("training home and development UI", () => {
     expect(app).toContain("formatStudentError");
     expect(app).toContain("data-student-secondary");
   });
+
+  it("groups student navigation without removing secondary destinations", () => {
+    expect(index).toContain('class="student-nav-more" data-student');
+    expect(index).toContain("Öğrenme Yolum");
+    expect(index).toContain("Gelişimim");
+    expect(index).toContain("Profilim");
+    expect(index).toContain('id="student-more-toggle"');
+    expect(index).toContain('data-student-menu-page="exercise"');
+    expect(index).toContain('data-student-menu-page="assignments"');
+    expect(index).toContain('data-student-menu-page="assessments"');
+    expect(index).toContain('data-student-menu-page="badges"');
+    expect(index).toContain('data-student-menu-page="billing-account"');
+    expect(app).toContain('item.classList.toggle("hidden", isPlatform)');
+    expect(app).toContain('studentMoreToggle.setAttribute("aria-expanded", "false")');
+    expect(app).toContain("data-student-menu-page");
+  });
+
+  it("prioritizes the real daily action before the learning path on the student home", () => {
+    expect(styles).toContain(".student-shell #page-dashboard > #today-card");
+    expect(styles).toContain(".student-shell #page-dashboard > #learning-path-card");
+    expect(styles).toContain(".student-shell #today-card.supporting-task-card");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-path-summary-item");
+  });
 });

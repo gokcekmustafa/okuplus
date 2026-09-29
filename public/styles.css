@@ -4283,6 +4283,210 @@ body {
   }
 }
 
+/* Student navigation and home refresh: preserve routes and data, reduce visual noise. */
+.student-shell .sidebar-nav {
+  gap: 5px;
+}
+
+.student-shell .student-nav-more {
+  order: 5;
+  margin: 4px 0;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.student-shell .student-nav-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: var(--student-ink);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.student-shell .student-nav-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-shell .student-nav-more > summary::after {
+  margin-left: auto;
+  content: "＋";
+  color: var(--student-muted);
+  font-size: 18px;
+}
+
+.student-shell .student-nav-more[open] > summary::after {
+  content: "−";
+}
+
+.student-shell .student-nav-more > summary:hover,
+.student-shell .student-nav-more[open] > summary {
+  color: var(--student-blue);
+  background: #f2f6ff;
+}
+
+.student-shell .student-nav-more-list {
+  display: grid;
+  gap: 3px;
+  padding: 4px 0 0 10px;
+}
+
+.student-shell .student-nav-more-list .nav-item {
+  min-height: 42px;
+  padding: 9px 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.student-shell .student-nav-more-list .nav-item[data-student-secondary] {
+  display: flex !important;
+}
+
+.student-shell #page-dashboard {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-shell #page-dashboard > .page-head {
+  order: 0;
+}
+
+.student-shell #page-dashboard > #today-card {
+  order: 1;
+}
+
+.student-shell #page-dashboard > #learning-path-card {
+  order: 2;
+}
+
+.student-shell #page-dashboard > #home-insights,
+.student-shell #page-dashboard > #guest-diagnostic-card,
+.student-shell #page-dashboard > #review-card,
+.student-shell #page-dashboard > #entitlement-card {
+  order: 3;
+}
+
+.student-shell #today-card.supporting-task-card {
+  margin-top: 8px;
+  padding: clamp(22px, 3vw, 30px);
+  border: 1px solid #cad9f0;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4f7ff 72%, #f1fbf7 100%);
+  box-shadow: 0 14px 30px rgba(37, 58, 100, 0.08);
+}
+
+.student-shell #today-card.supporting-task-card .training-home-heading h2 {
+  color: var(--student-ink);
+  font-size: clamp(1.55rem, 3vw, 2rem);
+}
+
+.student-shell #today-card.supporting-task-card .training-home-heading p {
+  max-width: 58ch;
+}
+
+.student-shell #today-card.supporting-task-card .training-status {
+  align-self: flex-start;
+  background: #e9f6ef;
+}
+
+.student-shell #today-card.supporting-task-card .training-progress-track {
+  height: 10px;
+  margin: 22px 0 10px;
+}
+
+.student-shell #today-card.supporting-task-card .training-home-actions {
+  align-items: center;
+  margin-top: 18px;
+}
+
+.student-shell #learning-path-card {
+  margin-top: 14px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid #d7e2f4;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 58, 100, 0.06);
+}
+
+.student-shell #learning-path-card .learning-path-heading h3 {
+  font-size: clamp(1.45rem, 3vw, 1.85rem);
+}
+
+.student-shell #learning-path-card .learning-path-summary-item {
+  background: #f8faff;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-path-summary-item.is-common {
+  background: #f3fbf7;
+}
+
+.student-shell .student-more-menu {
+  position: fixed;
+  right: 12px;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: grid;
+  width: min(260px, calc(100vw - 24px));
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px rgba(28, 39, 75, 0.16);
+}
+
+.student-shell .student-more-menu.hidden {
+  display: none !important;
+}
+
+.student-shell .student-more-menu button {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 12px;
+  color: var(--text);
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-shell .student-more-menu button:hover,
+.student-shell .student-more-menu button:focus-visible {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+@media (min-width: 769px) {
+  .student-shell .student-more-menu {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .student-shell .student-bottom-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .student-shell .bottom-nav-label {
+    font-size: 10px;
+  }
+
+  .student-shell #today-card.supporting-task-card,
+  .student-shell #learning-path-card {
+    border-radius: 18px;
+  }
+
+  .student-shell #learning-path-card .learning-path-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* V1 student-first visual system. Keep the existing admin surface intact while
    giving the learner shell a calmer, more legible rhythm. */
 :root {
@@ -5497,5 +5701,73 @@ textarea:focus-visible {
 
   .guest-result-buttons .btn {
     width: 100%;
+  }
+}
+
+/* Final student-first overrides (kept at the end so the refreshed hierarchy wins). */
+.student-shell #page-dashboard {
+  display: flex;
+  flex-direction: column;
+}
+
+.student-shell #page-dashboard > #today-card {
+  order: 1;
+}
+
+.student-shell #page-dashboard > #learning-path-card {
+  order: 2;
+}
+
+.student-shell #page-dashboard > #home-insights,
+.student-shell #page-dashboard > #guest-diagnostic-card,
+.student-shell #page-dashboard > #review-card,
+.student-shell #page-dashboard > #entitlement-card {
+  order: 3;
+}
+
+.student-shell #today-card.supporting-task-card {
+  margin-top: 8px;
+  padding: clamp(22px, 3vw, 30px);
+  border: 1px solid #cad9f0;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4f7ff 72%, #f1fbf7 100%);
+  box-shadow: 0 14px 30px rgba(37, 58, 100, 0.08);
+}
+
+.student-shell #today-card.supporting-task-card .training-home-heading h2 {
+  color: var(--student-ink);
+  font-size: clamp(1.55rem, 3vw, 2rem);
+}
+
+.student-shell #today-card.supporting-task-card .training-focus-grid {
+  display: none;
+}
+
+.student-shell #learning-path-card {
+  margin-top: 14px;
+  padding: clamp(18px, 3vw, 26px);
+  border: 1px solid #d7e2f4;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 58, 100, 0.06);
+}
+
+.student-shell #learning-path-card .learning-path-summary-item {
+  background: #f8faff;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-path-summary-item.is-common {
+  background: #f3fbf7;
+}
+
+@media (max-width: 768px) {
+  .student-shell #today-card.supporting-task-card,
+  .student-shell #learning-path-card {
+    border-radius: 18px;
+  }
+
+  .student-shell #learning-path-card .learning-path-summary {
+    grid-template-columns: 1fr;
   }
 }
