@@ -1,5 +1,9 @@
 import { Prisma, type Prisma as PrismaTypes } from "@prisma/client";
 import { forbiddenError } from "../../lib/errors.js";
+import {
+  ACADEMIC_P0_GUIDED_SKILL_ORDER,
+  getAcademicP0GuidedSkillPrerequisite,
+} from "../../curriculum/academic-reading-p0.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor, type StudentActor } from "../student-learning/policy.js";
 
@@ -303,7 +307,11 @@ async function readPathState(
   };
 }
 
-function prerequisiteIdsForStep(steps: ReturnType<typeof flattenSteps>, index: number) {
+function prerequisiteIdsForStep(
+  steps: ReturnType<typeof flattenSteps>,
+  index: number,
+  guidedStepsByStableKey: ReadonlyMap<string, PathStepRow>,
+) {
   const step = steps[index];
   if (!step) return [];
   const ids = new Set<string>();
@@ -324,6 +332,23 @@ function prerequisiteIdsForStep(steps: ReturnType<typeof flattenSteps>, index: n
       .find((candidate) => candidate.type === "REINFORCEMENT");
     if (reinforcement) ids.add(reinforcement.id);
   }
+  if (step.type === "TEACHING") {
+    const skill = ACADEMIC_P0_GUIDED_SKILL_ORDER.find(
+      (candidate) =>
+        step.stableKey === `${candidate}_TEACHING` ||
+        step.stableKey === `${candidate}_SMALL_STUDY` ||
+        step.stableKey === `${candidate}_PRACTICE`,
+    );
+    if (skill) {
+      const previousSkill = getAcademicP0GuidedSkillPrerequisite(skill);
+      if (previousSkill) {
+        const previousPractice =
+          guidedStepsByStableKey.get(`${previousSkill}_PRACTICE`) ??
+          steps.find((candidate) => candidate.stableKey === `${previousSkill}_PRACTICE`);
+        if (previousPractice) ids.add(previousPractice.id);
+      }
+    }
+  }
   return [...ids];
 }
 
@@ -332,6 +357,7 @@ function toNodes(
   currentLevel: { id: string; code: string; name: string; displayOrder: number } | null,
   progress: Map<string, StepProgressRow>,
   globallyCompletedIds: Set<string>,
+  guidedStepsByStableKey: ReadonlyMap<string, PathStepRow>,
 ) {
   const steps = flattenSteps(path);
   let activeAssigned = false;
@@ -342,7 +368,7 @@ function toNodes(
     if (saved?.status === "COMPLETED") {
       status = "completed";
     } else {
-      const prerequisiteIds = prerequisiteIdsForStep(steps, index);
+      const prerequisiteIds = prerequisiteIdsForStep(steps, index, guidedStepsByStableKey);
       const prerequisiteCompleted = prerequisiteIds.every((id) => globallyCompletedIds.has(id));
       const eligible = levelEligible(step, currentLevel);
       if (!activeAssigned && prerequisiteCompleted && eligible) {
@@ -412,6 +438,11 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
           .filter((stepProgress) => stepProgress.status === "COMPLETED")
           .map((stepProgress) => stepProgress.learningStepId),
       );
+      const guidedStepsByStableKey = new Map(
+        states.flatMap((state) =>
+          flattenSteps(state.path).map((step) => [step.stableKey, step] as const),
+        ),
+      );
       const projections = states.map((state) => ({
         path: {
           id: state.path.id,
@@ -426,7 +457,13 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
               name: state.currentLevel.name,
             }
           : null,
-        ...toNodes(state.path, state.currentLevel, allProgress, globallyCompletedIds),
+        ...toNodes(
+          state.path,
+          state.currentLevel,
+          allProgress,
+          globallyCompletedIds,
+          guidedStepsByStableKey,
+        ),
       }));
       const primary =
         projections.find((projection) =>

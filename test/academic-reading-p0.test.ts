@@ -2,7 +2,9 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   ACADEMIC_P0_COMMON_FLOW,
+  ACADEMIC_P0_GUIDED_SKILL_ORDER,
   ACADEMIC_P0_LESSONS,
+  getAcademicP0GuidedSkillPrerequisite,
   validateAcademicReadingP0Catalog,
 } from "../src/curriculum/academic-reading-p0.js";
 import { buildAcademicProgram } from "../src/modules/student-learning/academic-program.js";
@@ -38,6 +40,21 @@ describe("academic reading P0 catalogue", () => {
     const text = JSON.stringify(ACADEMIC_P0_LESSONS);
     expect(text).not.toMatch(/\b\d+(?:\.\d+)?\s*(?:WPM|kelime\/dakika)\b/i);
     expect(ACADEMIC_P0_COMMON_FLOW.assessmentRule).toContain("ürün politikası");
+  });
+
+  it("keeps the student-facing roadmap in a single guided order", () => {
+    expect(ACADEMIC_P0_GUIDED_SKILL_ORDER).toEqual([
+      "FAST_ATTENTION",
+      "FAST_RECOGNITION",
+      "FAST_CHUNKING",
+      "RC_MAIN_IDEA",
+      "RC_DETAIL",
+      "RC_INFERENCE",
+    ]);
+    expect(getAcademicP0GuidedSkillPrerequisite("FAST_ATTENTION")).toBeNull();
+    expect(getAcademicP0GuidedSkillPrerequisite("FAST_CHUNKING")).toBe("FAST_RECOGNITION");
+    expect(getAcademicP0GuidedSkillPrerequisite("RC_MAIN_IDEA")).toBe("FAST_CHUNKING");
+    expect(getAcademicP0GuidedSkillPrerequisite("RC_INFERENCE")).toBe("RC_DETAIL");
   });
 });
 
