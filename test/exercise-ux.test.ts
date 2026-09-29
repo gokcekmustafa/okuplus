@@ -90,6 +90,38 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("İpucu");
   });
 
+  it("uses the updated failure copy and hides structured feedback internals", () => {
+    const h = harness();
+    h.context.exerciseQuestions = [
+      {
+        questionVersionId: "q1",
+        options: [{ id: "b", text: "Anlamlı kelime grubu" }],
+      },
+    ];
+    h.run(`showExerciseFeedback({
+      id: "wrong-2",
+      questionVersionId: "q1",
+      responseOrder: 2,
+      isCorrect: false,
+      rawScore: 0,
+      feedback: {
+        message: "Bu kez olmadı.",
+        explanation: "Anlamlı grup, cümledeki ilişkiyi koruyan doğal kelime birliğidir.",
+        revealedAnswer: { type: "MULTIPLE_CHOICE", correctOptionIds: ["b"] },
+      },
+      correctAnswer: { type: "MULTIPLE_CHOICE", correctOptionIds: ["b"] },
+    })`);
+    const html = h.get("exercise-attempt-feedback").innerHTML;
+    expect(html).toContain("Bu defa olmadı.");
+    expect(html).not.toContain("Bu kez olmadı.");
+    expect(html).toContain("Anlamlı grup, cümledeki ilişkiyi koruyan doğal kelime birliğidir.");
+    expect(html).toContain("Anlamlı kelime grubu");
+    expect(html).not.toContain("revealedAnswer");
+    expect(html).not.toContain("correctOptionIds");
+    expect(html).not.toContain("[object Object]");
+    expect(h.run('exerciseFeedbackText("Bu kez olmadı.")')).toBe("");
+  });
+
   it("keeps answered but unscored items pending even when summary flag is false", () => {
     const h = harness();
     h.context.exerciseSession.scoreSummary = {

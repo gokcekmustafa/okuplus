@@ -1,6 +1,6 @@
 # OKU+
 
-OKU+ is a Fastify API and static single-page web application backed by PostgreSQL and Prisma. The repository currently contains a local/test release baseline and a staging deployment foundation. No production environment is configured or approved.
+OKU+ is a Fastify API and static single-page web application backed by PostgreSQL and Prisma. The repository contains the application, protected production release workflows, and a separate staging validation foundation. Environment secrets and database approvals are managed outside the repository.
 
 ## Prerequisites
 
@@ -106,7 +106,7 @@ The staging foundation is configuration-only until an authorized Render account/
 
 ## Release baseline and branch policy
 
-`master` is the current release-baseline branch. Feature work may use short-lived `feature/*` branches and merge into `master` after the CI quality gates pass. A separate staging branch is not required until an authorized remote/team workflow demonstrates a need for it.
+`master` is the single canonical development and release source. Feature work may use short-lived `feature/*` or `codex/*` branches and must merge into `master` after the CI quality gates pass. `staging` is a validation target only; it is not a second source of truth and must not be used to assemble production releases. Production migration, seed, and deployment are allowed only through the protected workflows from `master` with their explicit target, backup/rollback, and editorial approvals.
 
 The verified Git remote is `origin` → `https://github.com/gokcekmustafa/okuplus.git`; `master` is protected by local no-force-push policy and pushes must follow the pre-push safety checklist. Remote and CI evidence is recorded in [`docs/GITHUB_REMOTE_CI_EVIDENCE_8I6A.md`](docs/GITHUB_REMOTE_CI_EVIDENCE_8I6A.md) and [`docs/STAGE_8I6A_FINAL_REPORT.md`](docs/STAGE_8I6A_FINAL_REPORT.md).
 
@@ -114,4 +114,4 @@ The verified Git remote is `origin` → `https://github.com/gokcekmustafa/okuplu
 
 Known security decisions and residual risks are documented in [`docs/SECURITY_HARDENING_8I2.md`](docs/SECURITY_HARDENING_8I2.md). In particular, browser bearer tokens currently use `localStorage`, CSP retains `unsafe-inline` for legacy assets, and the rate limiter is process-local; these require explicit risk treatment before production.
 
-Current production status is **NO-GO**. There is no production service, production database, production secret, production catalog, production payment activation, or real customer data in scope. The three HIGH dependency advisories and open 8G-8/8G-9B/iyzico evidence gates must be resolved or explicitly accepted before any separately authorized production work.
+Current production status must be taken from the latest protected deployment and database workflow evidence; a local checkout is never sufficient proof of production health. The three HIGH dependency advisories and open 8G-8/8G-9B/iyzico evidence gates remain release risks unless the corresponding protected release evidence explicitly resolves or accepts them.
