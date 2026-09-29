@@ -123,6 +123,7 @@ export function assertSameCatalogDatabaseTarget(
     throw new Error("hedef URL onaylı staging veritabanıyla eşleşmiyor");
   }
 }
+
 export function assertCatalogEnvironmentSafety(
   target: Pick<CatalogTarget, "environment" | "host" | "database">,
   options: { rejectTestDatabase: boolean },

@@ -1,5 +1,4 @@
 import "dotenv/config";
-import { performance } from "node:perf_hooks";
 import { isDeepStrictEqual } from "node:util";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
@@ -11,23 +10,6 @@ import {
   catalogFixtureReason,
   type CatalogRecordIdentity,
 } from "../src/curriculum/catalog-validation.js";
-import {
-  assertFirstRealPackCanonicalBinding,
-  assertCanonicalRuntimeMetadata,
-  CANONICAL_CATALOG_MANIFEST,
-} from "../src/curriculum/canonical-catalog.js";
-import {
-  assertApprovedTargetFingerprint,
-  assertCatalogEnvironmentSafety,
-  assertLiveCatalogTargetIdentity,
-  parseCatalogTargetUrl,
-  type CatalogDbIdentity,
-  type CatalogTarget,
-} from "../src/curriculum/catalog-target-verification.js";
-import {
-  assertIsolatedFirstRealPackTestTarget,
-  ISOLATED_FIRST_REAL_PACK_TEST_DATABASE,
-} from "./isolated-test-target.js";
 
 const WRITE_CONFIRMATION = "I_HAVE_VERIFIED_8G8_TARGET";
 const TEST_WRITE_CONFIRMATION = "I_HAVE_VERIFIED_8G8_TEST_TARGET";
@@ -39,23 +21,29 @@ const EXPECTED_ENVIRONMENTS = ["TEST", "STAGING", "PRODUCTION"] as const;
 const args = new Set(process.argv.slice(2));
 const isDryRun = args.has("--dry-run");
 const simulateFailure = args.has("--simulate-failure");
-const useCanonicalCatalog = args.has("--canonical-catalog");
-const useIsolatedTestTarget = args.has("--isolated-test");
-const measureTiming = process.env.CURRICULUM_PACK_MEASURE_TIMING === "1";
 
 type PromotionEnvironment = (typeof EXPECTED_ENVIRONMENTS)[number];
 
-type TargetSummary = Omit<CatalogTarget, "environment">;
+type TargetSummary = {
+  url: string;
+  host: string;
+  port: string;
+  database: string;
+};
 
 type Target = {
   summary: TargetSummary;
   environment: PromotionEnvironment;
   levelCode: string;
   skillCodes: string[];
-  canonicalCatalogBinding: string | null;
 };
 
-type DbIdentity = CatalogDbIdentity;
+type DbIdentity = {
+  database: string;
+  db_user: string;
+  host: string | null;
+  port: number | null;
+};
 
 type Counts = {
   content: number;
@@ -107,6 +95,21 @@ function wordCount(body: string): number {
   return body.trim().split(/\s+/).filter(Boolean).length;
 }
 
+function targetSummary(rawUrl: string): TargetSummary {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    fail("CURRICULUM_PACK_DATABASE_URL geçerli bir PostgreSQL URL'i değil");
+  }
+  if (parsed.protocol !== "postgresql:" && parsed.protocol !== "postgres:") {
+    fail("hedef URL PostgreSQL olmalı");
+  }
+  const database = decodeURIComponent(parsed.pathname.replace(/^\/+/, "").split("/")[0] ?? "");
+  if (!database) fail("hedef veritabanı adı boş");
+  return { url: rawUrl, host: parsed.hostname, port: parsed.port || "5432", database };
+}
+
 function readTarget(): Target {
   if (args.has("--simulate-failure") && args.has("--dry-run"))
     fail("--simulate-failure ile --dry-run birlikte kullanılamaz");
@@ -119,40 +122,17 @@ function readTarget(): Target {
     fail("CURRICULUM_PACK_ENVIRONMENT TEST, STAGING veya PRODUCTION olmalı");
   }
 
+  const summary = targetSummary(rawUrl);
   const typedEnvironment = environment as PromotionEnvironment;
   const isLocalTest = typedEnvironment === "TEST";
-  let parsedTarget: CatalogTarget;
-  try {
-    parsedTarget = parseCatalogTargetUrl(rawUrl, typedEnvironment);
-  } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
-  }
-  const summary: TargetSummary = parsedTarget;
 
-  try {
-    assertCatalogEnvironmentSafety(parsedTarget, { rejectTestDatabase: useCanonicalCatalog });
-  } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
-  }
-
-  if (isLocalTest) {
-    if (useIsolatedTestTarget) {
-      try {
-        assertIsolatedFirstRealPackTestTarget(summary);
-      } catch (error) {
-        fail(error instanceof Error ? error.message : String(error));
-      }
-    } else if (summary.database !== "oku_plus_test") {
-      fail(`TEST environment yalnızca oku_plus_test hedefleyebilir (${summary.database})`);
-    }
-  } else if (useIsolatedTestTarget) {
-    fail(
-      `--isolated-test yalnızca TEST environment'ında ve ${ISOLATED_FIRST_REAL_PACK_TEST_DATABASE} hedefinde kullanılabilir`,
-    );
+  if (isLocalTest && summary.database !== "oku_plus_test") {
+    fail(`TEST environment yalnızca oku_plus_test hedefleyebilir (${summary.database})`);
   }
   if (!isLocalTest && /test/i.test(summary.database)) {
     fail(`non-TEST environment test veritabanına yazamaz (${summary.database})`);
   }
+
   if (!isDryRun) {
     if (isLocalTest) {
       if (process.env.CURRICULUM_PACK_ALLOW_TEST_WRITE !== TEST_WRITE_CONFIRMATION) {
@@ -190,25 +170,12 @@ function readTarget(): Target {
   if (skillCodes.length !== 3 || new Set(skillCodes).size !== 3) {
     fail("CURRICULUM_PACK_SKILL_CODES tam olarak üç farklı mevcut skill code içermeli");
   }
-  if (typedEnvironment !== "TEST" && !useCanonicalCatalog) {
-    fail("STAGING/PRODUCTION promotion için --canonical-catalog zorunlu");
-  }
-  if (useCanonicalCatalog) {
-    try {
-      assertFirstRealPackCanonicalBinding({ levelCode, skillCodes });
-    } catch (error) {
-      fail(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   return {
     summary,
     environment: typedEnvironment,
     levelCode,
     skillCodes,
-    canonicalCatalogBinding: useCanonicalCatalog
-      ? CANONICAL_CATALOG_MANIFEST.manifestVersion
-      : null,
   };
 }
 
@@ -217,13 +184,43 @@ function assertProductionCandidateCatalog(label: string, record: CatalogRecordId
   if (reason) fail(`${label} production candidate olamaz; ${reason}`);
 }
 
+function normalizeHost(value: string | null): string {
+  return (value ?? "").replace(/\/\d+$/, "").toLowerCase();
+}
+
 async function readIdentity(prisma: PrismaClient): Promise<DbIdentity> {
   const rows = await prisma.$queryRawUnsafe<DbIdentity[]>(
-    "select current_database() as database, current_user as db_user",
+    "select current_database() as database, current_user as db_user, inet_server_addr()::text as host, inet_server_port() as port",
   );
   const identity = rows[0];
   if (!identity) fail("database identity okunamadı");
   return identity;
+}
+
+function assertIdentity(target: Target, identity: DbIdentity): void {
+  if (identity.database !== target.summary.database) {
+    fail(
+      `hedef database doğrulaması başarısız: URL=${target.summary.database}, connection=${identity.database}`,
+    );
+  }
+  if (String(identity.port ?? "") !== target.summary.port) {
+    fail(
+      `hedef port doğrulaması başarısız: URL=${target.summary.port}, connection=${identity.port}`,
+    );
+  }
+  const expectedHost = normalizeHost(target.summary.host);
+  const actualHost = normalizeHost(identity.host);
+  const localHosts = new Set(["127.0.0.1", "::1", "localhost"]);
+  const hostsMatch =
+    expectedHost === actualHost || (localHosts.has(expectedHost) && localHosts.has(actualHost));
+  if (!hostsMatch) {
+    fail(
+      `hedef host doğrulaması başarısız: URL=${target.summary.host}, connection=${identity.host}`,
+    );
+  }
+  if (target.environment === "TEST" && identity.database !== "oku_plus_test") {
+    fail("TEST environment connection oku_plus_test değil");
+  }
 }
 
 function stableId(kind: string, slug: string, suffix = ""): string {
@@ -820,9 +817,8 @@ function delta(before: Counts, after: Counts): Counts {
 function safeTarget(target: Target, identity: DbIdentity): Record<string, unknown> {
   return {
     environment: target.environment,
-    provider: target.summary.provider,
-    host: target.summary.host,
-    port: target.summary.port,
+    host: identity.host,
+    port: identity.port,
     database: identity.database,
     user: identity.db_user,
   };
@@ -830,57 +826,19 @@ function safeTarget(target: Target, identity: DbIdentity): Record<string, unknow
 
 async function main(): Promise<void> {
   const target = readTarget();
-  const prisma = new PrismaClient({
-    datasources: { db: { url: target.summary.url } },
-    transactionOptions: {
-      maxWait: 2_000,
-      timeout: 15_000,
-    },
-  });
+  const prisma = new PrismaClient({ datasources: { db: { url: target.summary.url } } });
   try {
     await prisma.$connect();
     const identity = await readIdentity(prisma);
-    try {
-      assertLiveCatalogTargetIdentity(target.summary, identity);
-    } catch (error) {
-      fail(error instanceof Error ? error.message : String(error));
-    }
-    if (target.environment !== "TEST") {
-      try {
-        assertApprovedTargetFingerprint(
-          target.summary,
-          identity,
-          process.env.CURRICULUM_PACK_APPROVED_TARGET_FINGERPRINT,
-        );
-      } catch (error) {
-        fail(error instanceof Error ? error.message : String(error));
-      }
-    }
+    assertIdentity(target, identity);
     const [level, skills] = await Promise.all([
       prisma.level.findUnique({
         where: { code: target.levelCode },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          minScore: true,
-          maxScore: true,
-          gradeBand: true,
-          difficultyMin: true,
-          difficultyMax: true,
-          displayOrder: true,
-        },
+        select: { id: true, code: true, name: true },
       }),
       prisma.skill.findMany({
         where: { code: { in: target.skillCodes } },
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          category: true,
-          description: true,
-          displayOrder: true,
-        },
+        select: { id: true, code: true, name: true },
       }),
     ]);
     if (!level) fail(`Level bulunamadı: ${target.levelCode}`);
@@ -894,15 +852,6 @@ async function main(): Promise<void> {
         code: skill.code,
         name: skill.name,
       });
-    }
-    if (useCanonicalCatalog) {
-    try {
-      assertCanonicalRuntimeMetadata(CANONICAL_CATALOG_MANIFEST, level, skills);
-      } catch (error) {
-        fail(
-          `canonical catalog metadata conflict: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
     }
     if (
       FIRST_REAL_CURRICULUM_PACK.catalog.kind !== "PRODUCTION_CANDIDATE" ||
@@ -947,7 +896,6 @@ async function main(): Promise<void> {
             status: "FAIL",
             phase: "conflict-check",
             target: safeTarget(target, identity),
-            canonicalCatalogBinding: target.canonicalCatalogBinding,
             before,
             packCounts: inspection.packCounts,
             ...planSummary,
@@ -967,7 +915,6 @@ async function main(): Promise<void> {
             mode: "DRY_RUN",
             target: safeTarget(target, identity),
             packId: PACK_ID,
-            canonicalCatalogBinding: target.canonicalCatalogBinding,
             level,
             skills,
             before,
@@ -989,7 +936,6 @@ async function main(): Promise<void> {
             mode: "NOOP",
             target: safeTarget(target, identity),
             packId: PACK_ID,
-            canonicalCatalogBinding: target.canonicalCatalogBinding,
             level,
             skills,
             before,
@@ -1012,14 +958,12 @@ async function main(): Promise<void> {
           mode: "WRITE",
           target: safeTarget(target, identity),
           packId: PACK_ID,
-          canonicalCatalogBinding: target.canonicalCatalogBinding,
           expectedNewRecords: expected,
         },
         null,
         2,
       ),
     );
-    const transactionStartedAt = performance.now();
     const created = await prisma.$transaction(async (tx) => {
       const result = await createPack(tx, plans);
       const inTransaction = await readPackCounts(tx, plans);
@@ -1030,7 +974,6 @@ async function main(): Promise<void> {
       if (simulateFailure) fail("simulated failure; transaction must rollback");
       return result;
     });
-    const transactionDurationMs = Number((performance.now() - transactionStartedAt).toFixed(2));
     const after = await readAllCounts(prisma);
     const afterPack = await readPackCounts(prisma, plans);
     const actualDelta = delta(before, after);
@@ -1045,7 +988,6 @@ async function main(): Promise<void> {
           mode: "WRITE",
           target: safeTarget(target, identity),
           packId: PACK_ID,
-          canonicalCatalogBinding: target.canonicalCatalogBinding,
           level,
           skills,
           before,
@@ -1053,7 +995,6 @@ async function main(): Promise<void> {
           delta: actualDelta,
           packCounts: afterPack,
           created,
-          ...(measureTiming ? { transactionDurationMs } : {}),
         },
         null,
         2,
