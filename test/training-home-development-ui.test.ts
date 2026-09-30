@@ -90,6 +90,11 @@ describe("training home and development UI", () => {
     expect(app).toContain("menu.hidden = !open");
     expect(app).toContain('event.key === "Escape"');
     expect(app).toContain("data-user-menu-page");
+    expect(styles).toContain("@media (min-width: 769px)");
+    expect(styles).toContain(".student-shell .student-nav-more > summary");
+    expect(styles).toContain('.student-shell .nav-item[data-page="lessons"]');
+    expect(styles).toContain('.student-shell .nav-item[data-page="settings"]');
+    expect(styles).toContain('.student-shell .student-nav-more-list [data-page="billing-account"]');
   });
 
   it("prioritizes the real daily action before the learning path on the student home", () => {

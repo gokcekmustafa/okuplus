@@ -2692,6 +2692,31 @@ body {
   .student-shell .student-bottom-nav {
     display: none !important;
   }
+
+  /* Desktop sidebar: keep account actions in the top user menu and expose
+     the remaining student destinations without a nested "Diğer alanlar" group. */
+  .student-shell .student-nav-more {
+    order: 0;
+    margin: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .student-shell .student-nav-more > summary {
+    display: none;
+  }
+
+  .student-shell .student-nav-more-list {
+    display: grid !important;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .student-shell .student-nav-more-list [data-page="billing-account"],
+  .student-shell .nav-item[data-page="lessons"],
+  .student-shell .nav-item[data-page="settings"] {
+    display: none !important;
+  }
 }
 
 /* ================= Learning Path ================= */
