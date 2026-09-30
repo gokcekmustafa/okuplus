@@ -25,6 +25,12 @@ describe("student dashboard release 0.4", () => {
       'const paths = ["progress", "gamification", "history?page=1&pageSize=5", "learning-path"];',
     );
     expect(app).toContain('insightApi("learning-path")');
+    expect(app).toContain('"/student/learning-path/steps/"');
+    expect(app).toContain("loadFocusedLearningPathStep");
+    expect(app).toContain("Dersi tamamladım ve sonraki adıma geç");
+    expect(app).toContain("nextStep");
+    expect(app).toContain("learningPathEntryMode");
+    expect(app).toContain('var disabled = visualStatus !== "active" ? " disabled" : "";');
     expect(app).toContain('fetch("/account/entitlements"');
     expect(app).toContain("function renderTrainingHome(data)");
     expect(app).toContain("summary?.sessionCount");
@@ -50,6 +56,8 @@ describe("student dashboard release 0.4", () => {
     expect(styles).toContain(".training-home-card");
     expect(styles).toContain("@media (max-width: 700px)");
     expect(index).toContain('aria-live="polite"');
+    expect(index).toContain('id="lesson-list-panel"');
+    expect(index).toContain('id="lessons-heading"');
   });
 
   it("does not flash the dashboard while student onboarding is being resolved", () => {

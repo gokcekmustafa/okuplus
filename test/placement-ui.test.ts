@@ -137,6 +137,7 @@ function errorFormatterHarness() {
 describe("placement onboarding UI request contract", () => {
   it("opens the first published lesson when quick-start returns the active learning step", async () => {
     const h = harness({
+      stepId: "learning-step-1",
       type: "TEACHING",
       contentVersionId: "content-version-1",
       templateVersionId: null,

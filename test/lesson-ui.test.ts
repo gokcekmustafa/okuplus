@@ -11,7 +11,13 @@ const code = source.slice(
 function harness() {
   const elements = new Map<string, { innerHTML: string; textContent: string }>();
   const get = (id: string) => {
-    if (!elements.has(id)) elements.set(id, { innerHTML: "", textContent: "" });
+    if (!elements.has(id)) {
+      elements.set(id, {
+        innerHTML: "",
+        textContent: "",
+        classList: { add() {}, remove() {}, toggle() {} },
+      });
+    }
     return elements.get(id)!;
   };
   const context = createContext({
@@ -42,5 +48,17 @@ describe("student lesson UI", () => {
     h.run("renderLessonList([])");
     expect(h.get("lesson-list").innerHTML).toContain("yayınlanmış ders bulunmuyor");
     expect(h.get("lesson-detail").innerHTML).toContain("Bir ders seçtiğinde");
+  });
+
+  it("renders a roadmap lesson as one focused step without a lesson catalog", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({title:'Hedefi belirle',objective:'Okumadan önce hedefini söyle',explanation:'Önce ne aradığını netleştir.',workedExample:'Başlığı ve soruyu birlikte incele.',guidedPractice:'Şimdi kendi hedefini yaz.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Hızlı Okuma'})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).toContain("ŞİMDİKİ DURAĞIN");
+    expect(html).toContain("Dersi tamamladım ve sonraki adıma geç");
+    expect(html).not.toContain("Sana uygun dersler");
+    expect(html).toContain("data-learning-step-complete");
   });
 });

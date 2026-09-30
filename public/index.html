@@ -4494,15 +4494,21 @@
             <header class="insight-heading">
               <div>
                 <p class="insight-eyebrow">ÖĞREN, DENE, UYGULA</p>
-                <h2>Dersler</h2>
-                <p>Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.</p>
+                <h2 id="lessons-heading">Dersler</h2>
+                <p id="lessons-description">
+                  Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.
+                </p>
               </div>
               <button type="button" class="btn btn-secondary" id="lessons-refresh">Yenile</button>
             </header>
             <p id="lessons-status" role="status" aria-live="polite"></p>
             <div id="lessons-error" class="error hidden" role="alert"></div>
-            <div class="lesson-layout">
-              <section class="insight-panel" aria-labelledby="lesson-list-title">
+            <div class="lesson-layout" id="lesson-layout">
+              <section
+                class="insight-panel"
+                id="lesson-list-panel"
+                aria-labelledby="lesson-list-title"
+              >
                 <h3 id="lesson-list-title">Sana uygun dersler</h3>
                 <div id="lesson-list" class="lesson-list"></div>
               </section>

@@ -2087,6 +2087,21 @@ function learningPathVisualStatus(status) {
   return status === "available" ? "locked" : status;
 }
 
+function learningPathNodesFromData(data) {
+  var groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
+  return groups.flatMap(function (group) {
+    return Array.isArray(group?.nodes) ? group.nodes.filter(Boolean) : [];
+  });
+}
+
+function activeLearningPathNodeFromData(data) {
+  return (
+    learningPathNodesFromData(data).find(function (node) {
+      return node.status === "active";
+    }) || null
+  );
+}
+
 async function startLearningPathNode(node, button) {
   var tv = node?.templateVersionId;
   var type = node?.type;
@@ -2095,7 +2110,8 @@ async function startLearningPathNode(node, button) {
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
       return;
     }
-    preferredLessonContentVersionId = node.contentVersionId;
+    activeLearningStepNode = node;
+    learningPathEntryMode = true;
     navigate("lessons");
     return;
   }
@@ -2290,7 +2306,7 @@ function learningPathMapKind(node) {
 
 function learningPathActionLabel(node, visualStatus) {
   if (visualStatus === "locked") return "Henüz açık değil";
-  if (visualStatus === "completed") return "Tekrar et";
+  if (visualStatus === "completed") return "Tamamlandı";
   if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
   if (node?.type === "ASSESSMENT" || node?.type === "MEASUREMENT") return "Değerlendir";
   if (node?.type === "REINFORCEMENT") return "Pekiştir";
@@ -2440,7 +2456,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var label = node.label || node.code || "Öğrenme adımı";
       var statusLabel = learningPathStatusLabel(visualStatus);
       var areaLabel = learningPathAreaLabel(entry.area);
-      var disabled = visualStatus === "locked" ? " disabled" : "";
+      var disabled = visualStatus !== "active" ? " disabled" : "";
       var current = currentNode?.id === node.id ? ' aria-current="step"' : "";
       var aria = areaLabel + " · " + kind.label + " · " + label + " · " + statusLabel;
       var isCurrent = currentNode?.id === node.id;
@@ -3141,7 +3157,17 @@ function setupOnboardingEvents() {
         // first station is a lesson, so the onboarding flow teaches before it
         // asks the student to practise or answer assessment questions.
         if (data.contentVersionId && (data.type === "TEACHING" || data.type === "SMALL_STUDY")) {
-          preferredLessonContentVersionId = data.contentVersionId;
+          if (!data.stepId) throw new Error("İlk öğrenme adımı bulunamadı");
+          activeLearningStepNode = {
+            id: data.stepId,
+            type: data.type,
+            title: data.title || "Öğrenme adımı",
+            templateVersionId: data.templateVersionId,
+            contentVersionId: data.contentVersionId,
+            assessmentId: data.assessmentId,
+            status: "active",
+          };
+          learningPathEntryMode = true;
           navigate("lessons");
           return;
         }
@@ -3278,7 +3304,54 @@ function renderLessonDetail(lesson) {
     <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`;
 }
 
+function setLessonPageMode(focused) {
+  $("lesson-layout")?.classList.toggle("is-learning-path", focused);
+  $("lesson-list-panel")?.classList.toggle("hidden", focused);
+  $("lessons-refresh")?.classList.toggle("hidden", focused);
+  const heading = $("lessons-heading");
+  const description = $("lessons-description");
+  const listTitle = $("lesson-list-title");
+  if (heading) heading.textContent = focused ? "Öğrenme adımı" : "Dersler";
+  if (description) {
+    description.textContent = focused
+      ? "Haritadaki sıradaki durağını tamamla, sonraki adım otomatik olarak açılsın."
+      : "Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.";
+  }
+  if (listTitle) listTitle.textContent = "Sana uygun dersler";
+}
+
+function renderFocusedLesson(lesson, learningStep) {
+  const detail = $("lesson-detail");
+  if (!detail) return;
+  const completed = Boolean(lesson?.completion?.completed);
+  const stepTypeLabel = learningStep?.type === "SMALL_STUDY" ? "Küçük çalışma" : "Öğretim";
+  detail.innerHTML = lesson
+    ? `
+    <div class="learning-path-step-context">
+      <span class="badge badge-info">${escapeHtml(stepTypeLabel)}</span>
+      <span class="muted">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
+    </div>
+    <p class="insight-eyebrow">ŞİMDİKİ DURAĞIN</p>
+    <h3>${escapeHtml(lesson.title)}</h3>
+    <p class="lesson-objective"><strong>Bugünkü amacın:</strong> ${escapeHtml(lesson.objective)}</p>
+    <section><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
+    <section><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
+    <section><h4>Şimdi sen düşün</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
+    <div class="lesson-flow" aria-label="Öğrenme yolu akışı">
+      <span class="badge badge-info">Bu ders</span><span aria-hidden="true">→</span>
+      <span class="badge badge-success">Tamamla</span><span aria-hidden="true">→</span>
+      <span class="badge badge-neutral">Sonraki durak</span>
+    </div>
+    <div class="lesson-actions">
+      <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
+      <button type="button" class="btn btn-primary" data-learning-step-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : "Dersi tamamladım ve sonraki adıma geç"}</button>
+    </div>
+    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`
+    : '<p class="muted">Bu öğrenme adımı için yayınlanmış ders bulunamadı.</p>';
+}
+
 function renderLessonList(items) {
+  setLessonPageMode(false);
   const list = $("lesson-list");
   if (!list) return;
   if (!items.length) {
@@ -3286,13 +3359,6 @@ function renderLessonList(items) {
       '<p class="muted">Şu an yayınlanmış ders bulunmuyor. Egzersizlerin hazır olduğunda burada görünecek.</p>';
     renderLessonDetail(null);
     return;
-  }
-  if (preferredLessonContentVersionId) {
-    const preferred = items.find(
-      (lesson) => lesson.contentVersionId === preferredLessonContentVersionId,
-    );
-    if (preferred) selectedLessonId = preferred.id;
-    preferredLessonContentVersionId = null;
   }
   if (!selectedLessonId || !items.some((lesson) => lesson.id === selectedLessonId)) {
     selectedLessonId = items[0].id;
@@ -3306,10 +3372,98 @@ function renderLessonList(items) {
   renderLessonDetail(items.find((item) => item.id === selectedLessonId) || items[0]);
 }
 
+function learningPathStepApi(stepId, suffix, options) {
+  options = options || {};
+  const tokens = getStoredTokens();
+  return fetch(
+    "/student/learning-path/steps/" + encodeURIComponent(stepId) + "/lesson" + (suffix || ""),
+    Object.assign({}, options, {
+      headers: Object.assign(
+        {},
+        authHeaders(tokens.accessToken, tokens.tenantId),
+        options.method && options.method !== "GET" ? csrfHeaders() : {},
+        options.headers || {},
+      ),
+    }),
+  );
+}
+
+async function loadFocusedLearningPathStep() {
+  const status = $("lessons-status");
+  const error = $("lessons-error");
+  if (!status) return;
+  setLessonPageMode(true);
+  status.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
+  error?.classList.add("hidden");
+  try {
+    if (!activeLearningStepNode) {
+      const path = await insightApi("learning-path");
+      activeLearningStepNode = activeLearningPathNodeFromData(path);
+    }
+    const node = activeLearningStepNode;
+    if (!node) {
+      status.textContent = "Öğrenme yolundaki tüm durakları tamamladın.";
+      renderFocusedLesson(null, null);
+      return;
+    }
+    if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
+      status.textContent = "";
+      await startLearningPathNode(node, null);
+      return;
+    }
+    const data = await parseResponse(await learningPathStepApi(node.id, ""));
+    lessonData = data?.lesson ? [data.lesson] : [];
+    selectedLessonId = data?.lesson?.id || null;
+    renderFocusedLesson(data?.lesson || null, data?.learningStep || node);
+    status.textContent = "Bu adımı tamamladığında sonraki durak açılacak.";
+  } catch (err) {
+    status.textContent = "";
+    if (error) {
+      error.textContent = formatStudentError(
+        err,
+        "Öğrenme adımı yüklenemedi. Tekrar deneyebilirsin.",
+      );
+      error.classList.remove("hidden");
+    }
+  }
+}
+
+async function completeFocusedLearningStep() {
+  const node = activeLearningStepNode;
+  const button = $("lesson-detail")?.querySelector("[data-learning-step-complete]");
+  const status = $("lesson-detail-status");
+  if (!node || !button) return;
+  button.disabled = true;
+  if (status) status.textContent = "Adım tamamlanıyor…";
+  try {
+    const data = await parseResponse(
+      await learningPathStepApi(node.id, "/complete", { method: "POST", body: "{}" }),
+    );
+    const nextStep = data?.nextStep || null;
+    if (!nextStep) {
+      learningPathEntryMode = false;
+      activeLearningStepNode = null;
+      navigate("dashboard");
+      return;
+    }
+    activeLearningStepNode = { ...nextStep, status: "active" };
+    learningPathEntryMode = true;
+    await startLearningPathNode(activeLearningStepNode, null);
+  } catch (err) {
+    button.disabled = false;
+    if (status) {
+      status.textContent = formatStudentError(err, "Ders tamamlanamadı. Tekrar deneyebilirsin.");
+    }
+  }
+}
+
 async function loadLessons() {
   const status = $("lessons-status");
   const error = $("lessons-error");
   if (!status) return;
+  learningPathEntryMode = false;
+  activeLearningStepNode = null;
+  setLessonPageMode(false);
   status.textContent = "Derslerin yükleniyor…";
   error?.classList.add("hidden");
   try {
@@ -3391,6 +3545,12 @@ function setupLessonEvents() {
   $("lesson-detail")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
     if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
+    if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
+    if (event.target.closest("[data-learning-step-back]")) {
+      learningPathEntryMode = false;
+      activeLearningStepNode = null;
+      navigate("dashboard");
+    }
   });
 }
 
@@ -3495,7 +3655,11 @@ function navigate(page) {
   } else if (page === "exercise") {
     void loadExercisePage();
   } else if (page === "lessons") {
-    void loadLessons();
+    if (isPlatformUser === false && learningPathEntryMode) {
+      void loadFocusedLearningPathStep();
+    } else {
+      void loadLessons();
+    }
   } else if (page === "skills") {
     void loadSkills();
   } else if (page === "levels") {
@@ -4055,11 +4219,21 @@ sidebarBackdrop.className = "sidebar-backdrop";
 sidebarBackdrop.id = "sidebar-backdrop";
 document.body.appendChild(sidebarBackdrop);
 
+function navigateFromMenu(page) {
+  if (page === "lessons" && isPlatformUser === false) {
+    activeLearningStepNode = null;
+    learningPathEntryMode = true;
+  }
+  navigate(page);
+}
+
 for (const item of document.querySelectorAll(".nav-item")) {
-  item.addEventListener("click", () => navigate(item.dataset.page));
+  item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }
 for (const item of document.querySelectorAll(".bottom-nav-item")) {
-  item.addEventListener("click", () => navigate(item.dataset.bottomPage || item.dataset.page));
+  item.addEventListener("click", () =>
+    navigateFromMenu(item.dataset.bottomPage || item.dataset.page),
+  );
 }
 
 $("student-more-toggle")?.addEventListener("click", () => {
@@ -4081,7 +4255,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 for (const item of document.querySelectorAll("[data-student-menu-page]")) {
-  item.addEventListener("click", () => navigate(item.dataset.studentMenuPage));
+  item.addEventListener("click", () => navigateFromMenu(item.dataset.studentMenuPage));
 }
 
 $("sidebar-toggle").addEventListener("click", () => {
@@ -7547,7 +7721,8 @@ let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
 let lessonData = [];
 let selectedLessonId = null;
-let preferredLessonContentVersionId = null;
+let activeLearningStepNode = null;
+let learningPathEntryMode = false;
 
 let skillPage = 1;
 const SKILL_PAGE_SIZE = 50;
