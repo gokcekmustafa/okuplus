@@ -5,6 +5,11 @@ import { prisma } from "../../lib/prisma.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor } from "../student-learning/policy.js";
 import {
+  assertLearningStepAccessible,
+  completeLearningStep,
+  getNextLearningStep,
+} from "../learning-path/index.js";
+import {
   completeLearningStepForContent,
   resolveLearningStepForContent,
 } from "../student-learning/persistent-path.js";
@@ -99,6 +104,96 @@ function toLesson(row: LessonRow, completedAt: Date | null) {
     skill: row.contentSkills[0]?.skill ?? null,
     ...metadata,
     completion: { completed: completedAt !== null, completedAt },
+  };
+}
+
+function learningStepView(node: Awaited<ReturnType<typeof assertLearningStepAccessible>>) {
+  return {
+    id: node.id,
+    type: node.type,
+    title: node.label,
+    unitTitle: node.unit.title,
+    status: node.status,
+  };
+}
+
+async function findLessonForContentVersion(contentVersionId: string, actor: LessonActor) {
+  const row = (await prisma.content.findFirst({
+    where: {
+      ...visibleWhere(actor),
+      currentVersion: { id: contentVersionId, status: "PUBLISHED" },
+    },
+    select: LESSON_SELECT,
+  })) as LessonRow | null;
+  if (!row || !row.currentVersion || !metadataFor(row)) throw notFoundError("Ders bulunamadı");
+  const progress = await withTenantContext(actor, (tx) =>
+    tx.studentLessonProgress.findUnique({
+      where: {
+        tenantId_studentId_contentVersionId: {
+          tenantId: actor.tenantId!,
+          studentId: actor.userId,
+          contentVersionId,
+        },
+      },
+      select: { completedAt: true },
+    }),
+  );
+  return toLesson(row, progress?.completedAt ?? null);
+}
+
+/**
+ * Returns the lesson belonging to one accessible roadmap station. This is
+ * deliberately separate from the legacy lesson catalog: the roadmap is the
+ * source of truth for which lesson the student may open next.
+ */
+export async function getStudentLearningStepLesson(stepId: string, actor: LessonActor) {
+  assertActor(actor);
+  const node = await assertLearningStepAccessible(actor, stepId);
+  if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
+    throw validationError("Bu öğrenme adımı doğrudan ders ekranı kullanmıyor");
+  }
+  if (!node.contentVersionId) {
+    throw notFoundError("Bu öğrenme adımının yayınlanmış dersi yok");
+  }
+  return {
+    lesson: await findLessonForContentVersion(node.contentVersionId, actor),
+    learningStep: learningStepView(node),
+  };
+}
+
+/**
+ * Completes the currently open teaching/small-study station and returns the
+ * server-selected next station. The client never supplies the next step.
+ */
+export async function completeStudentLearningStepLesson(stepId: string, actor: LessonActor) {
+  assertActor(actor);
+  const current = await getStudentLearningStepLesson(stepId, actor);
+  const completedAt = new Date();
+  try {
+    await withTenantContext(actor, async (tx) => {
+      await tx.studentLessonProgress.create({
+        data: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          contentVersionId: current.lesson.contentVersionId,
+          completedAt,
+        },
+      });
+    });
+  } catch (error) {
+    if (
+      !(error instanceof PrismaNamespace.PrismaClientKnownRequestError) ||
+      error.code !== "P2002"
+    ) {
+      throw error;
+    }
+  }
+
+  await completeLearningStep(actor, stepId);
+  return {
+    lesson: await findLessonForContentVersion(current.lesson.contentVersionId, actor),
+    learningStep: { ...current.learningStep, status: "completed" as const },
+    nextStep: await getNextLearningStep(actor),
   };
 }
 

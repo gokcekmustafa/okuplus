@@ -4777,6 +4777,27 @@ textarea:focus-visible {
   white-space: pre-line;
 }
 
+.lesson-layout.is-learning-path {
+  display: block;
+}
+
+.lesson-layout.is-learning-path #lesson-detail {
+  max-width: 820px;
+  margin-inline: auto;
+}
+
+.learning-path-step-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.learning-path-step-context .muted {
+  margin: 0;
+}
+
 .lesson-objective {
   padding: 12px 14px;
   border-radius: 12px;
