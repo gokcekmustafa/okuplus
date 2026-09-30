@@ -77,6 +77,21 @@ export async function studentLearningRoutes(
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const { authProvider } = opts;
+  app.addHook("onResponse", async (req, reply) => {
+    if (req.url.split("?", 1)[0] !== "/student/learning-path" || reply.statusCode < 400) return;
+    req.log.warn(
+      {
+        event: "student.learning_path.response",
+        requestId: req.id,
+        responseStatus: reply.statusCode,
+        authenticated: Boolean(req.authUser),
+        hasTenantContext: Boolean(req.tenantContext?.tenantId),
+        userIdHash: hashForDiagnostics(req.authUser?.id),
+        tenantIdHash: hashForDiagnostics(req.tenantContext?.tenantId),
+      },
+      "Learning path response completed with an error status",
+    );
+  });
   app.get("/student/today", { preHandler: [requireAuth(authProvider)] }, async (req) => {
     return ok(
       await getToday({

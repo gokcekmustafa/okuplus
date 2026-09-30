@@ -2506,6 +2506,7 @@ async function loadLearningPath() {
   if (!container) return;
   learningPathLoading = true;
   const scope = insightScope();
+  var learningPathPhase = "request";
   container.setAttribute("aria-busy", "true");
   retryEl?.classList.add("hidden");
   container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolun yükleniyor…</p>';
@@ -2513,7 +2514,9 @@ async function loadLearningPath() {
     var data = await insightApi("learning-path");
     if (scope !== insightScope()) return;
     container.setAttribute("aria-busy", "false");
+    learningPathPhase = "home-insights";
     renderHomeInsights(data);
+    learningPathPhase = "academic-model";
     renderAcademicLearningModel(data.academicProgram);
     var pathGroups =
       Array.isArray(data.paths) && data.paths.length
@@ -2522,6 +2525,7 @@ async function loadLearningPath() {
     var nodes = pathGroups.flatMap(function (group) {
       return group.nodes || [];
     });
+    learningPathPhase = "progress-summary";
     var aggregateProgress = pathGroups.reduce(
       function (total, group) {
         var progress = learningPathGroupProgress(group);
@@ -2587,6 +2591,7 @@ async function loadLearningPath() {
       continueEl.disabled = true;
       continueEl.onclick = null;
     }
+    learningPathPhase = "learning-path-map";
     renderLearningPathMap(pathGroups, data.currentLevel);
   } catch (error) {
     console.error("learning-path-load-failed", {
@@ -2594,6 +2599,7 @@ async function loadLearningPath() {
       status: error?.status ?? null,
       code: error?.code ?? null,
       name: error?.name ?? "UnknownError",
+      phase: learningPathPhase,
     });
     container.setAttribute("aria-busy", "false");
     if (summaryEl) summaryEl.innerHTML = "";
