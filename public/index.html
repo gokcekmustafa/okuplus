@@ -376,7 +376,6 @@
           </button>
 
           <div class="topbar-context">
-            <span class="tenant-name" id="topbar-tenant">—</span>
             <select
               id="context-switcher"
               class="context-switcher hidden"
@@ -401,23 +400,22 @@
               <div class="user-menu-wrap">
                 <button
                   id="user-menu-toggle"
-                  class="user-avatar-button"
+                  class="user-name-button"
                   type="button"
                   aria-label="Kullanıcı menüsünü aç"
                   aria-expanded="false"
                   aria-controls="user-menu"
                 >
-                  <span class="user-avatar" id="user-avatar">?</span>
+                  <span class="user-name" id="user-name">—</span>
+                  <span class="user-menu-chevron" aria-hidden="true">⌄</span>
                 </button>
                 <div id="user-menu" class="user-menu hidden" hidden aria-label="Kullanıcı menüsü">
                   <button type="button" data-user-menu-page="settings">⚙️ Profilim</button>
                   <button type="button" data-user-menu-page="billing-account">
                     💳 Hesap ve Ödeme
                   </button>
+                  <button id="user-menu-logout" type="button">↪️ Çıkış yap</button>
                 </div>
-              </div>
-              <div class="user-meta">
-                <span class="user-name" id="user-name">—</span>
               </div>
             </div>
             <button
@@ -430,7 +428,6 @@
             >
               <span aria-hidden="true">🌙</span>
             </button>
-            <button id="logout-btn" type="button" class="btn btn-ghost btn-sm">Çıkış yap</button>
           </div>
         </header>
 
@@ -683,7 +680,6 @@
             </section>
             <div id="learning-path-card" class="card learning-path-card" data-student>
               <div id="learning-path-model" hidden></div>
-              <div id="learning-map-current" class="learning-map-current" aria-live="polite"></div>
               <div
                 id="learning-path"
                 class="learning-path"

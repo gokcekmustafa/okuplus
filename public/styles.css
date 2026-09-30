@@ -1265,27 +1265,13 @@ body {
 .topbar-user {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .user-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.user-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 
 .user-menu-wrap {
@@ -1293,18 +1279,44 @@ body {
   flex: 0 0 auto;
 }
 
-.user-avatar-button {
+.user-name-button {
   display: inline-flex;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
+  min-height: 36px;
+  max-width: min(42vw, 240px);
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.user-avatar-button:focus-visible {
+.user-name-button:hover,
+.user-name-button:focus-visible {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.user-name-button:focus-visible {
   outline: 3px solid #a7a7ff;
   outline-offset: 3px;
+}
+
+.user-name-button .user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-chevron {
+  flex: 0 0 auto;
+  font-size: 17px;
+  line-height: 1;
 }
 
 .user-menu {
@@ -2646,7 +2658,7 @@ body {
   box-sizing: border-box;
 }
 
-.student-shell #logout-btn {
+.student-shell .user-name-button {
   min-height: 48px;
 }
 
@@ -4957,6 +4969,12 @@ textarea:focus-visible {
   height: 68px;
   padding-inline: 28px;
   border-bottom-color: #dfe7f3;
+}
+
+.student-shell .topbar-context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
 }
 
 .student-shell .gamification-badge {
@@ -8989,14 +9007,13 @@ textarea:focus-visible {
   }
 }
 
-/* Final v6 cascade: the legacy roadmap rules above must not hide the new
-   compact current-step strip. */
+/* The current-step strip was intentionally removed from the roadmap header. */
 .student-shell #learning-path-card > #learning-map-current {
-  display: flex !important;
+  display: none !important;
 }
 
 .student-shell #learning-path-card .learning-map-current-copy small {
-  display: block !important;
+  display: none !important;
 }
 
 /* Dark theme: keep the student shell readable while preserving its visual hierarchy. */

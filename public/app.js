@@ -969,12 +969,6 @@ function showDashboard(me) {
 
   $("welcome-name").textContent = user.displayName;
   $("user-name").textContent = user.displayName;
-  $("user-avatar").textContent = (user.displayName || "?").trim().charAt(0).toUpperCase();
-  $("topbar-tenant").textContent = tenantContext?.tenantId
-    ? tenantContext.tenantType === "INDIVIDUAL"
-      ? "Kişisel"
-      : tenantContext.tenantName || `Kuruluş: ${tenantContext.tenantId}`
-    : "Platform";
 
   // Platform yetkilileri dışında admin menülerini gizle.
   for (const item of document.querySelectorAll(".nav-item[data-admin]")) {
@@ -2348,21 +2342,8 @@ function learningPathActionLabel(node, visualStatus) {
 
 function renderLearningPathEmptyState(currentLevel) {
   var container = $("learning-path");
-  var currentEl = $("learning-map-current");
   if (!container) return;
   var hasLevel = Boolean(currentLevel);
-  var currentTitle = hasLevel ? "Öğrenme yolun hazırlanıyor" : "İlk durağını açalım";
-  var currentDetail = hasLevel
-    ? "Yayınlanmış ilk durak hazır olduğunda burada görünecek."
-    : "Seviyeni belirlediğinde sana uygun ilk durak burada açılacak.";
-  if (currentEl) {
-    currentEl.innerHTML =
-      '<div class="learning-map-current-copy"><span class="learning-map-current-dot learning-map-empty-dot" aria-hidden="true">◎</span><span><strong>' +
-      escapeHtml(currentTitle) +
-      "</strong><small>" +
-      escapeHtml(currentDetail) +
-      '</small></span></div><span class="learning-map-current-progress">Hazırlanıyor</span>';
-  }
   container.innerHTML =
     '<div class="learning-map-empty-state" role="status"><div class="learning-map-empty-route" aria-hidden="true"><span class="learning-map-empty-node is-first">1</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">2</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">3</span></div><div class="learning-map-empty-copy"><h4>Öğrenme yolu burada açılacak</h4><p>' +
     escapeHtml(
@@ -2396,7 +2377,6 @@ function learningPathRouteGeometry(count) {
 
 function renderLearningPathMap(pathGroups, currentLevel) {
   var container = $("learning-path");
-  var currentEl = $("learning-map-current");
   if (!container) return;
   var groups = Array.isArray(pathGroups) ? pathGroups : [];
   var entries = sortGuidedLearningNodes(
@@ -2418,9 +2398,6 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var currentNode = nodes.find(function (node) {
     return node.status === "active";
   });
-  var currentEntry = entries.find(function (entry) {
-    return entry.node.id === currentNode?.id;
-  });
   var completed = nodes.filter(function (node) {
     return node.status === "completed";
   }).length;
@@ -2430,41 +2407,12 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     percent: nodes.length ? Math.round((completed / nodes.length) * 100) : 0,
   };
   var percent = Number(progress.percent || 0);
-  var currentKind = currentNode ? learningPathMapKind(currentNode) : null;
-  var currentArea = currentEntry ? learningPathAreaLabel(currentEntry.area) : "Öğrenme yolu";
-  if (currentEl) {
-    currentEl.innerHTML =
-      '<div class="learning-map-current-copy"><span class="learning-map-current-dot" aria-hidden="true"></span><span><strong>' +
-      escapeHtml(currentNode ? "Şimdi: " + currentArea : "Öğrenme yolun") +
-      "</strong><small>" +
-      escapeHtml(
-        currentNode
-          ? currentKind.label + " · Durağa dokun ve devam et."
-          : completed === nodes.length
-            ? "Bu öğrenme döngüsünü tamamladın."
-            : "Duraklar sırayla açılır.",
-      ) +
-      '</small></span></div><span class="learning-map-current-progress">' +
-      escapeHtml(String(progress.completed || 0)) +
-      "/" +
-      escapeHtml(String(progress.total || 0)) +
-      " · " +
-      escapeHtml(String(percent)) +
-      "%" +
-      "</span>";
-  }
 
   var route = learningPathRouteGeometry(entries.length);
-  var avatarLetter =
-    String($("user-avatar")?.textContent || "O")
-      .trim()
-      .slice(0, 1) || "O";
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">OKU+</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div><span class="learning-map-v6-avatar" aria-hidden="true">' +
-    escapeHtml(avatarLetter.toUpperCase()) +
-    '</span></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
+    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">OKU+</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
     escapeHtml(levelLabel) +
     "</strong><small>Seviye</small></span><span><strong>🔥 " +
     escapeHtml(streak) +
@@ -4230,7 +4178,10 @@ async function handleLogout() {
   }
 }
 
-$("logout-btn").addEventListener("click", () => void handleLogout());
+$("user-menu-logout")?.addEventListener("click", () => {
+  setUserMenuOpen(false);
+  void handleLogout();
+});
 
 // ---------- Navigasyon (menü) ----------
 
