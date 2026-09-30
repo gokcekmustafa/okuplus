@@ -2143,7 +2143,7 @@ function learningPathCommonDetail(pathGroups) {
     return group.path?.area === "COMMON";
   });
   if (!common) return "";
-  var commonNodes = common.nodes || [];
+  var commonNodes = Array.isArray(common.nodes) ? common.nodes : [];
   var reinforcement = commonNodes.find(function (node) {
     return node.type === "REINFORCEMENT";
   });
@@ -2156,10 +2156,10 @@ function learningPathCommonDetail(pathGroups) {
   var reading = pathGroups.find(function (group) {
     return group.path?.area === "READING_COMPREHENSION";
   });
-  var fastPractice = fast?.nodes?.find(function (node) {
+  var fastPractice = (Array.isArray(fast?.nodes) ? fast.nodes : []).find(function (node) {
     return node.type === "PRACTICE";
   });
-  var readingPractice = reading?.nodes?.find(function (node) {
+  var readingPractice = (Array.isArray(reading?.nodes) ? reading.nodes : []).find(function (node) {
     return node.type === "PRACTICE";
   });
 
@@ -2324,7 +2324,8 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var groups = Array.isArray(pathGroups) ? pathGroups : [];
   var entries = sortGuidedLearningNodes(
     groups.flatMap(function (group) {
-      return (group.nodes || []).map(function (node) {
+      var groupNodes = Array.isArray(group?.nodes) ? group.nodes : [];
+      return groupNodes.filter(Boolean).map(function (node) {
         return { node: node, area: group.path?.area || "COMMON" };
       });
     }),
@@ -2515,15 +2516,33 @@ async function loadLearningPath() {
     if (scope !== insightScope()) return;
     container.setAttribute("aria-busy", "false");
     learningPathPhase = "home-insights";
-    renderHomeInsights(data);
+    try {
+      renderHomeInsights(data);
+    } catch (error) {
+      console.error("learning-path-render-failed", {
+        phase: learningPathPhase,
+        name: error?.name ?? "UnknownError",
+      });
+    }
     learningPathPhase = "academic-model";
-    renderAcademicLearningModel(data.academicProgram);
+    try {
+      renderAcademicLearningModel(data.academicProgram);
+    } catch (error) {
+      console.error("learning-path-render-failed", {
+        phase: learningPathPhase,
+        name: error?.name ?? "UnknownError",
+      });
+      $("learning-path-model")?.replaceChildren();
+    }
     var pathGroups =
       Array.isArray(data.paths) && data.paths.length
         ? data.paths
         : [{ path: data.path, nodes: data.nodes || [] }];
+    pathGroups = pathGroups.filter(function (group) {
+      return group && typeof group === "object";
+    });
     var nodes = pathGroups.flatMap(function (group) {
-      return group.nodes || [];
+      return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });
     learningPathPhase = "progress-summary";
     var aggregateProgress = pathGroups.reduce(
