@@ -100,51 +100,49 @@ describe("training home and development UI", () => {
 
   it("shows one guided data-driven learning map without changing the path contract", () => {
     expect(index).toContain('id="learning-map-current"');
-    expect(index).toContain('id="learning-model-details"');
+    expect(index).not.toContain('id="learning-model-details"');
     expect(app).toContain("function renderLearningPathMap(pathGroups, currentLevel)");
     expect(app).toContain("GUIDED_LEARNING_SKILL_ORDER");
-    expect(app).toContain("learningPathNodeRoadmapPhase");
     expect(app).toContain("function learningPathMapKind(node)");
     expect(app).not.toContain("studentLearningPathSelectedArea");
-    expect(styles).toContain(".student-shell .learning-map-track::before");
-    expect(styles).toContain(".student-shell .learning-map-phase");
-    expect(styles).toContain(".student-shell .learning-map-step.roadmap-right");
-    expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-route");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-path");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-left");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-right");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-step");
     expect(styles).toContain(".student-shell .learning-map-empty-state");
     expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
     expect(app).toContain("function learningPathRouteGeometry(count)");
-    expect(app).toContain("learning-map-route");
     expect(app).toContain("learning-roadmap-student.png");
-    expect(app).toContain("learning-map-legend");
-    expect(app).toContain("Tamamladıkça yeni duraklar açılacak.");
-    expect(styles).toContain(".student-shell .learning-map-character");
+    expect(app).toContain("learning-map-v6-legend");
+    expect(app).toContain("Duraklar sırayla açılır.");
+    expect(app).toContain("learning-map-v6-character");
   });
 
   it("keeps the student home focused on the roadmap", () => {
     expect(styles).toContain(".student-shell #page-dashboard > #today-card");
     expect(styles).toContain(".student-shell #page-dashboard > #entitlement-card");
     expect(styles).toContain(".student-shell #page-dashboard > #review-card");
-    expect(styles).toContain(".student-shell #learning-path-card #learning-model-details");
-    expect(styles).toContain(".student-shell .learning-map-track::before");
-    expect(styles).toContain(".student-shell .learning-map-step.kind-fast");
-    expect(styles).toContain(".student-shell .learning-map-step.kind-comprehension");
+    expect(styles).toContain(".student-shell #learning-path-card > #learning-model-details");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-legend");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-step");
     expect(app).toContain('label: "Öğren", icon: "⚡"');
     expect(app).toContain('label: "Öğren", icon: "★"');
     expect(app).toContain('label: "Öğren", icon: "◒"');
-    expect(app).toContain('class="learning-map-area"');
-    expect(app).toContain('class="learning-map-node-lock"');
+    expect(app).toContain('class="learning-map-v6-area"');
+    expect(app).toContain('class="learning-map-v6-lock"');
+    expect(app).not.toContain(">Kilitli<");
+    expect(app).not.toContain('class="path-node-label"');
     expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
     expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
     expect(app).toContain('continueEl.classList.add("hidden")');
-    expect(app).toContain("learning-map-overview");
-    expect(app).toContain("learning-map-stats");
-    expect(app).toContain("learning-map-here");
-    expect(app).toContain("Bir sonraki adım seni bekliyor.");
-    expect(styles).toContain("@keyframes okuplus-map-active");
-    expect(styles).toContain("@keyframes okuplus-map-route-svg");
+    expect(app).toContain("learning-map-v6-summary");
+    expect(app).toContain("learning-map-v6-action");
+    expect(app).toContain("learning-map-v6-character");
+    expect(app).toContain("Bir sonraki durak seni bekliyor.");
     expect(styles).toContain("#learning-path-card > .learning-path-heading");
-    expect(styles).toContain(".learning-map-step.active .learning-map-node-copy");
-    expect(styles).toContain("border-left: 3px solid #7048e8");
+    expect(styles).toContain("@keyframes okuplus-map-v6-pulse");
+    expect(styles).toContain(".learning-map-v6-step.is-current .learning-map-v6-marker");
   });
 
   it("does not duplicate dashboard data loads after onboarding", () => {
