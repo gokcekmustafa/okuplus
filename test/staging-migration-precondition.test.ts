@@ -141,7 +141,7 @@ describe("staging migration precondition diagnostics", () => {
   });
 
   it("compares existing learning steps without treating their identity as mutable data", () => {
-    expect(provisioner).toContain("const { id, ...existingValues } = existing;");
+    expect(provisioner).toContain("const { id, status, isActive, ...existingValues } = existing;");
     expect(provisioner).toContain("isDeepStrictEqual(existingValues, immutable)");
   });
 });
