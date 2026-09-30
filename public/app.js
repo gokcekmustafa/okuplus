@@ -387,6 +387,16 @@ function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar
   return fallback;
 }
 
+function formatLoginError(error) {
+  if (error?.status === 401 || error?.code === "UNAUTHORIZED")
+    return "E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.";
+  if (error?.status >= 500) return "Giriş sırasında bir bağlantı sorunu oluştu. Tekrar dene.";
+  return formatStudentError(
+    error,
+    "E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.",
+  );
+}
+
 function setGuestPhase(phase) {
   const sections = {
     intro: "guest-intro",
@@ -2463,7 +2473,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
           : "";
       var stepNumber = index + 1;
       var characterMarkup = isCurrent
-        ? '<span class="learning-map-v6-character"><span>ŞİMDİ</span><img src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /><b>BURADASIN</b></span>'
+        ? '<span class="learning-map-v6-character"><img src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /></span>'
         : "";
       return (
         '<article class="learning-map-v6-step ' +
@@ -4088,7 +4098,7 @@ function setLoading(isLoading) {
   submitBtn.disabled = isLoading;
   submitBtn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
   submitBtn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
-  $("login-error").classList.add("hidden");
+  if (isLoading) $("login-error").classList.add("hidden");
 }
 
 function setSignupLoading(isLoading) {
@@ -4096,7 +4106,7 @@ function setSignupLoading(isLoading) {
   submitBtn.disabled = isLoading;
   submitBtn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
   submitBtn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
-  $("signup-error").classList.add("hidden");
+  if (isLoading) $("signup-error").classList.add("hidden");
 }
 
 function showSignupForm() {
@@ -4180,10 +4190,7 @@ $("login-form").addEventListener("submit", async (event) => {
     await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
   } catch (err) {
-    $("login-error").textContent = formatStudentError(
-      err,
-      "E-posta veya şifre doğru değil. Tekrar dene.",
-    );
+    $("login-error").textContent = formatLoginError(err);
     $("login-error").classList.remove("hidden");
   } finally {
     inFlight = false;
