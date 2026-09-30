@@ -1126,6 +1126,10 @@ body {
   text-align: center;
 }
 
+.onboarding-notice {
+  color: var(--muted);
+}
+
 /* ================= Uygulama düzeni ================= */
 .app {
   min-height: 100vh;
