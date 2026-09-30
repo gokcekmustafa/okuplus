@@ -398,12 +398,38 @@
 
           <div class="topbar-user">
             <div class="user-chip">
-              <span class="user-avatar" id="user-avatar">?</span>
+              <div class="user-menu-wrap">
+                <button
+                  id="user-menu-toggle"
+                  class="user-avatar-button"
+                  type="button"
+                  aria-label="Kullanıcı menüsünü aç"
+                  aria-expanded="false"
+                  aria-controls="user-menu"
+                >
+                  <span class="user-avatar" id="user-avatar">?</span>
+                </button>
+                <div id="user-menu" class="user-menu hidden" hidden aria-label="Kullanıcı menüsü">
+                  <button type="button" data-user-menu-page="settings">⚙️ Profilim</button>
+                  <button type="button" data-user-menu-page="billing-account">
+                    💳 Hesap ve Ödeme
+                  </button>
+                </div>
+              </div>
               <div class="user-meta">
                 <span class="user-name" id="user-name">—</span>
-                <span class="user-role" id="user-role">—</span>
               </div>
             </div>
+            <button
+              id="theme-toggle"
+              class="theme-toggle"
+              type="button"
+              aria-label="Koyu temaya geç"
+              aria-pressed="false"
+              title="Koyu temaya geç"
+            >
+              <span aria-hidden="true">🌙</span>
+            </button>
             <button id="logout-btn" type="button" class="btn btn-ghost btn-sm">Çıkış yap</button>
           </div>
         </header>
@@ -4974,40 +5000,40 @@
           <button
             type="button"
             class="bottom-nav-item"
-            data-bottom-page="settings"
-            aria-label="Profilim"
+            data-bottom-page="exercise"
+            aria-label="Antrenman"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">👤</span
-            ><span class="bottom-nav-label">Profilim</span>
+            <span class="bottom-nav-icon" aria-hidden="true">✏️</span
+            ><span class="bottom-nav-label">Antrenman</span>
           </button>
           <button
-            id="student-more-toggle"
             type="button"
             class="bottom-nav-item"
-            aria-label="Diğer öğrenci ekranları"
-            aria-expanded="false"
-            aria-controls="student-more-menu"
+            data-bottom-page="assignments"
+            aria-label="Ödevler"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">⋯</span
-            ><span class="bottom-nav-label">Daha fazla</span>
+            <span class="bottom-nav-icon" aria-hidden="true">📝</span
+            ><span class="bottom-nav-label">Ödevler</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="assessments"
+            aria-label="Ölçme ve değerlendirme"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">📊</span
+            ><span class="bottom-nav-label">Ölçme</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-item"
+            data-bottom-page="badges"
+            aria-label="Rozetler ve kupalar"
+          >
+            <span class="bottom-nav-icon" aria-hidden="true">🏅</span
+            ><span class="bottom-nav-label">Rozetler</span>
           </button>
         </nav>
-        <div
-          id="student-more-menu"
-          class="student-more-menu hidden"
-          hidden
-          data-student
-          aria-label="Diğer öğrenci ekranları"
-          aria-hidden="true"
-        >
-          <button type="button" data-student-menu-page="exercise">✏️ Antrenman</button>
-          <button type="button" data-student-menu-page="assignments">📝 Ödevler</button>
-          <button type="button" data-student-menu-page="assessments">
-            📊 Ölçme &amp; Değerlendirme
-          </button>
-          <button type="button" data-student-menu-page="badges">🏅 Rozetler &amp; Kupalar</button>
-          <button type="button" data-student-menu-page="billing-account">💳 Hesap ve Ödeme</button>
-        </div>
       </div>
     </div>
     <dialog

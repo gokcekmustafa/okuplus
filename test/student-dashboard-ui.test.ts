@@ -63,9 +63,17 @@ describe("student dashboard release 0.4", () => {
     expect(index).toContain('id="lessons-heading"');
     expect(index).not.toContain('data-bottom-page="lessons"');
     expect(index).toContain('data-bottom-page="progress"');
-    expect(index).toContain('data-bottom-page="settings"');
+    expect(index).toContain('data-bottom-page="exercise"');
+    expect(index).toContain('data-bottom-page="assignments"');
+    expect(index).toContain('data-bottom-page="assessments"');
+    expect(index).toContain('data-bottom-page="badges"');
+    expect(index).not.toContain('id="student-more-toggle"');
     expect(app).not.toContain("<span>ŞİMDİ</span>");
     expect(app).not.toContain("<b>BURADASIN</b>");
+    expect(index).toContain('id="user-menu-toggle"');
+    expect(index).toContain('data-user-menu-page="settings"');
+    expect(index).toContain('data-user-menu-page="billing-account"');
+    expect(index).toContain('id="theme-toggle"');
     expect(styles).toContain("#learning-path.learning-path::before");
   });
 
@@ -75,6 +83,15 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain("E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.");
     expect(app).toContain('if (isLoading) $("login-error").classList.add("hidden");');
     expect(app).toContain('$("login-error").textContent = formatLoginError(err);');
+  });
+
+  it("persists the accessible light and dark theme toggle", () => {
+    expect(app).toContain('theme: "oku.theme"');
+    expect(app).toContain("function applyTheme(theme)");
+    expect(app).toContain("document.documentElement.dataset.theme = resolvedTheme;");
+    expect(app).toContain("localStorage.setItem(STORAGE_KEYS.theme, nextTheme);");
+    expect(styles).toContain(':root[data-theme="dark"]');
+    expect(styles).toContain(".theme-toggle");
   });
 
   it("does not flash the dashboard while student onboarding is being resolved", () => {

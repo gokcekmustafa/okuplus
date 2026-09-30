@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   refreshToken: "oku.refreshToken",
   tenantId: "oku.tenantId",
   soundEffects: "oku.soundEffects",
+  theme: "oku.theme",
 };
 
 const GUEST_SESSION_STORAGE_KEY = "oku.guestDiagnostic.sessionId";
@@ -23,6 +24,31 @@ const guestDiagnosticState = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+function storedTheme() {
+  return localStorage.getItem(STORAGE_KEYS.theme) === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  const resolvedTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = resolvedTheme;
+  const toggle = $("theme-toggle");
+  if (!toggle) return;
+  const dark = resolvedTheme === "dark";
+  toggle.setAttribute("aria-pressed", String(dark));
+  toggle.setAttribute("aria-label", dark ? "Açık temaya geç" : "Koyu temaya geç");
+  toggle.title = dark ? "Açık temaya geç" : "Koyu temaya geç";
+  toggle.querySelector("span")?.replaceChildren(document.createTextNode(dark ? "☀️" : "🌙"));
+}
+
+function setupThemeEvents() {
+  applyTheme(storedTheme());
+  $("theme-toggle")?.addEventListener("click", () => {
+    const nextTheme = storedTheme() === "dark" ? "light" : "dark";
+    localStorage.setItem(STORAGE_KEYS.theme, nextTheme);
+    applyTheme(nextTheme);
+  });
+}
 
 let inFlight = false;
 let insightsIdentity = "";
@@ -930,7 +956,7 @@ function showDashboard(me) {
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("view-guest")?.classList.add("hidden");
-  setStudentMoreMenuOpen(false);
+  setUserMenuOpen(false);
 
   const { user, tenantContext } = me;
   resetInsights();
@@ -949,9 +975,6 @@ function showDashboard(me) {
       ? "Kişisel"
       : tenantContext.tenantName || `Kuruluş: ${tenantContext.tenantId}`
     : "Platform";
-
-  const roleLabel = user.platformRole ? `Platform · ${user.platformRole}` : "Tenant kullanıcısı";
-  $("user-role").textContent = roleLabel;
 
   // Platform yetkilileri dışında admin menülerini gizle.
   for (const item of document.querySelectorAll(".nav-item[data-admin]")) {
@@ -3592,12 +3615,7 @@ function navigate(page) {
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && isPlatformUser !== false) return;
 
-  setStudentMoreMenuOpen(false);
-  const studentMoreToggle = $("student-more-toggle");
-  studentMoreToggle?.classList.toggle(
-    "active",
-    ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page),
-  );
+  setUserMenuOpen(false);
   document.querySelectorAll(".student-nav-more[open]").forEach(function (details) {
     details.removeAttribute("open");
   });
@@ -3612,10 +3630,7 @@ function navigate(page) {
     if (active) item.setAttribute("aria-current", "page");
   }
   for (const item of document.querySelectorAll(".bottom-nav-item")) {
-    const active =
-      item.id === "student-more-toggle"
-        ? ["exercise", "assignments", "assessments", "badges", "billing-account"].includes(page)
-        : (item.dataset.bottomPage || item.dataset.page) === page;
+    const active = (item.dataset.bottomPage || item.dataset.page) === page;
     item.classList.toggle("active", active);
     item.toggleAttribute("aria-current", active);
     if (active) item.setAttribute("aria-current", "page");
@@ -3684,9 +3699,9 @@ function navigate(page) {
   closeSidebar();
 }
 
-function setStudentMoreMenuOpen(open) {
-  const menu = $("student-more-menu");
-  const toggle = $("student-more-toggle");
+function setUserMenuOpen(open) {
+  const menu = $("user-menu");
+  const toggle = $("user-menu-toggle");
   if (!menu || !toggle) return;
   menu.classList.toggle("hidden", !open);
   menu.hidden = !open;
@@ -4200,7 +4215,7 @@ $("login-form").addEventListener("submit", async (event) => {
 
 // ---------- Logout ----------
 
-$("logout-btn").addEventListener("click", async () => {
+async function handleLogout() {
   const { refreshToken, tenantId } = getStoredTokens();
   try {
     if (refreshToken) {
@@ -4213,7 +4228,9 @@ $("logout-btn").addEventListener("click", async () => {
     clearStoredSession();
     showLogin();
   }
-});
+}
+
+$("logout-btn").addEventListener("click", () => void handleLogout());
 
 // ---------- Navigasyon (menü) ----------
 
@@ -4239,26 +4256,26 @@ for (const item of document.querySelectorAll(".bottom-nav-item")) {
   );
 }
 
-$("student-more-toggle")?.addEventListener("click", () => {
-  const menu = $("student-more-menu");
+$("user-menu-toggle")?.addEventListener("click", () => {
+  const menu = $("user-menu");
   if (!menu) return;
-  setStudentMoreMenuOpen(menu.classList.contains("hidden"));
+  setUserMenuOpen(menu.classList.contains("hidden"));
 });
 
 document.addEventListener("click", (event) => {
-  const menu = $("student-more-menu");
-  const toggle = $("student-more-toggle");
+  const menu = $("user-menu");
+  const toggle = $("user-menu-toggle");
   if (!menu || menu.classList.contains("hidden")) return;
   if (menu.contains(event.target) || toggle?.contains(event.target)) return;
-  setStudentMoreMenuOpen(false);
+  setUserMenuOpen(false);
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setStudentMoreMenuOpen(false);
+  if (event.key === "Escape") setUserMenuOpen(false);
 });
 
-for (const item of document.querySelectorAll("[data-student-menu-page]")) {
-  item.addEventListener("click", () => navigateFromMenu(item.dataset.studentMenuPage));
+for (const item of document.querySelectorAll("[data-user-menu-page]")) {
+  item.addEventListener("click", () => navigateFromMenu(item.dataset.userMenuPage));
 }
 
 $("sidebar-toggle").addEventListener("click", () => {
@@ -14055,6 +14072,7 @@ function setupAssignmentEvents() {
   });
 }
 async function init() {
+  setupThemeEvents();
   restoreSession();
   setupModalAccessibility();
   setupTenantEvents();

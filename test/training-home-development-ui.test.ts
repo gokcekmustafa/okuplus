@@ -71,24 +71,24 @@ describe("training home and development UI", () => {
     expect(app).toContain("data-student-secondary");
   });
 
-  it("groups student navigation without removing secondary destinations", () => {
+  it("keeps secondary destinations available in the student shell", () => {
     expect(index).toContain('class="student-nav-more" data-student');
     expect(index).toContain("Öğrenme Yolum");
     expect(index).toContain("Gelişimim");
     expect(index).toContain("Profilim");
-    expect(index).toContain('id="student-more-toggle"');
-    expect(index).toContain('class="student-more-menu hidden"');
-    expect(index).toContain('aria-hidden="true"');
-    expect(index).toContain('data-student-menu-page="exercise"');
-    expect(index).toContain('data-student-menu-page="assignments"');
-    expect(index).toContain('data-student-menu-page="assessments"');
-    expect(index).toContain('data-student-menu-page="badges"');
-    expect(index).toContain('data-student-menu-page="billing-account"');
+    expect(index).toContain('id="user-menu-toggle"');
+    expect(index).toContain('data-user-menu-page="settings"');
+    expect(index).toContain('data-user-menu-page="billing-account"');
+    expect(index).toContain('data-bottom-page="exercise"');
+    expect(index).toContain('data-bottom-page="assignments"');
+    expect(index).toContain('data-bottom-page="assessments"');
+    expect(index).toContain('data-bottom-page="badges"');
+    expect(index).not.toContain('id="student-more-toggle"');
     expect(app).toContain('item.classList.toggle("hidden", isPlatform)');
-    expect(app).toContain("function setStudentMoreMenuOpen(open)");
+    expect(app).toContain("function setUserMenuOpen(open)");
     expect(app).toContain("menu.hidden = !open");
     expect(app).toContain('event.key === "Escape"');
-    expect(app).toContain("data-student-menu-page");
+    expect(app).toContain("data-user-menu-page");
   });
 
   it("prioritizes the real daily action before the learning path on the student home", () => {

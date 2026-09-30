@@ -15,6 +15,20 @@
   --topbar-h: 60px;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101827;
+  --surface: #182235;
+  --text: #e7eef9;
+  --muted: #a6b4c8;
+  --border: #34445d;
+  --primary: #8eafff;
+  --primary-hover: #b1c7ff;
+  --primary-soft: #27395d;
+  --danger: #ff8f8f;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.28), 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
 /* ================= Academic learning model ================= */
 .academic-model {
   margin: 14px 0 18px;
@@ -1272,6 +1286,88 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.user-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.user-avatar-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.user-avatar-button:focus-visible {
+  outline: 3px solid #a7a7ff;
+  outline-offset: 3px;
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  width: max-content;
+  min-width: 190px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px rgba(28, 39, 75, 0.16);
+}
+
+.user-menu.hidden,
+.user-menu[hidden] {
+  display: none !important;
+}
+
+.user-menu button {
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.user-menu button:hover,
+.user-menu button:focus-visible {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .user-meta {
@@ -4430,55 +4526,9 @@ body {
   background: #f3fbf7;
 }
 
-.student-shell .student-more-menu {
-  position: fixed;
-  right: 12px;
-  bottom: calc(78px + env(safe-area-inset-bottom));
-  z-index: 30;
-  display: grid;
-  width: min(260px, calc(100vw - 24px));
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: 0 16px 36px rgba(28, 39, 75, 0.16);
-}
-
-.student-shell .student-more-menu.hidden {
-  display: none !important;
-}
-
-.student-shell .student-more-menu[hidden] {
-  display: none !important;
-}
-
-.student-shell .student-more-menu button {
-  border: 0;
-  border-radius: 10px;
-  padding: 11px 12px;
-  color: var(--text);
-  background: transparent;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.student-shell .student-more-menu button:hover,
-.student-shell .student-more-menu button:focus-visible {
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-
-@media (min-width: 769px) {
-  .student-shell .student-more-menu {
-    display: none !important;
-  }
-}
-
 @media (max-width: 768px) {
   .student-shell .student-bottom-nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .student-shell .bottom-nav-label {
@@ -4643,7 +4693,7 @@ textarea:focus-visible {
 
   .student-shell .student-bottom-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     height: 72px;
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     box-shadow: 0 -8px 24px rgba(28, 39, 75, 0.08);
@@ -8947,4 +8997,70 @@ textarea:focus-visible {
 
 .student-shell #learning-path-card .learning-map-current-copy small {
   display: block !important;
+}
+
+/* Dark theme: keep the student shell readable while preserving its visual hierarchy. */
+:root[data-theme="dark"] .student-shell {
+  --student-ink: #e7eef9;
+  --student-muted: #a6b4c8;
+  --student-blue: #9bb7ff;
+  --student-teal: #70dfc1;
+  background: linear-gradient(135deg, #111b2b 0%, #17253b 58%, #12272a 100%);
+}
+
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  border-color: var(--border);
+}
+
+:root[data-theme="dark"] .student-shell .sidebar,
+:root[data-theme="dark"] .student-shell .topbar {
+  background: rgba(19, 29, 45, 0.96);
+  border-color: #314158;
+}
+
+:root[data-theme="dark"] .student-shell .nav-item {
+  color: var(--student-ink);
+}
+
+:root[data-theme="dark"] .student-shell .nav-item:hover {
+  background: #233451;
+}
+
+:root[data-theme="dark"] .student-shell .nav-item.active {
+  background: #2b416d;
+}
+
+:root[data-theme="dark"] .student-shell #today-card.supporting-task-card,
+:root[data-theme="dark"] .student-shell #learning-path-card.learning-path-card,
+:root[data-theme="dark"] .student-shell .training-home-card,
+:root[data-theme="dark"] .student-shell .insight-panel,
+:root[data-theme="dark"] .student-shell .card {
+  border-color: #344663;
+  background: #182235;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-summary,
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-summary-item,
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-path-summary-item {
+  background: #22314a;
+}
+
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-path-summary-item.is-common {
+  background: #1d3a38;
+}
+
+:root[data-theme="dark"] .student-shell .bottom-nav-item:hover,
+:root[data-theme="dark"] .student-shell .bottom-nav-item.active {
+  background: var(--primary-soft);
 }
