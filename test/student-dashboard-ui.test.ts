@@ -61,7 +61,20 @@ describe("student dashboard release 0.4", () => {
     expect(index).toContain('aria-live="polite"');
     expect(index).toContain('id="lesson-list-panel"');
     expect(index).toContain('id="lessons-heading"');
+    expect(index).not.toContain('data-bottom-page="lessons"');
+    expect(index).toContain('data-bottom-page="progress"');
+    expect(index).toContain('data-bottom-page="settings"');
+    expect(app).not.toContain("<span>ŞİMDİ</span>");
+    expect(app).not.toContain("<b>BURADASIN</b>");
     expect(styles).toContain("#learning-path.learning-path::before");
+  });
+
+  it("keeps invalid login feedback visible after the request finishes", () => {
+    expect(index).toContain('id="login-error"');
+    expect(app).toContain("function formatLoginError(error)");
+    expect(app).toContain("E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.");
+    expect(app).toContain('if (isLoading) $("login-error").classList.add("hidden");');
+    expect(app).toContain('$("login-error").textContent = formatLoginError(err);');
   });
 
   it("does not flash the dashboard while student onboarding is being resolved", () => {

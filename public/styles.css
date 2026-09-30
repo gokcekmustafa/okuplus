@@ -4478,7 +4478,7 @@ body {
 
 @media (max-width: 768px) {
   .student-shell .student-bottom-nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .student-shell .bottom-nav-label {
@@ -4643,7 +4643,7 @@ textarea:focus-visible {
 
   .student-shell .student-bottom-nav {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     height: 72px;
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     box-shadow: 0 -8px 24px rgba(28, 39, 75, 0.08);
@@ -8336,36 +8336,10 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
-.student-shell #learning-path-card .learning-map-v6-character > span,
-.student-shell #learning-path-card .learning-map-v6-character > b {
-  position: absolute;
-  z-index: 3;
-  padding: 4px 7px;
-  border-radius: 999px;
-  font-size: 8px;
-  font-weight: 950;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.student-shell #learning-path-card .learning-map-v6-character > span {
-  top: -5px;
-  background: #ede9ff;
-  color: #6047c8;
-  letter-spacing: 0.08em;
-}
-
-.student-shell #learning-path-card .learning-map-v6-character > b {
-  bottom: -4px;
-  background: #7048e8;
-  color: #fff;
-}
-
 .student-shell #learning-path-card .learning-map-v6-character img {
   display: block;
   width: 58px;
   height: auto;
-  margin-top: 12px;
 }
 
 @keyframes okuplus-map-v6-pulse {
