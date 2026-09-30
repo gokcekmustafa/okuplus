@@ -4731,6 +4731,7 @@ textarea:focus-visible {
     padding-inline: 2px;
   }
 }
+
 .lesson-layout {
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.4fr);
@@ -7809,6 +7810,308 @@ textarea:focus-visible {
 
   .student-shell .learning-map-marker-wrap {
     width: 56px;
+  }
+
+  .student-shell .learning-map-marker {
+    width: 50px;
+    height: 50px;
+    font-size: 19px;
+  }
+
+  .student-shell .bottom-nav-label {
+    font-size: 9px;
+  }
+}
+
+/* Roadmap v4 final cascade: keep the compact station hierarchy after the
+   legacy roadmap rules that intentionally remain above this block. */
+.student-shell #learning-path-card {
+  overflow-x: clip;
+}
+
+.student-shell #learning-path-card .learning-map-overview {
+  padding: 2px 4px 11px;
+}
+
+.student-shell #learning-path-card .learning-map-overview-title h4 {
+  margin-top: 7px;
+  font-size: clamp(1.55rem, 5.8vw, 2.15rem);
+}
+
+.student-shell #learning-path-card .learning-map-overview-title p {
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+.student-shell .learning-map-avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 1.35rem;
+}
+
+.student-shell #learning-path-card .learning-map-stats {
+  grid-template-columns: minmax(0, 1.25fr) minmax(62px, 0.75fr) minmax(112px, 1.2fr);
+  gap: 12px;
+  margin: 0 4px 12px;
+  padding: 10px 12px;
+  border-radius: 18px;
+}
+
+.student-shell .learning-map-stat-icon {
+  display: none;
+}
+
+.student-shell .learning-map-stat {
+  gap: 0;
+}
+
+.student-shell .learning-map-stat strong {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.student-shell .learning-map-stat small {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.student-shell #learning-path-card .learning-map-legend {
+  gap: 6px 12px;
+  margin: 0 4px 14px;
+  font-size: 10px;
+}
+
+.student-shell #learning-path-card .learning-map-legend-item.completed,
+.student-shell #learning-path-card .learning-map-legend-item.locked {
+  display: none;
+}
+
+.student-shell #learning-path-card .learning-map-panel-heading {
+  align-items: flex-start;
+  margin: 0 4px 4px;
+}
+
+.student-shell #learning-path-card .learning-map-panel-intro {
+  max-width: 26rem;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.student-shell #learning-path-card .learning-map-panel-count {
+  margin-top: 1px;
+  padding: 6px 9px;
+  font-size: 10px;
+}
+
+.student-shell #learning-path-card .learning-map-track {
+  gap: 0;
+  padding: 4px 0 34px;
+}
+
+.student-shell .learning-map-step,
+.student-shell .learning-map-node {
+  min-height: 154px;
+}
+
+.student-shell .learning-map-node {
+  grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.student-shell .learning-map-marker-wrap {
+  width: 72px;
+  height: 72px;
+}
+
+.student-shell .learning-map-step.roadmap-left .learning-map-marker-wrap {
+  transform: translateX(clamp(-34px, -5vw, -18px));
+}
+
+.student-shell .learning-map-step.roadmap-right .learning-map-marker-wrap {
+  transform: translateX(clamp(18px, 5vw, 34px));
+}
+
+.student-shell .learning-map-node-copy {
+  max-width: 182px;
+  min-width: 0;
+  padding: 7px 8px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
+.student-shell .learning-map-step.roadmap-left .learning-map-node-copy {
+  justify-self: end;
+}
+
+.student-shell .learning-map-step.roadmap-right .learning-map-node-copy {
+  justify-self: start;
+}
+
+.student-shell .learning-map-node-top {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+
+.student-shell .learning-map-step.roadmap-left .learning-map-node-top {
+  align-items: flex-end;
+}
+
+.student-shell .learning-map-node-top > span {
+  max-width: 100%;
+  overflow: visible;
+  white-space: normal;
+}
+
+.student-shell .learning-map-node .learning-map-area {
+  color: #66758f;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.student-shell .learning-map-node .learning-map-kind {
+  color: #2f4f83;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.student-shell .learning-map-node .path-node-label {
+  display: -webkit-box;
+  max-width: 100%;
+  margin-top: 5px;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.22;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.student-shell .learning-map-step.active .learning-map-node-copy {
+  min-height: 76px;
+  padding: 10px 11px;
+  border: 1px solid #c9c3ff;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #ffffff, #f8f6ff);
+  box-shadow: 0 9px 20px rgba(78, 68, 181, 0.12);
+}
+
+.student-shell .learning-map-step.active .learning-map-node-action {
+  display: inline-flex;
+  margin-top: 7px;
+  color: #5e43c8;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.student-shell .learning-map-node-lock {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.student-shell .learning-map-step.locked .learning-map-node-copy {
+  opacity: 0.86;
+}
+
+.student-shell .learning-map-step.locked .learning-map-area,
+.student-shell .learning-map-step.locked .learning-map-kind,
+.student-shell .learning-map-step.locked .path-node-label {
+  color: #8996aa;
+}
+
+.student-shell .learning-map-step.completed .learning-map-node-copy {
+  color: #34745e;
+}
+
+.student-shell .student-bottom-nav {
+  min-height: 70px;
+}
+
+.student-shell .bottom-nav-item {
+  min-width: 0;
+  padding-inline: 2px;
+}
+
+.student-shell .bottom-nav-label {
+  max-width: 100%;
+  font-size: 10px;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+@media (max-width: 700px) {
+  .student-shell #learning-path-card .learning-map-stats {
+    grid-template-columns: minmax(0, 1.15fr) minmax(52px, 0.75fr) minmax(106px, 1.2fr);
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .student-shell .learning-map-node {
+    grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .student-shell .learning-map-marker-wrap {
+    width: 60px;
+    height: 60px;
+  }
+
+  .student-shell .learning-map-step.roadmap-left .learning-map-marker-wrap {
+    transform: translateX(clamp(-24px, -5vw, -16px));
+  }
+
+  .student-shell .learning-map-step.roadmap-right .learning-map-marker-wrap {
+    transform: translateX(clamp(16px, 5vw, 24px));
+  }
+
+  .student-shell .learning-map-node-copy {
+    max-width: 100%;
+    padding-inline: 5px;
+  }
+
+  .student-shell .learning-map-node .learning-map-area {
+    font-size: clamp(8px, 2.25vw, 10px);
+  }
+
+  .student-shell .learning-map-node .learning-map-kind {
+    font-size: clamp(10px, 2.8vw, 11px);
+  }
+
+  .student-shell .learning-map-node .path-node-label {
+    font-size: clamp(11px, 3.15vw, 14px);
+  }
+}
+
+@media (max-width: 380px) {
+  .student-shell #learning-path-card .learning-map-stats {
+    gap: 5px;
+    padding-inline: 8px;
+  }
+
+  .student-shell .learning-map-stat strong {
+    font-size: 10px;
+  }
+
+  .student-shell .learning-map-stat small {
+    font-size: 8px;
+  }
+
+  .student-shell .learning-map-node {
+    grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1fr);
+  }
+
+  .student-shell .learning-map-marker-wrap {
+    width: 54px;
+    height: 54px;
   }
 
   .student-shell .learning-map-marker {

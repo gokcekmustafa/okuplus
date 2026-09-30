@@ -128,9 +128,11 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-track::before");
     expect(styles).toContain(".student-shell .learning-map-step.kind-fast");
     expect(styles).toContain(".student-shell .learning-map-step.kind-comprehension");
-    expect(app).toContain('label: "Hızlı okuma", icon: "⚡"');
-    expect(app).toContain('label: "Okuduğunu anlama", icon: "★"');
-    expect(app).toContain('label: "Öğrenme dersi", icon: "◒"');
+    expect(app).toContain('label: "Öğren", icon: "⚡"');
+    expect(app).toContain('label: "Öğren", icon: "★"');
+    expect(app).toContain('label: "Öğren", icon: "◒"');
+    expect(app).toContain('class="learning-map-area"');
+    expect(app).toContain('class="learning-map-node-lock"');
     expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
     expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
     expect(app).toContain('continueEl.classList.add("hidden")');
@@ -139,5 +141,16 @@ describe("training home and development UI", () => {
     expect(app).toContain("learning-map-here");
     expect(styles).toContain("@keyframes okuplus-map-active");
     expect(styles).toContain("@keyframes okuplus-map-route-svg");
+  });
+
+  it("does not duplicate dashboard data loads after onboarding", () => {
+    const onboarding = app.slice(
+      app.indexOf("async function maybeShowOnboarding()"),
+      app.indexOf("function showOnboardingError"),
+    );
+    expect(onboarding).not.toContain("void loadToday()");
+    expect(onboarding).not.toContain("void loadLearningPath()");
+    expect(app).toContain("if (todayLoading) return;");
+    expect(app).toContain("if (learningPathLoading) return;");
   });
 });
