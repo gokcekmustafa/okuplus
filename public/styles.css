@@ -7823,6 +7823,624 @@ textarea:focus-visible {
   }
 }
 
+/* Learning map v6: one lightweight route, one active station, no detail cards. */
+.student-shell #learning-path-card.learning-path-card {
+  box-sizing: border-box;
+  overflow: visible;
+  overflow-x: clip;
+  padding: clamp(14px, 3vw, 24px);
+  border: 0;
+  border-radius: 24px;
+  background: #fbfcff;
+  box-shadow: 0 12px 30px rgba(44, 61, 108, 0.08);
+}
+
+.student-shell #learning-path-card > .learning-path-heading,
+.student-shell #learning-path-card > #learning-path-summary,
+.student-shell #learning-path-card > #learning-model-details {
+  display: none;
+}
+
+.student-shell #learning-path-card > #learning-map-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  margin: 0 2px 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy strong {
+  overflow: hidden;
+  color: #4e43b8;
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy small {
+  overflow: hidden;
+  color: #7c879e;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-current-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border: 3px solid #7252ef;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px #e9e4ff;
+}
+
+.student-shell #learning-path-card .learning-map-current-progress {
+  flex: 0 0 auto;
+  color: #6260a9;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-v6 {
+  width: 100%;
+  min-width: 0;
+  color: #182d56;
+}
+
+.student-shell #learning-path-card .learning-map-v6-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 10px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-header h4,
+.student-shell #learning-path-card .learning-map-v6-heading h4 {
+  margin: 0;
+  color: #172e5c;
+  font-size: clamp(1.45rem, 5vw, 2rem);
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.student-shell #learning-path-card .learning-map-v6-header p:last-child,
+.student-shell #learning-path-card .learning-map-v6-heading p:last-child {
+  margin: 6px 0 0;
+  color: #7d8ca7;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.student-shell #learning-path-card .learning-map-v6-kicker {
+  margin: 0 0 5px;
+  color: #6554d8;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+}
+
+.student-shell #learning-path-card .learning-map-v6-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: #ede9ff;
+  color: #6541e7;
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+
+.student-shell #learning-path-card .learning-map-v6-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(62px, 0.8fr) minmax(62px, 0.8fr);
+  gap: 8px 14px;
+  align-items: end;
+  margin: 0 2px 12px;
+  padding: 9px 0 11px;
+  border-top: 1px solid #e9edf6;
+  border-bottom: 1px solid #e9edf6;
+}
+
+.student-shell #learning-path-card .learning-map-v6-summary > span:not(.learning-map-v6-progress) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-summary strong {
+  overflow: hidden;
+  color: #314779;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-v6-summary small {
+  color: #8b96a9;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.student-shell #learning-path-card .learning-map-v6-progress {
+  grid-column: 1 / -1;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8ebf7;
+}
+
+.student-shell #learning-path-card .learning-map-v6-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7048e8, #9c73ff);
+  transition: width 0.35s ease;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: 0 2px 14px;
+  color: #6c7890;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a5b3c8;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .fast i {
+  background: #2179ef;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .comprehension i {
+  background: #f2671d;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .current i {
+  background: #7048e8;
+}
+
+.student-shell #learning-path-card .learning-map-v6-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 2px 4px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-heading h4 {
+  font-size: 1.15rem;
+}
+
+.student-shell #learning-path-card .learning-map-v6-heading > span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f0edff;
+  color: #5d4acc;
+  font-size: 10px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-v6-route {
+  position: relative;
+  display: grid;
+  grid-auto-rows: 142px;
+  height: var(--learning-map-route-height);
+  min-height: 0;
+  overflow-x: clip;
+  padding: 0 0 12px;
+  isolation: isolate;
+}
+
+.student-shell #learning-path-card .learning-map-v6-path {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.student-shell #learning-path-card .learning-map-v6-path path {
+  fill: none;
+  stroke: #c8dcff;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+  stroke-dasharray: 5 4;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-column: 1;
+  min-width: 0;
+  min-height: 142px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-node {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 142px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: inherit;
+}
+
+.student-shell #learning-path-card .learning-map-v6-node:not(:disabled) {
+  cursor: pointer;
+}
+
+.student-shell
+  #learning-path-card
+  .learning-map-v6-node:not(:disabled):hover
+  .learning-map-v6-marker,
+.student-shell
+  #learning-path-card
+  .learning-map-v6-node:not(:disabled):focus-visible
+  .learning-map-v6-marker {
+  transform: scale(1.06);
+}
+
+.student-shell #learning-path-card .learning-map-v6-node:focus-visible {
+  outline: 3px solid #cfc7ff;
+  outline-offset: -3px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-marker-wrap {
+  position: relative;
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  justify-self: center;
+}
+
+.student-shell #learning-path-card .learning-map-v6-left .learning-map-v6-marker-wrap {
+  transform: translateX(-10px);
+}
+
+.student-shell #learning-path-card .learning-map-v6-right .learning-map-v6-marker-wrap {
+  transform: translateX(10px);
+}
+
+.student-shell #learning-path-card .learning-map-v6-marker {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 2px solid #bcd2f9;
+  border-radius: 18px;
+  background: #f8fbff;
+  color: #2d79e8;
+  font-size: 23px;
+  font-weight: 900;
+  box-shadow: 0 5px 12px rgba(70, 111, 187, 0.11);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-comprehension
+  .learning-map-v6-marker {
+  border-color: #f5c6ab;
+  background: #fff9f4;
+  color: #ed641b;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.kind-reinforcement .learning-map-v6-marker,
+.student-shell #learning-path-card .learning-map-v6-step.kind-checkpoint .learning-map-v6-marker,
+.student-shell #learning-path-card .learning-map-v6-step.kind-measurement .learning-map-v6-marker {
+  border-color: #d4c4ff;
+  background: #faf7ff;
+  color: #7048e8;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-marker {
+  border-color: #b8e5cc;
+  background: #effbf4;
+  color: #10a86a;
+  box-shadow: 0 4px 10px rgba(23, 163, 103, 0.11);
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.locked .learning-map-v6-marker {
+  border-color: #d9e0ea;
+  background: #f2f5f8;
+  color: #aab5c3;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-marker {
+  border-color: #7048e8;
+  background: #7048e8;
+  color: #fff;
+  box-shadow:
+    0 0 0 7px #eeeaff,
+    0 10px 18px rgba(112, 72, 232, 0.25);
+  animation: okuplus-map-v6-pulse 2.2s ease-in-out infinite;
+}
+
+.student-shell #learning-path-card .learning-map-v6-copy {
+  display: flex;
+  grid-row: 1;
+  min-width: 0;
+  max-width: 150px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 4px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-left .learning-map-v6-copy {
+  grid-column: 1;
+  align-items: flex-end;
+  justify-self: end;
+  text-align: right;
+}
+
+.student-shell #learning-path-card .learning-map-v6-right .learning-map-v6-copy {
+  grid-column: 3;
+  align-items: flex-start;
+  justify-self: start;
+  text-align: left;
+}
+
+.student-shell #learning-path-card .learning-map-v6-area {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #2c76dc;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  line-height: 1.18;
+  text-transform: uppercase;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-comprehension .learning-map-v6-area {
+  color: #d45b20;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-common .learning-map-v6-area {
+  color: #6250ca;
+}
+
+.student-shell #learning-path-card .learning-map-v6-kind {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: #213d70;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.16;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-kind {
+  color: #287458;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.locked .learning-map-v6-copy {
+  opacity: 0.42;
+}
+
+.student-shell #learning-path-card .learning-map-v6-action {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 7px 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #7048e8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 5px 11px rgba(112, 72, 232, 0.18);
+}
+
+.student-shell #learning-path-card .learning-map-v6-lock {
+  color: #9ba8b9;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.student-shell #learning-path-card .learning-map-v6-character {
+  position: absolute;
+  bottom: 38px;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  width: 82px;
+  justify-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.student-shell #learning-path-card .learning-map-v6-character > span,
+.student-shell #learning-path-card .learning-map-v6-character > b {
+  position: absolute;
+  z-index: 3;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 950;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.student-shell #learning-path-card .learning-map-v6-character > span {
+  top: -5px;
+  background: #ede9ff;
+  color: #6047c8;
+  letter-spacing: 0.08em;
+}
+
+.student-shell #learning-path-card .learning-map-v6-character > b {
+  bottom: -4px;
+  background: #7048e8;
+  color: #fff;
+}
+
+.student-shell #learning-path-card .learning-map-v6-character img {
+  display: block;
+  width: 58px;
+  height: auto;
+  margin-top: 12px;
+}
+
+@keyframes okuplus-map-v6-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 7px #eeeaff,
+      0 10px 18px rgba(112, 72, 232, 0.25);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 11px rgba(238, 234, 255, 0.55),
+      0 11px 22px rgba(112, 72, 232, 0.3);
+  }
+}
+
+@media (max-width: 700px) {
+  .student-shell #learning-path-card.learning-path-card {
+    padding: 14px 10px 22px;
+    border-radius: 20px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-summary {
+    gap: 7px 8px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-node {
+    grid-template-columns: minmax(0, 1fr) 70px minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-marker-wrap {
+    width: 62px;
+    height: 62px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-marker {
+    width: 50px;
+    height: 50px;
+    border-radius: 15px;
+    font-size: 20px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-left .learning-map-v6-marker-wrap {
+    transform: translateX(-7px);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-right .learning-map-v6-marker-wrap {
+    transform: translateX(7px);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-copy {
+    max-width: 132px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-kind {
+    font-size: clamp(12px, 3.3vw, 14px);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-character {
+    width: 72px;
+    bottom: 32px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-character img {
+    width: 50px;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-shell #learning-path-card .learning-map-v6-route {
+    grid-auto-rows: 142px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-copy {
+    max-width: 120px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-area {
+    font-size: 8px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-kind {
+    font-size: 12px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-action {
+    padding-inline: 8px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-marker,
+  .student-shell #learning-path-card .learning-map-v6-progress i {
+    animation: none;
+    transition: none;
+  }
+}
+
 /* Roadmap v5: the map is the screen. Stations stay lightweight; only the
    route, marker state, and current action carry visual emphasis. */
 .student-shell #learning-path-card > .learning-path-heading {
@@ -8319,4 +8937,14 @@ textarea:focus-visible {
   .student-shell .bottom-nav-label {
     font-size: 9px;
   }
+}
+
+/* Final v6 cascade: the legacy roadmap rules above must not hide the new
+   compact current-step strip. */
+.student-shell #learning-path-card > #learning-map-current {
+  display: flex !important;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy small {
+  display: block !important;
 }

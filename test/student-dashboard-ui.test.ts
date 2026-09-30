@@ -9,10 +9,12 @@ describe("student dashboard release 0.4", () => {
   it("uses real student APIs for the dashboard summary", () => {
     expect(app).toContain('fetch("/student/today"');
     expect(app).toContain("async function insightApi(path)");
+    expect(app).toContain("const insightRequests = new Map()");
+    expect(app).toContain("if (existing) return existing");
     expect(app).toContain(
       'const paths = ["progress", "gamification", "history?page=1&pageSize=5", "learning-path"];',
     );
-    expect(app).toContain('fetch("/student/learning-path"');
+    expect(app).toContain('insightApi("learning-path")');
     expect(app).toContain('fetch("/account/entitlements"');
     expect(app).toContain("function renderTrainingHome(data)");
     expect(app).toContain("summary?.sessionCount");
@@ -29,7 +31,7 @@ describe("student dashboard release 0.4", () => {
   it("shows quota, next step, recent activity and accessible responsive states", () => {
     expect(index).toContain('id="today-card"');
     expect(index).toContain('id="home-insights"');
-    expect(index).toContain('id="learning-path-summary"');
+    expect(index).not.toContain('id="learning-path-summary"');
     expect(app).toContain("renderTrainingHome(data)");
     expect(app).toContain("renderHomeInsights(data)");
     expect(app).toContain("learningPathCommonDetail(pathGroups)");
