@@ -58,12 +58,12 @@ describe("training home and development UI", () => {
     expect(styles).toContain("@media (max-width: 600px)");
   });
 
-  it("keeps the student shell focused on five primary destinations", () => {
+  it("keeps the student shell focused on its primary destinations", () => {
     expect(index).toContain('data-page="dashboard" data-student-primary');
     expect(index).toContain('data-page="exercise" data-student-primary');
-    expect(index).toContain('data-page="lessons" data-student');
     expect(index).toContain('data-page="progress" data-student-primary');
-    expect(index).toContain('data-page="settings" data-student-primary');
+    expect(index).not.toContain('data-page="lessons" data-student');
+    expect(index).not.toContain('data-page="settings" data-student-primary');
     expect(index).toContain("Bugün ne öğreneceksin?");
     expect(index).toContain("Öğren");
     expect(index).toContain("Geri bildirim");
@@ -72,10 +72,15 @@ describe("training home and development UI", () => {
   });
 
   it("keeps secondary destinations available in the student shell", () => {
-    expect(index).toContain('class="student-nav-more" data-student');
-    expect(index).toContain("Öğrenme Yolum");
+    expect(index).not.toContain('class="student-nav-more"');
+    expect(index).not.toContain("Diğer alanlar");
+    expect(index).toContain('data-page="assignments" data-student-secondary');
+    expect(index).toContain('data-page="exercise" data-student-primary');
+    expect(index).toContain('data-page="assessments" data-student-secondary');
+    expect(index).toContain('data-page="badges" data-student-secondary');
     expect(index).toContain("Gelişimim");
-    expect(index).toContain("Profilim");
+    expect(index).not.toContain('data-page="lessons" data-student');
+    expect(index).not.toContain('data-page="settings" data-student-primary');
     expect(index).toContain('id="user-menu-toggle"');
     expect(index).toContain('data-user-menu-page="settings"');
     expect(index).toContain('data-user-menu-page="billing-account"');
@@ -90,11 +95,7 @@ describe("training home and development UI", () => {
     expect(app).toContain("menu.hidden = !open");
     expect(app).toContain('event.key === "Escape"');
     expect(app).toContain("data-user-menu-page");
-    expect(styles).toContain("@media (min-width: 769px)");
-    expect(styles).toContain(".student-shell .student-nav-more > summary");
-    expect(styles).toContain('.student-shell .nav-item[data-page="lessons"]');
-    expect(styles).toContain('.student-shell .nav-item[data-page="settings"]');
-    expect(styles).toContain('.student-shell .student-nav-more-list [data-page="billing-account"]');
+    expect(styles).toContain(".student-shell .sidebar-nav");
   });
 
   it("prioritizes the real daily action before the learning path on the student home", () => {

@@ -3564,9 +3564,6 @@ function navigate(page) {
   if (page === "billing-account" && isPlatformUser !== false) return;
 
   setUserMenuOpen(false);
-  document.querySelectorAll(".student-nav-more[open]").forEach(function (details) {
-    details.removeAttribute("open");
-  });
 
   for (const name of PAGES) {
     $("page-" + name)?.classList.toggle("hidden", name !== page);

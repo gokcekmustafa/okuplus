@@ -2692,31 +2692,6 @@ body {
   .student-shell .student-bottom-nav {
     display: none !important;
   }
-
-  /* Desktop sidebar: keep account actions in the top user menu and expose
-     the remaining student destinations without a nested "Diğer alanlar" group. */
-  .student-shell .student-nav-more {
-    order: 0;
-    margin: 0;
-    border-top: 0;
-    padding-top: 0;
-  }
-
-  .student-shell .student-nav-more > summary {
-    display: none;
-  }
-
-  .student-shell .student-nav-more-list {
-    display: grid !important;
-    gap: 6px;
-    padding: 0;
-  }
-
-  .student-shell .student-nav-more-list [data-page="billing-account"],
-  .student-shell .nav-item[data-page="lessons"],
-  .student-shell .nav-item[data-page="settings"] {
-    display: none !important;
-  }
 }
 
 /* ================= Learning Path ================= */
@@ -4425,65 +4400,6 @@ body {
   gap: 5px;
 }
 
-.student-shell .student-nav-more {
-  order: 5;
-  margin: 4px 0;
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-}
-
-.student-shell .student-nav-more > summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 48px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  color: var(--student-ink);
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 600;
-  list-style: none;
-}
-
-.student-shell .student-nav-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.student-shell .student-nav-more > summary::after {
-  margin-left: auto;
-  content: "＋";
-  color: var(--student-muted);
-  font-size: 18px;
-}
-
-.student-shell .student-nav-more[open] > summary::after {
-  content: "−";
-}
-
-.student-shell .student-nav-more > summary:hover,
-.student-shell .student-nav-more[open] > summary {
-  color: var(--student-blue);
-  background: #f2f6ff;
-}
-
-.student-shell .student-nav-more-list {
-  display: grid;
-  gap: 3px;
-  padding: 4px 0 0 10px;
-}
-
-.student-shell .student-nav-more-list .nav-item {
-  min-height: 42px;
-  padding: 9px 12px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.student-shell .student-nav-more-list .nav-item[data-student-secondary] {
-  display: flex !important;
-}
-
 .student-shell #page-dashboard {
   display: flex;
   flex-direction: column;
@@ -4626,10 +4542,6 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid #a7a7ff;
   outline-offset: 3px;
-}
-
-.student-shell .nav-item[data-student-secondary] {
-  display: none !important;
 }
 
 .student-shell .page-view {
