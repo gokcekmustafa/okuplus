@@ -472,6 +472,8 @@ async function ensureStep(
       title: true,
       type: true,
       position: true,
+      status: true,
+      isActive: true,
       skillId: true,
       contentVersionId: true,
       exerciseTemplateVersionId: true,
@@ -499,14 +501,25 @@ async function ensureStep(
     metadata: step.metadata ?? null,
   };
   if (existing) {
-    const { id, ...existingValues } = existing;
+    const { id, status, isActive, ...existingValues } = existing;
     if (!isDeepStrictEqual(existingValues, immutable))
       fail(`mevcut LearningStep çakışıyor: ${step.code}`);
+    if (status === "PUBLISHED" && isActive) return id;
+    if (status !== "DRAFT" || !isActive) {
+      fail(`mevcut LearningStep yayınlanabilir durumda değil: ${step.code}`);
+    }
+    if (apply) {
+      await tx.learningStep.update({
+        where: { id },
+        data: { status: "PUBLISHED", isActive: true },
+        select: { id: true },
+      });
+    }
     return id;
   }
   if (!apply) return `dry-run:step:${unitId}:${step.code}`;
   const created = await tx.learningStep.create({
-    data: { unitId, stableKey: step.code, ...immutable },
+    data: { unitId, stableKey: step.code, status: "PUBLISHED", isActive: true, ...immutable },
     select: { id: true },
   });
   return created.id;

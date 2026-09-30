@@ -148,6 +148,8 @@ describe("education V2 P0 forward migration contract", () => {
     expect(provisioning).toContain("where: { code_version:");
     expect(provisioning).toContain("where: { pathId_code:");
     expect(provisioning).toContain("where: { unitId_stableKey:");
+    expect(provisioning).toContain('data: { status: "PUBLISHED", isActive: true }');
+    expect(provisioning).toContain('status: "PUBLISHED", isActive: true, ...immutable');
     expect(provisioning).not.toMatch(/\b(?:delete|deleteMany|updateMany)\s*\(/u);
   });
 });
