@@ -2339,7 +2339,10 @@ function learningPathRouteGeometry(count) {
   var path = "M 50 0";
   var previousX = 50;
   for (var index = 0; index < count; index++) {
-    var x = index % 2 === 0 ? 35 : 65;
+    // The marker is only slightly offset from the centre column. Keeping the
+    // route close to that column leaves the side copy readable on mobile and
+    // prevents the connector from crossing station labels.
+    var x = index % 2 === 0 ? 44 : 56;
     var y = topPadding + index * stepHeight;
     var controlY = Math.max(20, y - 72);
     path += " C " + previousX + " " + controlY + ", " + x + " " + controlY + ", " + x + " " + y;
@@ -2446,14 +2449,15 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var disabled = visualStatus === "locked" ? " disabled" : "";
       var current = currentNode?.id === node.id ? ' aria-current="step"' : "";
       var aria = label + " - " + statusLabel;
-      var unitLabel = node.unit?.title
-        ? '<span class="path-node-unit">' + escapeHtml(node.unit.title) + "</span>"
-        : "";
+      var isCurrent = currentNode?.id === node.id;
+      var unitLabel =
+        isCurrent && node.unit?.title
+          ? '<span class="path-node-unit">' + escapeHtml(node.unit.title) + "</span>"
+          : "";
       var actionLabel = learningPathActionLabel(node, visualStatus);
       var stepNumber = index + 1;
-      var isCurrent = currentNode?.id === node.id;
       var characterMarkup = isCurrent
-        ? '<span class="learning-map-character-wrap"><img class="learning-map-character" src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /><span class="learning-map-here">BURADASIN</span></span>'
+        ? '<span class="learning-map-character-wrap"><span class="learning-map-now">ŞİMDİ</span><img class="learning-map-character" src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /><span class="learning-map-here">BURADASIN</span></span>'
         : "";
       return (
         '<div class="path-node-item learning-map-step ' +
