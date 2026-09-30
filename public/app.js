@@ -2318,26 +2318,20 @@ function renderLearningPathEmptyState(currentLevel) {
   $("learning-map-start-placement")?.addEventListener("click", () => navigate("assessments"));
 }
 
-function learningPathMapWindow(entries, nodes) {
-  var visibleLimit = 7;
-  if (entries.length <= visibleLimit) {
-    return { entries: entries, start: 0, end: entries.length };
+function learningPathRouteGeometry(count) {
+  var stepHeight = 154;
+  var topPadding = 76;
+  var height = Math.max(480, topPadding + Math.max(count - 1, 0) * stepHeight + 112);
+  var path = "M 50 0";
+  var previousX = 50;
+  for (var index = 0; index < count; index++) {
+    var x = index % 2 === 0 ? 35 : 65;
+    var y = topPadding + index * stepHeight;
+    var controlY = Math.max(20, y - 72);
+    path += " C " + previousX + " " + controlY + ", " + x + " " + controlY + ", " + x + " " + y;
+    previousX = x;
   }
-  var focusIndex = nodes.findIndex(function (node) {
-    return node.status === "active";
-  });
-  if (focusIndex < 0) {
-    focusIndex = nodes.reduce(function (lastIndex, node, index) {
-      return node.status === "completed" ? index : lastIndex;
-    }, 0);
-  }
-  var maxStart = entries.length - visibleLimit;
-  var start = Math.min(Math.max(focusIndex - 2, 0), maxStart);
-  return {
-    entries: entries.slice(start, start + visibleLimit),
-    start: start,
-    end: Math.min(start + visibleLimit, entries.length),
-  };
+  return { height: height, path: path };
 }
 
 function renderLearningPathMap(pathGroups, currentLevel) {
@@ -2360,8 +2354,6 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var nodes = entries.map(function (entry) {
     return entry.node;
   });
-  var mapWindow = learningPathMapWindow(entries, nodes);
-  var visibleEntries = mapWindow.entries;
   var currentNode = nodes.find(function (node) {
     return node.status === "active";
   });
@@ -2396,33 +2388,40 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       "</span>";
   }
 
+  var route = learningPathRouteGeometry(entries.length);
+  var avatarLetter =
+    String($("user-avatar")?.textContent || "O")
+      .trim()
+      .slice(0, 1) || "O";
+  var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
+  var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<div class="learning-map-panel-heading"><div><p class="learning-map-kicker">ÖĞRENME HARİTAN</p><h4>Adım adım ilerle</h4><p class="learning-map-panel-intro">' +
+    '<div class="learning-map-overview"><div class="learning-map-overview-title"><span class="learning-map-wordmark">Oku+</span><h4>Öğrenme yolu</h4><p>Bir sonraki adım seni bekliyor</p></div><span class="learning-map-avatar" aria-hidden="true">' +
+    escapeHtml(avatarLetter.toUpperCase()) +
+    '</span></div><div class="learning-map-stats"><div class="learning-map-stat"><span class="learning-map-stat-icon">▥</span><div><strong>' +
+    escapeHtml(levelLabel) +
+    '</strong><small>Mevcut seviye</small></div></div><div class="learning-map-stat"><span class="learning-map-stat-icon">🔥</span><div><strong>' +
+    escapeHtml(streak) +
+    ' gün</strong><small>Seri</small></div></div><div class="learning-map-stat learning-map-stat-progress"><div class="learning-map-stat-progress-line"><span style="width:' +
+    escapeHtml(String(percent)) +
+    '%"></span></div><strong>%' +
+    escapeHtml(String(percent)) +
+    "</strong><small>" +
+    escapeHtml(String(progress.completed || 0)) +
+    "/" +
+    escapeHtml(String(progress.total || 0)) +
+    ' durak tamamlandı</small></div></div><div class="learning-map-legend" aria-label="Harita açıklaması"><span class="learning-map-legend-item fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="learning-map-legend-item comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span><span class="learning-map-legend-item completed"><i aria-hidden="true"></i>Tamamlandı</span><span class="learning-map-legend-item current"><i aria-hidden="true"></i>Şimdi</span><span class="learning-map-legend-item locked"><i aria-hidden="true"></i>Kilitli</span></div><div class="learning-map-panel-heading"><div><p class="learning-map-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan</h4><p class="learning-map-panel-intro">' +
     escapeHtml(
       currentNode
         ? "Aktif durağa dokun, öğrenme adımını tamamla; sonraki durak açılsın."
         : "Tamamladıkça yeni duraklar açılacak.",
     ) +
-    (currentLevel?.name
-      ? '<span class="learning-map-level">' + escapeHtml(currentLevel.name) + "</span>"
-      : "") +
     '</p></div><span class="learning-map-panel-count">' +
     escapeHtml(String(progress.completed || 0)) +
     "/" +
     escapeHtml(String(progress.total || 0)) +
-    " tamamlandı</span></div>" +
-    (visibleEntries.length < entries.length
-      ? '<p class="learning-map-window-note">' +
-        escapeHtml(
-          "Haritanın " +
-            String(mapWindow.start + 1) +
-            "–" +
-            String(mapWindow.end) +
-            ". durakları gösteriliyor; ilerledikçe sonraki duraklar görünür.",
-        ) +
-        "</p>"
-      : "");
-  var nodeMarkup = visibleEntries
+    " tamamlandı</span></div>";
+  var nodeMarkup = entries
     .map(function (entry, index) {
       var node = entry.node;
       var visualStatus = learningPathVisualStatus(node.status);
@@ -2437,25 +2436,18 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         ? '<span class="path-node-unit">' + escapeHtml(node.unit.title) + "</span>"
         : "";
       var actionLabel = learningPathActionLabel(node, visualStatus);
-      var globalIndex = mapWindow.start + index;
-      var stepNumber = globalIndex + 1;
-      var phase = learningPathNodeRoadmapPhase(node);
-      var previousPhase =
-        globalIndex > 0 ? learningPathNodeRoadmapPhase(entries[globalIndex - 1].node) : null;
-      var phaseMarker =
-        phase !== previousPhase
-          ? '<div class="learning-map-phase" aria-hidden="true"><span>' +
-            escapeHtml(phase) +
-            "</span></div>"
-          : "";
+      var stepNumber = index + 1;
+      var isCurrent = currentNode?.id === node.id;
+      var characterMarkup = isCurrent
+        ? '<span class="learning-map-character-wrap"><img class="learning-map-character" src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /><span class="learning-map-here">BURADASIN</span></span>'
+        : "";
       return (
-        phaseMarker +
         '<div class="path-node-item learning-map-step ' +
         escapeHtml(visualStatus) +
         " kind-" +
         escapeHtml(kind.className) +
         (index % 2 === 0 ? " roadmap-left" : " roadmap-right") +
-        (currentNode?.id === node.id ? " is-current" : "") +
+        (isCurrent ? " is-current" : "") +
         '" role="listitem" data-map-index="' +
         stepNumber +
         '"><button type="button" class="path-node learning-map-node ' +
@@ -2471,11 +2463,13 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         '"' +
         current +
         disabled +
-        '><span class="path-node-marker learning-map-marker" aria-hidden="true"><span>' +
+        '><span class="learning-map-marker-wrap">' +
+        characterMarkup +
+        '<span class="path-node-marker learning-map-marker" aria-hidden="true"><span>' +
         escapeHtml(
           visualStatus === "completed" ? "✓" : visualStatus === "locked" ? "·" : kind.icon,
         ) +
-        '</span></span><span class="path-node-copy learning-map-node-copy">' +
+        '</span></span></span><span class="path-node-copy learning-map-node-copy">' +
         unitLabel +
         '<span class="learning-map-node-top"><span class="path-node-status">' +
         escapeHtml(statusLabel) +
@@ -2495,8 +2489,15 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   container.innerHTML =
     '<div class="learning-map-panel" data-learning-panel="guided-roadmap">' +
     heading +
-    '<div class="learning-map-track" role="list" aria-label="' +
+    '<div class="learning-map-track" style="--learning-map-route-height:' +
+    escapeHtml(String(route.height)) +
+    'px" role="list" aria-label="' +
     'Yönlendirilmiş öğrenme adımları">' +
+    '<svg class="learning-map-route" viewBox="0 0 100 ' +
+    escapeHtml(String(route.height)) +
+    '" preserveAspectRatio="none" aria-hidden="true"><path d="' +
+    escapeHtml(route.path) +
+    '"></path></svg>' +
     nodeMarkup +
     "</div></div>";
 

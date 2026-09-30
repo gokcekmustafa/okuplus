@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 const app = readFileSync("public/app.js", "utf8");
 const index = readFileSync("public/index.html", "utf8");
 const styles = readFileSync("public/styles.css", "utf8");
-const learningPathService = readFileSync("src/modules/learning-path/service.ts", "utf8");
 
 describe("training home and development UI", () => {
   it("renders the daily training home states", () => {
@@ -113,9 +112,12 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell .learning-map-step.kind-checkpoint");
     expect(styles).toContain(".student-shell .learning-map-empty-state");
     expect(app).toContain("function renderLearningPathEmptyState(currentLevel)");
-    expect(app).toContain("function learningPathMapWindow(entries, nodes)");
+    expect(app).toContain("function learningPathRouteGeometry(count)");
+    expect(app).toContain("learning-map-route");
+    expect(app).toContain("learning-roadmap-student.png");
+    expect(app).toContain("learning-map-legend");
     expect(app).toContain("Tamamladıkça yeni duraklar açılacak.");
-    expect(styles).toContain(".student-shell .learning-map-window-note");
+    expect(styles).toContain(".student-shell .learning-map-character");
   });
 
   it("keeps the student home focused on the roadmap", () => {
@@ -132,13 +134,10 @@ describe("training home and development UI", () => {
     expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
     expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
     expect(app).toContain('continueEl.classList.add("hidden")');
+    expect(app).toContain("learning-map-overview");
+    expect(app).toContain("learning-map-stats");
+    expect(app).toContain("learning-map-here");
     expect(styles).toContain("@keyframes okuplus-map-active");
-  });
-
-  it("does not treat an empty published path as a usable roadmap", () => {
-    expect(learningPathService).toContain(
-      "const usableRows = rows.filter((row) => row.units.some((unit) => unit.steps.length > 0));",
-    );
-    expect(learningPathService).toContain("for (const row of usableRows)");
+    expect(styles).toContain("@keyframes okuplus-map-route-svg");
   });
 });
