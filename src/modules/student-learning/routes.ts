@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { ok } from "../../lib/response.js";
 import { validationError } from "../../lib/errors.js";
@@ -11,6 +12,56 @@ import {
   startPersonalExercise,
 } from "./service.js";
 import { startStudentReview, getStudentReview } from "./review-service.js";
+
+function hashForDiagnostics(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 16);
+}
+
+function elapsedMilliseconds(startedAt: bigint): number {
+  return Math.round(Number(process.hrtime.bigint() - startedAt) / 100_000) / 10;
+}
+
+function redactDiagnosticText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  return value
+    .replace(
+      /((?:authorization|cookie|password|token|secret|database_url)\s*[:=]\s*)\S+/gi,
+      "$1[REDACTED]",
+    )
+    .slice(0, maxLength);
+}
+
+function safeLearningPathError(error: unknown) {
+  const record =
+    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
+  return {
+    name: error instanceof Error ? error.name : "UnknownError",
+    code: redactDiagnosticText(record?.code, 80),
+    message: redactDiagnosticText(error instanceof Error ? error.message : error, 240),
+    stack: redactDiagnosticText(error instanceof Error ? error.stack : null, 4000),
+  };
+}
+
+function learningPathSummary(data: unknown) {
+  const record = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
+  const paths = Array.isArray(record.paths) ? record.paths : [];
+  const nodes = Array.isArray(record.nodes) ? record.nodes : [];
+  const groupedNodeCount = paths.reduce((total, path) => {
+    if (!path || typeof path !== "object") return total;
+    const pathNodes = (path as { nodes?: unknown }).nodes;
+    return total + (Array.isArray(pathNodes) ? pathNodes.length : 0);
+  }, 0);
+  return {
+    source: redactDiagnosticText(record.source, 80),
+    pathCount: paths.length,
+    nodeCount: nodes.length,
+    groupedNodeCount,
+    hasCurrentLevel: Boolean(record.currentLevel),
+    hasAcademicProgram: Boolean(record.academicProgram),
+    hasToday: Boolean(record.today),
+  };
+}
 
 function optionalBodyString(body: Record<string, unknown>, key: string, maxLength: number) {
   const value = body[key];
@@ -100,12 +151,42 @@ export async function studentLearningRoutes(
     );
   });
   app.get("/student/learning-path", { preHandler: [requireAuth(authProvider)] }, async (req) => {
-    return ok(
-      await getLearningPath({
-        userId: req.authUser!.id,
-        tenantId: req.tenantContext?.tenantId ?? null,
+    const startedAt = process.hrtime.bigint();
+    const userId = req.authUser!.id;
+    const tenantId = req.tenantContext?.tenantId ?? null;
+    try {
+      const data = await getLearningPath({
+        userId,
+        tenantId,
         platformRole: req.authUser!.platformRole ?? null,
-      }),
-    );
+      });
+      req.log.info(
+        {
+          event: "student.learning_path.completed",
+          requestId: req.id,
+          userIdHash: hashForDiagnostics(userId),
+          tenantIdHash: hashForDiagnostics(tenantId),
+          durationMs: elapsedMilliseconds(startedAt),
+          responseStatus: 200,
+          ...learningPathSummary(data),
+        },
+        "Learning path request completed",
+      );
+      return ok(data);
+    } catch (error) {
+      req.log.error(
+        {
+          event: "student.learning_path.failed",
+          requestId: req.id,
+          userIdHash: hashForDiagnostics(userId),
+          tenantIdHash: hashForDiagnostics(tenantId),
+          durationMs: elapsedMilliseconds(startedAt),
+          responseStatus: 500,
+          error: safeLearningPathError(error),
+        },
+        "Learning path request failed",
+      );
+      throw error;
+    }
   });
 }
