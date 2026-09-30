@@ -347,6 +347,34 @@ async function parseResponse(res) {
   return body?.data;
 }
 
+function reportLearningPathClientError(error, phase) {
+  try {
+    const { accessToken, tenantId } = getStoredTokens();
+    if (!accessToken) return;
+    const body = {
+      phase,
+      name: error?.name ?? "UnknownError",
+      status: typeof error?.status === "number" ? error.status : null,
+      code: error?.code ?? null,
+      message: error?.message ?? null,
+      requestId: error?.requestId ?? null,
+    };
+    void fetch("/student/learning-path/client-diagnostic", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...authHeaders(accessToken, tenantId),
+        ...csrfHeaders(),
+      },
+      body: JSON.stringify(body),
+    }).catch(() => {
+      // Client diagnostics must never affect the learning path UI.
+    });
+  } catch {
+    // Client diagnostics must never affect the learning path UI.
+  }
+}
+
 function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar dene.") {
   if (error?.code === "UNAUTHORIZED" || error?.status === 401)
     return "Oturumun sona ermiş olabilir. Tekrar giriş yapmayı dene.";
@@ -2519,6 +2547,7 @@ async function loadLearningPath() {
     try {
       renderHomeInsights(data);
     } catch (error) {
+      reportLearningPathClientError(error, learningPathPhase);
       console.error("learning-path-render-failed", {
         phase: learningPathPhase,
         name: error?.name ?? "UnknownError",
@@ -2528,6 +2557,7 @@ async function loadLearningPath() {
     try {
       renderAcademicLearningModel(data.academicProgram);
     } catch (error) {
+      reportLearningPathClientError(error, learningPathPhase);
       console.error("learning-path-render-failed", {
         phase: learningPathPhase,
         name: error?.name ?? "UnknownError",
@@ -2613,6 +2643,7 @@ async function loadLearningPath() {
     learningPathPhase = "learning-path-map";
     renderLearningPathMap(pathGroups, data.currentLevel);
   } catch (error) {
+    reportLearningPathClientError(error, learningPathPhase);
     console.error("learning-path-load-failed", {
       requestId: error?.requestId ?? null,
       status: error?.status ?? null,

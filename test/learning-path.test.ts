@@ -274,6 +274,23 @@ describe.sequential("learning path", () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().data.nodes.length).toBeGreaterThan(0);
   });
+  it("accepts a safe client diagnostic without changing learning-path data", async () => {
+    const r = await app.inject({
+      method: "POST",
+      url: "/student/learning-path/client-diagnostic",
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        phase: "learning-path-map",
+        name: "TypeError",
+        status: null,
+        code: null,
+        message: "render failed",
+        requestId: "req-test",
+      },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().data).toEqual({ received: true });
+  });
   it("current node exists", async () => {
     const r = await app.inject({
       method: "GET",

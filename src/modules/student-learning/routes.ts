@@ -72,6 +72,18 @@ function optionalBodyString(body: Record<string, unknown>, key: string, maxLengt
   return value.trim();
 }
 
+function diagnosticBodyString(body: Record<string, unknown>, key: string, maxLength: number) {
+  const value = body[key];
+  return typeof value === "string" ? redactDiagnosticText(value, maxLength) : null;
+}
+
+function diagnosticBodyStatus(body: Record<string, unknown>) {
+  const value = body.status;
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : null;
+}
+
 export async function studentLearningRoutes(
   app: FastifyInstance,
   opts: { authProvider: AuthProvider },
@@ -204,4 +216,35 @@ export async function studentLearningRoutes(
       throw error;
     }
   });
+  app.post(
+    "/student/learning-path/client-diagnostic",
+    { preHandler: [requireAuth(authProvider)] },
+    async (req) => {
+      const body = (req.body as Record<string, unknown> | null) ?? {};
+      const allowedPhases = new Set([
+        "request",
+        "home-insights",
+        "academic-model",
+        "progress-summary",
+        "learning-path-map",
+      ]);
+      const phase = diagnosticBodyString(body, "phase", 40);
+      req.log.warn(
+        {
+          event: "student.learning_path.client_error",
+          requestId: req.id,
+          clientRequestId: diagnosticBodyString(body, "requestId", 120),
+          userIdHash: hashForDiagnostics(req.authUser?.id),
+          tenantIdHash: hashForDiagnostics(req.tenantContext?.tenantId),
+          phase: phase && allowedPhases.has(phase) ? phase : "unknown",
+          name: diagnosticBodyString(body, "name", 80),
+          code: diagnosticBodyString(body, "code", 80),
+          message: diagnosticBodyString(body, "message", 240),
+          status: diagnosticBodyStatus(body),
+        },
+        "Learning path client error reported",
+      );
+      return ok({ received: true });
+    },
+  );
 }
