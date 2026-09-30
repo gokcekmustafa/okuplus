@@ -16,6 +16,8 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain('err.requestId = res.headers.get("x-request-id")');
     expect(app).toContain('console.error("learning-path-load-failed"');
     expect(app).toContain("phase: learningPathPhase");
+    expect(app).toContain('console.error("learning-path-render-failed"');
+    expect(app).toContain("pathGroups = pathGroups.filter");
     expect(app).toContain(
       'const paths = ["progress", "gamification", "history?page=1&pageSize=5", "learning-path"];',
     );
