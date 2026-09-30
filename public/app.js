@@ -2331,7 +2331,7 @@ function renderLearningPathEmptyState(currentLevel) {
       '</small></span></div><span class="learning-map-current-progress">Hazırlanıyor</span>';
   }
   container.innerHTML =
-    '<div class="learning-map-empty-state" role="status"><div class="learning-map-empty-route" aria-hidden="true"><span class="learning-map-empty-node is-first">1</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">2</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">3</span></div><div class="learning-map-empty-copy"><p class="learning-map-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan burada açılacak</h4><p>' +
+    '<div class="learning-map-empty-state" role="status"><div class="learning-map-empty-route" aria-hidden="true"><span class="learning-map-empty-node is-first">1</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">2</span><span class="learning-map-empty-line"></span><span class="learning-map-empty-node">3</span></div><div class="learning-map-empty-copy"><h4>Öğrenme yolu burada açılacak</h4><p>' +
     escapeHtml(
       hasLevel
         ? "İlk içerikler yayınlandığında hızlı okuma, okuduğunu anlama ve değerlendirme duraklarını sırayla göreceksin."
@@ -2443,11 +2443,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     escapeHtml(String(progress.total || 0)) +
     ' durak</small></span><span class="learning-map-v6-progress" aria-hidden="true"><i style="width:' +
     escapeHtml(String(percent)) +
-    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span><span class="current"><i aria-hidden="true"></i>Şimdi</span></div><div class="learning-map-v6-heading"><div><p class="learning-map-v6-kicker">ADIM ADIM İLERLE</p><h4>Öğrenme haritan</h4><p>Bir durağı tamamla, sonraki durak açılsın.</p></div><span>' +
-    escapeHtml(String(progress.completed || 0)) +
-    "/" +
-    escapeHtml(String(progress.total || 0)) +
-    "</span></div>";
+    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span><span class="current"><i aria-hidden="true"></i>Şimdi</span></div>';
   var nodeMarkup = entries
     .map(function (entry, index) {
       var node = entry.node;

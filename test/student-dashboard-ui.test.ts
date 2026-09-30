@@ -53,11 +53,15 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain("learningPathCommonDetail(pathGroups)");
     expect(app).toContain("aggregateProgress.completed");
     expect(app).toContain("data.nextAction");
+    expect(app).not.toContain("ADIM ADIM İLERLE");
+    expect(app).not.toContain("Öğrenme haritan");
+    expect(app).not.toContain("Bir durağı tamamla, sonraki durak açılsın.");
     expect(styles).toContain(".training-home-card");
     expect(styles).toContain("@media (max-width: 700px)");
     expect(index).toContain('aria-live="polite"');
     expect(index).toContain('id="lesson-list-panel"');
     expect(index).toContain('id="lessons-heading"');
+    expect(styles).toContain("#learning-path.learning-path::before");
   });
 
   it("does not flash the dashboard while student onboarding is being resolved", () => {
