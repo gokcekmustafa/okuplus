@@ -13847,11 +13847,16 @@ function insightScope() {
   const t = getStoredTokens();
   return insightsIdentity + ":" + t.tenantId + ":" + t.accessToken;
 }
+function insightRequestCache() {
+  if (typeof insightRequests !== "undefined") return insightRequests;
+  if (!globalThis.__okuInsightRequests) globalThis.__okuInsightRequests = new Map();
+  return globalThis.__okuInsightRequests;
+}
 function resetInsights() {
   progressRequest++;
   gamificationRequest++;
   historyRequest++;
-  insightRequests.clear();
+  insightRequestCache().clear();
   if (typeof exerciseGamificationRequest === "number") exerciseGamificationRequest++;
   insightAwards = [];
   insightsIdentity = "";
@@ -13917,7 +13922,8 @@ function insightBar(accuracy, label) {
 async function insightApi(path) {
   const t = getStoredTokens();
   const key = insightScope() + "::" + path;
-  const existing = insightRequests.get(key);
+  const requests = insightRequestCache();
+  const existing = requests.get(key);
   if (existing) return existing;
   const request = parseResponse(
     fetch("/student/" + path, {
@@ -13925,9 +13931,9 @@ async function insightApi(path) {
       signal: AbortSignal.timeout(15000),
     }),
   ).finally(() => {
-    if (insightRequests.get(key) === request) insightRequests.delete(key);
+    if (requests.get(key) === request) requests.delete(key);
   });
-  insightRequests.set(key, request);
+  requests.set(key, request);
   return request;
 }
 function renderHomeInsights(path) {
