@@ -13996,14 +13996,14 @@ async function insightApi(path) {
   const requests = insightRequestCache();
   const existing = requests.get(key);
   if (existing) return existing;
-  const request = parseResponse(
-    fetch("/student/" + path, {
-      headers: authHeaders(t.accessToken, t.tenantId),
-      signal: insightRequestSignal(path),
-    }),
-  ).finally(() => {
-    if (requests.get(key) === request) requests.delete(key);
-  });
+  const request = fetch("/student/" + path, {
+    headers: authHeaders(t.accessToken, t.tenantId),
+    signal: insightRequestSignal(path),
+  })
+    .then(parseResponse)
+    .finally(() => {
+      if (requests.get(key) === request) requests.delete(key);
+    });
   requests.set(key, request);
   return request;
 }
