@@ -40,7 +40,9 @@ function element() {
   };
 }
 
-function harness() {
+function harness(
+  quickStartData: Record<string, unknown> = { templateVersionId: "template-version" },
+) {
   const elements = new Map<string, ReturnType<typeof element>>();
   const calls: FetchCall[] = [];
   const navigations: string[] = [];
@@ -63,7 +65,7 @@ function harness() {
     fetch: async (url: string, options: Record<string, unknown> = {}) => {
       calls.push({ url, options });
       if (url === "/student/onboarding/quick-start") {
-        return { ok: true, data: { templateVersionId: "template-version" } };
+        return { ok: true, data: quickStartData };
       }
       if (url === "/student/onboarding/placement") {
         return { ok: true, data: { assessmentId: "assessment-1" } };
@@ -133,6 +135,19 @@ function errorFormatterHarness() {
 }
 
 describe("placement onboarding UI request contract", () => {
+  it("opens the first published lesson when quick-start returns the active learning step", async () => {
+    const h = harness({
+      type: "TEACHING",
+      contentVersionId: "content-version-1",
+      templateVersionId: null,
+      assessmentId: null,
+    });
+    await h.elements.get("onboard-quickstart")!.handlers.click();
+
+    expect(h.calls).toHaveLength(1);
+    expect(h.navigations).toEqual(["lessons"]);
+  });
+
   it("sends an empty JSON object and the existing CSRF header for placement start", async () => {
     const h = harness();
     await h.elements.get("onboard-placement")!.handlers.click();

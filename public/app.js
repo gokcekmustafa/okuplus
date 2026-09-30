@@ -1058,6 +1058,8 @@ function showOnboardingError(message, retryable) {
   var error = $("onboarding-error");
   if (error) {
     error.textContent = message || "";
+    error.classList.remove("onboarding-notice");
+    error.setAttribute("role", "alert");
     if (message) error.classList.remove("hidden");
     else error.classList.add("hidden");
   }
@@ -1066,6 +1068,18 @@ function showOnboardingError(message, retryable) {
     if (retryable) retry.classList.remove("hidden");
     else retry.classList.add("hidden");
   }
+}
+
+function showOnboardingNotice(message) {
+  var notice = $("onboarding-error");
+  if (notice) {
+    notice.textContent = message || "";
+    notice.classList.toggle("hidden", !message);
+    notice.classList.toggle("onboarding-notice", Boolean(message));
+    notice.setAttribute("role", "status");
+  }
+  var retry = $("onboarding-retry-load");
+  if (retry) retry.classList.add("hidden");
 }
 
 function renderTrainingHome(data) {
@@ -3092,6 +3106,19 @@ function setupOnboardingEvents() {
           headers: authHeaders(tokens.accessToken, tokens.tenantId),
         });
         var data = await parseResponse(res);
+
+        // Prefer the student's current published learning-path station. The
+        // first station is a lesson, so the onboarding flow teaches before it
+        // asks the student to practise or answer assessment questions.
+        if (data.contentVersionId && (data.type === "TEACHING" || data.type === "SMALL_STUDY")) {
+          preferredLessonContentVersionId = data.contentVersionId;
+          navigate("lessons");
+          return;
+        }
+        if (data.assessmentId && !data.templateVersionId) {
+          void window.startTodayAssessment(data.assessmentId);
+          return;
+        }
         if (!data.templateVersionId) throw new Error("Uygun egzersiz bulunamadı");
         var startRes = await fetch("/student/exercises/start", {
           method: "POST",
@@ -3138,7 +3165,12 @@ function setupOnboardingEvents() {
           headers: authHeaders(tokens.accessToken, tokens.tenantId),
         });
         var data = await parseResponse(res);
-        if (!data.assessmentId) throw new Error("Uygun değerlendirme bulunamadı");
+        if (!data.assessmentId) {
+          showOnboardingNotice(
+            "Seviye ölçümü şu anda kullanıma açık değil. Hızlı Başla ile ilk öğrenme adımına geçebilirsin.",
+          );
+          return;
+        }
         var startRes = await fetch("/student/assessments/" + data.assessmentId + "/start", {
           method: "POST",
           headers: {
