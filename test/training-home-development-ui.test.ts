@@ -139,8 +139,12 @@ describe("training home and development UI", () => {
     expect(app).toContain("learning-map-overview");
     expect(app).toContain("learning-map-stats");
     expect(app).toContain("learning-map-here");
+    expect(app).toContain("Bir sonraki adım seni bekliyor.");
     expect(styles).toContain("@keyframes okuplus-map-active");
     expect(styles).toContain("@keyframes okuplus-map-route-svg");
+    expect(styles).toContain("#learning-path-card > .learning-path-heading");
+    expect(styles).toContain(".learning-map-step.active .learning-map-node-copy");
+    expect(styles).toContain("border-left: 3px solid #7048e8");
   });
 
   it("does not duplicate dashboard data loads after onboarding", () => {

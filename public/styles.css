@@ -7823,6 +7823,202 @@ textarea:focus-visible {
   }
 }
 
+/* Roadmap v5: the map is the screen. Stations stay lightweight; only the
+   route, marker state, and current action carry visual emphasis. */
+.student-shell #learning-path-card > .learning-path-heading {
+  display: none;
+}
+
+.student-shell #learning-path-card {
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-overview {
+  padding: 3px 0 10px;
+}
+
+.student-shell #learning-path-card .learning-map-overview-title p {
+  color: #6f7e99;
+}
+
+.student-shell #learning-path-card .learning-map-current {
+  min-height: 28px;
+  margin: 0 0 10px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy {
+  gap: 8px;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy strong {
+  color: #4f45be;
+  font-size: 11px;
+}
+
+.student-shell #learning-path-card .learning-map-current-copy small {
+  display: none;
+}
+
+.student-shell #learning-path-card .learning-map-current-dot {
+  width: 8px;
+  height: 8px;
+  border-width: 2px;
+  box-shadow: 0 0 0 2px #ddd9ff;
+}
+
+.student-shell #learning-path-card .learning-map-current-progress {
+  color: #6b62c9;
+  font-size: 11px;
+}
+
+.student-shell #learning-path-card .learning-map-stats {
+  margin: 0 0 13px;
+  padding: 8px 0;
+  border: 0;
+  border-top: 1px solid #e7e9f3;
+  border-bottom: 1px solid #e7e9f3;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-stat strong {
+  color: #263663;
+}
+
+.student-shell #learning-path-card .learning-map-stat small {
+  color: #8490a6;
+}
+
+.student-shell #learning-path-card .learning-map-stat-progress-line {
+  height: 5px;
+  border-radius: 999px;
+  background: #e9eafa;
+}
+
+.student-shell #learning-path-card .learning-map-stat-progress-line span {
+  border-radius: inherit;
+  background: #7048e8;
+}
+
+.student-shell #learning-path-card .learning-map-panel-heading {
+  margin: 0 0 2px;
+}
+
+.student-shell #learning-path-card .learning-map-panel-intro,
+.student-shell #learning-path-card .learning-map-panel-count {
+  display: none;
+}
+
+.student-shell #learning-path-card #learning-path-summary {
+  display: none;
+}
+
+.student-shell #learning-path-card .learning-map-track {
+  padding-top: 2px;
+}
+
+.student-shell #learning-path-card .learning-map-node,
+.student-shell #learning-path-card .learning-map-node:not(:disabled):hover,
+.student-shell #learning-path-card .learning-map-node:not(:disabled):focus-visible {
+  min-height: 154px;
+  border: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-node:not(:disabled):hover {
+  transform: none;
+}
+
+.student-shell #learning-path-card .learning-map-node:not(:disabled):focus-visible {
+  outline: 3px solid #c9c3ff;
+  outline-offset: -3px;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node-copy {
+  min-height: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-left: 3px solid #7048e8;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node-top,
+.student-shell #learning-path-card .learning-map-step.active .path-node-label {
+  color: #42359f;
+}
+
+.student-shell #learning-path-card .learning-map-step.active .learning-map-node-action {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 7px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #7048e8;
+  color: #ffffff;
+  font-size: 10px;
+  line-height: 1;
+  box-shadow: 0 5px 12px rgba(112, 72, 232, 0.2);
+}
+
+.student-shell #learning-path-card .learning-map-step.completed .learning-map-node-copy {
+  color: #27785b;
+}
+
+.student-shell #learning-path-card .learning-map-step.locked .learning-map-node-copy {
+  opacity: 0.72;
+}
+
+.student-shell #learning-path-card .learning-map-node-lock {
+  margin-top: 5px;
+  color: #9ca8b9;
+  font-size: 12px;
+}
+
+.student-shell #learning-path-card .learning-model-details {
+  margin-top: 4px;
+}
+
+@media (max-width: 700px) {
+  .student-shell #learning-path-card .learning-map-node {
+    min-height: 142px;
+  }
+
+  .student-shell #learning-path-card .learning-map-step.active .learning-map-node {
+    min-height: 142px;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-shell #learning-path-card .learning-map-node,
+  .student-shell #learning-path-card .learning-map-step.active .learning-map-node {
+    min-height: 132px;
+  }
+
+  .student-shell #learning-path-card .learning-map-step.active .learning-map-node-action {
+    padding-inline: 7px;
+    font-size: 9px;
+  }
+}
+
 /* Roadmap v4 final cascade: keep the compact station hierarchy after the
    legacy roadmap rules that intentionally remain above this block. */
 .student-shell #learning-path-card {

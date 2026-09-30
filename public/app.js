@@ -2398,7 +2398,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<div class="learning-map-overview"><div class="learning-map-overview-title"><span class="learning-map-wordmark">Oku+</span><h4>Öğrenme yolu</h4><p>Bir sonraki durağın hazır.</p></div><span class="learning-map-avatar" aria-hidden="true">' +
+    '<div class="learning-map-overview"><div class="learning-map-overview-title"><span class="learning-map-wordmark">Oku+</span><h4>Öğrenme yolu</h4><p>Bir sonraki adım seni bekliyor.</p></div><span class="learning-map-avatar" aria-hidden="true">' +
     escapeHtml(avatarLetter.toUpperCase()) +
     '</span></div><div class="learning-map-stats"><div class="learning-map-stat"><span class="learning-map-stat-icon">▥</span><div><strong>' +
     escapeHtml(levelLabel) +
