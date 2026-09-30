@@ -11,6 +11,8 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain("async function insightApi(path)");
     expect(app).toContain("const insightRequests = new Map()");
     expect(app).toContain("if (existing) return existing");
+    expect(app).toContain('const timeoutMs = path === "learning-path" ? 30000 : 15000');
+    expect(app).toContain("signal: insightRequestSignal(path)");
     expect(app).toContain(
       'const paths = ["progress", "gamification", "history?page=1&pageSize=5", "learning-path"];',
     );

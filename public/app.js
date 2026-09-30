@@ -13919,6 +13919,15 @@ function insightBar(accuracy, label) {
   const value = Math.round(accuracy * 100);
   return `<div class="insight-bar" role="progressbar" aria-label="${escapeHtml(label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}"><span style="width:${Math.min(100, Math.max(0, value))}%"></span></div>`;
 }
+function insightRequestSignal(path) {
+  // Production learning-path responses include the persisted curriculum and can
+  // take longer than lightweight progress endpoints on a cold database connection.
+  const timeoutMs = path === "learning-path" ? 30000 : 15000;
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  return undefined;
+}
 async function insightApi(path) {
   const t = getStoredTokens();
   const key = insightScope() + "::" + path;
@@ -13928,7 +13937,7 @@ async function insightApi(path) {
   const request = parseResponse(
     fetch("/student/" + path, {
       headers: authHeaders(t.accessToken, t.tenantId),
-      signal: AbortSignal.timeout(15000),
+      signal: insightRequestSignal(path),
     }),
   ).finally(() => {
     if (requests.get(key) === request) requests.delete(key);
