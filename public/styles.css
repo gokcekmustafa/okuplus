@@ -7928,6 +7928,11 @@ textarea:focus-visible {
   color: #182d56;
 }
 
+.student-shell #learning-path-card > #learning-path.learning-path::before {
+  display: none;
+  content: none;
+}
+
 .student-shell #learning-path-card .learning-map-v6-header {
   display: flex;
   align-items: flex-start;
