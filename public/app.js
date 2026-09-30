@@ -340,6 +340,7 @@ async function parseResponse(res) {
     err.status = res.status;
     err.code = body?.error?.code;
     err.details = body?.error?.details;
+    err.requestId = res.headers.get("x-request-id");
     if (isPremiumLimitError(err)) showPremiumPaywall(err.details, err.message);
     throw err;
   }
@@ -2587,8 +2588,13 @@ async function loadLearningPath() {
       continueEl.onclick = null;
     }
     renderLearningPathMap(pathGroups, data.currentLevel);
-  } catch (_e) {
-    void _e;
+  } catch (error) {
+    console.error("learning-path-load-failed", {
+      requestId: error?.requestId ?? null,
+      status: error?.status ?? null,
+      code: error?.code ?? null,
+      name: error?.name ?? "UnknownError",
+    });
     container.setAttribute("aria-busy", "false");
     if (summaryEl) summaryEl.innerHTML = "";
     container.innerHTML =
