@@ -5,6 +5,7 @@ import {
   findCanonicalPlacementAssessment,
   selectCanonicalPlacementAssessment,
 } from "./canonical-selector.js";
+import { assertLearningAssessmentAccessible } from "../learning-path/index.js";
 import type {
   CreateAssessmentInput,
   ListAssessmentsQuery,
@@ -518,6 +519,15 @@ export async function startAssessmentSession(
   if (!templateVersion || templateVersion.status !== "PUBLISHED") {
     throw validationError("Şablon sürümü yayınlanmış değil");
   }
+
+  await assertLearningAssessmentAccessible(
+    {
+      userId: actor.userId,
+      tenantId: actor.tenantId,
+      platformRole: actor.platformRole,
+    },
+    id,
+  );
 
   // Mevcut IN_PROGRESS session var mı?
   const existingSession = await prisma.exerciseSession.findFirst({

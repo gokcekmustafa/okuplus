@@ -5,7 +5,11 @@ import {
   getAcademicP0GuidedSkillPrerequisite,
 } from "../../curriculum/academic-reading-p0.js";
 import { withTenantContext } from "../tenant/index.js";
-import { assertStudentActor, type StudentActor } from "../student-learning/policy.js";
+import {
+  assertStudentActor,
+  STUDENT_LEARNING_SESSION_FILTER,
+  type StudentActor,
+} from "../student-learning/policy.js";
 
 export type LearningPathActor = StudentActor;
 
@@ -206,7 +210,7 @@ async function readPathState(
               tenantId: actor.tenantId,
               studentId: actor.userId,
               templateVersionId: { in: templateVersionIds },
-              context: "INDIVIDUAL",
+              ...STUDENT_LEARNING_SESSION_FILTER,
               status: "COMPLETED",
             },
             _count: { _all: true },
@@ -569,6 +573,28 @@ export async function assertLearningTemplateAccessible(
       }),
     );
     if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
+  }
+  return node;
+}
+
+/**
+ * Assessment başlatma da roadmap kilidinin arkasında kalmalıdır. Placement
+ * gibi roadmap'e bağlı olmayan assessment'lar için geriye dönük davranış
+ * korunur; bağlı bir assessment varsa yalnızca server'ın aktif düğümü açılır.
+ */
+export async function assertLearningAssessmentAccessible(
+  actor: LearningPathActor,
+  assessmentId: string,
+) {
+  assertStudent(actor);
+  const path = await getStudentLearningPath(actor);
+  if (!path) return;
+  const node = (path.paths ?? [path])
+    .flatMap((projection) => projection.nodes)
+    .find((item) => item.assessmentId === assessmentId);
+  if (!node) return;
+  if (node.status === "locked") {
+    throw forbiddenError("Bu değerlendirme öğrenme yolunda henüz açık değil");
   }
   return node;
 }

@@ -86,11 +86,14 @@ export interface TodayResponse {
   review: StudentReviewResponse | null;
 }
 
-export async function getToday(actor: {
-  userId: string;
-  tenantId: string | null;
-  platformRole: PlatformRole | null;
-}): Promise<TodayResponse> {
+export async function getToday(
+  actor: {
+    userId: string;
+    tenantId: string | null;
+    platformRole: PlatformRole | null;
+  },
+  options: { nextLearningStep?: TodayResponse["nextLearningStep"] } = {},
+): Promise<TodayResponse> {
   assertStudentActor(actor);
   const tenantId = actor.tenantId;
   const now = new Date();
@@ -270,7 +273,9 @@ export async function getToday(actor: {
       .then(
         (versions) => versions.find((version) => isTrainingVersionConfig(version.config)) ?? null,
       ),
-    getNextLearningStep(actor),
+    options.nextLearningStep !== undefined
+      ? Promise.resolve(options.nextLearningStep)
+      : getNextLearningStep(actor),
     tenantId ? getStudentReview(actor) : Promise.resolve(null),
   ]);
 
@@ -402,10 +407,25 @@ export async function getLearningPath(actor: {
   if (persistedPath) {
     const academicProgram =
       (await getPersistentAcademicProgram(actor).catch(() => null)) ?? buildAcademicProgram([]);
+    const pathProjections = persistedPath.paths ?? [persistedPath];
+    const nextNode = pathProjections
+      .flatMap((projection) => projection.nodes)
+      .find((node) => node.status === "active");
+    const nextLearningStep = nextNode
+      ? {
+          id: nextNode.id,
+          type: nextNode.type,
+          title: nextNode.label,
+          unitTitle: nextNode.unit.title,
+          templateVersionId: nextNode.templateVersionId,
+          contentVersionId: nextNode.contentVersionId,
+          assessmentId: nextNode.assessmentId,
+        }
+      : null;
     return {
       ...persistedPath,
       academicProgram,
-      today: await getToday(actor).catch(() => null),
+      today: await getToday(actor, { nextLearningStep }).catch(() => null),
     };
   }
   const tenantId = actor.tenantId;

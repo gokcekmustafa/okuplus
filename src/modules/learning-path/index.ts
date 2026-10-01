@@ -1,4 +1,5 @@
 export {
+  assertLearningAssessmentAccessible,
   assertLearningContentAccessible,
   assertLearningStepAccessible,
   assertLearningTemplateAccessible,

@@ -138,10 +138,6 @@ function nextStepForProgram(
   return stage ? { area: "COMMON", skillCode: null, stage: stage.code, title: stage.title } : null;
 }
 
-function nextActiveStepId(path: PathRow, completed: Set<string>): string | null {
-  return allSteps(path).find((step) => statusForStep(step, completed) === "ACTIVE")?.id ?? null;
-}
-
 export async function getPersistentAcademicProgram(
   actor: PersistentLearningActor,
 ): Promise<AcademicProgramResponse | null> {
@@ -199,21 +195,7 @@ export async function getPersistentAcademicProgram(
         },
       })) as PathRow[];
 
-      const pathIds = paths.map((path) => path.id);
       const stepIds = paths.flatMap((path) => allSteps(path).map((step) => step.id));
-      for (const pathId of pathIds) {
-        await tx.studentLearningPath.upsert({
-          where: {
-            tenantId_studentId_learningPathId: {
-              tenantId: actor.tenantId!,
-              studentId: actor.userId,
-              learningPathId: pathId,
-            },
-          },
-          update: {},
-          create: { tenantId: actor.tenantId!, studentId: actor.userId, learningPathId: pathId },
-        });
-      }
       const progress = await tx.studentLearningStepProgress.findMany({
         where: {
           tenantId: actor.tenantId!,
@@ -335,23 +317,6 @@ export async function getPersistentAcademicProgram(
       nextStep: null,
     };
     response.nextStep = nextStepForProgram(response.areas, response.common);
-
-    await withTenantContext(actor, async (tx) => {
-      await Promise.all(
-        paths.map((path) =>
-          tx.studentLearningPath.update({
-            where: {
-              tenantId_studentId_learningPathId: {
-                tenantId: actor.tenantId!,
-                studentId: actor.userId,
-                learningPathId: path.id,
-              },
-            },
-            data: { currentStepId: nextActiveStepId(path, state) },
-          }),
-        ),
-      );
-    });
 
     return response;
   } catch (error) {

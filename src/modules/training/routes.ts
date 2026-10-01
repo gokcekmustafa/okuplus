@@ -56,6 +56,7 @@ function registerTrainingStartRoute(
       await startPersonalExercise(actor, {
         templateVersionId: graph.versionId,
         clientSessionId: body.clientSessionId,
+        enforceLearningPathOrder: true,
       }),
     );
   });

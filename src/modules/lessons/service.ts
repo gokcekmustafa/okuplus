@@ -5,14 +5,12 @@ import { prisma } from "../../lib/prisma.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor } from "../student-learning/policy.js";
 import {
+  assertLearningContentAccessible,
   assertLearningStepAccessible,
   completeLearningStep,
   getNextLearningStep,
 } from "../learning-path/index.js";
-import {
-  completeLearningStepForContent,
-  resolveLearningStepForContent,
-} from "../student-learning/persistent-path.js";
+import { completeLearningStepForContent } from "../student-learning/persistent-path.js";
 import { parseLessonMetadata, type LessonMetadata } from "./contract.js";
 
 export type LessonActor = {
@@ -223,10 +221,7 @@ export async function getStudentLesson(id: string, actor: LessonActor) {
   })) as LessonRow | null;
   if (!row || !row.currentVersion || !metadataFor(row)) throw notFoundError("Ders bulunamadı");
   const contentVersionId = row.currentVersion.id;
-  const learningStep = await resolveLearningStepForContent(contentVersionId, actor);
-  if (learningStep.matched && !learningStep.unlocked) {
-    throw validationError("Bu ders için önceki öğrenme adımları tamamlanmalı");
-  }
+  await assertLearningContentAccessible(actor, contentVersionId);
   const progress = await withTenantContext(actor, (tx) =>
     tx.studentLessonProgress.findUnique({
       where: {
@@ -268,6 +263,6 @@ export async function completeStudentLesson(id: string, actor: LessonActor) {
   await completeLearningStepForContent(lesson.contentVersionId, actor, {
     source: "LESSON_COMPLETED",
     contentVersionId: lesson.contentVersionId,
-  }).catch(() => {});
+  });
   return getStudentLesson(id, actor);
 }
