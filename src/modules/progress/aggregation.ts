@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { STUDENT_LEARNING_SESSION_FILTER } from "../student-learning/policy.js";
 import { summarizeProgressAttempts } from "./policy.js";
+import { isIndependentTrainingSession } from "../training/session-origin.js";
 
 function getWeekRange(date: Date): { periodStart: Date; periodEnd: Date } {
   const d = new Date(date);
@@ -34,7 +35,9 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
       assessmentId: true,
       context: true,
       sessionType: true,
+      deviceInfo: true,
       completedAt: true,
+      trainingSessionItem: { select: { id: true } },
       attempts: {
         select: {
           id: true,
@@ -56,6 +59,7 @@ export async function aggregateSessionProgress(sessionId: string): Promise<void>
 
   if (!session) return;
   if (!session.completedAt) return;
+  if (session.trainingSessionItem || isIndependentTrainingSession(session.deviceInfo)) return;
   if (
     session.assignmentId !== null ||
     session.assessmentId !== null ||

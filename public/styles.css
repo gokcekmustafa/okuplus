@@ -9010,6 +9010,73 @@ textarea:focus-visible {
   background: #22314a;
 }
 
+.student-shell .training-activities-list {
+  margin: 10px 0 20px;
+}
+
+.student-shell .training-activities-intro h3 {
+  margin: 0 0 6px;
+  color: var(--student-ink);
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+}
+
+.student-shell .training-activities-intro p {
+  margin: 0;
+}
+
+.student-shell .training-activities-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.student-shell .training-activity-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.student-shell .training-activity-card h4 {
+  margin: 0;
+  color: var(--student-ink);
+  font-size: 1.15rem;
+}
+
+.student-shell .training-activity-card p {
+  flex: 1;
+  margin: 0;
+  color: var(--student-muted);
+  line-height: 1.5;
+}
+
+.student-shell .training-activity-meta {
+  color: var(--student-muted);
+  font-size: 14px;
+}
+
+.student-shell .training-activity-card .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+:root[data-theme="dark"] .student-shell .training-activity-card {
+  border-color: #344663;
+  background: #182235;
+}
+
+@media (max-width: 600px) {
+  .student-shell .training-activities-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 :root[data-theme="dark"] .student-shell #learning-path-card .learning-path-summary-item.is-common {
   background: #1d3a38;
 }

@@ -4294,7 +4294,7 @@
           <section id="page-exercise" class="page-view hidden" data-student-primary>
             <div class="page-head">
               <h2>Antrenman</h2>
-              <p class="muted">Öğren, dene, geri bildirim al ve bir sonraki adımını gör.</p>
+              <p class="muted">Kısa bir okuma çalışması seç ve hemen başla.</p>
             </div>
             <div id="student-exercise-header" class="student-exercise-header hidden">
               <div style="display: flex; align-items: center; gap: 12px">
@@ -4327,7 +4327,12 @@
                 <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
               </div>
             </div>
-            <div class="exercise-method" data-student aria-label="Antrenman akışı">
+            <div
+              id="exercise-method"
+              class="exercise-method"
+              data-student
+              aria-label="Antrenman akışı"
+            >
               <span class="exercise-method-step active">Öğren</span>
               <span class="exercise-method-arrow" aria-hidden="true">→</span>
               <span class="exercise-method-step">Örnek</span>
@@ -4345,6 +4350,24 @@
             <button id="exercise-retry-load" type="button" class="btn btn-ghost hidden">
               Tekrar dene
             </button>
+            <section
+              id="training-activities-list"
+              class="training-activities-list"
+              data-student
+              aria-labelledby="training-activities-title"
+              style="display: none"
+            >
+              <div class="training-activities-intro">
+                <div>
+                  <p class="insight-eyebrow">KISA ÇALIŞMALAR</p>
+                  <h3 id="training-activities-title">İstediğin aktiviteyi seç</h3>
+                  <p class="muted">
+                    Her biri kısa sürer; doğru veya yanlış cevaplarını hemen görürsün.
+                  </p>
+                </div>
+              </div>
+              <div id="training-activities-grid" class="training-activities-grid"></div>
+            </section>
             <section
               id="student-reading-card"
               class="card student-reading-card"

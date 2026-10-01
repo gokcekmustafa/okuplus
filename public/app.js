@@ -2797,14 +2797,6 @@ function rememberDailyTrainingState(state) {
     /* Storage is optional; the server remains the source of truth. */
   }
 }
-function restoreDailyTrainingState() {
-  try {
-    const raw = sessionStorage.getItem(dailyTrainingStorageKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 function formatDailyTrainingError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
   if (status === 401) return "Oturumun sona ermiş olabilir. Lütfen tekrar giriş yap.";
@@ -2825,6 +2817,97 @@ async function fetchDailyTraining(id) {
     }),
   );
 }
+
+async function loadTrainingActivities() {
+  if (trainingActivityLoading) return;
+  trainingActivityLoading = true;
+  const status = $("exercise-load-status");
+  if (status) status.textContent = "Aktiviteler hazırlanıyor…";
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/training/activities", {
+        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+        signal: AbortSignal.timeout(15000),
+      }),
+    );
+    trainingActivities = Array.isArray(data?.activities) ? data.activities : [];
+    renderTrainingActivities();
+    if (status) status.textContent = "";
+  } catch (error) {
+    trainingActivities = [];
+    renderTrainingActivities();
+    if (status) {
+      status.textContent = formatStudentError(
+        error,
+        "Antrenman aktiviteleri yüklenemedi. Bağlantını kontrol edip tekrar dene.",
+      );
+    }
+    throw error;
+  } finally {
+    trainingActivityLoading = false;
+  }
+}
+
+function renderTrainingActivities() {
+  const list = $("training-activities-list");
+  const grid = $("training-activities-grid");
+  if (!list || !grid) return;
+  const showList = isPlatformUser === false && !exerciseSession && !dailyTrainingSummary;
+  list.style.display = showList ? "block" : "none";
+  if (!showList) return;
+  if (!trainingActivities.length) {
+    grid.innerHTML = '<p class="muted">Şu anda yayınlanmış aktivite bulunmuyor.</p>';
+    return;
+  }
+  grid.innerHTML = trainingActivities
+    .map((activity) => {
+      const available = activity.available !== false;
+      return `<article class="training-activity-card">
+        <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+        <p>${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
+        <div class="training-activity-meta">${escapeHtml(activity.durationLabel || "Kısa çalışma")}</div>
+        <button type="button" class="btn btn-primary" data-training-activity-start="${escapeHtml(activity.id)}" ${available ? "" : "disabled"}>${available ? "Başla" : "Şu anda hazır değil"}</button>
+      </article>`;
+    })
+    .join("");
+}
+
+async function startTrainingActivity(activityId) {
+  const button = document.querySelector(
+    `[data-training-activity-start="${CSS.escape(activityId)}"]`,
+  );
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Hazırlanıyor…";
+  }
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/training/activities/" + encodeURIComponent(activityId) + "/start", {
+        method: "POST",
+        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        body: JSON.stringify({ clientSessionId: `${activityId}-${Date.now()}` }),
+      }),
+    );
+    exerciseMode = "activity";
+    activeTrainingActivityId = activityId;
+    exerciseReviewMode = false;
+    resetDailyTrainingState();
+    rememberExerciseSession(data.sessionId);
+    exerciseRequestedSessionId = data.sessionId;
+    navigate("exercise");
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Başla";
+    }
+    const status = $("exercise-load-status");
+    if (status)
+      status.textContent = formatStudentError(error, "Aktivite başlatılamadı. Tekrar dene.");
+  }
+}
+
 function nextDailyTrainingItem(session) {
   return session?.items?.find((item) => item.status !== "COMPLETED" && item.exerciseSessionId);
 }
@@ -2840,6 +2923,8 @@ window.startDailyTraining = async function () {
     status.classList.add("hidden");
   }
   try {
+    exerciseMode = "daily";
+    activeTrainingActivityId = null;
     exerciseReviewMode = false;
     const tokens = getStoredTokens();
     const data = await parseResponse(
@@ -7687,6 +7772,10 @@ let exerciseScope = null;
 let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
+let trainingActivities = [];
+let trainingActivityLoading = false;
+let activeTrainingActivityId = null;
+let exerciseMode = null;
 let lessonData = [];
 let selectedLessonId = null;
 let activeLearningStepNode = null;
@@ -10295,12 +10384,6 @@ async function loadExercisePage() {
         resetDailyTrainingState();
       }
       exerciseScope = scope;
-      const t = getStoredTokens();
-      const today = await parseResponse(
-        await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
-      );
-      const persistedDaily = restoreDailyTrainingState();
-      if (!dailyTrainingSessionId && persistedDaily?.id) dailyTrainingSessionId = persistedDaily.id;
       let dailySession = null;
       if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
@@ -10324,7 +10407,7 @@ async function loadExercisePage() {
       const id =
         requestedSessionId ||
         dailyItem?.exerciseSessionId ||
-        (dailySession ? null : today.activeSession?.id || exerciseSession?.id || savedId);
+        (dailySession ? null : exerciseSession?.id || (exerciseMode ? savedId : null));
       exerciseRequestedSessionId = null;
       if (id) {
         let session;
@@ -10339,12 +10422,17 @@ async function loadExercisePage() {
         }
         if (exerciseSession?.id !== session.id) resetExerciseState();
         exerciseSession = session;
+        if (session.deviceInfo?.source === "INDEPENDENT_TRAINING") {
+          exerciseMode = "activity";
+          activeTrainingActivityId = session.deviceInfo.activityId || activeTrainingActivityId;
+        }
         restoreExerciseAttempts(session);
         rememberExerciseSession(session.id);
         await loadExerciseQuestions();
       } else {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
+        else await loadTrainingActivities();
       }
       await refreshExerciseGamification();
     } else {
@@ -10352,9 +10440,8 @@ async function loadExercisePage() {
       if (exerciseSession) await loadExerciseQuestions();
     }
     renderExerciseSession();
-    $("exercise-load-status").textContent = exerciseSession
-      ? ""
-      : "Devam eden alıştırman yok. Öğrenme yolundan başlayabilirsin.";
+    if (exerciseSession) $("exercise-load-status").textContent = "";
+    renderTrainingActivities();
   } catch (error) {
     $("exercise-load-status").textContent = dailyTrainingSessionId
       ? formatDailyTrainingError(error)
@@ -10370,11 +10457,16 @@ async function loadExercisePage() {
 }
 function returnToExercisePath() {
   if (exerciseBusy) return;
+  const returningToActivities = exerciseMode === "activity";
   exerciseReviewMode = false;
   rememberExerciseSession(null);
   resetDailyTrainingState();
   resetExerciseState();
   renderExerciseSession();
+  if (returningToActivities) {
+    navigate("exercise");
+    return;
+  }
   navigate("dashboard");
   $("learning-path")?.scrollIntoView({ block: "start" });
 }
@@ -10415,14 +10507,21 @@ function renderExerciseSession() {
   const info = $("exercise-session-info");
   const detail = $("exercise-session-detail");
   if (!exerciseSession) {
+    const method = $("exercise-method");
+    if (method) method.style.display = "none";
     if (info) info.style.display = "none";
     renderStudentReading(null);
     $("exercise-training-instructions").style.display = "none";
     $("exercise-questions-card").style.display = "none";
     if (dailyTrainingSummary?.status === "COMPLETED") renderDailyTrainingResult();
     else $("exercise-result-card").style.display = "none";
+    renderTrainingActivities();
     return;
   }
+  const method = $("exercise-method");
+  if (method) method.style.display = "flex";
+  const activities = $("training-activities-list");
+  if (activities) activities.style.display = "none";
   renderStudentReading(exerciseSession);
   const instructionsEl = $("exercise-training-instructions");
   const trainingInstructions = exerciseSession.templateVersion?.training?.instructions;
@@ -10517,6 +10616,7 @@ function renderExerciseResult() {
   const s = exerciseSession.scoreSummary;
   var isStudent = isPlatformUser === false;
   if (isStudent) {
+    const isIndependentActivity = exerciseMode === "activity";
     const pointsLabel = "Toplam GP";
     const isAssessment = Boolean(exerciseSession.assessmentId);
     const isDailyReview = Boolean(
@@ -10526,6 +10626,28 @@ function renderExerciseResult() {
     const isReview = exerciseReviewMode || isDailyReview;
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
     const g = exerciseGamification;
+    if (isIndependentActivity) {
+      body.innerHTML = `
+      <div class="completion-card">
+        <div aria-hidden="true" style="font-size:48px">🎉</div>
+        <h3 tabindex="-1" id="exercise-completion-title">Aktiviteyi tamamladın!</h3>
+        <p>Çalışman antrenman geçmişine kaydedildi. İstersen aynı aktiviteyi tekrar oynayabilirsin.</p>
+        <dl class="exercise-result-stats">
+          <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
+          <div><dt>Doğru cevap</dt><dd>${s.scoredCount == null ? "—" : s.scoredCount}</dd></div>
+          <div><dt>Ortalama</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
+        </dl>
+        <div class="training-home-actions">
+          <button id="exercise-replay" type="button" class="btn btn-secondary">Tekrar oyna</button>
+          <button id="exercise-return-path" type="button" class="btn btn-primary">Antrenmanlara dön</button>
+        </div>
+      </div>`;
+      $("exercise-replay")?.addEventListener("click", () => {
+        if (activeTrainingActivityId) void startTrainingActivity(activeTrainingActivityId);
+      });
+      $("exercise-return-path")?.addEventListener("click", returnToExercisePath);
+      return;
+    }
     body.innerHTML = `
       <div class="completion-card">
         <div aria-hidden="true" style="font-size:48px">🎉</div>
@@ -11269,6 +11391,14 @@ function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
+  $("training-activities-grid")?.addEventListener("click", (event) => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-training-activity-start]")
+        : null;
+    const activityId = target?.getAttribute("data-training-activity-start");
+    if (activityId && !target.hasAttribute("disabled")) void startTrainingActivity(activityId);
+  });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
   const createBtn = $("exercise-create-btn");
