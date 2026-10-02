@@ -16,6 +16,7 @@ import {
   type TrainingActor,
 } from "./runtime.js";
 import { assertStudentActor } from "../student-learning/policy.js";
+import { listTrainingActivities, startTrainingActivity } from "./activities.js";
 
 type TrainingStartResolver = (
   actor: TrainingActor,
@@ -78,6 +79,38 @@ export async function trainingStudentRoutes(
       const actor = dailyActor(request);
       assertStudentActor(actor);
       return ok(await startDailyTraining(actor));
+    },
+  );
+  app.get(
+    "/student/training/activities",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request) => {
+      const actor = dailyActor(request);
+      assertStudentActor(actor);
+      return ok(await listTrainingActivities(actor));
+    },
+  );
+  app.post(
+    "/student/training/activities/:activityId/start",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request) => {
+      const body =
+        request.body && typeof request.body === "object"
+          ? (request.body as { clientSessionId?: unknown })
+          : {};
+      if (
+        body.clientSessionId !== undefined &&
+        (typeof body.clientSessionId !== "string" || body.clientSessionId.trim().length === 0)
+      ) {
+        throw validationError("clientSessionId geçerli bir metin olmalı");
+      }
+      const activityId = (request.params as { activityId?: string }).activityId?.trim();
+      if (!activityId) throw validationError("Aktivite kimliği gerekli");
+      const actor = dailyActor(request);
+      assertStudentActor(actor);
+      return ok(
+        await startTrainingActivity(actor, activityId, body.clientSessionId as string | undefined),
+      );
     },
   );
   app.get(

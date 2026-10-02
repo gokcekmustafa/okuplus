@@ -2849,14 +2849,6 @@ function rememberDailyTrainingState(state) {
     /* Storage is optional; the server remains the source of truth. */
   }
 }
-function restoreDailyTrainingState() {
-  try {
-    const raw = sessionStorage.getItem(dailyTrainingStorageKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
 function formatDailyTrainingError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
   if (status === 401) return "Oturumun sona ermiş olabilir. Lütfen tekrar giriş yap.";
@@ -2877,6 +2869,97 @@ async function fetchDailyTraining(id) {
     }),
   );
 }
+
+async function loadTrainingActivities() {
+  if (trainingActivityLoading) return;
+  trainingActivityLoading = true;
+  const status = $("exercise-load-status");
+  if (status) status.textContent = "Aktiviteler hazırlanıyor…";
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/training/activities", {
+        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+        signal: AbortSignal.timeout(15000),
+      }),
+    );
+    trainingActivities = Array.isArray(data?.activities) ? data.activities : [];
+    renderTrainingActivities();
+    if (status) status.textContent = "";
+  } catch (error) {
+    trainingActivities = [];
+    renderTrainingActivities();
+    if (status) {
+      status.textContent = formatStudentError(
+        error,
+        "Antrenman aktiviteleri yüklenemedi. Bağlantını kontrol edip tekrar dene.",
+      );
+    }
+    throw error;
+  } finally {
+    trainingActivityLoading = false;
+  }
+}
+
+function renderTrainingActivities() {
+  const list = $("training-activities-list");
+  const grid = $("training-activities-grid");
+  if (!list || !grid) return;
+  const showList = isPlatformUser === false && !exerciseSession && !dailyTrainingSummary;
+  list.style.display = showList ? "block" : "none";
+  if (!showList) return;
+  if (!trainingActivities.length) {
+    grid.innerHTML = '<p class="muted">Şu anda yayınlanmış aktivite bulunmuyor.</p>';
+    return;
+  }
+  grid.innerHTML = trainingActivities
+    .map((activity) => {
+      const available = activity.available !== false;
+      return `<article class="training-activity-card">
+        <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+        <p>${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
+        <div class="training-activity-meta">${escapeHtml(activity.durationLabel || "Kısa çalışma")}</div>
+        <button type="button" class="btn btn-primary" data-training-activity-start="${escapeHtml(activity.id)}" ${available ? "" : "disabled"}>${available ? "Başla" : "Şu anda hazır değil"}</button>
+      </article>`;
+    })
+    .join("");
+}
+
+async function startTrainingActivity(activityId) {
+  const button = document.querySelector(
+    `[data-training-activity-start="${CSS.escape(activityId)}"]`,
+  );
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Hazırlanıyor…";
+  }
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/student/training/activities/" + encodeURIComponent(activityId) + "/start", {
+        method: "POST",
+        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
+        body: JSON.stringify({ clientSessionId: `${activityId}-${Date.now()}` }),
+      }),
+    );
+    exerciseMode = "activity";
+    activeTrainingActivityId = activityId;
+    exerciseReviewMode = false;
+    resetDailyTrainingState();
+    rememberExerciseSession(data.sessionId);
+    exerciseRequestedSessionId = data.sessionId;
+    navigate("exercise");
+  } catch (error) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Başla";
+    }
+    const status = $("exercise-load-status");
+    if (status)
+      status.textContent = formatStudentError(error, "Aktivite başlatılamadı. Tekrar dene.");
+  }
+}
+
 function nextDailyTrainingItem(session) {
   return session?.items?.find((item) => item.status !== "COMPLETED" && item.exerciseSessionId);
 }
@@ -2892,6 +2975,8 @@ window.startDailyTraining = async function () {
     status.classList.add("hidden");
   }
   try {
+    exerciseMode = "daily";
+    activeTrainingActivityId = null;
     exerciseReviewMode = false;
     const tokens = getStoredTokens();
     const data = await parseResponse(
@@ -7739,6 +7824,10 @@ let exerciseScope = null;
 let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
+let trainingActivities = [];
+let trainingActivityLoading = false;
+let activeTrainingActivityId = null;
+let exerciseMode = null;
 let lessonData = [];
 let selectedLessonId = null;
 let activeLearningStepNode = null;
@@ -10347,12 +10436,6 @@ async function loadExercisePage() {
         resetDailyTrainingState();
       }
       exerciseScope = scope;
-      const t = getStoredTokens();
-      const today = await parseResponse(
-        await fetch("/student/today", { headers: authHeaders(t.accessToken, t.tenantId) }),
-      );
-      const persistedDaily = restoreDailyTrainingState();
-      if (!dailyTrainingSessionId && persistedDaily?.id) dailyTrainingSessionId = persistedDaily.id;
       let dailySession = null;
       if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
       const dailyItem = nextDailyTrainingItem(dailySession);
@@ -10376,7 +10459,7 @@ async function loadExercisePage() {
       const id =
         requestedSessionId ||
         dailyItem?.exerciseSessionId ||
-        (dailySession ? null : today.activeSession?.id || exerciseSession?.id || savedId);
+        (dailySession ? null : exerciseSession?.id || (exerciseMode ? savedId : null));
       exerciseRequestedSessionId = null;
       if (id) {
         let session;
@@ -10391,12 +10474,17 @@ async function loadExercisePage() {
         }
         if (exerciseSession?.id !== session.id) resetExerciseState();
         exerciseSession = session;
+        if (session.deviceInfo?.source === "INDEPENDENT_TRAINING") {
+          exerciseMode = "activity";
+          activeTrainingActivityId = session.deviceInfo.activityId || activeTrainingActivityId;
+        }
         restoreExerciseAttempts(session);
         rememberExerciseSession(session.id);
         await loadExerciseQuestions();
       } else {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
+        else await loadTrainingActivities();
       }
       await refreshExerciseGamification();
     } else {
@@ -10404,9 +10492,8 @@ async function loadExercisePage() {
       if (exerciseSession) await loadExerciseQuestions();
     }
     renderExerciseSession();
-    $("exercise-load-status").textContent = exerciseSession
-      ? ""
-      : "Devam eden alıştırman yok. Öğrenme yolundan başlayabilirsin.";
+    if (exerciseSession) $("exercise-load-status").textContent = "";
+    renderTrainingActivities();
   } catch (error) {
     $("exercise-load-status").textContent = dailyTrainingSessionId
       ? formatDailyTrainingError(error)
@@ -10422,11 +10509,16 @@ async function loadExercisePage() {
 }
 function returnToExercisePath() {
   if (exerciseBusy) return;
+  const returningToActivities = exerciseMode === "activity";
   exerciseReviewMode = false;
   rememberExerciseSession(null);
   resetDailyTrainingState();
   resetExerciseState();
   renderExerciseSession();
+  if (returningToActivities) {
+    navigate("exercise");
+    return;
+  }
   navigate("dashboard");
   $("learning-path")?.scrollIntoView({ block: "start" });
 }
@@ -10467,14 +10559,21 @@ function renderExerciseSession() {
   const info = $("exercise-session-info");
   const detail = $("exercise-session-detail");
   if (!exerciseSession) {
+    const method = $("exercise-method");
+    if (method) method.style.display = "none";
     if (info) info.style.display = "none";
     renderStudentReading(null);
     $("exercise-training-instructions").style.display = "none";
     $("exercise-questions-card").style.display = "none";
     if (dailyTrainingSummary?.status === "COMPLETED") renderDailyTrainingResult();
     else $("exercise-result-card").style.display = "none";
+    renderTrainingActivities();
     return;
   }
+  const method = $("exercise-method");
+  if (method) method.style.display = "flex";
+  const activities = $("training-activities-list");
+  if (activities) activities.style.display = "none";
   renderStudentReading(exerciseSession);
   const instructionsEl = $("exercise-training-instructions");
   const trainingInstructions = exerciseSession.templateVersion?.training?.instructions;
@@ -10569,6 +10668,8 @@ function renderExerciseResult() {
   const s = exerciseSession.scoreSummary;
   var isStudent = isPlatformUser === false;
   if (isStudent) {
+    const isIndependentActivity =
+      typeof exerciseMode !== "undefined" && exerciseMode === "activity";
     const pointsLabel = "Toplam GP";
     const isAssessment = Boolean(exerciseSession.assessmentId);
     const isDailyReview = Boolean(
@@ -10578,6 +10679,28 @@ function renderExerciseResult() {
     const isReview = exerciseReviewMode || isDailyReview;
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
     const g = exerciseGamification;
+    if (isIndependentActivity) {
+      body.innerHTML = `
+      <div class="completion-card">
+        <div aria-hidden="true" style="font-size:48px">🎉</div>
+        <h3 tabindex="-1" id="exercise-completion-title">Aktiviteyi tamamladın!</h3>
+        <p>Çalışman antrenman geçmişine kaydedildi. İstersen aynı aktiviteyi tekrar oynayabilirsin.</p>
+        <dl class="exercise-result-stats">
+          <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
+          <div><dt>Doğru cevap</dt><dd>${s.scoredCount == null ? "—" : s.scoredCount}</dd></div>
+          <div><dt>Ortalama</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
+        </dl>
+        <div class="training-home-actions">
+          <button id="exercise-replay" type="button" class="btn btn-secondary">Tekrar oyna</button>
+          <button id="exercise-return-path" type="button" class="btn btn-primary">Antrenmanlara dön</button>
+        </div>
+      </div>`;
+      $("exercise-replay")?.addEventListener("click", () => {
+        if (activeTrainingActivityId) void startTrainingActivity(activeTrainingActivityId);
+      });
+      $("exercise-return-path")?.addEventListener("click", returnToExercisePath);
+      return;
+    }
     body.innerHTML = `
       <div class="completion-card">
         <div aria-hidden="true" style="font-size:48px">🎉</div>
@@ -11321,6 +11444,14 @@ function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
+  $("training-activities-grid")?.addEventListener("click", (event) => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-training-activity-start]")
+        : null;
+    const activityId = target?.getAttribute("data-training-activity-start");
+    if (activityId && !target.hasAttribute("disabled")) void startTrainingActivity(activityId);
+  });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
   const createBtn = $("exercise-create-btn");
@@ -14323,44 +14454,11 @@ function renderDevelopmentJourneySummary(skills) {
   const summary = $("development-journey-summary");
   if (summary) summary.textContent = developmentJourneySummary(skills);
 }
-function developmentComparisonValue(value) {
-  return typeof value === "number" && Number.isFinite(value) ? formatAccuracy(value) : "—";
-}
-function developmentComparisonChange(value) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
-  const points = value * 100;
-  const sign = points > 0 ? "+" : "";
-  return `${sign}${points.toFixed(1).replace(".", ",")} puan`;
-}
-function renderDevelopmentComparison(items) {
+function renderTrainingSeparationNotice() {
   const container = $("development-comparison");
   if (!container) return;
-  if (!Array.isArray(items) || items.length === 0) {
-    container.innerHTML = '<p class="muted">Başlangıç ölçümü henüz bulunmuyor.</p>';
-    return;
-  }
-  const trendLabels = {
-    DEVELOPING: "Gelişiyor",
-    STABLE: "Stabil",
-    NEEDS_REVIEW: "Tekrar gerekli",
-  };
-  container.innerHTML = `
-    <div class="development-comparison-scroll">
-      <table class="development-comparison-table">
-        <thead><tr><th scope="col">Beceri</th><th scope="col">Başlangıç</th><th scope="col">Şimdi</th><th scope="col">Gelişim</th><th scope="col">Trend</th></tr></thead>
-        <tbody>${items
-          .map(
-            (item) => `<tr>
-              <th scope="row">${escapeHtml(item.label || "Beceri")}</th>
-              <td>${developmentComparisonValue(item.baselineScore)}</td>
-              <td>${developmentComparisonValue(item.currentAccuracy)}</td>
-              <td>${developmentComparisonChange(item.change)}</td>
-              <td>${escapeHtml(trendLabels[item.trend] || "—")}</td>
-            </tr>`,
-          )
-          .join("")}</tbody>
-      </table>
-    </div>`;
+  container.innerHTML =
+    '<p class="muted">Antrenman skorları yalnızca pratik sinyalidir. Akademik başlangıç ve gelişim karşılaştırmalarını Ölçme &amp; Değerlendirme alanında, tamamlanan assessment sonuçlarıyla görebilirsin.</p>';
 }
 function developmentTargetText(target) {
   const current = Number(target.currentValue) || 0;
@@ -14514,7 +14612,7 @@ async function loadProgress() {
       "progress-accuracy",
     );
   renderDevelopmentJourneySummary(progress?.training?.skills);
-  renderDevelopmentComparison(progress?.development);
+  renderTrainingSeparationNotice();
   if (progress) {
     renderProgressList(progress.items, progress.training?.skills);
     $("progress-study").innerHTML =
@@ -14761,6 +14859,21 @@ function studentAssessmentApi(path, options) {
     }),
   );
 }
+function studentMeasurementApi(options) {
+  options = options || {};
+  var tokens = getStoredTokens();
+  return fetch(
+    "/student/measurements",
+    Object.assign({}, options, {
+      method: options.method || "GET",
+      headers: Object.assign(
+        {},
+        authHeaders(tokens.accessToken, tokens.tenantId),
+        options.headers || {},
+      ),
+    }),
+  );
+}
 
 function assessmentStatusBadge(status) {
   var cls = {
@@ -14811,10 +14924,13 @@ async function loadAssessments() {
   if (type) params.set("type", type);
   if (status) params.set("status", status);
   try {
-    var res =
-      isPlatformUser === false
-        ? await studentAssessmentApi("")
-        : await assessmentApi("?" + params.toString());
+    if (isPlatformUser === false) {
+      var studentBody = await parseResponse(await studentMeasurementApi());
+      assessmentData = studentBody.availableMeasurements || [];
+      renderStudentMeasurementDashboard(studentBody);
+      return;
+    }
+    var res = await assessmentApi("?" + params.toString());
     var body = await parseResponse(res);
     assessmentData = body.items;
     renderAssessmentList(body.total);
@@ -14824,6 +14940,118 @@ async function loadAssessments() {
         '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">—</td></tr>';
     showAssessmentError(err.message || "Değerlendirmeler yüklenemedi.");
   }
+}
+
+function measurementSourceLabel(source) {
+  return (
+    {
+      OFFICIAL_PLACEMENT: "Başlangıç ölçümü",
+      DEVELOPMENT_MEASUREMENT: "Gelişim ölçümü",
+      LEARNING_PATH: "Öğrenme Yolu değerlendirmesi",
+    }[source] || "Ölçüm"
+  );
+}
+
+function measurementScore(value) {
+  return Number.isFinite(value) ? formatAccuracy(value) : "Puan henüz oluşmadı";
+}
+
+function measurementChange(value) {
+  if (!Number.isFinite(value)) return "Henüz karşılaştırılabilir iki ölçüm yok";
+  var points = value * 100;
+  var sign = points > 0 ? "+" : "";
+  return sign + points.toFixed(1).replace(".", ",") + " puan";
+}
+
+function renderMeasurementHistory(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return '<p class="muted measurement-empty">Henüz tamamlanmış bir ölçüm bulunmuyor.</p>';
+  }
+  return items
+    .map(
+      (item) => `<article class="measurement-history-item">
+        <div class="measurement-history-icon" aria-hidden="true">${item.source === "OFFICIAL_PLACEMENT" ? "🧭" : "📊"}</div>
+        <div class="measurement-history-copy">
+          <div class="measurement-history-topline"><span class="badge badge-info">${escapeHtml(measurementSourceLabel(item.source))}</span><time>${escapeHtml(insightDate(item.completedAt, true))}</time></div>
+          <h4>${escapeHtml(item.title)}</h4>
+          <p class="muted">Sonuç: ${escapeHtml(measurementScore(item.score))}${item.level ? ` · ${escapeHtml(item.level.name)}` : ""}</p>
+        </div>
+      </article>`,
+    )
+    .join("");
+}
+
+function renderStudentMeasurementDashboard(data) {
+  var baseline = data?.baseline || {};
+  var last = data?.lastMeasurement || null;
+  var development = data?.development || {};
+  var overview = $("measurement-overview");
+  var skills = $("measurement-skills");
+  var available = $("student-assessment-cards");
+  var history = $("measurement-history");
+  var learningPath = $("measurement-learning-path");
+  var learningPathSection = $("measurement-learning-path-section");
+
+  if (overview) {
+    var baselineLevel = baseline.level?.name || "Henüz belirlenmedi";
+    var lastScore = last ? measurementScore(last.score) : "Henüz ölçüm yok";
+    var developmentValue = development.available ? measurementChange(development.scoreChange) : "—";
+    var statusText =
+      baseline.status === "REVIEW_REQUIRED"
+        ? "Başlangıç ölçümün var; seviye sonucu henüz kesinleşmemiş."
+        : baseline.status === "NOT_AVAILABLE"
+          ? "Başlangıç seviyeni görmek için resmi seviye ölçümünü tamamla."
+          : "Bu alan yalnızca tamamlanan resmi ölçümlerden gelen verileri gösterir.";
+    overview.innerHTML = `
+      <div class="measurement-stat-grid">
+        ${insightMetric("🧭", "Başlangıç seviyem", baselineLevel, "insight-blue")}
+        ${insightMetric("📌", "Son ölçüm", lastScore, "insight-purple")}
+        ${insightMetric("↗", "Gelişimim", developmentValue, "insight-green")}
+        ${insightMetric("🧾", "Tamamlanan ölçüm", Array.isArray(data?.history) ? data.history.length : 0, "insight-gold")}
+      </div>
+      ${last ? `<p class="muted measurement-last-detail">Son ölçüm: <strong>${escapeHtml(last.title)}</strong> · ${escapeHtml(insightDate(last.completedAt, true))}</p>` : ""}
+      <p class="muted measurement-disclaimer">${escapeHtml(statusText)} Antrenman skorları akademik ölçüm sonuçlarına dahil edilmez.</p>`;
+  }
+
+  var skillData = data?.skillResults;
+  if (skills) {
+    skills.innerHTML = skillData?.items?.length
+      ? skillData.items
+          .map(
+            (item) => `<article class="measurement-skill-card">
+              <div class="measurement-skill-heading"><h4>${escapeHtml(item.label)}</h4><strong>${escapeHtml(measurementScore(item.score))}</strong></div>
+              ${item.score !== null ? insightBar(item.score, item.label) : '<p class="muted">Bu beceri için henüz puanlanan veri yok.</p>'}
+              <p class="muted measurement-skill-meta">${item.scoredCount ? `${item.scoredCount} puanlanan cevap` : "Puanlanan cevap bulunmuyor"}</p>
+            </article>`,
+          )
+          .join("")
+      : '<p class="muted measurement-empty">Henüz beceri sonucu bulunmuyor. Yeterli ölçüm oluştuğunda burada görünecek.</p>';
+  }
+
+  if (available) {
+    var availableItems = data?.availableMeasurements || [];
+    available.innerHTML = availableItems.length
+      ? availableItems
+          .map(function (item) {
+            var inProgress = item.sessionStatus === "IN_PROGRESS" || item.hasInProgressSession;
+            var action = inProgress ? "Devam Et" : item.hasResult ? "Sonuçları Gör" : "Başla";
+            var typeCopy =
+              {
+                PLACEMENT: "Seviye Belirleme",
+                DIAGNOSTIC: "Tanılama",
+                BENCHMARK: "Gelişim Ölçümü",
+              }[item.type] || "Ölçüm";
+            return `<article class="learning-card assessment-student-card"><div class="learning-card-icon assessment-icon" aria-hidden="true">${item.type === "PLACEMENT" ? "🧭" : "📊"}</div><div class="learning-card-content"><div class="learning-card-topline"><span class="badge badge-info">${typeCopy}</span>${item.levelName ? `<span class="muted">${escapeHtml(item.levelName)}</span>` : ""}</div><h3>${escapeHtml(item.title)}</h3><p class="muted">${item.type === "PLACEMENT" ? "Resmi başlangıç seviyeni belirler." : "Yeni bir ölçümle akademik gelişimini takip et."}</p>${item.questionCount ? `<p class="assessment-meta">${item.questionCount} soru${item.attemptedCount ? ` · ${item.attemptedCount} cevaplandı` : ""}</p>` : ""}${item.hasResult ? `<p class="assessment-result-line">Sonuç: ${escapeHtml(measurementScore(item.score))}${item.resultLevelName ? " · " + escapeHtml(item.resultLevelName) : ""}</p>` : ""}<div class="learning-card-actions"><button type="button" class="btn ${item.hasResult ? "btn-ghost" : "btn-primary"}" data-assessment-student-action="${item.id}">${action}</button><button type="button" class="btn btn-ghost" data-assessment-student-detail="${item.id}">Detay</button></div></div></article>`;
+          })
+          .join("")
+      : '<div class="empty-learning-state"><div aria-hidden="true">🧭</div><h3>Şu anda kullanılabilir ölçüm yok.</h3><p class="muted">Yeni bir ölçüm yayınlandığında burada görünecek.</p></div>';
+  }
+
+  if (history) history.innerHTML = renderMeasurementHistory(data?.history);
+  if (learningPath)
+    learningPath.innerHTML = renderMeasurementHistory(data?.learningPathAssessments);
+  if (learningPathSection)
+    learningPathSection.classList.toggle("hidden", !data?.learningPathAssessments?.length);
 }
 
 function renderAssessmentList(total) {

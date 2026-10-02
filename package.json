@@ -20,6 +20,7 @@
     "qa:curriculum-pack": "tsx scripts/qa-curriculum-pack.ts",
     "qa:curriculum-catalog": "tsx scripts/qa-curriculum-catalog.ts",
     "qa:curriculum-fixtures": "tsx scripts/qa-curriculum-fixtures.ts",
+    "content:validate-manifest": "tsx scripts/validate-content-manifest.ts",
     "provision:education-v2-p0-learning-path": "tsx scripts/provision-education-v2-p0-learning-path.ts",
     "audit:education-v2-p0-staging": "tsx scripts/audit-education-v2-p0-staging.ts",
     "rebalance:curriculum-pack": "tsx scripts/rebalance-curriculum-pack.ts",

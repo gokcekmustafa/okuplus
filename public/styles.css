@@ -1404,6 +1404,147 @@ body {
 .student-content-view {
   margin: 8px 0 24px;
 }
+.measurement-overview {
+  margin-bottom: 22px;
+}
+.measurement-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.measurement-stat-grid .insight-stat {
+  margin: 0;
+  min-height: 132px;
+}
+.insight-blue {
+  background: #eef6ff;
+  border-color: #cfe0f6;
+  box-shadow: 0 3px 0 #dbe9f8;
+}
+.insight-green {
+  background: #ecfdf5;
+  border-color: #c9eadb;
+  box-shadow: 0 3px 0 #d8f2e5;
+}
+.measurement-disclaimer,
+.measurement-last-detail {
+  margin: 12px 4px 0;
+  font-size: 13px;
+}
+.measurement-section {
+  margin: 24px 0;
+}
+.measurement-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.measurement-section-heading h3 {
+  margin: 2px 0 0;
+}
+.measurement-skill-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.measurement-skill-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--surface);
+  min-width: 0;
+}
+.measurement-skill-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.measurement-skill-heading h4 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.measurement-skill-heading strong {
+  color: #304fa8;
+  white-space: nowrap;
+}
+.measurement-skill-card .insight-bar {
+  margin: 14px 0 8px;
+}
+.measurement-skill-meta {
+  font-size: 12px;
+  margin: 0;
+}
+.measurement-empty {
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  margin: 0;
+}
+.measurement-history {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 0 18px;
+  background: var(--surface);
+}
+.measurement-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.measurement-history-item:last-child {
+  border-bottom: 0;
+}
+.measurement-history-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #f2f5fb;
+  font-size: 21px;
+  flex: 0 0 42px;
+}
+.measurement-history-copy {
+  min-width: 0;
+  flex: 1;
+}
+.measurement-history-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.measurement-history-topline time {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.measurement-history-copy h4 {
+  margin: 8px 0 4px;
+  overflow-wrap: anywhere;
+}
+.measurement-history-copy p {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .measurement-stat-grid,
+  .measurement-skill-grid {
+    grid-template-columns: 1fr;
+  }
+  .measurement-stat-grid .insight-stat {
+    min-height: auto;
+  }
+  .measurement-history-topline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
 .student-section-intro {
   padding: 8px 4px 16px;
 }
@@ -9054,6 +9195,73 @@ textarea:focus-visible {
 :root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-summary-item,
 :root[data-theme="dark"] .student-shell #learning-path-card .learning-path-summary-item {
   background: #22314a;
+}
+
+.student-shell .training-activities-list {
+  margin: 10px 0 20px;
+}
+
+.student-shell .training-activities-intro h3 {
+  margin: 0 0 6px;
+  color: var(--student-ink);
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+}
+
+.student-shell .training-activities-intro p {
+  margin: 0;
+}
+
+.student-shell .training-activities-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.student-shell .training-activity-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.student-shell .training-activity-card h4 {
+  margin: 0;
+  color: var(--student-ink);
+  font-size: 1.15rem;
+}
+
+.student-shell .training-activity-card p {
+  flex: 1;
+  margin: 0;
+  color: var(--student-muted);
+  line-height: 1.5;
+}
+
+.student-shell .training-activity-meta {
+  color: var(--student-muted);
+  font-size: 14px;
+}
+
+.student-shell .training-activity-card .btn {
+  width: 100%;
+  min-height: 44px;
+}
+
+:root[data-theme="dark"] .student-shell .training-activity-card {
+  border-color: #344663;
+  background: #182235;
+}
+
+@media (max-width: 600px) {
+  .student-shell .training-activities-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 :root[data-theme="dark"] .student-shell #learning-path-card .learning-path-summary-item.is-common {
