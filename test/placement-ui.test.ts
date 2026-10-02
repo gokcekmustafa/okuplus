@@ -81,6 +81,18 @@ function harness(
     recordPilotTelemetry: () => undefined,
     formatStudentError: (_error: unknown, fallback: string) => fallback,
   });
+  (context as { authenticatedFetch?: unknown }).authenticatedFetch = async (
+    url: string,
+    options: Record<string, unknown> = {},
+  ) => {
+    const method = String(options.method || "GET").toUpperCase();
+    const headers = {
+      ...(method === "POST" ? context.csrfHeaders() : {}),
+      ...(options.headers || {}),
+      "content-type": "application/json",
+    };
+    return context.fetch(url, { ...options, headers });
+  };
 
   runInContext(`${setupCode}\nsetupOnboardingEvents();`, context);
   return {
@@ -118,6 +130,10 @@ function exerciseApiHarness(
       return { status: 200, ok: true };
     },
   });
+  (context as { authenticatedFetch?: unknown }).authenticatedFetch = (
+    url: string,
+    options: Record<string, unknown>,
+  ) => context.fetch(url, options);
   runInContext(exerciseApiCode, context);
   return {
     calls,

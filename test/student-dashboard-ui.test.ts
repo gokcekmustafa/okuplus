@@ -7,7 +7,7 @@ const styles = readFileSync("public/styles.css", "utf8");
 
 describe("student dashboard release 0.4", () => {
   it("uses real student APIs for the dashboard summary", () => {
-    expect(app).toContain('fetch("/student/today"');
+    expect(app).toContain('authenticatedFetch("/student/today"');
     expect(app).toContain("async function insightApi(path)");
     expect(app).toContain("const insightRequests = new Map()");
     expect(app).toContain("if (existing) return existing");
