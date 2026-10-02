@@ -18,6 +18,7 @@ const APPLE_AUD = "com.okuplus.test";
 const NONCE = "stage8b-secure-nonce-123456";
 const PASSWORD = "stage8b-password-123!";
 const EMAIL_GOOGLE = "stage8b-google@example.com";
+const EMAIL_GOOGLE_EXISTING = "stage8b-google-existing@example.com";
 const EMAIL_APPLE = "stage8b@privaterelay.appleid.com";
 const EMAIL_PASSWORD = "stage8b-password@example.com";
 
@@ -245,6 +246,36 @@ describe.sequential("social auth + persistent session", () => {
     expect(
       await prisma.authIdentity.count({ where: { userId: passwordUserId, provider: "GOOGLE" } }),
     ).toBe(1);
+  });
+
+  it("8b. doğrulanmış Google e-postası mevcut hesabı koruyarak eşleşir", async () => {
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: {
+        email: EMAIL_GOOGLE_EXISTING,
+        password: PASSWORD,
+        displayName: "Existing Google Account",
+        platform: "WEB",
+      },
+    });
+    const existingUserId = signup.json().data.user.id;
+    const response = await social(
+      "GOOGLE",
+      await token("GOOGLE", {
+        subject: "stage8b-google-existing-subject",
+        email: EMAIL_GOOGLE_EXISTING,
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.user.id).toBe(existingUserId);
+    expect(
+      await prisma.authIdentity.count({
+        where: { userId: existingUserId, provider: "GOOGLE" },
+      }),
+    ).toBe(1);
+    expect(await prisma.studentProfile.count({ where: { studentId: existingUserId } })).toBe(1);
   });
 
   it("9. son login methodu unlink edilemez", async () => {

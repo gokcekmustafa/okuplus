@@ -58,6 +58,29 @@ export class SocialAuthService {
     if (verified.email) {
       const collision = await prisma.user.findUnique({ where: { email: verified.email } });
       if (collision) {
+        if (provider === "GOOGLE" && verified.emailVerified) {
+          try {
+            await prisma.$transaction(async (tx) => {
+              await provisionPersonalContextInTransaction(tx, collision.id);
+              await tx.authIdentity.create({
+                data: {
+                  userId: collision.id,
+                  provider,
+                  subject: verified.subject,
+                  providerEmail: verified.email,
+                  emailVerified: true,
+                  isPrivateEmail: verified.isPrivateEmail,
+                },
+              });
+            });
+            return this.authProvider.startSession(collision.id, null, metadata);
+          } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+              throw conflictError("Google kimliği başka bir hesaba bağlı");
+            }
+            throw error;
+          }
+        }
         throw conflictError(
           "Bu e-posta mevcut bir hesaba ait; doğrulanmış oturumla provider kimliğini bağlayın",
         );
