@@ -6,7 +6,7 @@ import {
 import { LESSON_METADATA_TYPE } from "../modules/lessons/contract.js";
 
 /**
- * Oku+ Education V2 P0 content manifest.
+ * OkuPratik Education V2 P0 content manifest.
  *
  * This file is intentionally persistence-agnostic. It is the reviewed source
  * for the first small, teaching-first program; the companion seed script is

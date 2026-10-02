@@ -40,7 +40,7 @@ jobs:
       # run id so concurrent/retried CI runs cannot consume one another's
       # session-creation budget.
       GUEST_RATE_LIMIT_NAMESPACE: ci:guest:${{ github.run_id }}
-      CORS_ORIGIN: https://okuplus.online
+      CORS_ORIGIN: https://www.okupratik.com
       UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
     steps:

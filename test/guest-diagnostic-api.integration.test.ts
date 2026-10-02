@@ -12,7 +12,7 @@ import { loadEnv } from "../src/config/env.js";
 
 const integrationEnabled = process.env.GUEST_API_INTEGRATION === "true";
 const integrationDescribe = integrationEnabled ? describe : describe.skip;
-const ORIGIN = "https://okuplus.online";
+const ORIGIN = "https://www.okupratik.com";
 
 type CookieJar = Partial<Record<typeof GUEST_COOKIE_NAME | typeof GUEST_CSRF_COOKIE_NAME, string>>;
 type JsonBody = {

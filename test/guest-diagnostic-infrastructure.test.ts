@@ -25,7 +25,7 @@ const migration = readFileSync(
 function request(
   method: string,
   token: string,
-  origin: string | undefined = "https://okuplus.online",
+  origin: string | undefined = "https://www.okupratik.com",
 ): FastifyRequest {
   return {
     method,
@@ -63,26 +63,28 @@ describe("guest diagnostic security infrastructure", () => {
     const expectedHash = hashGuestToken(token);
 
     expect(() =>
-      assertGuestCsrfRequest(request("POST", token), expectedHash, ["https://okuplus.online"]),
+      assertGuestCsrfRequest(request("POST", token), expectedHash, ["https://www.okupratik.com"]),
     ).not.toThrow();
     expect(() =>
       assertGuestCsrfRequest(request("POST", token, "https://attacker.example"), expectedHash, [
-        "https://okuplus.online",
+        "https://www.okupratik.com",
       ]),
     ).toThrow("origin");
     expect(() =>
-      assertGuestCsrfRequest(request("POST", token, ""), expectedHash, ["https://okuplus.online"]),
+      assertGuestCsrfRequest(request("POST", token, ""), expectedHash, [
+        "https://www.okupratik.com",
+      ]),
     ).toThrow("origin");
     expect(() =>
       assertGuestCsrfRequest(request("POST", "wrong-token"), expectedHash, [
-        "https://okuplus.online",
+        "https://www.okupratik.com",
       ]),
     ).toThrow("CSRF");
   });
 
   it("does not apply CSRF validation to safe methods", () => {
     expect(() =>
-      assertGuestCsrfRequest(request("GET", ""), "not-used", ["https://okuplus.online"]),
+      assertGuestCsrfRequest(request("GET", ""), "not-used", ["https://www.okupratik.com"]),
     ).not.toThrow();
   });
 

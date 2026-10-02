@@ -24,7 +24,7 @@ jobs:
     env:
       APP_ENV: production
       NODE_ENV: production
-      PRODUCTION_SMOKE_BASE_URL: https://okuplus.vercel.app
+      PRODUCTION_SMOKE_BASE_URL: https://www.okupratik.com
       PRODUCTION_SMOKE_CONFIRM: ${{ inputs.confirm_create }}
 
     steps:
