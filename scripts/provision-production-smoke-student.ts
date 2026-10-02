@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 
-export const EXPECTED_PRODUCTION_ORIGIN = "https://okuplus.vercel.app";
+export const EXPECTED_PRODUCTION_ORIGIN = "https://www.okupratik.com";
 export const SYNTHETIC_EMAIL_PATTERN =
   /^okuplus\.production\.smoke(?:\+[a-z0-9-]+)?@synthetic\.invalid$/iu;
 
@@ -82,7 +82,7 @@ export function validateProvisionConfig(config: ProvisionConfig): ValidatedProvi
     throw new Error("PRODUCTION_SMOKE_CONFIRM=CREATE gerekli");
   }
 
-  const displayName = config.displayName?.trim() || "Oku+ Production Smoke Student";
+  const displayName = config.displayName?.trim() || "OkuPratik Production Smoke Student";
   if (displayName.length > 120) throw new Error("display name çok uzun");
 
   return {

@@ -19,7 +19,7 @@ jobs:
     env:
       APP_ENV: production
       NODE_ENV: production
-      PRODUCTION_SMOKE_BASE_URL: https://okuplus.vercel.app
+      PRODUCTION_SMOKE_BASE_URL: https://www.okupratik.com
       PRODUCTION_SMOKE_EMAIL: ${{ secrets.PRODUCTION_SMOKE_EMAIL }}
       PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}
       CHROME_PATH: /usr/bin/chromium

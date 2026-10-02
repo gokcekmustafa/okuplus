@@ -62,7 +62,7 @@ async function assertPersonalOwner(actor: BillingActor, client: Db = prisma): Pr
 function splitDisplayName(displayName: string): { name: string; surname: string } {
   const parts = displayName.trim().split(/\s+/).filter(Boolean);
   return {
-    name: parts[0] ?? "Oku+",
+    name: parts[0] ?? "OkuPratik",
     surname: parts.slice(1).join(" ") || "Kullanıcısı",
   };
 }
