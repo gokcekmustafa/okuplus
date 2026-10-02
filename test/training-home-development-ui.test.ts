@@ -99,7 +99,7 @@ describe("training home and development UI", () => {
   });
 
   it("shows one guided data-driven learning map without changing the path contract", () => {
-    expect(index).toContain('id="learning-map-current"');
+    expect(index).not.toContain('id="learning-map-current"');
     expect(index).not.toContain('id="learning-model-details"');
     expect(app).toContain("function renderLearningPathMap(pathGroups, currentLevel)");
     expect(app).toContain("GUIDED_LEARNING_SKILL_ORDER");
@@ -115,7 +115,12 @@ describe("training home and development UI", () => {
     expect(app).toContain("function learningPathRouteGeometry(count)");
     expect(app).toContain("learning-roadmap-student.png");
     expect(app).toContain("learning-map-v6-legend");
-    expect(app).toContain("Duraklar sırayla açılır.");
+    expect(app).not.toContain('"Şimdi: " + currentArea');
+    expect(app).not.toContain("Durağa dokun ve devam et.");
+    expect(app).not.toContain('class="current"');
+    expect(index).not.toContain('id="logout-btn"');
+    expect(index).toContain('data-user-menu-action="logout"');
+    expect(index).toContain('id="user-name"');
     expect(app).toContain("learning-map-v6-character");
   });
 
