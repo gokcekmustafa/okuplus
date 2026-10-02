@@ -862,7 +862,9 @@ $("context-switcher")?.addEventListener("change", function (e) {
 });
 
 async function fetchMe(accessToken, tenantId) {
-  const res = await fetch("/auth/me", { headers: authHeaders(accessToken, tenantId) });
+  const res = await authenticatedFetch("/auth/me", {
+    headers: authHeaders(accessToken, tenantId),
+  });
   return parseResponse(res);
 }
 
@@ -878,6 +880,71 @@ async function refreshTokens(refreshToken, tenantId) {
     body: JSON.stringify({ refreshToken }),
   });
   return parseResponse(res);
+}
+
+let authRefreshPromise = null;
+
+function authenticatedRequestHeaders(headers, accessToken, tenantId) {
+  const merged = { ...(headers || {}) };
+  delete merged.authorization;
+  delete merged.Authorization;
+  delete merged["x-tenant-id"];
+  delete merged["X-Tenant-Id"];
+  return { ...merged, ...authHeaders(accessToken, tenantId) };
+}
+
+async function refreshStoredTokens(refreshToken, tenantId) {
+  if (!authRefreshPromise) {
+    authRefreshPromise = refreshTokens(refreshToken, tenantId)
+      .then((tokens) => {
+        localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
+        localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+        return tokens;
+      })
+      .finally(() => {
+        authRefreshPromise = null;
+      });
+  }
+  return authRefreshPromise;
+}
+
+async function authenticatedFetch(path, options = {}) {
+  const requestOptions = { ...options, credentials: "include" };
+  const method = String(requestOptions.method || "GET").toUpperCase();
+  const requestHeaders = {
+    ...(method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE"
+      ? csrfHeaders()
+      : {}),
+    ...(requestOptions.headers || {}),
+  };
+  const initialTokens = getStoredTokens();
+  const request = (tokens) =>
+    fetch(path, {
+      ...requestOptions,
+      headers: authenticatedRequestHeaders(requestHeaders, tokens.accessToken, tokens.tenantId),
+    });
+
+  const response = await request(initialTokens);
+  if (response.status !== 401 || path === "/auth/refresh") {
+    return response;
+  }
+  if (!initialTokens.refreshToken) {
+    clearStoredSession();
+    showLogin();
+    return response;
+  }
+
+  try {
+    const tokens = await refreshStoredTokens(initialTokens.refreshToken, initialTokens.tenantId);
+    return request({
+      accessToken: tokens.accessToken,
+      tenantId: initialTokens.tenantId,
+    });
+  } catch {
+    clearStoredSession();
+    showLogin();
+    return response;
+  }
 }
 
 async function logout(refreshToken, tenantId) {
@@ -899,7 +966,7 @@ async function logout(refreshToken, tenantId) {
 /**
  * Sayfa yenilendiğinde session'ı yeniden kurar.
  * 1) access token ile /auth/me dene
- * 2) 401 ise refresh token ile yeni çift al, tekrar dene
+ * 2) 401 ise ortak authenticatedFetch katmanı refresh token ile yeni çift alır
  * 3) hepsi başarısızsa login ekranına dön
  */
 async function restoreSession() {
@@ -920,26 +987,8 @@ async function restoreSession() {
       return;
     }
   }
-
-  // Access token geçersiz: varsa refresh token ile yenile.
-  if (!refreshToken) {
-    clearStoredSession();
-    showGuestLanding();
-    return;
-  }
-
-  try {
-    const tokens = await refreshTokens(refreshToken, tenantId);
-    localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
-    localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
-
-    const me = await fetchMe(tokens.accessToken, tenantId);
-    showDashboard(me);
-  } catch (_e) {
-    void _e;
-    clearStoredSession();
-    showGuestLanding();
-  }
+  clearStoredSession();
+  showGuestLanding();
 }
 
 // ---------- Ekran geçişleri ----------
@@ -1022,10 +1071,7 @@ async function loadContextsAndRender() {
     return;
   }
   try {
-    var tokens = getStoredTokens();
-    var res = await fetch("/auth/contexts", {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    });
+    var res = await authenticatedFetch("/auth/contexts");
     var data = await parseResponse(res);
     var contexts = data.contexts || [];
     if (contexts.length <= 1) {
@@ -1034,7 +1080,7 @@ async function loadContextsAndRender() {
       return;
     }
     sel.classList.remove("hidden");
-    var current = tokens.tenantId || "";
+    var current = getStoredTokens().tenantId || "";
     sel.innerHTML = contexts
       .map(function (c) {
         var label = c.isPersonal ? "Kişisel" : c.name;
@@ -1092,10 +1138,7 @@ var onboardingSelectedGoal = null;
 
 async function maybeShowOnboarding() {
   try {
-    var tokens = getStoredTokens();
-    var res = await fetch("/student/onboarding", {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    });
+    var res = await authenticatedFetch("/student/onboarding");
     var data = await parseResponse(res);
     if (data.completed) {
       navigate("dashboard");
@@ -1103,8 +1146,11 @@ async function maybeShowOnboarding() {
     }
     showOnboarding(data);
     recordPilotTelemetry("ONBOARDING_STARTED");
-  } catch (_e) {
-    void _e;
+  } catch (error) {
+    if (error?.status === 401) {
+      showLogin();
+      return;
+    }
     showOnboarding({});
     showOnboardingError(
       "Başlangıç bilgilerin yüklenemedi. Bağlantını kontrol edip tekrar dene.",
@@ -1230,10 +1276,7 @@ async function loadToday() {
   retryEl?.classList.add("hidden");
   const scope = insightScope();
   try {
-    var tokens = getStoredTokens();
-    var res = await fetch("/student/today", {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    });
+    var res = await authenticatedFetch("/student/today");
     var data = await parseResponse(res);
     if (scope !== insightScope()) {
       todayCard?.setAttribute("aria-busy", "false");
@@ -2082,11 +2125,9 @@ function renderReviewCard(review) {
   for (const button of items.querySelectorAll("[data-review-start]")) {
     button.addEventListener("click", async function () {
       button.disabled = true;
-      const tokens = getStoredTokens();
       try {
-        const response = await fetch("/student/review/start", {
+        const response = await authenticatedFetch("/student/review/start", {
           method: "POST",
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
           body: JSON.stringify({
             templateVersionId: button.getAttribute("data-review-start"),
             skillId: button.getAttribute("data-review-skill"),
@@ -2158,10 +2199,8 @@ async function startLearningPathNode(node, button) {
   }
   if (button) button.disabled = true;
   try {
-    var tokens = getStoredTokens();
-    var response = await fetch("/student/exercises/start", {
+    var response = await authenticatedFetch("/student/exercises/start", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify({
         templateVersionId: tv,
         clientSessionId: "path-" + node.id + "-" + Date.now(),
@@ -2788,11 +2827,9 @@ window.resumeTodaySession = async function (id) {
   navigate("exercise");
 };
 window.startTodayAssignment = async function (id) {
-  var tokens = getStoredTokens();
   try {
-    var r = await fetch("/student/assignments/" + id + "/start", {
+    var r = await authenticatedFetch("/student/assignments/" + id + "/start", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
     });
     var data = await parseResponse(r);
     exerciseRequestedSessionId = data.sessionId;
@@ -2802,11 +2839,9 @@ window.startTodayAssignment = async function (id) {
   }
 };
 window.startTodayAssessment = async function (id) {
-  var tokens = getStoredTokens();
   try {
-    var r = await fetch("/student/assessments/" + id + "/start", {
+    var r = await authenticatedFetch("/student/assessments/" + id + "/start", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify({}),
     });
     var data = await parseResponse(r);
@@ -2817,18 +2852,13 @@ window.startTodayAssessment = async function (id) {
   }
 };
 window.startTodayExercise = async function (encodedTemplateVersionId) {
-  var tokens = getStoredTokens();
   exerciseReviewMode = false;
   try {
     var templateVersionId = encodedTemplateVersionId
       ? decodeURIComponent(encodedTemplateVersionId)
       : "";
-    var r = await fetch("/student/exercises/start", {
+    var r = await authenticatedFetch("/student/exercises/start", {
       method: "POST",
-      headers: {
-        ...authHeaders(tokens.accessToken, tokens.tenantId),
-        ...csrfHeaders(),
-      },
       body: JSON.stringify(templateVersionId ? { templateVersionId } : {}),
     });
     var data = await parseResponse(r);
@@ -2861,10 +2891,8 @@ function formatDailyTrainingError(error) {
   return "Bugünkü antrenman yüklenemedi. Bağlantını kontrol edip tekrar dene.";
 }
 async function fetchDailyTraining(id) {
-  const tokens = getStoredTokens();
   return parseResponse(
-    await fetch("/student/training/daily/" + encodeURIComponent(id), {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
+    await authenticatedFetch("/student/training/daily/" + encodeURIComponent(id), {
       signal: AbortSignal.timeout(15000),
     }),
   );
@@ -2876,10 +2904,8 @@ async function loadTrainingActivities() {
   const status = $("exercise-load-status");
   if (status) status.textContent = "Aktiviteler hazırlanıyor…";
   try {
-    const tokens = getStoredTokens();
     const data = await parseResponse(
-      await fetch("/student/training/activities", {
-        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+      await authenticatedFetch("/student/training/activities", {
         signal: AbortSignal.timeout(15000),
       }),
     );
@@ -2934,13 +2960,14 @@ async function startTrainingActivity(activityId) {
     button.textContent = "Hazırlanıyor…";
   }
   try {
-    const tokens = getStoredTokens();
     const data = await parseResponse(
-      await fetch("/student/training/activities/" + encodeURIComponent(activityId) + "/start", {
-        method: "POST",
-        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
-        body: JSON.stringify({ clientSessionId: `${activityId}-${Date.now()}` }),
-      }),
+      await authenticatedFetch(
+        "/student/training/activities/" + encodeURIComponent(activityId) + "/start",
+        {
+          method: "POST",
+          body: JSON.stringify({ clientSessionId: `${activityId}-${Date.now()}` }),
+        },
+      ),
     );
     exerciseMode = "activity";
     activeTrainingActivityId = activityId;
@@ -2978,11 +3005,9 @@ window.startDailyTraining = async function () {
     exerciseMode = "daily";
     activeTrainingActivityId = null;
     exerciseReviewMode = false;
-    const tokens = getStoredTokens();
     const data = await parseResponse(
-      await fetch("/student/training/daily/start", {
+      await authenticatedFetch("/student/training/daily/start", {
         method: "POST",
-        headers: { ...authHeaders(tokens.accessToken, tokens.tenantId), ...csrfHeaders() },
         body: JSON.stringify({}),
       }),
     );
@@ -3090,10 +3115,7 @@ async function loadOnboardingLevels() {
   if (!sel || sel.options.length > 1) return;
   retry?.classList.add("hidden");
   try {
-    var tokens = getStoredTokens();
-    var res = await fetch("/student/onboarding/levels", {
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
-    });
+    var res = await authenticatedFetch("/student/onboarding/levels");
     var data = await parseResponse(res);
     var items = data.levels || data || [];
     sel.dataset.loadError = "false";
@@ -3114,16 +3136,14 @@ async function loadOnboardingLevels() {
 }
 
 async function saveOnboardingStep() {
-  var tokens = getStoredTokens();
   if (onboardingStep === 1) {
     var name = $("onboard-displayName").value.trim();
     var by = $("onboard-birthYear").value.trim();
     if (!name) throw new Error("Ad gerekli");
     var payload = { displayName: name };
     if (by) payload.birthYear = Number(by);
-    var res = await fetch("/student/profile", {
+    var res = await authenticatedFetch("/student/profile", {
       method: "PATCH",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify(payload),
     });
     await parseResponse(res);
@@ -3137,9 +3157,8 @@ async function saveOnboardingStep() {
     var levelId = $("onboard-level").value;
     if (!levelId) throw new Error("Sınıf seviyesi gerekli");
     if (!onboardingSelectedGoal) throw new Error("Öğrenme amacı seçin");
-    var res2 = await fetch("/student/profile", {
+    var res2 = await authenticatedFetch("/student/profile", {
       method: "PATCH",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify({ currentLevelId: levelId, learningGoal: onboardingSelectedGoal }),
     });
     await parseResponse(res2);
@@ -3147,16 +3166,14 @@ async function saveOnboardingStep() {
     if (!$("onboard-consent-terms").checked || !$("onboard-consent-data").checked)
       throw new Error("Gerekli onaylar verilmeli");
     // grant consents
-    await fetch("/student/consents", {
+    await authenticatedFetch("/student/consents", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify({ type: "TERMS_OF_SERVICE", version: "v1" }),
     }).then(function (r) {
       return parseResponse(r);
     });
-    await fetch("/student/consents", {
+    await authenticatedFetch("/student/consents", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
       body: JSON.stringify({ type: "DATA_PROCESSING", version: "v1" }),
     }).then(function (r) {
       return parseResponse(r);
@@ -3165,9 +3182,8 @@ async function saveOnboardingStep() {
       !$("onboard-parental-wrap").classList.contains("hidden") &&
       $("onboard-consent-parental").checked
     ) {
-      await fetch("/student/consents", {
+      await authenticatedFetch("/student/consents", {
         method: "POST",
-        headers: authHeaders(tokens.accessToken, tokens.tenantId),
         body: JSON.stringify({ type: "PARENTAL_CONSENT", version: "v1" }),
       }).then(function (r) {
         return parseResponse(r);
@@ -3213,10 +3229,8 @@ function setupOnboardingEvents() {
       complete.setAttribute("aria-busy", "true");
       try {
         await saveOnboardingStep();
-        var tokens = getStoredTokens();
-        var res = await fetch("/student/onboarding/complete", {
+        var res = await authenticatedFetch("/student/onboarding/complete", {
           method: "POST",
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
           body: JSON.stringify({}),
         });
         await parseResponse(res);
@@ -3257,14 +3271,11 @@ function setupOnboardingEvents() {
   var quick = $("onboard-quickstart");
   if (quick)
     quick.addEventListener("click", async function () {
-      var tokens = getStoredTokens();
       quick.disabled = true;
       quick.setAttribute("aria-busy", "true");
       quick.textContent = "Hazırlanıyor…";
       try {
-        var res = await fetch("/student/onboarding/quick-start", {
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
-        });
+        var res = await authenticatedFetch("/student/onboarding/quick-start");
         var data = await parseResponse(res);
 
         // Prefer the student's current published learning-path station. The
@@ -3290,12 +3301,8 @@ function setupOnboardingEvents() {
           return;
         }
         if (!data.templateVersionId) throw new Error("Uygun egzersiz bulunamadı");
-        var startRes = await fetch("/student/exercises/start", {
+        var startRes = await authenticatedFetch("/student/exercises/start", {
           method: "POST",
-          headers: {
-            ...authHeaders(tokens.accessToken, tokens.tenantId),
-            ...csrfHeaders(),
-          },
           body: JSON.stringify({
             templateVersionId: data.templateVersionId,
             clientSessionId: "onboard-" + Date.now(),
@@ -3326,14 +3333,11 @@ function setupOnboardingEvents() {
   var place = $("onboard-placement");
   if (place)
     place.addEventListener("click", async function () {
-      var tokens = getStoredTokens();
       place.disabled = true;
       place.setAttribute("aria-busy", "true");
       place.textContent = "Hazırlanıyor…";
       try {
-        var res = await fetch("/student/onboarding/placement", {
-          headers: authHeaders(tokens.accessToken, tokens.tenantId),
-        });
+        var res = await authenticatedFetch("/student/onboarding/placement");
         var data = await parseResponse(res);
         if (!data.assessmentId) {
           showOnboardingNotice(
@@ -3341,14 +3345,13 @@ function setupOnboardingEvents() {
           );
           return;
         }
-        var startRes = await fetch("/student/assessments/" + data.assessmentId + "/start", {
-          method: "POST",
-          headers: {
-            ...authHeaders(tokens.accessToken, tokens.tenantId),
-            ...csrfHeaders(),
+        var startRes = await authenticatedFetch(
+          "/student/assessments/" + data.assessmentId + "/start",
+          {
+            method: "POST",
+            body: JSON.stringify({}),
           },
-          body: JSON.stringify({}),
-        });
+        );
         var started = await parseResponse(startRes);
         if (!started.sessionId) throw new Error("Seviye ölçümü başlatılamadı");
         exerciseRequestedSessionId = started.sessionId;
@@ -3376,13 +3379,11 @@ void setupOnboardingEvents();
 
 function lessonApi(path, options) {
   options = options || {};
-  const tokens = getStoredTokens();
-  return fetch(
+  return authenticatedFetch(
     "/student/lessons" + path,
     Object.assign({}, options, {
       headers: Object.assign(
         {},
-        authHeaders(tokens.accessToken, tokens.tenantId),
         options.method && options.method !== "GET" ? csrfHeaders() : {},
         options.headers || {},
       ),
@@ -3488,13 +3489,11 @@ function renderLessonList(items) {
 
 function learningPathStepApi(stepId, suffix, options) {
   options = options || {};
-  const tokens = getStoredTokens();
-  return fetch(
+  return authenticatedFetch(
     "/student/learning-path/steps/" + encodeURIComponent(stepId) + "/lesson" + (suffix || ""),
     Object.assign({}, options, {
       headers: Object.assign(
         {},
-        authHeaders(tokens.accessToken, tokens.tenantId),
         options.method && options.method !== "GET" ? csrfHeaders() : {},
         options.headers || {},
       ),
@@ -3601,12 +3600,8 @@ async function startSelectedLesson() {
   const status = $("lesson-detail-status");
   try {
     const data = await parseResponse(
-      await fetch("/student/exercises/start", {
+      await authenticatedFetch("/student/exercises/start", {
         method: "POST",
-        headers: {
-          ...authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
-          ...csrfHeaders(),
-        },
         body: JSON.stringify({
           templateVersionId: lesson.exerciseTemplateVersionId,
           clientSessionId: `lesson-${lesson.id}-${Date.now()}`,
@@ -10247,7 +10242,7 @@ function exerciseApi(path, options = {}) {
       .replace(/^\/exercise-sessions\/([^/]+)\/complete$/, "/student/sessions/$1/complete")
       .replace(/^\/questions\/([^/]+)\/attempts$/, "/student/questions/$1/attempts");
   }
-  return fetch(route, { signal: AbortSignal.timeout(15000), ...options, headers });
+  return authenticatedFetch(route, { signal: AbortSignal.timeout(15000), ...options, headers });
 }
 function showExerciseError(msg) {
   const el = $("exercise-error");
@@ -10358,7 +10353,7 @@ async function refreshExerciseGamification() {
   try {
     const t = getStoredTokens();
     next = await parseResponse(
-      await fetch("/student/gamification", {
+      await authenticatedFetch("/student/gamification", {
         signal: AbortSignal.timeout(15000),
         headers: authHeaders(t.accessToken, t.tenantId),
       }),
@@ -10384,7 +10379,7 @@ async function refreshExerciseGamification() {
 async function fetchStudentExercise(id) {
   const t = getStoredTokens();
   return parseResponse(
-    await fetch("/student/sessions/" + encodeURIComponent(id), {
+    await authenticatedFetch("/student/sessions/" + encodeURIComponent(id), {
       signal: AbortSignal.timeout(15000),
       headers: authHeaders(t.accessToken, t.tenantId),
     }),
@@ -13753,10 +13748,8 @@ function assignmentApi(path, options = {}) {
 }
 
 function studentAssignmentApi(path, options = {}) {
-  const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
-  return fetch(`/student/assignments${path}`, { ...options, method, headers });
+  return authenticatedFetch(`/student/assignments${path}`, { ...options, method });
 }
 
 function assignmentStatusBadge(status) {
@@ -14323,7 +14316,7 @@ async function insightApi(path) {
   const requests = insightRequestCache();
   const existing = requests.get(key);
   if (existing) return existing;
-  const request = fetch("/student/" + path, {
+  const request = authenticatedFetch("/student/" + path, {
     headers: authHeaders(t.accessToken, t.tenantId),
     signal: insightRequestSignal(path),
   })
@@ -14845,32 +14838,20 @@ function assessmentApi(path, options) {
 }
 function studentAssessmentApi(path, options) {
   options = options || {};
-  var tokens = getStoredTokens();
   var method = options.method || "GET";
-  return fetch(
+  return authenticatedFetch(
     "/student/assessments" + path,
     Object.assign({}, options, {
       method: method,
-      headers: Object.assign(
-        {},
-        authHeaders(tokens.accessToken, tokens.tenantId),
-        options.headers || {},
-      ),
     }),
   );
 }
 function studentMeasurementApi(options) {
   options = options || {};
-  var tokens = getStoredTokens();
-  return fetch(
+  return authenticatedFetch(
     "/student/measurements",
     Object.assign({}, options, {
       method: options.method || "GET",
-      headers: Object.assign(
-        {},
-        authHeaders(tokens.accessToken, tokens.tenantId),
-        options.headers || {},
-      ),
     }),
   );
 }

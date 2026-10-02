@@ -8,8 +8,8 @@ describe("daily training student flow", () => {
   it("starts and resumes the server-owned daily session", () => {
     expect(index).toContain('id="start-daily-training"');
     expect(index).toContain('id="today-training-retry"');
-    expect(app).toContain('fetch("/student/training/daily/start"');
-    expect(app).toContain('fetch("/student/training/daily/" + encodeURIComponent(id)');
+    expect(app).toContain('authenticatedFetch("/student/training/daily/start"');
+    expect(app).toContain('authenticatedFetch("/student/training/daily/" + encodeURIComponent(id)');
     expect(app).toContain("rememberDailyTrainingState");
     expect(app).toContain("nextDailyTrainingItem");
   });

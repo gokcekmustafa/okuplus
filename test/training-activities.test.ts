@@ -49,7 +49,7 @@ describe("independent training activities", () => {
   it("renders the direct activity flow without loading Learning Path", () => {
     expect(index).toContain('id="training-activities-list"');
     expect(index).toContain('id="training-activities-grid"');
-    expect(app).toContain('fetch("/student/training/activities"');
+    expect(app).toContain('authenticatedFetch("/student/training/activities"');
     expect(app).toContain("data-training-activity-start");
     expect(app).toContain("Antrenmanlara dön");
     expect(app).toContain("Tekrar oyna");
