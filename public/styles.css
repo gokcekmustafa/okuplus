@@ -1274,37 +1274,40 @@ body {
   gap: 10px;
 }
 
-.user-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 700;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 .user-menu-wrap {
   position: relative;
   flex: 0 0 auto;
 }
 
-.user-avatar-button {
+.user-menu-toggle {
   display: inline-flex;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: var(--surface);
   cursor: pointer;
 }
 
-.user-avatar-button:focus-visible {
+.user-menu-toggle:hover,
+.user-menu-toggle:focus-visible {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.user-menu-toggle:focus-visible {
   outline: 3px solid #a7a7ff;
   outline-offset: 3px;
+}
+
+.user-menu-chevron {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
 }
 
 .user-menu {
@@ -2785,10 +2788,6 @@ body {
 .student-shell .context-switcher {
   min-height: 48px;
   box-sizing: border-box;
-}
-
-.student-shell #logout-btn {
-  min-height: 48px;
 }
 
 .student-card {
@@ -9133,11 +9132,7 @@ textarea:focus-visible {
 /* Final v6 cascade: the legacy roadmap rules above must not hide the new
    compact current-step strip. */
 .student-shell #learning-path-card > #learning-map-current {
-  display: flex !important;
-}
-
-.student-shell #learning-path-card .learning-map-current-copy small {
-  display: block !important;
+  display: none !important;
 }
 
 /* Dark theme: keep the student shell readable while preserving its visual hierarchy. */
