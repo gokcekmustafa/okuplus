@@ -25,6 +25,7 @@ import {
   getNextLearningStep,
   markLearningStepInProgressForTemplate,
 } from "../learning-path/index.js";
+import { independentTrainingDeviceInfo } from "../training/session-origin.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -752,13 +753,20 @@ export async function startPersonalExercise(
     templateVersionId?: string;
     clientSessionId?: string;
     enforceLearningPathOrder?: boolean;
+    independentTraining?: boolean;
+    independentTrainingActivityId?: string;
   },
 ) {
   const tenantId = actor.tenantId;
   if (!tenantId || actor.platformRole !== null) {
     throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
   }
-  const clientSessionId = input.clientSessionId?.trim() || null;
+  const independentTraining = input.independentTraining === true;
+  const suppliedClientSessionId = input.clientSessionId?.trim() || null;
+  const clientSessionId =
+    independentTraining && suppliedClientSessionId
+      ? `training-activity:${suppliedClientSessionId}`
+      : suppliedClientSessionId;
   if (clientSessionId && clientSessionId.length > 200) {
     throw validationError("clientSessionId en fazla 200 karakter olmalı");
   }
@@ -810,7 +818,9 @@ export async function startPersonalExercise(
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
     await loadTrainingRuntimeGraph(templateVersionId!, actor);
   }
-  const learningStep = await resolveLearningStepForTemplate(templateVersionId!, actor);
+  const learningStep = independentTraining
+    ? { matched: false, stepId: null, unlocked: false }
+    : await resolveLearningStepForTemplate(templateVersionId!, actor);
   if (learningStep.matched && !learningStep.unlocked) {
     throw validationError("Bu uygulama için önceki öğrenme adımları tamamlanmalı");
   }
@@ -873,12 +883,15 @@ export async function startPersonalExercise(
         sessionType: "PRACTICE",
         status: "IN_PROGRESS",
         clientSessionId,
+        deviceInfo: independentTraining
+          ? independentTrainingDeviceInfo(input.independentTrainingActivityId)
+          : undefined,
       },
       select: { id: true },
     });
     return { sessionId: created.id, isNew: true };
   });
-  if (result.isNew) {
+  if (result.isNew && !independentTraining) {
     await markLearningStepInProgressForTemplate(actor, templateVersionId).catch(() => {});
   }
   return result;
@@ -903,6 +916,7 @@ export async function getStudentSession(
       templateVersionId: true,
       assignmentId: true,
       assessmentId: true,
+      deviceInfo: true,
       startedAt: true,
       completedAt: true,
       scoreSummary: true,

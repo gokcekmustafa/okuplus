@@ -1,5 +1,12 @@
 export { trainingStudentRoutes } from "./routes.js";
 export {
+  listTrainingActivities,
+  startTrainingActivity,
+  TRAINING_ACTIVITY_CATALOG,
+  findTrainingActivity,
+} from "./activities.js";
+export type { TrainingActivityId } from "./activities.js";
+export {
   DAILY_TRAINING_COMPOSITION,
   dailySessionDateKey,
   getDailyTrainingSession,

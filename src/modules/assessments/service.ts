@@ -5,6 +5,7 @@ import {
   findCanonicalPlacementAssessment,
   selectCanonicalPlacementAssessment,
 } from "./canonical-selector.js";
+import { resolveLearningStepForAssessment } from "../student-learning/persistent-path.js";
 import type {
   CreateAssessmentInput,
   ListAssessmentsQuery,
@@ -348,6 +349,7 @@ export async function listStudentAssessments(actor: {
         where: {
           assessmentId: { in: assessmentIds },
           studentId: actor.userId,
+          ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
         },
         select: {
           assessmentId: true,
@@ -358,7 +360,11 @@ export async function listStudentAssessments(actor: {
         orderBy: { createdAt: "desc" },
       }),
       prisma.assessmentResult.findMany({
-        where: { assessmentId: { in: assessmentIds }, studentId: actor.userId },
+        where: {
+          assessmentId: { in: assessmentIds },
+          studentId: actor.userId,
+          ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
+        },
         select: {
           assessmentId: true,
           score: true,
@@ -442,6 +448,7 @@ export async function getStudentAssessment(
       assessmentId: id,
       studentId: actor.userId,
       status: "IN_PROGRESS",
+      ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     },
     select: { id: true },
   });
@@ -525,11 +532,17 @@ export async function startAssessmentSession(
       assessmentId: id,
       studentId: actor.userId,
       status: "IN_PROGRESS",
+      ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     },
     select: { id: true },
   });
   if (existingSession) {
     return { sessionId: existingSession.id, isNew: false };
+  }
+
+  const learningStep = await resolveLearningStepForAssessment(id, actor);
+  if (learningStep.matched && !learningStep.unlocked) {
+    throw validationError("Ortak değerlendirme için önce pekiştirme tamamlanmalı");
   }
 
   // Tenant belirleme
@@ -556,6 +569,7 @@ export async function startAssessmentSession(
       tenantId: sessionTenantId,
       studentId: actor.userId,
       templateVersionId: config.templateVersionId,
+      learningStepId: learningStep.stepId,
       assessmentId: id,
       context: "ASSESSMENT",
       sessionType: "ASSESSMENT",

@@ -19,6 +19,7 @@ import {
   loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
+import { isIndependentTrainingSession } from "../training/session-origin.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
 import { completeLearningStepForSession } from "../learning-path/index.js";
 import {
@@ -549,6 +550,7 @@ export async function completeExerciseSession(
       studentId: true,
       assessmentId: true,
       learningStepId: true,
+      deviceInfo: true,
       status: true,
       templateVersionId: true,
       templateVersion: {
@@ -748,7 +750,9 @@ export async function completeExerciseSession(
     await syncTrainingSessionItem(id);
   }
 
-  if (session.tenantId) {
+  const shouldSyncLearningPath =
+    !session.trainingSessionItem && !isIndependentTrainingSession(session.deviceInfo);
+  if (session.tenantId && shouldSyncLearningPath) {
     const learningActor = {
       userId: session.studentId,
       tenantId: session.tenantId,

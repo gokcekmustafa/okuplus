@@ -4323,7 +4323,7 @@
           <section id="page-exercise" class="page-view hidden" data-student-primary>
             <div class="page-head">
               <h2>Antrenman</h2>
-              <p class="muted">Öğren, dene, geri bildirim al ve bir sonraki adımını gör.</p>
+              <p class="muted">Kısa bir okuma çalışması seç ve hemen başla.</p>
             </div>
             <div id="student-exercise-header" class="student-exercise-header hidden">
               <div style="display: flex; align-items: center; gap: 12px">
@@ -4356,7 +4356,12 @@
                 <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
               </div>
             </div>
-            <div class="exercise-method" data-student aria-label="Antrenman akışı">
+            <div
+              id="exercise-method"
+              class="exercise-method"
+              data-student
+              aria-label="Antrenman akışı"
+            >
               <span class="exercise-method-step active">Öğren</span>
               <span class="exercise-method-arrow" aria-hidden="true">→</span>
               <span class="exercise-method-step">Örnek</span>
@@ -4374,6 +4379,24 @@
             <button id="exercise-retry-load" type="button" class="btn btn-ghost hidden">
               Tekrar dene
             </button>
+            <section
+              id="training-activities-list"
+              class="training-activities-list"
+              data-student
+              aria-labelledby="training-activities-title"
+              style="display: none"
+            >
+              <div class="training-activities-intro">
+                <div>
+                  <p class="insight-eyebrow">KISA ÇALIŞMALAR</p>
+                  <h3 id="training-activities-title">İstediğin aktiviteyi seç</h3>
+                  <p class="muted">
+                    Her biri kısa sürer; doğru veya yanlış cevaplarını hemen görürsün.
+                  </p>
+                </div>
+              </div>
+              <div id="training-activities-grid" class="training-activities-grid"></div>
+            </section>
             <section
               id="student-reading-card"
               class="card student-reading-card"
@@ -4561,10 +4584,50 @@
                 <p class="insight-eyebrow">KENDİNİ ÖLÇ</p>
                 <h3>Seviyeni ve gelişimini keşfet</h3>
                 <p class="muted">
-                  Bu çalışmalar bir not değil; sana uygun sonraki adımı bulmana yardım eder.
+                  Gerçek ölçüm sonuçlarını, beceri kanıtlarını ve ölçüm geçmişini tek yerde gör.
                 </p>
               </div>
-              <div id="student-assessment-cards" class="learning-card-grid"></div>
+              <div id="measurement-overview" class="measurement-overview" aria-live="polite"></div>
+              <section class="measurement-section" aria-labelledby="measurement-skills-title">
+                <div class="measurement-section-heading">
+                  <div>
+                    <p class="insight-eyebrow">GERÇEK KANITLAR</p>
+                    <h3 id="measurement-skills-title">Beceri sonuçlarım</h3>
+                  </div>
+                </div>
+                <div id="measurement-skills" class="measurement-skill-grid"></div>
+              </section>
+              <section class="measurement-section" aria-labelledby="measurement-available-title">
+                <div class="measurement-section-heading">
+                  <div>
+                    <p class="insight-eyebrow">SIRADAKİ ÖLÇÜM</p>
+                    <h3 id="measurement-available-title">Kullanılabilir ölçümler</h3>
+                  </div>
+                </div>
+                <div id="student-assessment-cards" class="learning-card-grid"></div>
+              </section>
+              <section class="measurement-section" aria-labelledby="measurement-history-title">
+                <div class="measurement-section-heading">
+                  <div>
+                    <p class="insight-eyebrow">GEÇMİŞİN</p>
+                    <h3 id="measurement-history-title">Ölçüm geçmişi</h3>
+                  </div>
+                </div>
+                <div id="measurement-history" class="measurement-history"></div>
+              </section>
+              <section
+                id="measurement-learning-path-section"
+                class="measurement-section"
+                aria-labelledby="measurement-learning-path-title"
+              >
+                <div class="measurement-section-heading">
+                  <div>
+                    <p class="insight-eyebrow">ÖĞRENME YOLU</p>
+                    <h3 id="measurement-learning-path-title">Öğrenme Yolu değerlendirmeleri</h3>
+                  </div>
+                </div>
+                <div id="measurement-learning-path" class="measurement-history"></div>
+              </section>
             </div>
             <div class="card" style="padding: 16px; margin-bottom: 16px">
               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
@@ -4775,9 +4838,10 @@
               class="insight-panel development-comparison-panel"
               aria-labelledby="development-comparison-title"
             >
-              <h3 id="development-comparison-title">Başlangıçtan bugüne</h3>
+              <h3 id="development-comparison-title">Antrenman sonuçları</h3>
               <p class="muted">
-                Yerleştirme ölçümün ile puanlanan son çalışmalarını karşılaştırıyoruz.
+                Antrenman performansı aşağıdaki beceri kartlarında gösterilir; bu sonuçlar akademik
+                ölçüm yerine geçmez.
               </p>
               <div
                 id="development-comparison"
