@@ -23,8 +23,8 @@ describe("production browser smoke safety contract", () => {
   });
 
   it("allows only login/logout writes and canonical production hosts", () => {
+    expect(script).toContain('"https://www.okupratik.com"');
     expect(script).toContain('"https://okuplus.vercel.app"');
-    expect(script).toContain('"https://www.okuplus.online"');
     expect(script).toContain('url.pathname === "/auth/login" || url.pathname === "/auth/logout"');
     expect(script).toContain('"/student/today"');
     expect(script).toContain('"/student/progress"');

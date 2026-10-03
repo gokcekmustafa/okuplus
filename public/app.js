@@ -1,4 +1,4 @@
-// Oku+ — minimal SPA (vanilla JS)
+// OkuPratik — minimal SPA (vanilla JS)
 // Session yönetimi: access + refresh token localStorage'da tutulur.
 // Sayfa yenilendiğinde /auth/me ile doğrulanır; 401 ise /auth/refresh denenir.
 
@@ -2500,7 +2500,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">OKU+</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
+    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">OkuPratik</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
     escapeHtml(levelLabel) +
     "</strong><small>Seviye</small></span><span><strong>🔥 " +
     escapeHtml(streak) +

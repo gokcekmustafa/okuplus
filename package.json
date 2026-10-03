@@ -2,7 +2,7 @@
   "name": "oku-plus",
   "version": "0.2.0",
   "private": true,
-  "description": "Oku+ — EdTech SaaS platformu (backend)",
+  "description": "OkuPratik — EdTech SaaS platformu (backend)",
   "type": "module",
   "engines": {
     "node": ">=20"

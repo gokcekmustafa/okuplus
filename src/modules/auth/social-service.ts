@@ -15,8 +15,9 @@ function safeDisplayName(input: SocialCredentialInput, identity: VerifiedSocialI
   const supplied = input.displayName?.trim();
   if (supplied) return supplied.slice(0, 120);
   if (identity.displayName) return identity.displayName.slice(0, 120);
-  if (identity.email) return (identity.email.split("@")[0] || "Oku+ Kullanıcısı").slice(0, 120);
-  return "Oku+ Kullanıcısı";
+  if (identity.email)
+    return (identity.email.split("@")[0] || "OkuPratik Kullanıcısı").slice(0, 120);
+  return "OkuPratik Kullanıcısı";
 }
 
 export class SocialAuthService {
