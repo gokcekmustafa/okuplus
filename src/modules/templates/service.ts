@@ -1,7 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma, type ExerciseTemplateStatus, type VersionStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
+import { notFoundError, validationError } from "../../lib/errors.js";
 import type {
   CreateTemplateInput,
   CreateTemplateVersionInput,

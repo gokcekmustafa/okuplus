@@ -1373,12 +1373,6 @@ body {
   background: var(--primary-soft);
 }
 
-.user-meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.25;
-}
-
 .user-name {
   font-size: 14px;
   font-weight: 600;
@@ -1714,28 +1708,8 @@ body {
 }
 
 /* ---------- Placeholder / yakında ---------- */
-.coming-soon {
-  padding: 48px 24px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
 .coming-soon-icon {
   font-size: 40px;
-}
-
-.coming-soon h3 {
-  margin: 4px 0 0;
-  font-size: 18px;
-}
-
-.coming-soon p {
-  margin: 0;
-  color: var(--muted);
-  max-width: 420px;
 }
 
 .placeholder-note {
@@ -2225,10 +2199,6 @@ body {
   color: #2f6b1e;
 }
 
-.content-type-icon {
-  margin-right: 4px;
-}
-
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -2332,29 +2302,6 @@ body {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 18px;
-}
-
-.gamification-stat {
-  display: grid;
-  gap: 6px;
-  text-align: center;
-}
-
-.gamification-stat-icon {
-  font-size: 28px;
-}
-
-.gamification-stat strong {
-  font-size: 26px;
-  color: var(--text);
-}
-
-.gamification-section {
-  margin-bottom: 18px;
-}
-
-.gamification-section h3 {
-  margin-top: 0;
 }
 
 .gamification-badges {
@@ -2679,10 +2626,6 @@ body {
     padding: 0 12px;
   }
 
-  .user-meta {
-    display: none;
-  }
-
   .stat-grid {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
@@ -2788,14 +2731,6 @@ body {
 .student-shell .context-switcher {
   min-height: 48px;
   box-sizing: border-box;
-}
-
-.student-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 16px 20px;
-  box-shadow: var(--shadow);
 }
 
 @media (max-width: 768px) {
@@ -3944,13 +3879,6 @@ body {
 .skill-title > span {
   font-size: 25px;
 }
-.skill-accuracy {
-  font-size: 22px;
-  color: #304fa8;
-}
-.skill-period {
-  font-size: 12px;
-}
 .insight-bar {
   height: 12px;
   border-radius: 12px;
@@ -3981,13 +3909,6 @@ body {
   font-weight: 750;
   margin: 6px 0 0;
   color: #243655;
-}
-.skill-time {
-  border-top: 1px solid #edf0f6;
-  padding-top: 14px;
-  margin: 16px 0 0;
-  font-size: 13px;
-  color: #46536a;
 }
 .insight-activity {
   display: flex;
@@ -5043,10 +4964,6 @@ textarea:focus-visible {
 
 .student-shell .user-name {
   font-size: 15px;
-}
-
-.student-shell .user-role {
-  font-size: 13px;
 }
 
 .student-shell .page {

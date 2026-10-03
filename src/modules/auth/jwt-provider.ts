@@ -60,7 +60,7 @@ export class JwtAuthProvider implements AuthProvider {
   private readonly refreshTtlSeconds: number;
   private readonly hasher: PasswordHasher;
 
-  constructor(private readonly options: JwtAuthProviderOptions) {
+  constructor(options: JwtAuthProviderOptions) {
     this.secretKey = new TextEncoder().encode(options.jwtSecret);
     this.accessTtlSeconds = options.accessTtlSeconds;
     this.refreshTtlSeconds = options.refreshTtlSeconds;

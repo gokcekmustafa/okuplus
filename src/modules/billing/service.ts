@@ -673,7 +673,7 @@ export async function processIyzicoWebhook(
       receivedAt: receivedAt.toISOString(),
     });
     const parsed = provider.parseWebhook({ verified });
-    return await applyVerifiedWebhook(parsed, verified.rawPayload, payloadHash, receivedAt);
+    return await applyVerifiedWebhook(parsed, payloadHash, receivedAt);
   } catch (error) {
     await recordRejectedWebhook(
       payload,
@@ -688,7 +688,6 @@ export async function processIyzicoWebhook(
 
 async function applyVerifiedWebhook(
   parsed: ReturnType<typeof parseIyzicoWebhook>,
-  payload: unknown,
   payloadHash: string,
   receivedAt: Date,
 ) {
