@@ -154,7 +154,7 @@ describe("config/env", () => {
       ...base,
       APP_ENV: "production",
       NODE_ENV: "production",
-      CORS_ORIGIN: "https://www.okuplus.online",
+      CORS_ORIGIN: "https://www.okupratik.com",
       AUTH_COOKIE_TRANSPORT: "on",
       AUTH_ORIGIN_ENFORCEMENT: "on",
       JWT_SECRET: "Q7!mZ2_rT8xL4pN6vC9kH3aW5eJ1sB0dF4yK8uP",
@@ -173,13 +173,13 @@ describe("config/env", () => {
       ...base,
       APP_ENV: "production",
       NODE_ENV: "production",
-      CORS_ORIGIN: "https://www.okuplus.online",
+      CORS_ORIGIN: "https://www.okupratik.com",
       AUTH_COOKIE_TRANSPORT: "on",
       AUTH_ORIGIN_ENFORCEMENT: "on",
       JWT_SECRET: "Q7!mZ2_rT8xL4pN6vC9kH3aW5eJ1sB0dF4yK8uP",
       GOOGLE_OIDC_WEB_CLIENT_ID: "1234567890.apps.googleusercontent.com",
       GOOGLE_OIDC_CLIENT_SECRET: "real-google-oauth-client-secret-value",
-      GOOGLE_OIDC_CALLBACK_URL: "https://www.okuplus.online/auth/social/google/callback",
+      GOOGLE_OIDC_CALLBACK_URL: "https://www.okupratik.com/auth/social/google/callback",
     });
 
     expect(env.GOOGLE_OIDC_CALLBACK_URL).toContain("/auth/social/google/callback");

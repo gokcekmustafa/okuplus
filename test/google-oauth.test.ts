@@ -4,7 +4,7 @@ import { GoogleOAuthClient } from "../src/modules/auth/google-oauth.js";
 import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 
-const CALLBACK_URL = "https://www.okuplus.online/auth/social/google/callback";
+const CALLBACK_URL = "https://www.okupratik.com/auth/social/google/callback";
 const STATE_SECRET = "local-google-oauth-state-secret-that-is-long-enough";
 
 function requestWithCookie(cookie: string): FastifyRequest {
