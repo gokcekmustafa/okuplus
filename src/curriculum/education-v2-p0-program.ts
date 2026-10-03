@@ -178,7 +178,6 @@ function question(
 }
 
 function contract(
-  key: string,
   title: string,
   family: TrainingExerciseVersionConfig["family"],
   competency: TrainingExerciseVersionConfig["competency"],
@@ -369,7 +368,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "fast-attention-lesson",
       skillCode: "FAST_ATTENTION",
       contract: contract(
-        "EDU-V2-P0-FAST-ATTENTION-STUDY",
         "Dikkat hedefini seç",
         "ATTENTION_BURST",
         "FAST_ATTENTION",
@@ -415,7 +413,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "fast-recognition-practice",
       skillCode: "FAST_RECOGNITION",
       contract: contract(
-        "EDU-V2-P0-FAST-RECOGNITION-PRACTICE",
         "Anlam taşıyan kelimeyi bul",
         "RAPID_RECOGNITION",
         "FAST_RECOGNITION",
@@ -461,7 +458,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "fast-chunking-practice",
       skillCode: "FAST_CHUNKING",
       contract: contract(
-        "EDU-V2-P0-FAST-CHUNKING-PRACTICE",
         "Anlamlı grubu bul",
         "PHRASE_CHUNKING",
         "FAST_CHUNKING",
@@ -507,7 +503,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "rc-detail-study",
       skillCode: "RC_DETAIL",
       contract: contract(
-        "EDU-V2-P0-RC-DETAIL-STUDY",
         "Ayrıntıyı metinle eşleştir",
         "DETAIL_EVIDENCE",
         "RC_DETAIL",
@@ -553,7 +548,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "rc-main-idea-practice",
       skillCode: "RC_MAIN_IDEA",
       contract: contract(
-        "EDU-V2-P0-RC-MAIN-IDEA-PRACTICE",
         "Ana fikri kanıtla seç",
         "MAIN_IDEA",
         "RC_MAIN_IDEA",
@@ -599,7 +593,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "rc-inference-practice",
       skillCode: "RC_INFERENCE",
       contract: contract(
-        "EDU-V2-P0-RC-INFERENCE-PRACTICE",
         "Kanıtlardan çıkarım yap",
         "INFERENCE",
         "RC_INFERENCE",
@@ -645,7 +638,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "common-reinforcement",
       skillCode: "FAST_CHUNKING",
       contract: contract(
-        "EDU-V2-P0-COMMON-REINFORCEMENT",
         "Odak ve anlamı birlikte kullan",
         "PHRASE_CHUNKING",
         "FAST_CHUNKING",
@@ -691,7 +683,6 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
       contentKey: "common-test",
       skillCode: "RC_MAIN_IDEA",
       contract: contract(
-        "EDU-V2-P0-COMMON-TEST",
         "İlk döngüyü ölç",
         "MAIN_IDEA",
         "RC_MAIN_IDEA",

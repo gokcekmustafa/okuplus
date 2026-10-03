@@ -1,10 +1,7 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { z } from "zod";
 
 const templateTypeSchema = z.enum(["COMPREHENSION", "FLUENCY", "INFERENCE", "VOCABULARY", "MIXED"]);
 const templateStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);
-const versionStatusSchema = z.enum(["DRAFT", "REVIEW", "PUBLISHED", "ARCHIVED"]);
-
 const titleSchema = z
   .string()
   .trim()
