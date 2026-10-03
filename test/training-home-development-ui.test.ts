@@ -58,12 +58,12 @@ describe("training home and development UI", () => {
     expect(styles).toContain("@media (max-width: 600px)");
   });
 
-  it("keeps the student shell focused on five primary destinations", () => {
+  it("keeps the student shell focused on the core destinations", () => {
     expect(index).toContain('data-page="dashboard" data-student-primary');
     expect(index).toContain('data-page="exercise" data-student-primary');
     expect(index).toContain('data-page="lessons" data-student');
     expect(index).toContain('data-page="progress" data-student-primary');
-    expect(index).toContain('data-page="settings" data-student-primary');
+    expect(index).not.toContain('data-page="settings" data-student-primary');
     expect(index).toContain("Bugün ne öğreneceksin?");
     expect(index).toContain("Öğren");
     expect(index).toContain("Geri bildirim");
@@ -71,11 +71,16 @@ describe("training home and development UI", () => {
     expect(app).toContain("data-student-secondary");
   });
 
-  it("keeps secondary destinations available in the student shell", () => {
-    expect(index).toContain('class="student-nav-more" data-student');
+  it("keeps secondary destinations directly visible in the desktop sidebar", () => {
+    expect(index).not.toContain('class="student-nav-more"');
+    expect(index).not.toContain("Diğer alanlar");
+    expect(index).toContain('data-page="assignments" data-student-secondary');
+    expect(index).toContain('data-page="assessments" data-student-secondary');
+    expect(index).toContain('data-page="badges" data-student-secondary');
+    expect(index).not.toContain('data-page="billing-account" data-student-secondary');
+    expect(index).not.toContain('data-page="settings" data-student-primary');
     expect(index).toContain("Öğrenme Yolum");
     expect(index).toContain("Gelişimim");
-    expect(index).toContain("Profilim");
     expect(index).toContain('id="user-menu-toggle"');
     expect(index).toContain('data-user-menu-page="settings"');
     expect(index).toContain('data-user-menu-page="billing-account"');
