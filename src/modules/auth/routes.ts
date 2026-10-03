@@ -9,6 +9,7 @@ import type {
 } from "./index.js";
 import { signupPersonalAccount, signupSchema } from "./index.js";
 import type { SocialAuthService } from "./social-service.js";
+import { GoogleOAuthClient } from "./google-oauth.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import {
   clearAuthCookies,
@@ -17,6 +18,8 @@ import {
   REFRESH_COOKIE_NAME,
   resolveRefreshToken,
   setAuthCookies,
+  authCookieHeaders,
+  clearGoogleOAuthStateCookie,
   setNoStore,
 } from "./cookies.js";
 import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
@@ -61,6 +64,7 @@ const socialBodySchema = {
 } as const;
 
 type SessionBody = SessionMetadata & { tenantId?: string };
+type GoogleCallbackQuery = { code?: string; state?: string; error?: string };
 
 function sessionMetadata(body: SessionMetadata): SessionMetadata {
   return { deviceName: body.deviceName ?? null, platform: body.platform ?? "UNKNOWN" };
@@ -91,6 +95,7 @@ export async function authRoutes(
   opts: {
     authProvider: AuthProvider;
     socialAuthService: SocialAuthService;
+    googleOAuthClient: GoogleOAuthClient;
     csrfSecret: string;
     allowedOrigins: readonly string[];
     enforceAuthOrigin: boolean;
@@ -100,6 +105,7 @@ export async function authRoutes(
   const {
     authProvider,
     socialAuthService,
+    googleOAuthClient,
     csrfSecret,
     allowedOrigins,
     enforceAuthOrigin,
@@ -182,10 +188,53 @@ export async function authRoutes(
 
   app.get("/auth/social/config", async () => {
     return ok({
-      google: { configured: socialAuthService.providerConfigured("GOOGLE") },
+      google: {
+        configured:
+          socialAuthService.providerConfigured("GOOGLE") && googleOAuthClient.isConfigured(),
+      },
       apple: { configured: socialAuthService.providerConfigured("APPLE") },
     });
   });
+
+  app.get("/auth/social/google/start", async (_request, reply) => {
+    const flow = googleOAuthClient.begin();
+    setNoStore(reply);
+    return reply.header("Set-Cookie", flow.stateCookie).redirect(flow.authorizationUrl);
+  });
+
+  app.get<{ Querystring: GoogleCallbackQuery }>(
+    "/auth/social/google/callback",
+    async (request, reply) => {
+      setNoStore(reply);
+      if (request.query.error || !request.query.code || !request.query.state) {
+        return reply
+          .header("Set-Cookie", clearGoogleOAuthStateCookie())
+          .redirect(googleOAuthClient.errorRedirect());
+      }
+
+      try {
+        const { idToken, nonce } = await googleOAuthClient.exchangeCode(
+          request,
+          request.query.code,
+          request.query.state,
+        );
+        const session = await socialAuthService.login(
+          "GOOGLE",
+          { idToken, nonce },
+          { platform: "WEB", deviceName: "Google OAuth" },
+        );
+        reply.header("Set-Cookie", [
+          clearGoogleOAuthStateCookie(),
+          ...authCookieHeaders(session.tokens, createCsrfToken(csrfSecret)),
+        ]);
+        return reply.redirect(googleOAuthClient.successRedirect());
+      } catch {
+        return reply
+          .header("Set-Cookie", clearGoogleOAuthStateCookie())
+          .redirect(googleOAuthClient.errorRedirect());
+      }
+    },
+  );
 
   app.post<{ Body: SocialCredentialInput & SessionMetadata }>(
     "/auth/social/google",

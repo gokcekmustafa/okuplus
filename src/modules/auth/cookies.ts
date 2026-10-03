@@ -14,7 +14,7 @@ type CookieOptions = {
   path: "/" | "/auth";
 };
 
-function serializeCookie(name: string, value: string, options: CookieOptions): string {
+export function serializeCookie(name: string, value: string, options: CookieOptions): string {
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     `Max-Age=${Math.max(0, Math.floor(options.maxAge))}`,
@@ -24,6 +24,39 @@ function serializeCookie(name: string, value: string, options: CookieOptions): s
   ];
   if (options.httpOnly) parts.push("HttpOnly");
   return parts.join("; ");
+}
+
+export const GOOGLE_OAUTH_STATE_COOKIE_NAME = "__Host-oku_google_oauth";
+
+export function googleOAuthStateCookie(value: string, maxAge: number): string {
+  return serializeCookie(GOOGLE_OAUTH_STATE_COOKIE_NAME, value, {
+    httpOnly: true,
+    maxAge,
+    path: "/",
+  });
+}
+
+export function clearGoogleOAuthStateCookie(): string {
+  return googleOAuthStateCookie("", 0);
+}
+
+export function authCookieHeaders(tokens: AuthTokens, csrfToken: string): string[] {
+  return [
+    serializeCookie(ACCESS_COOKIE_NAME, tokens.accessToken, {
+      httpOnly: true,
+      maxAge: Math.max(1, Math.floor((tokens.accessTokenExpiresAt.getTime() - Date.now()) / 1000)),
+      path: "/",
+    }),
+    serializeCookie(REFRESH_COOKIE_NAME, tokens.refreshToken, {
+      httpOnly: true,
+      maxAge: Math.max(1, Math.floor((tokens.refreshTokenExpiresAt.getTime() - Date.now()) / 1000)),
+      path: "/auth",
+    }),
+    serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
+      maxAge: Math.max(1, Math.floor((tokens.refreshTokenExpiresAt.getTime() - Date.now()) / 1000)),
+      path: "/",
+    }),
+  ];
 }
 
 function appendSetCookies(reply: FastifyReply, cookies: string[]): void {
@@ -95,22 +128,7 @@ export function resolveAccessToken(request: FastifyRequest): string | undefined 
 }
 
 export function setAuthCookies(reply: FastifyReply, tokens: AuthTokens, csrfToken: string): void {
-  appendSetCookies(reply, [
-    serializeCookie(ACCESS_COOKIE_NAME, tokens.accessToken, {
-      httpOnly: true,
-      maxAge: Math.max(1, Math.floor((tokens.accessTokenExpiresAt.getTime() - Date.now()) / 1000)),
-      path: "/",
-    }),
-    serializeCookie(REFRESH_COOKIE_NAME, tokens.refreshToken, {
-      httpOnly: true,
-      maxAge: Math.max(1, Math.floor((tokens.refreshTokenExpiresAt.getTime() - Date.now()) / 1000)),
-      path: "/auth",
-    }),
-    serializeCookie(CSRF_COOKIE_NAME, csrfToken, {
-      maxAge: Math.max(1, Math.floor((tokens.refreshTokenExpiresAt.getTime() - Date.now()) / 1000)),
-      path: "/",
-    }),
-  ]);
+  appendSetCookies(reply, authCookieHeaders(tokens, csrfToken));
 }
 
 export function clearAuthCookies(reply: FastifyReply): void {

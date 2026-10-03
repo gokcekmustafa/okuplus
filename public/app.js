@@ -112,6 +112,10 @@ function soundEffectsEnabled() {
   return localStorage.getItem(STORAGE_KEYS.soundEffects) === "true";
 }
 
+function hasBrowserCookie(name) {
+  return document.cookie.split(";").some((part) => part.trim().startsWith(`${name}=`));
+}
+
 function playRewardSound(kind) {
   if (!soundEffectsEnabled() || !rewardAudioPrimed) return;
   try {
@@ -850,11 +854,18 @@ async function loadSocialLoginConfig() {
 }
 
 function providerButtonMessage(provider) {
-  $("social-login-status").textContent =
-    `${provider} Web SDK bu dağıtımda başlatılmadı; sahte giriş yapılmadı.`;
+  $("social-login-status").textContent = `${provider} ile giriş şu anda kullanılamıyor.`;
 }
 
-$("google-login-btn").addEventListener("click", () => providerButtonMessage("Google"));
+function startGoogleLogin() {
+  const button = $("google-login-btn");
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  $("social-login-status").textContent = "Google ile giriş yapılıyor…";
+  window.location.assign("/auth/social/google/start");
+}
+
+$("google-login-btn").addEventListener("click", startGoogleLogin);
 $("apple-login-btn").addEventListener("click", () => providerButtonMessage("Apple"));
 void loadSocialLoginConfig();
 $("context-switcher")?.addEventListener("change", function (e) {
@@ -890,7 +901,11 @@ function authenticatedRequestHeaders(headers, accessToken, tenantId) {
   delete merged.Authorization;
   delete merged["x-tenant-id"];
   delete merged["X-Tenant-Id"];
-  return { ...merged, ...authHeaders(accessToken, tenantId) };
+  return {
+    ...merged,
+    ...authHeaders(accessToken, tenantId),
+    ...(accessToken ? {} : { "x-auth-transport": "cookie" }),
+  };
 }
 
 async function refreshStoredTokens(refreshToken, tenantId) {
@@ -928,7 +943,7 @@ async function authenticatedFetch(path, options = {}) {
   if (response.status !== 401 || path === "/auth/refresh") {
     return response;
   }
-  if (!initialTokens.refreshToken) {
+  if (initialTokens.accessToken && !initialTokens.refreshToken) {
     clearStoredSession();
     showLogin();
     return response;
@@ -972,14 +987,44 @@ async function logout(refreshToken, tenantId) {
 async function restoreSession() {
   const { accessToken, refreshToken, tenantId } = getStoredTokens();
   if (!accessToken) {
-    if (refreshToken) clearStoredSession();
-    showGuestLanding();
+    if (!refreshToken && !hasBrowserCookie("__Host-oku_csrf")) {
+      if (new URLSearchParams(window.location.search).get("auth") === "google-error") {
+        showLogin();
+        $("login-error").textContent = "Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.";
+        $("login-error").classList.remove("hidden");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        showGuestLanding();
+      }
+      return;
+    }
+    try {
+      const me = await fetchMe(null, tenantId);
+      showDashboard(me);
+      if (new URLSearchParams(window.location.search).get("auth") === "google-success") {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      return;
+    } catch {
+      if (refreshToken) clearStoredSession();
+      if (new URLSearchParams(window.location.search).get("auth") === "google-error") {
+        showLogin();
+        $("login-error").textContent = "Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.";
+        $("login-error").classList.remove("hidden");
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
+      showGuestLanding();
+    }
     return;
   }
 
   try {
     const me = await fetchMe(accessToken, tenantId);
     showDashboard(me);
+    if (new URLSearchParams(window.location.search).get("auth") === "google-success") {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     return;
   } catch (err) {
     if (err.status !== 401) {
@@ -4250,9 +4295,7 @@ $("login-form").addEventListener("submit", async (event) => {
 async function handleLogout() {
   const { refreshToken, tenantId } = getStoredTokens();
   try {
-    if (refreshToken) {
-      await logout(refreshToken, tenantId);
-    }
+    await logout(refreshToken, tenantId);
   } catch (_e) {
     void _e;
     // Sunucu tarafı iptal başarısız olsa bile yerel session temizlenir.

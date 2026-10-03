@@ -13,6 +13,8 @@ export type {
 } from "./social-verifier.js";
 export { SocialAuthService } from "./social-service.js";
 export type { SocialCredentialInput } from "./social-service.js";
+export { GoogleOAuthClient } from "./google-oauth.js";
+export type { GoogleOAuthOptions } from "./google-oauth.js";
 export type {
   AuthProvider,
   AuthSession,

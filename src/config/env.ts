@@ -95,6 +95,9 @@ const envSchema = z.object({
   // default and remove after the Vercel/GitHub target comparison is complete.
   PRODUCTION_IDENTITY_DIAGNOSTIC_ENABLED: z.enum(["off", "on"]).default("off"),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
+  GOOGLE_OIDC_WEB_CLIENT_ID: z.string().trim().default(""),
+  GOOGLE_OIDC_CLIENT_SECRET: z.string().trim().default(""),
+  GOOGLE_OIDC_CALLBACK_URL: z.string().trim().default(""),
   APPLE_OIDC_CLIENT_IDS: z.string().default(""),
   PILOT_MODE: z.enum(["off", "on"]).default("off"),
   PILOT_STUDENT_ACCESS: z.string().default(""),
@@ -188,6 +191,45 @@ function hasUnsafeProductionClientIds(value: string): boolean {
     );
 }
 
+function hasUsableOAuthSecret(value: string): boolean {
+  return (
+    value.length >= 16 &&
+    !/(?:change[-_ ]?me|default|development|example|localhost|placeholder|staging|test)/iu.test(
+      value,
+    )
+  );
+}
+
+function hasCompleteGoogleWebOAuthConfig(env: Env): boolean {
+  return Boolean(
+    env.GOOGLE_OIDC_WEB_CLIENT_ID && env.GOOGLE_OIDC_CLIENT_SECRET && env.GOOGLE_OIDC_CALLBACK_URL,
+  );
+}
+
+function hasPartialGoogleWebOAuthConfig(env: Env): boolean {
+  return Boolean(
+    env.GOOGLE_OIDC_WEB_CLIENT_ID || env.GOOGLE_OIDC_CLIENT_SECRET || env.GOOGLE_OIDC_CALLBACK_URL,
+  );
+}
+
+function isExplicitHttpsUrl(value: string): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      isExplicitOriginAllowlist(url.origin) &&
+      url.pathname.startsWith("/") &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === ""
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validateSecurityEnvironment(env: Env): void {
   const issues: string[] = [];
 
@@ -236,6 +278,22 @@ function validateSecurityEnvironment(env: Env): void {
     }
     if (hasUnsafeProductionClientIds(env.GOOGLE_OIDC_CLIENT_IDS)) {
       issues.push("GOOGLE_OIDC_CLIENT_IDS production client ID içermeli");
+    }
+    if (hasPartialGoogleWebOAuthConfig(env) && !hasCompleteGoogleWebOAuthConfig(env)) {
+      issues.push(
+        "Google web OAuth için GOOGLE_OIDC_WEB_CLIENT_ID, GOOGLE_OIDC_CLIENT_SECRET ve GOOGLE_OIDC_CALLBACK_URL birlikte ayarlanmalı",
+      );
+    }
+    if (env.GOOGLE_OIDC_CALLBACK_URL && !isExplicitHttpsUrl(env.GOOGLE_OIDC_CALLBACK_URL)) {
+      issues.push("GOOGLE_OIDC_CALLBACK_URL production için explicit HTTPS URL olmalı");
+    }
+    if (hasUnsafeProductionClientIds(env.GOOGLE_OIDC_WEB_CLIENT_ID)) {
+      issues.push("GOOGLE_OIDC_WEB_CLIENT_ID production client ID içermeli");
+    }
+    if (env.GOOGLE_OIDC_CLIENT_SECRET && !hasUsableOAuthSecret(env.GOOGLE_OIDC_CLIENT_SECRET)) {
+      issues.push(
+        "GOOGLE_OIDC_CLIENT_SECRET production için güçlü ve placeholder olmayan bir değer olmalı",
+      );
     }
     if (hasUnsafeProductionClientIds(env.APPLE_OIDC_CLIENT_IDS)) {
       issues.push("APPLE_OIDC_CLIENT_IDS production client ID içermeli");

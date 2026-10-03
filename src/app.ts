@@ -8,6 +8,7 @@ import {
   OidcSocialTokenVerifier,
   parseAudienceList,
   SocialAuthService,
+  GoogleOAuthClient,
   type SocialTokenVerifier,
 } from "./modules/auth/index.js";
 import { authRoutes } from "./modules/auth/routes.js";
@@ -47,7 +48,7 @@ import { securityPlugin } from "./plugins/security.js";
 
 export async function buildApp(
   env: Env,
-  options: { socialTokenVerifier?: SocialTokenVerifier } = {},
+  options: { socialTokenVerifier?: SocialTokenVerifier; googleOAuthFetch?: typeof fetch } = {},
 ) {
   const app = Fastify({
     logger: loggerOptions(env),
@@ -69,10 +70,19 @@ export async function buildApp(
   const socialTokenVerifier =
     options.socialTokenVerifier ??
     new OidcSocialTokenVerifier({
-      googleAudiences: parseAudienceList(env.GOOGLE_OIDC_CLIENT_IDS),
+      googleAudiences: parseAudienceList(
+        [env.GOOGLE_OIDC_CLIENT_IDS, env.GOOGLE_OIDC_WEB_CLIENT_ID].filter(Boolean).join(","),
+      ),
       appleAudiences: parseAudienceList(env.APPLE_OIDC_CLIENT_IDS),
     });
   const socialAuthService = new SocialAuthService(socialTokenVerifier, authProvider);
+  const googleOAuthClient = new GoogleOAuthClient({
+    clientId: env.GOOGLE_OIDC_WEB_CLIENT_ID,
+    clientSecret: env.GOOGLE_OIDC_CLIENT_SECRET,
+    callbackUrl: env.GOOGLE_OIDC_CALLBACK_URL,
+    stateSecret: env.JWT_SECRET,
+    fetchImpl: options.googleOAuthFetch,
+  });
 
   await securityPlugin(app, env);
   await errorHandlerPlugin(app);
@@ -98,6 +108,7 @@ export async function buildApp(
   await app.register(authRoutes, {
     authProvider,
     socialAuthService,
+    googleOAuthClient,
     csrfSecret: env.JWT_SECRET,
     allowedOrigins,
     enforceAuthOrigin: env.AUTH_ORIGIN_ENFORCEMENT === "on",
