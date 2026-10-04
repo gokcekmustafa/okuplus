@@ -1,5 +1,6 @@
 export { assignmentAdminRoutes } from "./admin-routes.js";
 export { assignmentStudentRoutes } from "./student-routes.js";
+export { assignmentTeacherRoutes } from "./teacher-routes.js";
 export {
   createAssignment,
   deleteAssignment,
@@ -15,6 +16,7 @@ export {
   listAssignmentsQuerySchema,
   updateAssignmentSchema,
   updateAssignmentStatusSchema,
+  createTeacherAssignmentSchema,
 } from "./schemas.js";
 export type {
   AssignmentStatus,
@@ -22,4 +24,6 @@ export type {
   ListAssignmentsQuery,
   UpdateAssignmentInput,
   UpdateAssignmentStatusInput,
+  CreateTeacherAssignmentInput,
+  TeacherAssignmentStatus,
 } from "./schemas.js";

@@ -72,7 +72,7 @@ const STUDENT_ASSIGNMENT_SELECT = {
   tenant: { select: { name: true } },
 } satisfies Prisma.AssignmentSelect;
 
-async function resolveStudentAssignment(
+export async function resolveStudentAssignment(
   assignmentId: string,
   assignmentClassId: string,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },

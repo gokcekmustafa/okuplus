@@ -1,4 +1,10 @@
-import type { Prisma, PrismaClient, PlatformRole, TenantType } from "@prisma/client";
+import type {
+  Prisma,
+  PrismaClient,
+  PlatformRole,
+  TenantType,
+  MembershipRole,
+} from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 
 /**
@@ -11,6 +17,7 @@ export interface RequestContext {
   platformRole: PlatformRole | null;
   tenantType?: TenantType | null;
   tenantName?: string | null;
+  role?: MembershipRole | null;
 }
 
 export type DbClient = PrismaClient;
