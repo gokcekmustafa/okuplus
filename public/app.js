@@ -2285,60 +2285,6 @@ function learningPathAreaLabel(area, fallback) {
         : fallback || "Öğrenme alanı";
 }
 
-function learningPathGroupProgress(group) {
-  if (group?.overallProgress) return group.overallProgress;
-  var nodes = Array.isArray(group?.nodes) ? group.nodes : [];
-  var completed = nodes.filter(function (node) {
-    return node.status === "completed";
-  }).length;
-  return {
-    completed: completed,
-    total: nodes.length,
-    percent: nodes.length ? Math.round((completed / nodes.length) * 100) : 0,
-  };
-}
-
-function learningPathCommonDetail(pathGroups) {
-  var common = pathGroups.find(function (group) {
-    return group.path?.area === "COMMON";
-  });
-  if (!common) return "";
-  var commonNodes = Array.isArray(common.nodes) ? common.nodes : [];
-  var reinforcement = commonNodes.find(function (node) {
-    return node.type === "REINFORCEMENT";
-  });
-  var assessment = commonNodes.find(function (node) {
-    return node.type === "ASSESSMENT";
-  });
-  var fast = pathGroups.find(function (group) {
-    return group.path?.area === "FAST_READING";
-  });
-  var reading = pathGroups.find(function (group) {
-    return group.path?.area === "READING_COMPREHENSION";
-  });
-  var fastPractice = (Array.isArray(fast?.nodes) ? fast.nodes : []).find(function (node) {
-    return node.type === "PRACTICE";
-  });
-  var readingPractice = (Array.isArray(reading?.nodes) ? reading.nodes : []).find(function (node) {
-    return node.type === "PRACTICE";
-  });
-
-  if (reinforcement?.status === "locked") {
-    if (
-      fastPractice &&
-      readingPractice &&
-      (fastPractice.status !== "completed" || readingPractice.status !== "completed")
-    ) {
-      return "İki alandaki alıştırmaları tamamladığında açılır.";
-    }
-    return "Ön koşullar tamamlandığında açılır.";
-  }
-  if (assessment?.status === "locked") return "Pekiştirmeyi tamamladığında açılır.";
-  if (assessment?.status === "active") return "Başarı ölçümü için hazır.";
-  if (assessment?.status === "completed") return "Bu öğrenme döngüsü tamamlandı.";
-  return "";
-}
-
 var GUIDED_LEARNING_SKILL_ORDER = [
   "FAST_ATTENTION",
   "FAST_RECOGNITION",
@@ -2608,10 +2554,6 @@ function renderLearningPathMap(pathGroups, currentLevel) {
 async function loadLearningPath() {
   if (learningPathLoading) return;
   var container = $("learning-path");
-  var progEl = $("learning-path-progress");
-  var summaryEl = $("learning-path-summary");
-  var levelEl = $("learning-path-level");
-  var continueEl = $("learning-path-continue");
   var retryEl = $("learning-path-retry");
   if (!container) return;
   learningPathLoading = true;
@@ -2655,71 +2597,9 @@ async function loadLearningPath() {
     var nodes = pathGroups.flatMap(function (group) {
       return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });
-    learningPathPhase = "progress-summary";
-    var aggregateProgress = pathGroups.reduce(
-      function (total, group) {
-        var progress = learningPathGroupProgress(group);
-        return {
-          completed: total.completed + Number(progress.completed || 0),
-          total: total.total + Number(progress.total || 0),
-        };
-      },
-      { completed: 0, total: 0 },
-    );
-    if (progEl) {
-      var aggregatePercent = aggregateProgress.total
-        ? Math.round((aggregateProgress.completed / aggregateProgress.total) * 100)
-        : 0;
-      progEl.textContent =
-        aggregateProgress.completed +
-        "/" +
-        aggregateProgress.total +
-        " adım tamamlandı · " +
-        aggregatePercent +
-        "%";
-    }
-    if (summaryEl) {
-      var commonDetail = learningPathCommonDetail(pathGroups);
-      summaryEl.innerHTML = pathGroups
-        .map(function (group) {
-          var area = group.path?.area;
-          var progress = learningPathGroupProgress(group);
-          var areaLabel = learningPathAreaLabel(area, group.path?.title);
-          var detail = area === "COMMON" ? commonDetail : "";
-          return (
-            '<div class="learning-path-summary-item' +
-            (area === "COMMON" ? " is-common" : "") +
-            '" role="listitem"><span class="learning-path-summary-label">' +
-            escapeHtml(areaLabel) +
-            "</span><strong>" +
-            escapeHtml(String(progress.completed || 0)) +
-            "/" +
-            escapeHtml(String(progress.total || 0)) +
-            '</strong><span class="learning-path-summary-progress">' +
-            escapeHtml(String(progress.percent || 0)) +
-            "% tamamlandı</span>" +
-            (detail
-              ? '<span class="learning-path-summary-detail">' + escapeHtml(detail) + "</span>"
-              : "") +
-            "</div>"
-          );
-        })
-        .join("");
-    }
-    if (levelEl)
-      levelEl.textContent = data.currentLevel
-        ? "Seviyen: " + data.currentLevel.name
-        : "Seviye belirlenmedi — Seviyemi Ölç ile öğren";
     if (!nodes.length) {
-      continueEl?.classList.add("hidden");
       renderLearningPathEmptyState(data.currentLevel);
-      if (summaryEl) summaryEl.innerHTML = "";
       return;
-    }
-    if (continueEl) {
-      continueEl.classList.add("hidden");
-      continueEl.disabled = true;
-      continueEl.onclick = null;
     }
     learningPathPhase = "learning-path-map";
     renderLearningPathMap(pathGroups, data.currentLevel);
@@ -2733,7 +2613,6 @@ async function loadLearningPath() {
       phase: learningPathPhase,
     });
     container.setAttribute("aria-busy", "false");
-    if (summaryEl) summaryEl.innerHTML = "";
     container.innerHTML =
       '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
     retryEl?.classList.remove("hidden");
