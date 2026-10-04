@@ -4112,6 +4112,13 @@
               <button id="assignment-create-btn" type="button" class="btn btn-primary" data-admin>
                 Yeni Ödev
               </button>
+              <button
+                id="teacher-assignment-create-btn"
+                type="button"
+                class="btn btn-primary hidden"
+              >
+                Sınıfa ödev ata
+              </button>
             </div>
             <div id="assignment-error" class="error-banner hidden" role="alert"></div>
             <div
@@ -4127,6 +4134,19 @@
                 </p>
               </div>
               <div id="student-assignment-cards" class="learning-card-grid"></div>
+            </div>
+            <div
+              id="teacher-assignment-view"
+              class="student-content-view hidden"
+              aria-live="polite"
+            >
+              <div class="student-section-intro">
+                <p class="insight-eyebrow">SINIF ÇALIŞMALARI</p>
+                <h3>Atadığın ödevler</h3>
+                <p class="muted">
+                  Yetkili olduğun sınıf ve öğrencilerin sonuçlarını buradan takip et.
+                </p>
+              </div>
             </div>
             <div class="card" style="padding: 16px; margin-bottom: 16px">
               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
@@ -4213,6 +4233,87 @@
               </div>
             </div>
           </section>
+
+          <div id="teacher-assignment-form-modal" class="modal-backdrop hidden">
+            <div class="modal">
+              <div class="modal-head">
+                <h3>Ödev ata</h3>
+                <button
+                  id="teacher-assignment-form-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <form id="teacher-assignment-form" novalidate>
+                <div class="modal-body">
+                  <div
+                    id="teacher-assignment-form-error"
+                    class="error-banner hidden"
+                    role="alert"
+                  ></div>
+                  <label class="field"
+                    ><span>Sınıf *</span
+                    ><select id="teacher-assignment-class">
+                      <option value="">Sınıf seçin…</option>
+                    </select></label
+                  >
+                  <label class="field"
+                    ><span>Hedef öğrenci</span
+                    ><select id="teacher-assignment-student">
+                      <option value="">Tüm sınıf</option>
+                    </select></label
+                  >
+                  <label class="field"
+                    ><span>Şablon *</span
+                    ><select id="teacher-assignment-template">
+                      <option value="">Şablon seçin…</option>
+                    </select></label
+                  >
+                  <label class="field"
+                    ><span>Başlık *</span
+                    ><input
+                      id="teacher-assignment-title"
+                      type="text"
+                      maxlength="200"
+                      placeholder="Ödev başlığı"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Son tarih</span
+                    ><input id="teacher-assignment-due-date" type="datetime-local"
+                  /></label>
+                </div>
+                <div class="modal-actions">
+                  <button id="teacher-assignment-form-cancel" type="button" class="btn btn-ghost">
+                    İptal
+                  </button>
+                  <button id="teacher-assignment-form-submit" type="submit" class="btn btn-primary">
+                    Ödevi ata
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div id="teacher-results-modal" class="modal-backdrop hidden">
+            <div class="modal modal-wide">
+              <div class="modal-head">
+                <h3 id="teacher-results-title">Ödev sonuçları</h3>
+                <button
+                  id="teacher-results-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <div id="teacher-results-body" class="modal-body"></div>
+            </div>
+          </div>
 
           <!-- Ödev form modalı -->
           <div id="assignment-form-modal" class="modal-backdrop hidden">

@@ -1058,6 +1058,7 @@ function showDashboard(me) {
   insightsIdentity = user.id + ":" + (tenantContext?.tenantId || "");
   const isPlatform = Boolean(user.platformRole);
   isPlatformUser = isPlatform;
+  isTeacherUser = !isPlatform && tenantContext?.role === "TEACHER";
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
 
@@ -5547,7 +5548,7 @@ let teacherFormMode = "create";
 let teacherEditingId = null;
 let teacherDetailCurrent = null;
 
-function teacherApi(path, options = {}) {
+function teacherAssignmentResourceApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
   const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
@@ -13612,6 +13613,7 @@ let assignmentFormMode = "create";
 let assignmentEditingId = null;
 let assignmentDetailCurrent = null;
 let isPlatformUser = null;
+let isTeacherUser = false;
 
 function assignmentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -13624,6 +13626,16 @@ function assignmentApi(path, options = {}) {
 function studentAssignmentApi(path, options = {}) {
   const method = options.method ?? "GET";
   return authenticatedFetch(`/student/assignments${path}`, { ...options, method });
+}
+
+function teacherAssignmentApi(path, options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/teacher/assignments${path}`, { ...options, method });
+}
+
+function teacherApi(path, options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/teacher${path}`, { ...options, method });
 }
 
 function assignmentStatusBadge(status) {
@@ -13707,17 +13719,28 @@ async function loadAssignments() {
   hideAssignmentError();
   const tbody = $("assignment-list-body");
   tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Yükleniyor…</td></tr>';
-  $("student-assignment-view")?.classList.toggle("hidden", isPlatformUser !== false);
+  $("student-assignment-view")?.classList.toggle(
+    "hidden",
+    isPlatformUser !== false || isTeacherUser,
+  );
+  $("teacher-assignment-view")?.classList.toggle("hidden", !isTeacherUser);
+  $("teacher-assignment-create-btn")?.classList.toggle("hidden", !isTeacherUser);
   document
     .querySelectorAll("#page-assignments > .card")
-    .forEach((panel) => panel.classList.toggle("hidden", isPlatformUser === false));
+    .forEach((panel) =>
+      panel.classList.toggle("hidden", isPlatformUser === false && !isTeacherUser),
+    );
   const search = $("assignment-search").value.trim();
   const status = $("assignment-status-filter").value;
   const params = new URLSearchParams({ page: assignmentPage, pageSize: ASSIGNMENT_PAGE_SIZE });
   if (search) params.set("search", search);
   if (status) params.set("status", status);
   try {
-    const apiFn = isPlatformUser === false ? studentAssignmentApi : assignmentApi;
+    const apiFn = isTeacherUser
+      ? teacherAssignmentApi
+      : isPlatformUser === false
+        ? studentAssignmentApi
+        : assignmentApi;
     const res = await apiFn(`?${params.toString()}`);
     const body = await parseResponse(res);
     assignmentData = body.items;
@@ -13730,6 +13753,30 @@ async function loadAssignments() {
 
 function renderAssignmentList(total) {
   const tbody = $("assignment-list-body");
+  if (isTeacherUser) {
+    tbody.innerHTML = assignmentData.length
+      ? assignmentData
+          .map(
+            (a) => `
+      <tr>
+        <td>${escapeHtml(a.title)}</td>
+        <td>${escapeHtml(a.className)}</td>
+        <td>${escapeHtml(a.templateTitle)}</td>
+        <td>${a.studentCount} öğrenci</td>
+        <td>${assignmentStatusBadge(a.status)}</td>
+        <td>${formatAssignmentDate(a.dueDate)}</td>
+        <td class="numeric">${a.sessionCount}</td>
+        <td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-teacher-results-id="${a.id}">Sonuçları Gör</button></td>
+      </tr>`,
+          )
+          .join("")
+      : '<tr><td colspan="8" class="empty-cell">Henüz atanmış ödev yok.</td></tr>';
+    const totalPages = Math.max(1, Math.ceil(total / ASSIGNMENT_PAGE_SIZE));
+    $("assignment-page-info").textContent = `${total} ödev · sayfa ${assignmentPage}/${totalPages}`;
+    $("assignment-prev-btn").disabled = assignmentPage <= 1;
+    $("assignment-next-btn").disabled = assignmentPage >= totalPages;
+    return;
+  }
   if (isPlatformUser === false) {
     const cards = $("student-assignment-cards");
     cards.innerHTML = assignmentData.length
@@ -13740,11 +13787,13 @@ function renderAssignmentList(total) {
               ["SCHEDULED", "ACTIVE"].includes(a.status) &&
               !["COMPLETED", "CLOSED"].includes(a.sessionStatus);
             const cta =
-              state.cta === "Devam Et"
-                ? `<button type="button" class="btn btn-primary" data-assignment-continue-id="${a.id}">${state.cta}</button>`
-                : canStart
-                  ? `<button type="button" class="btn btn-primary" data-assignment-start-id="${a.id}">${state.cta}</button>`
-                  : `<button type="button" class="btn btn-ghost" data-assignment-detail-id="${a.id}">Detayı Gör</button>`;
+              state.cta === "Sonuçları Gör"
+                ? `<button type="button" class="btn btn-primary" data-assignment-result-id="${a.id}">${state.cta}</button>`
+                : state.cta === "Devam Et"
+                  ? `<button type="button" class="btn btn-primary" data-assignment-continue-id="${a.id}">${state.cta}</button>`
+                  : canStart
+                    ? `<button type="button" class="btn btn-primary" data-assignment-start-id="${a.id}">${state.cta}</button>`
+                    : `<button type="button" class="btn btn-ghost" data-assignment-detail-id="${a.id}">Detayı Gör</button>`;
             return `<article class="learning-card assignment-student-card"><div class="learning-card-icon" aria-hidden="true">📝</div><div class="learning-card-content"><div class="learning-card-topline"><span class="badge ${state.cls}">${state.label}</span>${formatStudentDueDate(a.dueDate) ? `<span class="muted">${formatStudentDueDate(a.dueDate)}</span>` : ""}</div><h3>${escapeHtml(a.title)}</h3><p class="muted">${escapeHtml(a.teacherName)} · ${escapeHtml(a.organizationName || "Kurum çalışması")} · ${escapeHtml(a.className)}</p>${studentProgressMarkup(a)}<div class="learning-card-actions">${cta}<button type="button" class="btn btn-ghost" data-assignment-detail-id="${a.id}">Detay</button></div></div></article>`;
           })
           .join("")
@@ -13916,7 +13965,11 @@ async function openAssignmentDetail(id) {
   $("assignment-detail-body").innerHTML = '<p class="muted">Yükleniyor…</p>';
   $("assignment-detail-modal").classList.remove("hidden");
   try {
-    const apiFn = isPlatformUser === false ? studentAssignmentApi : assignmentApi;
+    const apiFn = isTeacherUser
+      ? teacherAssignmentApi
+      : isPlatformUser === false
+        ? studentAssignmentApi
+        : assignmentApi;
     const res = await apiFn(`/${encodeURIComponent(id)}`);
     const d = await parseResponse(res);
     assignmentDetailCurrent = d;
@@ -13933,18 +13986,26 @@ function renderAssignmentDetail(d) {
   const startBtn = $("assignment-detail-start");
   const editBtn = $("assignment-detail-edit");
   const deleteBtn = $("assignment-detail-delete");
-  if (isPlatformUser !== false) {
+  if (isTeacherUser) {
+    startBtn.style.display = "none";
+    editBtn.classList.add("hidden");
+    deleteBtn.classList.add("hidden");
+  } else if (isPlatformUser !== false) {
     const canEdit = d.status === "DRAFT" || d.status === "SCHEDULED";
     const canDelete = d.status === "DRAFT";
     startBtn.style.display = "none";
     editBtn.classList.toggle("hidden", !canEdit);
     deleteBtn.classList.toggle("hidden", !canDelete);
   } else {
-    const canStart = (d.status === "SCHEDULED" || d.status === "ACTIVE") && !d.hasInProgressSession;
+    const completed = d.sessionStatus === "COMPLETED";
+    const canStart =
+      (d.status === "SCHEDULED" || d.status === "ACTIVE") && !d.hasInProgressSession && !completed;
     const canContinue = d.hasInProgressSession;
-    startBtn.style.display = canStart ? "inline-block" : "none";
-    startBtn.textContent = canContinue ? "Devam Et" : "Başla";
+    startBtn.style.display = canStart || completed ? "inline-block" : "none";
+    startBtn.textContent = completed ? "Sonuçları Gör" : canContinue ? "Devam Et" : "Başla";
     startBtn.dataset.assignmentStartId = d.id;
+    delete startBtn.dataset.assignmentResultId;
+    if (completed) startBtn.dataset.assignmentResultId = d.id;
     if (canContinue) startBtn.dataset.assignmentContinueId = d.id;
     editBtn.classList.add("hidden");
     deleteBtn.classList.add("hidden");
@@ -13997,6 +14058,155 @@ async function startAssignmentSession(assignmentId) {
   }
 }
 
+function formatAssignmentDuration(ms) {
+  const totalSeconds = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes} dk ${String(seconds).padStart(2, "0")} sn`;
+}
+
+function assignmentResultStatsMarkup(result) {
+  if (!result) return '<p class="muted">Bu ödev için henüz bir deneme yok.</p>';
+  return `<div class="info-grid">
+    <div class="info-item"><dt>Toplam soru</dt><dd>${result.totalQuestions}</dd></div>
+    <div class="info-item"><dt>Doğru</dt><dd>${result.correct}</dd></div>
+    <div class="info-item"><dt>Yanlış</dt><dd>${result.wrong}</dd></div>
+    <div class="info-item"><dt>Boş</dt><dd>${result.blank}</dd></div>
+    <div class="info-item"><dt>Başarı</dt><dd>${result.percentage === null ? "—" : `%${result.percentage}`}</dd></div>
+    <div class="info-item"><dt>Süre</dt><dd>${formatAssignmentDuration(result.timeSpentMs)}</dd></div>
+    <div class="info-item"><dt>Başlama</dt><dd>${formatAssignmentDateTime(result.startedAt)}</dd></div>
+    <div class="info-item"><dt>Tamamlanma</dt><dd>${formatAssignmentDateTime(result.completedAt)}</dd></div>
+  </div>`;
+}
+
+function renderStudentAssignmentResult(payload) {
+  const result = payload.result;
+  const latest = result.latest;
+  const history = [...result.history].reverse();
+  const skills = latest?.skills ?? [];
+  $("assignment-detail-title").textContent = `${payload.assignment.title} · Sonuç`;
+  $("assignment-detail-start").style.display = "none";
+  $("assignment-detail-edit").classList.add("hidden");
+  $("assignment-detail-delete").classList.add("hidden");
+  $("assignment-detail-body").innerHTML = `
+    <section class="detail-section"><h4>Son deneme</h4>${assignmentResultStatsMarkup(latest)}</section>
+    ${skills.length ? `<section class="detail-section"><h4>Beceri sonuçları</h4><div class="stack">${skills.map((skill) => `<div class="student-progress-label"><span>${escapeHtml(skill.name)}</span><strong>${skill.percentage === null ? "—" : `%${skill.percentage}`}</strong></div>`).join("")}</div></section>` : ""}
+    ${history.length > 1 ? `<section class="detail-section"><h4>Deneme geçmişi</h4><div class="stack">${history.map((attempt, index) => `<div class="card" style="padding:12px"><strong>Deneme ${history.length - index}</strong><span class="muted">${attempt.percentage === null ? "—" : `%${attempt.percentage}`} · ${formatAssignmentDuration(attempt.timeSpentMs)}</span></div>`).join("")}</div></section>` : ""}`;
+}
+
+async function openStudentAssignmentResult(id) {
+  $("assignment-detail-body").innerHTML = '<p class="muted">Sonuçların yükleniyor…</p>';
+  $("assignment-detail-modal").classList.remove("hidden");
+  try {
+    const payload = await parseResponse(
+      await studentAssignmentApi(`/${encodeURIComponent(id)}/result`),
+    );
+    renderStudentAssignmentResult(payload);
+  } catch (err) {
+    $("assignment-detail-body").innerHTML =
+      `<p class="error">${escapeHtml(err.message || "Sonuçlar yüklenemedi.")}</p>`;
+  }
+}
+
+function renderTeacherAssignmentResults(payload) {
+  const s = payload.summary;
+  $("teacher-results-title").textContent = `${payload.assignment.title} · Sonuçlar`;
+  $("teacher-results-body").innerHTML = `
+    <section class="detail-section"><h4>Sınıf özeti</h4><div class="info-grid">
+      <div class="info-item"><dt>Toplam öğrenci</dt><dd>${s.totalStudents}</dd></div>
+      <div class="info-item"><dt>Atanmış</dt><dd>${s.assigned}</dd></div>
+      <div class="info-item"><dt>Başlayan</dt><dd>${s.started}</dd></div>
+      <div class="info-item"><dt>Tamamlayan</dt><dd>${s.completed}</dd></div>
+      <div class="info-item"><dt>Ortalama başarı</dt><dd>${s.averagePercentage === null ? "—" : `%${s.averagePercentage}`}</dd></div>
+    </div></section>
+    <section class="detail-section"><h4>Öğrenci sonuçları</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Öğrenci</th><th>Durum</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Başarı</th><th>Beceriler</th></tr></thead><tbody>${payload.students
+      .map((student) => {
+        const r = student.latest;
+        const status =
+          r?.status === "COMPLETED" || student.assignmentStatus === "COMPLETED"
+            ? "Tamamlandı"
+            : student.assignmentStatus === "IN_PROGRESS"
+              ? "Başlandı"
+              : "Atandı";
+        return `<tr><td>${escapeHtml(student.studentName || student.studentEmail || "Öğrenci")}</td><td>${status}</td><td>${r ? r.correct : "—"}</td><td>${r ? r.wrong : "—"}</td><td>${r ? r.blank : "—"}</td><td>${r?.percentage === null || r?.percentage === undefined ? "—" : `%${r.percentage}`}</td><td>${r?.skills?.length ? r.skills.map((skill) => `${escapeHtml(skill.name)} %${skill.percentage ?? "—"}`).join(" · ") : "—"}</td></tr>`;
+      })
+      .join("")}</tbody></table></div></section>`;
+}
+
+async function openTeacherAssignmentResults(id) {
+  $("teacher-results-body").innerHTML = '<p class="muted">Sonuçlar yükleniyor…</p>';
+  $("teacher-results-modal").classList.remove("hidden");
+  try {
+    renderTeacherAssignmentResults(
+      await parseResponse(await teacherAssignmentApi(`/${encodeURIComponent(id)}/results`)),
+    );
+  } catch (err) {
+    $("teacher-results-body").innerHTML =
+      `<p class="error">${escapeHtml(err.message || "Sonuçlar yüklenemedi.")}</p>`;
+  }
+}
+
+let teacherAssignmentClasses = [];
+async function populateTeacherAssignmentForm() {
+  const classSelect = $("teacher-assignment-class");
+  const studentSelect = $("teacher-assignment-student");
+  const templateSelect = $("teacher-assignment-template");
+  classSelect.innerHTML = '<option value="">Yükleniyor…</option>';
+  templateSelect.innerHTML = '<option value="">Yükleniyor…</option>';
+  try {
+    const [classes, templates] = await Promise.all([
+      parseResponse(await teacherAssignmentResourceApi("/classes")),
+      parseResponse(await teacherAssignmentResourceApi("/templates")),
+    ]);
+    teacherAssignmentClasses = classes;
+    classSelect.innerHTML = `<option value="">Sınıf seçin…</option>${classes.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+    templateSelect.innerHTML = `<option value="">Şablon seçin…</option>${templates.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)}</option>`).join("")}`;
+    studentSelect.innerHTML = '<option value="">Tüm sınıf</option>';
+  } catch (err) {
+    $("teacher-assignment-form-error").textContent =
+      err.message || "Sınıf ve şablonlar yüklenemedi.";
+    $("teacher-assignment-form-error").classList.remove("hidden");
+  }
+}
+
+function closeTeacherAssignmentForm() {
+  $("teacher-assignment-form-modal").classList.add("hidden");
+}
+
+async function submitTeacherAssignmentForm(event) {
+  event.preventDefault();
+  const error = $("teacher-assignment-form-error");
+  error.classList.add("hidden");
+  const classId = $("teacher-assignment-class").value;
+  const templateId = $("teacher-assignment-template").value;
+  const title = $("teacher-assignment-title").value.trim();
+  if (!classId || !templateId || !title) {
+    error.textContent = "Sınıf, şablon ve başlık gereklidir.";
+    error.classList.remove("hidden");
+    return;
+  }
+  const dueDate = $("teacher-assignment-due-date").value;
+  const payload = { classId, templateId, title, status: "ACTIVE" };
+  const studentId = $("teacher-assignment-student").value;
+  if (studentId) payload.studentId = studentId;
+  if (dueDate) payload.dueDate = new Date(dueDate).toISOString();
+  const button = $("teacher-assignment-form-submit");
+  button.disabled = true;
+  try {
+    await parseResponse(
+      await teacherAssignmentApi("", { method: "POST", body: JSON.stringify(payload) }),
+    );
+    closeTeacherAssignmentForm();
+    assignmentPage = 1;
+    await loadAssignments();
+  } catch (err) {
+    error.textContent = err.message || "Ödev atanamadı.";
+    error.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function setupAssignmentEvents() {
   $("assignment-list-body").addEventListener("click", (event) => {
     const detailBtn = event.target.closest("[data-assignment-detail-id]");
@@ -14004,8 +14214,14 @@ function setupAssignmentEvents() {
     const deleteBtn = event.target.closest("[data-assignment-delete-id]");
     const startBtn = event.target.closest("[data-assignment-start-id]");
     const continueBtn = event.target.closest("[data-assignment-continue-id]");
+    const resultBtn = event.target.closest("[data-assignment-result-id]");
+    const teacherResultsBtn = event.target.closest("[data-teacher-results-id]");
     if (detailBtn) {
       void openAssignmentDetail(detailBtn.dataset.assignmentDetailId);
+    } else if (resultBtn) {
+      void openStudentAssignmentResult(resultBtn.dataset.assignmentResultId);
+    } else if (teacherResultsBtn) {
+      void openTeacherAssignmentResults(teacherResultsBtn.dataset.teacherResultsId);
     } else if (startBtn) {
       void startAssignmentSession(startBtn.dataset.assignmentStartId);
     } else if (continueBtn) {
@@ -14019,11 +14235,13 @@ function setupAssignmentEvents() {
   });
   $("student-assignment-cards")?.addEventListener("click", (event) => {
     const target = event.target.closest(
-      "[data-assignment-detail-id], [data-assignment-start-id], [data-assignment-continue-id]",
+      "[data-assignment-detail-id], [data-assignment-result-id], [data-assignment-start-id], [data-assignment-continue-id]",
     );
     if (!target) return;
     if (target.dataset.assignmentDetailId)
       return void openAssignmentDetail(target.dataset.assignmentDetailId);
+    if (target.dataset.assignmentResultId)
+      return void openStudentAssignmentResult(target.dataset.assignmentResultId);
     void startAssignmentSession(
       target.dataset.assignmentStartId || target.dataset.assignmentContinueId,
     );
@@ -14056,7 +14274,11 @@ function setupAssignmentEvents() {
   $("assignment-detail-start").addEventListener("click", () => {
     if (!assignmentDetailCurrent) return;
     $("assignment-detail-modal").classList.add("hidden");
-    void startAssignmentSession(assignmentDetailCurrent.id);
+    if ($("assignment-detail-start").dataset.assignmentResultId) {
+      void openStudentAssignmentResult(assignmentDetailCurrent.id);
+    } else {
+      void startAssignmentSession(assignmentDetailCurrent.id);
+    }
   });
   $("assignment-detail-edit").addEventListener("click", () => {
     if (!assignmentDetailCurrent) return;
@@ -14067,6 +14289,22 @@ function setupAssignmentEvents() {
     if (!assignmentDetailCurrent) return;
     $("assignment-detail-modal").classList.add("hidden");
     void deleteAssignment(assignmentDetailCurrent.id);
+  });
+  $("teacher-assignment-create-btn")?.addEventListener("click", () => {
+    $("teacher-assignment-form-error").classList.add("hidden");
+    $("teacher-assignment-form-modal").classList.remove("hidden");
+    void populateTeacherAssignmentForm();
+  });
+  $("teacher-assignment-form")?.addEventListener("submit", submitTeacherAssignmentForm);
+  $("teacher-assignment-form-close")?.addEventListener("click", closeTeacherAssignmentForm);
+  $("teacher-assignment-form-cancel")?.addEventListener("click", closeTeacherAssignmentForm);
+  $("teacher-results-close")?.addEventListener("click", () =>
+    $("teacher-results-modal").classList.add("hidden"),
+  );
+  $("teacher-assignment-class")?.addEventListener("change", (event) => {
+    const classItem = teacherAssignmentClasses.find((item) => item.id === event.target.value);
+    $("teacher-assignment-student").innerHTML =
+      `<option value="">Tüm sınıf</option>${(classItem?.students ?? []).map((student) => `<option value="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</option>`).join("")}`;
   });
 }
 async function init() {

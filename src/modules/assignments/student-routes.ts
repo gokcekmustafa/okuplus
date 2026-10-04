@@ -8,6 +8,7 @@ import {
   getStudentAssignment,
   startAssignmentSession,
 } from "./student-service.js";
+import { getStudentAssignmentResult } from "./results-service.js";
 
 function readParamId(request: FastifyRequest, label: string, key = "id"): string {
   const id = (request.params as Record<string, string | undefined>)[key];
@@ -51,6 +52,19 @@ export async function assignmentStudentRoutes(
     };
     return ok(await getStudentAssignment(readParamId(request, "Ödev"), actor));
   });
+
+  app.get(
+    "/student/assignments/:id/result",
+    { preHandler: requireStudentAuth },
+    async (request) => {
+      const actor = {
+        userId: request.authUser!.id,
+        tenantId: request.tenantContext?.tenantId ?? null,
+        platformRole: request.authUser?.platformRole ?? null,
+      };
+      return ok(await getStudentAssignmentResult(readParamId(request, "Ödev"), actor));
+    },
+  );
 
   app.post(
     "/student/assignments/:id/start",

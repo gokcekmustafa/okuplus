@@ -14,7 +14,11 @@ import {
 import { authRoutes } from "./modules/auth/routes.js";
 import { createCookieCsrfGuard } from "./modules/auth/csrf.js";
 import { assessmentAdminRoutes, assessmentStudentRoutes } from "./modules/assessments/index.js";
-import { assignmentAdminRoutes, assignmentStudentRoutes } from "./modules/assignments/index.js";
+import {
+  assignmentAdminRoutes,
+  assignmentStudentRoutes,
+  assignmentTeacherRoutes,
+} from "./modules/assignments/index.js";
 import { branchAdminRoutes } from "./modules/branches/index.js";
 import { classAdminRoutes } from "./modules/classes/index.js";
 import { contentAdminRoutes } from "./modules/contents/index.js";
@@ -129,6 +133,7 @@ export async function buildApp(
   await app.register(mediaAdminRoutes, { authProvider });
   await app.register(assignmentAdminRoutes, { authProvider });
   await app.register(assignmentStudentRoutes, { authProvider });
+  await app.register(assignmentTeacherRoutes, { authProvider });
   await app.register(assessmentAdminRoutes, { authProvider });
   await app.register(assessmentStudentRoutes, { authProvider });
   await app.register(progressStudentRoutes, { authProvider });

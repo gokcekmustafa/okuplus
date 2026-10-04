@@ -343,6 +343,7 @@ export class JwtAuthProvider implements AuthProvider {
       platformRole: null,
       tenantType: selected.tenant.type as "INDIVIDUAL" | "ORGANIZATION",
       tenantName: selected.tenant.name,
+      role: selected.role,
     };
   }
 

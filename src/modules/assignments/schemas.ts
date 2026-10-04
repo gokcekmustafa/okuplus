@@ -8,6 +8,7 @@ import { z } from "zod";
  */
 
 const assignmentStatusSchema = z.enum(["DRAFT", "SCHEDULED", "ACTIVE", "CLOSED"]);
+const teacherAssignmentStatusSchema = z.enum(["SCHEDULED", "ACTIVE"]);
 
 const titleSchema = z
   .string()
@@ -47,8 +48,21 @@ export const listAssignmentsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+/** Öğretmenin kendi yetki alanına ödev atama gövdesi. */
+export const createTeacherAssignmentSchema = z.object({
+  classId: z.string().trim().min(1, "Sınıf gerekli"),
+  studentId: z.string().trim().min(1).optional(),
+  templateId: z.string().trim().min(1, "Şablon gerekli"),
+  learningStepId: z.string().trim().min(1).nullable().optional(),
+  title: titleSchema,
+  dueDate: z.coerce.date().nullable().optional(),
+  status: teacherAssignmentStatusSchema.default("ACTIVE"),
+});
+
 export type CreateAssignmentInput = z.infer<typeof createAssignmentSchema>;
 export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;
 export type UpdateAssignmentStatusInput = z.infer<typeof updateAssignmentStatusSchema>;
 export type ListAssignmentsQuery = z.infer<typeof listAssignmentsQuerySchema>;
 export type AssignmentStatus = z.infer<typeof assignmentStatusSchema>;
+export type CreateTeacherAssignmentInput = z.infer<typeof createTeacherAssignmentSchema>;
+export type TeacherAssignmentStatus = z.infer<typeof teacherAssignmentStatusSchema>;
