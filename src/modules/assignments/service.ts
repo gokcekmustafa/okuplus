@@ -39,6 +39,7 @@ const ASSIGNMENT_LIST_SELECT = {
   classId: true,
   templateId: true,
   learningStepId: true,
+  templateVersionId: true,
   teacherId: true,
   title: true,
   dueDate: true,
@@ -59,6 +60,7 @@ export interface AssignmentListItem {
   classStatus: string;
   templateId: string;
   learningStepId: string | null;
+  templateVersionId: string | null;
   templateTitle: string;
   templateType: string;
   templateStatus: string;
@@ -128,6 +130,7 @@ export async function listAssignments(query: ListAssignmentsQuery): Promise<Assi
       classStatus: cls.status,
       templateId: a.templateId,
       learningStepId: a.learningStepId,
+      templateVersionId: a.templateVersionId,
       templateTitle: template.title,
       templateType: template.type,
       templateStatus: template.status,
@@ -201,6 +204,13 @@ export async function createAssignment(
     throw validationError("Şablon bu kuruma ait değil");
   }
 
+  const templateVersion = await prisma.exerciseTemplateVersion.findFirst({
+    where: { templateId: template.id, status: "PUBLISHED" },
+    select: { id: true },
+    orderBy: { version: "desc" },
+  });
+  if (!templateVersion) throw validationError("Şablonun yayınlanmış sürümü bulunamadı");
+
   if (input.learningStepId) {
     const step = await prisma.learningStep.findFirst({
       where: {
@@ -229,6 +239,7 @@ export async function createAssignment(
       tenantId: cls.tenantId,
       classId: input.classId,
       templateId: input.templateId,
+      templateVersionId: templateVersion.id,
       learningStepId: input.learningStepId ?? null,
       teacherId: input.teacherId,
       title: input.title,
@@ -284,6 +295,9 @@ export async function updateAssignmentStatus(
   }
 
   await prisma.assignment.update({ where: { id }, data });
+  if (input.status === "SCHEDULED" || input.status === "ACTIVE") {
+    await ensureClassStudentAssignments(existing);
+  }
   return getAssignment(id);
 }
 
@@ -341,6 +355,7 @@ export async function listClassAssignments(classId: string): Promise<AssignmentL
     classStatus: cls.status,
     templateId: a.templateId,
     learningStepId: a.learningStepId,
+    templateVersionId: a.templateVersionId,
     templateTitle: template.title,
     templateType: template.type,
     templateStatus: template.status,
@@ -378,6 +393,7 @@ function toAssignmentItem(
     classId: string;
     templateId: string;
     learningStepId: string | null;
+    templateVersionId: string | null;
     teacherId: string;
     title: string;
     dueDate: Date | null;
@@ -399,6 +415,7 @@ function toAssignmentItem(
     classStatus: row.class.status,
     templateId: row.templateId,
     learningStepId: row.learningStepId,
+    templateVersionId: row.templateVersionId,
     templateTitle: row.template.title,
     templateType: row.template.type,
     templateStatus: row.template.status,
@@ -412,4 +429,28 @@ function toAssignmentItem(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function ensureClassStudentAssignments(assignment: {
+  id: string;
+  tenantId: string;
+  classId: string;
+  dueDate: Date | null;
+}) {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { classId: assignment.classId, status: "ACTIVE", deletedAt: null },
+    select: { studentId: true },
+  });
+  if (enrollments.length === 0) return;
+
+  await prisma.studentAssignment.createMany({
+    data: enrollments.map((enrollment) => ({
+      tenantId: assignment.tenantId,
+      assignmentId: assignment.id,
+      studentId: enrollment.studentId,
+      source: "MANUAL" as const,
+      dueAt: assignment.dueDate,
+    })),
+    skipDuplicates: true,
+  });
 }

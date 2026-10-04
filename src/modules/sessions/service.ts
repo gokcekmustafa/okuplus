@@ -548,6 +548,7 @@ export async function completeExerciseSession(
       id: true,
       tenantId: true,
       studentId: true,
+      assignmentId: true,
       assessmentId: true,
       learningStepId: true,
       deviceInfo: true,
@@ -750,8 +751,23 @@ export async function completeExerciseSession(
     await syncTrainingSessionItem(id);
   }
 
+  if (session.assignmentId) {
+    await prisma.studentAssignment.updateMany({
+      where: {
+        assignmentId: session.assignmentId,
+        studentId: session.studentId,
+      },
+      data: {
+        status: "COMPLETED",
+        completedAt: updated.completedAt,
+      },
+    });
+  }
+
   const shouldSyncLearningPath =
-    !session.trainingSessionItem && !isIndependentTrainingSession(session.deviceInfo);
+    !session.assignmentId &&
+    !session.trainingSessionItem &&
+    !isIndependentTrainingSession(session.deviceInfo);
   if (session.tenantId && shouldSyncLearningPath) {
     const learningActor = {
       userId: session.studentId,

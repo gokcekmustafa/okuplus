@@ -58,6 +58,7 @@ describe("assignment admin", () => {
 
     // Clean leftover
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.assignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.enrollment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.teacherClassAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
@@ -286,6 +287,7 @@ describe("assignment admin", () => {
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.assignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.enrollment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.teacherClassAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
