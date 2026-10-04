@@ -61,6 +61,7 @@ describe("assignment student", () => {
     // Clean leftover
     await prisma.attempt.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.assignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.enrollment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.teacherClassAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
@@ -331,6 +332,7 @@ describe("assignment student", () => {
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.attempt.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.assignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.enrollment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.teacherClassAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
@@ -752,6 +754,7 @@ describe("assignment student", () => {
           assignmentId: true,
           context: true,
           sessionType: true,
+          learningStepId: true,
           studentId: true,
           tenantId: true,
         },
@@ -760,8 +763,23 @@ describe("assignment student", () => {
       expect(session!.assignmentId).toBe(startActiveId);
       expect(session!.context).toBe("ASSIGNMENT");
       expect(session!.sessionType).toBe("PRACTICE");
+      expect(session!.learningStepId).toBeNull();
       expect(session!.studentId).toBe(STUDENT_A_ID);
       expect(session!.tenantId).toBe(TENANT_A);
+
+      const recipient = await prisma.studentAssignment.findUnique({
+        where: {
+          assignmentId_studentId: { assignmentId: startActiveId, studentId: STUDENT_A_ID },
+        },
+        select: { status: true, tenantId: true, source: true },
+      });
+      expect(recipient).toEqual({ status: "IN_PROGRESS", tenantId: TENANT_A, source: "MANUAL" });
+
+      const assignment = await prisma.assignment.findUnique({
+        where: { id: startActiveId },
+        select: { templateVersionId: true },
+      });
+      expect(assignment?.templateVersionId).toBe(TEMPLATE_VERSION_A);
     });
 
     it("should return 404 for non-existent assignment", async () => {
