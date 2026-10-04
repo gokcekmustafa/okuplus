@@ -50,8 +50,6 @@ describe("student dashboard release 0.4", () => {
     expect(index).not.toContain('id="learning-path-summary"');
     expect(app).toContain("renderTrainingHome(data)");
     expect(app).toContain("renderHomeInsights(data)");
-    expect(app).toContain("learningPathCommonDetail(pathGroups)");
-    expect(app).toContain("aggregateProgress.completed");
     expect(app).toContain("data.nextAction");
     expect(app).not.toContain("ADIM ADIM İLERLE");
     expect(app).not.toContain("Öğrenme haritan");

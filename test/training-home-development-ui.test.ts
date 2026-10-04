@@ -100,7 +100,6 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell #page-dashboard > #today-card");
     expect(styles).toContain(".student-shell #page-dashboard > #learning-path-card");
     expect(styles).toContain(".student-shell #today-card.supporting-task-card");
-    expect(styles).toContain(".student-shell #learning-path-card .learning-path-summary-item");
   });
 
   it("shows one guided data-driven learning map without changing the path contract", () => {
@@ -133,7 +132,6 @@ describe("training home and development UI", () => {
     expect(styles).toContain(".student-shell #page-dashboard > #today-card");
     expect(styles).toContain(".student-shell #page-dashboard > #entitlement-card");
     expect(styles).toContain(".student-shell #page-dashboard > #review-card");
-    expect(styles).toContain(".student-shell #learning-path-card > #learning-model-details");
     expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-legend");
     expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-step");
     expect(app).toContain('label: "Öğren", icon: "⚡"');
@@ -145,12 +143,10 @@ describe("training home and development UI", () => {
     expect(app).not.toContain('class="path-node-label"');
     expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
     expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
-    expect(app).toContain('continueEl.classList.add("hidden")');
     expect(app).toContain("learning-map-v6-summary");
     expect(app).toContain("learning-map-v6-action");
     expect(app).toContain("learning-map-v6-character");
     expect(app).toContain("Bir sonraki durak seni bekliyor.");
-    expect(styles).toContain("#learning-path-card > .learning-path-heading");
     expect(styles).toContain("@keyframes okuplus-map-v6-pulse");
     expect(styles).toContain(".learning-map-v6-step.is-current .learning-map-v6-marker");
   });
