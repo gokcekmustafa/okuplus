@@ -14291,6 +14291,19 @@ function assignmentResultStatsMarkup(result) {
   </div>`;
 }
 
+function assignmentGamificationMarkup(gamification) {
+  if (!gamification) return "";
+  const points = Number(gamification.pointsAwarded) || 0;
+  const currentStreak = Number(gamification.currentStreak) || 0;
+  const longestStreak = Number(gamification.longestStreak) || 0;
+  const badges = Array.isArray(gamification.badges) ? gamification.badges : [];
+  return `<section class="detail-section"><h4>Bu ödevden kazandıkların</h4><div class="info-grid">
+    <div class="info-item"><dt>Gelişim puanı</dt><dd>+${points} GP</dd></div>
+    <div class="info-item"><dt>Güncel seri</dt><dd>🔥 ${currentStreak} gün</dd></div>
+    <div class="info-item"><dt>En uzun seri</dt><dd>${longestStreak} gün</dd></div>
+  </div>${badges.length ? `<div class="stack" style="margin-top:12px"><strong>Kazanılan rozet</strong>${badges.map((badge) => `<div class="card" style="padding:12px"><strong>${escapeHtml(badge.name)}</strong>${badge.description ? `<span class="muted">${escapeHtml(badge.description)}</span>` : ""}</div>`).join("")}</div>` : ""}</section>`;
+}
+
 function renderStudentAssignmentResult(payload) {
   const result = payload.result;
   const latest = result.latest;
@@ -14302,6 +14315,7 @@ function renderStudentAssignmentResult(payload) {
   $("assignment-detail-delete").classList.add("hidden");
   $("assignment-detail-body").innerHTML = `
     <section class="detail-section"><h4>Son deneme</h4>${assignmentResultStatsMarkup(latest)}</section>
+    ${assignmentGamificationMarkup(payload.gamification)}
     ${skills.length ? `<section class="detail-section"><h4>Beceri sonuçları</h4><div class="stack">${skills.map((skill) => `<div class="student-progress-label"><span>${escapeHtml(skill.name)}</span><strong>${skill.percentage === null ? "—" : `%${skill.percentage}`}</strong></div>`).join("")}</div></section>` : ""}
     ${history.length > 1 ? `<section class="detail-section"><h4>Deneme geçmişi</h4><div class="stack">${history.map((attempt, index) => `<div class="card" style="padding:12px"><strong>Deneme ${history.length - index}</strong><span class="muted">${attempt.percentage === null ? "—" : `%${attempt.percentage}`} · ${formatAssignmentDuration(attempt.timeSpentMs)}</span></div>`).join("")}</div></section>` : ""}`;
 }

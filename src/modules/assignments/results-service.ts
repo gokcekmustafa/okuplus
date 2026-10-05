@@ -3,6 +3,10 @@ import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError } from "../../lib/errors.js";
 import { assertTeacherClassAccess, type TeacherAssignmentActor } from "./teacher-service.js";
 import { resolveStudentAssignment } from "./student-service.js";
+import {
+  getAssignmentGamificationOutcome,
+  type AssignmentGamificationOutcome,
+} from "../gamification/foundation.js";
 
 export interface AssignmentSkillResult {
   skillId: string;
@@ -47,6 +51,7 @@ export interface StudentAssignmentResultResponse {
     dueDate: Date | null;
   };
   result: StudentAssignmentResult;
+  gamification: AssignmentGamificationOutcome | null;
 }
 
 export interface TeacherAssignmentResultsResponse {
@@ -385,6 +390,11 @@ export async function getStudentAssignmentResult(
       dueDate: assignment.dueDate,
     },
     result: rows[0]!,
+    gamification: await getAssignmentGamificationOutcome(
+      assignment.tenantId ?? actor.tenantId ?? "",
+      actor.userId,
+      id,
+    ),
   };
 }
 
