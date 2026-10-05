@@ -323,6 +323,16 @@ enum PointEventType {
   STREAK_MILESTONE
   BADGE_EARNED
   DAILY_LOGIN
+  ASSIGNMENT_COMPLETED
+  TRAINING_COMPLETED
+  LEARNING_ACTIVITY_COMPLETED
+}
+
+/// Canonical input events for the independent gamification foundation.
+enum GamificationEventType {
+  ASSIGNMENT_COMPLETED
+  TRAINING_COMPLETED
+  LEARNING_ACTIVITY_COMPLETED
 }
 
 enum ConsentType {
@@ -512,6 +522,10 @@ model User {
   studentBadges            StudentBadge[]
   pointEvents              PointEvent[]
   studentStreaks           StudentStreak[]
+  gamificationEvents       GamificationEvent[]       @relation("GamificationEventStudent")
+  gamificationAchievements StudentAchievement[]
+  gamificationStreakStates GamificationStreakState[]
+  gamificationStreakDays   GamificationStreakDay[]
   assessmentResults        AssessmentResult[]
   baselines                StudentBaseline[]
   lessonProgress           StudentLessonProgress[]
@@ -621,6 +635,10 @@ model Tenant {
   pointEvents              PointEvent[]
   studentBadges            StudentBadge[]
   studentStreaks           StudentStreak[]
+  gamificationEvents       GamificationEvent[]       @relation("GamificationEventTenant")
+  gamificationAchievements StudentAchievement[]
+  gamificationStreakStates GamificationStreakState[]
+  gamificationStreakDays   GamificationStreakDay[]
   assessmentResults        AssessmentResult[]
   baselines                 StudentBaseline[]
   lessonProgress            StudentLessonProgress[]
@@ -1863,13 +1881,112 @@ model PointEvent {
   student    User           @relation(fields: [studentId], references: [id], onDelete: Restrict)
   eventType  PointEventType
   points     Int
+  reasonCode String?
   sourceType String?
   sourceId   String?
+  gamificationEventId String?
+  gamificationEvent   GamificationEvent? @relation(fields: [gamificationEventId], references: [id], onDelete: SetNull)
   dedupeKey  String? // client-generated idempotency anahtarı
   createdAt  DateTime       @default(now())
 
   @@unique([tenantId, dedupeKey])
   @@index([studentId, tenantId, createdAt])
+  @@index([gamificationEventId])
+}
+
+/// Immutable input receipt for the independent gamification event pipeline.
+/// The source reference and idempotency key both protect against replay.
+model GamificationEvent {
+  id                String               @id @default(dbgenerated("uuidv7()"))
+  tenantId          String
+  tenant            Tenant               @relation("GamificationEventTenant", fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId         String
+  student           User                 @relation("GamificationEventStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  eventType         GamificationEventType
+  sourceType        String
+  sourceReference   String
+  idempotencyKey    String
+  occurredAt        DateTime
+  timezone          String               @default("UTC")
+  metadata          Json?
+  createdAt         DateTime             @default(now())
+
+  pointEvents       PointEvent[]
+  achievements      StudentAchievement[] @relation("GamificationAchievementSourceEvent")
+  streakDays        GamificationStreakDay[] @relation("GamificationStreakDaySourceEvent")
+
+  @@unique([tenantId, idempotencyKey], map: "GamificationEvent_tenantId_idempotencyKey_key")
+  @@unique([tenantId, studentId, eventType, sourceType, sourceReference], map: "GamificationEvent_source_key")
+  @@index([tenantId, studentId, eventType, occurredAt])
+  @@index([tenantId, studentId, sourceType, sourceReference])
+}
+
+/// Global, code-addressable achievement catalog. Tenant-scoped student awards
+/// are stored separately so definitions can be shared without leaking data.
+model AchievementDefinition {
+  id          String   @id @default(dbgenerated("uuidv7()"))
+  code        String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  studentAchievements StudentAchievement[]
+}
+
+/// Immutable student achievement awards. A definition can be awarded once per
+/// student and tenant, even when the input event is replayed.
+model StudentAchievement {
+  id                     String                 @id @default(dbgenerated("uuidv7()"))
+  tenantId               String
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId              String
+  student                User                   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  achievementDefinitionId String
+  achievementDefinition  AchievementDefinition @relation(fields: [achievementDefinitionId], references: [id], onDelete: Restrict)
+  sourceEventId          String?
+  sourceEvent            GamificationEvent?     @relation("GamificationAchievementSourceEvent", fields: [sourceEventId], references: [id], onDelete: SetNull)
+  awardedAt              DateTime               @default(now())
+
+  @@unique([tenantId, studentId, achievementDefinitionId], map: "StudentAchievement_tenant_student_definition_key")
+  @@index([tenantId, studentId, awardedAt])
+}
+
+/// One row per eligible local calendar day. This is the idempotency boundary
+/// for streaks; several activities on the same day cannot add several days.
+model GamificationStreakDay {
+  id            String             @id @default(dbgenerated("uuidv7()"))
+  tenantId      String
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId     String
+  student       User               @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  activityDate  DateTime           @db.Date
+  timezone      String
+  sourceEventId String?
+  sourceEvent   GamificationEvent? @relation("GamificationStreakDaySourceEvent", fields: [sourceEventId], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+
+  @@unique([tenantId, studentId, activityDate], map: "GamificationStreakDay_tenant_student_date_key")
+  @@index([tenantId, studentId, activityDate])
+}
+
+/// Cached streak state for fast reads. The day ledger remains the source of
+/// idempotency and makes the state rebuildable if required later.
+model GamificationStreakState {
+  id               String    @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student           User      @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  currentDays      Int       @default(0)
+  longestDays      Int       @default(0)
+  lastActivityDate DateTime? @db.Date
+  timezone         String    @default("UTC")
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([tenantId, studentId], map: "GamificationStreakState_tenant_student_key")
+  @@index([tenantId, lastActivityDate])
 }
 
 model StudentStreak {

@@ -24,7 +24,10 @@ import { classAdminRoutes } from "./modules/classes/index.js";
 import { contentAdminRoutes } from "./modules/contents/index.js";
 import { entitlementRoutes } from "./modules/entitlements/index.js";
 import { billingRoutes } from "./modules/billing/index.js";
-import { gamificationStudentRoutes } from "./modules/gamification/index.js";
+import {
+  gamificationFoundationRoutes,
+  gamificationStudentRoutes,
+} from "./modules/gamification/index.js";
 import { onboardingRoutes } from "./modules/onboarding/index.js";
 import { studentLearningRoutes } from "./modules/student-learning/index.js";
 import { baselineStudentRoutes } from "./modules/baseline/index.js";
@@ -141,6 +144,7 @@ export async function buildApp(
   await app.register(billingRoutes, { authProvider, env });
   await app.register(pilotRoutes, { authProvider, env });
   await app.register(gamificationStudentRoutes, { authProvider });
+  await app.register(gamificationFoundationRoutes, { authProvider });
   await app.register(onboardingRoutes, { authProvider });
   await app.register(studentLearningRoutes, { authProvider });
   await app.register(baselineStudentRoutes, { authProvider });
