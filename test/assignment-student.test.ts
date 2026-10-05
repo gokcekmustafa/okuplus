@@ -4,6 +4,7 @@ import { prisma } from "../src/lib/prisma.js";
 import { ScryptPasswordHasher } from "../src/modules/auth/index.js";
 import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
+import { processGamificationEvent } from "../src/modules/gamification/foundation.js";
 
 const hasher = new ScryptPasswordHasher();
 const PASSWORD = "astudent-test-pass-123!";
@@ -59,6 +60,11 @@ describe("assignment student", () => {
     await prisma.$connect();
 
     // Clean leftover
+    await prisma.studentAchievement.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationStreakDay.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.pointEvent.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationEvent.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationStreakState.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.attempt.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.studentAssignment.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
@@ -83,6 +89,7 @@ describe("assignment student", () => {
     await prisma.branch.deleteMany({ where: { id: BRANCH_A } });
     await prisma.user.deleteMany({ where: { id: { in: USER_IDS } } });
     await prisma.tenant.deleteMany({ where: { id: { in: TENANT_IDS } } });
+    await prisma.achievementDefinition.deleteMany({ where: { code: "FIRST_ASSIGNMENT" } });
 
     // Create tenants
     for (const tid of TENANT_IDS) {
@@ -319,6 +326,21 @@ describe("assignment student", () => {
       },
     });
 
+    await prisma.achievementDefinition.upsert({
+      where: { code: "FIRST_ASSIGNMENT" },
+      update: {
+        name: "İlk ödev",
+        description: "İlk ödevini tamamladın.",
+        active: true,
+      },
+      create: {
+        code: "FIRST_ASSIGNMENT",
+        name: "İlk ödev",
+        description: "İlk ödevini tamamladın.",
+        active: true,
+      },
+    });
+
     // Build app
     const env = loadEnv();
     app = await buildApp(env);
@@ -327,8 +349,12 @@ describe("assignment student", () => {
 
   afterAll(async () => {
     // Cleanup
-    await prisma.studentBadge.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentAchievement.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationStreakDay.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationEvent.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.gamificationStreakState.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
+    await prisma.studentBadge.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.attempt.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
     await prisma.exerciseSession.deleteMany({ where: { tenantId: { in: TENANT_IDS } } });
@@ -354,6 +380,7 @@ describe("assignment student", () => {
     await prisma.branch.deleteMany({ where: { id: BRANCH_A } });
     await prisma.user.deleteMany({ where: { id: { in: USER_IDS } } });
     await prisma.tenant.deleteMany({ where: { id: { in: TENANT_IDS } } });
+    await prisma.achievementDefinition.deleteMany({ where: { code: "FIRST_ASSIGNMENT" } });
 
     await app.close();
     await prisma.$disconnect();
@@ -790,6 +817,181 @@ describe("assignment student", () => {
         headers,
       });
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  // ==================== GAMIFICATION INTEGRATION TESTS ====================
+
+  describe("assignment completion gamification", () => {
+    let firstAssignmentId: string;
+    let secondAssignmentId: string;
+    let firstSessionId: string;
+
+    beforeAll(async () => {
+      const adminHeaders = await authHeaders(SUPER_ADMIN_ID, TENANT_A);
+      firstAssignmentId = await createAssignment(adminHeaders, {
+        classId: CLASS_A,
+        title: "Gamification Assignment One",
+        status: "ACTIVE",
+      });
+      secondAssignmentId = await createAssignment(adminHeaders, {
+        classId: CLASS_A,
+        title: "Gamification Assignment Two",
+        status: "ACTIVE",
+      });
+    });
+
+    it("completes an assignment with one reward event and keeps Learning Path unchanged", async () => {
+      const headers = await authHeaders(STUDENT_A_ID, TENANT_A);
+      const progressBefore = await prisma.studentLearningStepProgress.count({
+        where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+      });
+      const start = await app.inject({
+        method: "POST",
+        url: `/student/assignments/${firstAssignmentId}/start`,
+        headers,
+      });
+      expect(start.statusCode).toBe(200);
+      firstSessionId = start.json().data.sessionId as string;
+
+      const complete = await app.inject({
+        method: "POST",
+        url: `/student/sessions/${firstSessionId}/complete`,
+        headers,
+      });
+      expect(complete.statusCode).toBe(200);
+
+      const event = await prisma.gamificationEvent.findFirst({
+        where: {
+          tenantId: TENANT_A,
+          studentId: STUDENT_A_ID,
+          eventType: "ASSIGNMENT_COMPLETED",
+          sourceType: "ASSIGNMENT",
+          sourceReference: firstAssignmentId,
+        },
+        select: { id: true, idempotencyKey: true },
+      });
+      expect(event).toEqual({
+        id: expect.any(String),
+        idempotencyKey: `assignment-completed:${TENANT_A}:${STUDENT_A_ID}:${firstAssignmentId}`,
+      });
+      expect(
+        await prisma.pointEvent.count({
+          where: { tenantId: TENANT_A, gamificationEventId: event!.id },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.studentAchievement.count({
+          where: {
+            tenantId: TENANT_A,
+            studentId: STUDENT_A_ID,
+            achievementDefinition: { code: "FIRST_ASSIGNMENT" },
+          },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.gamificationStreakDay.count({
+          where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+        }),
+      ).toBe(1);
+
+      const progressAfter = await prisma.studentLearningStepProgress.count({
+        where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+      });
+      expect(progressAfter).toBe(progressBefore);
+
+      const result = await app.inject({
+        method: "GET",
+        url: `/student/assignments/${firstAssignmentId}/result`,
+        headers,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.json().data.gamification).toMatchObject({
+        pointsAwarded: 60,
+        currentStreak: 1,
+        longestStreak: 1,
+        badges: [expect.objectContaining({ code: "FIRST_ASSIGNMENT", name: "İlk ödev" })],
+      });
+    });
+
+    it("does not duplicate reward on replay or duplicate completion", async () => {
+      const eventCountBefore = await prisma.gamificationEvent.count({
+        where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+      });
+      const pointCountBefore = await prisma.pointEvent.count({
+        where: { tenantId: TENANT_A, studentId: STUDENT_A_ID, gamificationEventId: { not: null } },
+      });
+      const replay = await processGamificationEvent({
+        tenantId: TENANT_A,
+        studentId: STUDENT_A_ID,
+        eventType: "ASSIGNMENT_COMPLETED",
+        sourceType: "ASSIGNMENT",
+        sourceReference: firstAssignmentId,
+        idempotencyKey: `assignment-completed:${TENANT_A}:${STUDENT_A_ID}:${firstAssignmentId}`,
+      });
+      expect(replay.created).toBe(false);
+      expect(replay.pointsAwarded).toBe(60);
+      const duplicateCompletion = await app.inject({
+        method: "POST",
+        url: `/student/sessions/${firstSessionId}/complete`,
+        headers: await authHeaders(STUDENT_A_ID, TENANT_A),
+      });
+      expect(duplicateCompletion.statusCode).toBe(400);
+      expect(
+        await prisma.gamificationEvent.count({
+          where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+        }),
+      ).toBe(eventCountBefore);
+      expect(
+        await prisma.pointEvent.count({
+          where: {
+            tenantId: TENANT_A,
+            studentId: STUDENT_A_ID,
+            gamificationEventId: { not: null },
+          },
+        }),
+      ).toBe(pointCountBefore);
+    });
+
+    it("keeps multiple same-day assignment completions on one streak day", async () => {
+      const headers = await authHeaders(STUDENT_A_ID, TENANT_A);
+      const start = await app.inject({
+        method: "POST",
+        url: `/student/assignments/${secondAssignmentId}/start`,
+        headers,
+      });
+      const complete = await app.inject({
+        method: "POST",
+        url: `/student/sessions/${start.json().data.sessionId}/complete`,
+        headers,
+      });
+      expect(start.statusCode).toBe(200);
+      expect(complete.statusCode).toBe(200);
+
+      expect(
+        await prisma.gamificationEvent.count({
+          where: { tenantId: TENANT_A, studentId: STUDENT_A_ID, eventType: "ASSIGNMENT_COMPLETED" },
+        }),
+      ).toBe(2);
+      expect(
+        await prisma.pointEvent.count({
+          where: {
+            tenantId: TENANT_A,
+            studentId: STUDENT_A_ID,
+            gamificationEventId: { not: null },
+          },
+        }),
+      ).toBe(2);
+      expect(
+        await prisma.gamificationStreakDay.count({
+          where: { tenantId: TENANT_A, studentId: STUDENT_A_ID },
+        }),
+      ).toBe(1);
+      const streak = await prisma.gamificationStreakState.findUnique({
+        where: { tenantId_studentId: { tenantId: TENANT_A, studentId: STUDENT_A_ID } },
+        select: { currentDays: true, longestDays: true },
+      });
+      expect(streak).toEqual({ currentDays: 1, longestDays: 1 });
     });
   });
 

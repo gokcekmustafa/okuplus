@@ -6,6 +6,7 @@ export {
   GAMIFICATION_REWARD_RULES,
   calculateGamificationStreakTransition,
   formatGamificationActivityDate,
+  getAssignmentGamificationOutcome,
   getStudentGamificationFoundation,
   getTeacherGamificationSummary,
   processGamificationEvent,
@@ -13,6 +14,7 @@ export {
 export type {
   GamificationEventInput,
   GamificationEventResult,
+  AssignmentGamificationOutcome,
   GamificationStreakSnapshot,
   GamificationStudentActor,
   GamificationSummary,

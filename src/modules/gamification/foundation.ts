@@ -69,7 +69,7 @@ const STUDY_EVENT_TYPES: GamificationEventType[] = [
   "TRAINING_COMPLETED",
   "LEARNING_ACTIVITY_COMPLETED",
 ];
-const STREAK_EVENT_TYPES: GamificationEventType[] = STUDY_EVENT_TYPES;
+const STREAK_EVENT_TYPES: GamificationEventType[] = ["ASSIGNMENT_COMPLETED", ...STUDY_EVENT_TYPES];
 const MAX_SERIALIZATION_RETRIES = 3;
 
 export interface GamificationEventInput {
@@ -467,67 +467,71 @@ async function applyAchievements(
   return awarded.map((award) => ({ ...award.achievementDefinition, awardedAt: award.awardedAt }));
 }
 
+async function processInTransaction(
+  input: NormalizedGamificationEventInput,
+  client: Prisma.TransactionClient,
+): Promise<GamificationEventResult> {
+  await assertActiveStudent(client, input.tenantId, input.studentId);
+  const existing = await findExistingEvent(client, input);
+  if (existing) return duplicateResult(client, existing);
+
+  const eventData: Prisma.GamificationEventUncheckedCreateInput = {
+    tenantId: input.tenantId,
+    studentId: input.studentId,
+    eventType: input.eventType,
+    sourceType: input.sourceType,
+    sourceReference: input.sourceReference,
+    idempotencyKey: input.idempotencyKey,
+    occurredAt: input.occurredAt,
+    timezone: input.timezone,
+    ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+  };
+  const inserted = await client.gamificationEvent.createMany({
+    data: eventData,
+    skipDuplicates: true,
+  });
+  const event = await findExistingEvent(client, input);
+  if (!event) throw new Error("Gamification event could not be persisted");
+  if (inserted.count === 0) return duplicateResult(client, event);
+
+  const rule = GAMIFICATION_REWARD_RULES[event.eventType];
+  const pointEventType = POINT_EVENT_TYPES[event.eventType];
+  await client.pointEvent.createMany({
+    data: {
+      tenantId: event.tenantId,
+      studentId: event.studentId,
+      eventType: pointEventType,
+      points: rule.points,
+      reasonCode: rule.reasonCode,
+      sourceType: "GAMIFICATION_EVENT",
+      sourceId: event.sourceReference,
+      gamificationEventId: event.id,
+      dedupeKey: `gamification:${event.id}:${rule.code}`,
+    },
+    skipDuplicates: true,
+  });
+  const pointEvent = await client.pointEvent.findFirst({
+    where: { tenantId: event.tenantId, gamificationEventId: event.id },
+    select: { points: true },
+  });
+  const streak = await applyStreak(client, event);
+  const achievementsAwarded = await applyAchievements(client, event);
+
+  return {
+    event,
+    created: true,
+    pointsAwarded: pointEvent?.points ?? 0,
+    streak,
+    achievementsAwarded,
+  };
+}
+
 async function processOnce(
   input: NormalizedGamificationEventInput,
 ): Promise<GamificationEventResult> {
-  return prisma.$transaction(
-    async (client) => {
-      await assertActiveStudent(client, input.tenantId, input.studentId);
-      const existing = await findExistingEvent(client, input);
-      if (existing) return duplicateResult(client, existing);
-
-      const eventData: Prisma.GamificationEventUncheckedCreateInput = {
-        tenantId: input.tenantId,
-        studentId: input.studentId,
-        eventType: input.eventType,
-        sourceType: input.sourceType,
-        sourceReference: input.sourceReference,
-        idempotencyKey: input.idempotencyKey,
-        occurredAt: input.occurredAt,
-        timezone: input.timezone,
-        ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
-      };
-      const inserted = await client.gamificationEvent.createMany({
-        data: eventData,
-        skipDuplicates: true,
-      });
-      const event = await findExistingEvent(client, input);
-      if (!event) throw new Error("Gamification event could not be persisted");
-      if (inserted.count === 0) return duplicateResult(client, event);
-
-      const rule = GAMIFICATION_REWARD_RULES[event.eventType];
-      const pointEventType = POINT_EVENT_TYPES[event.eventType];
-      await client.pointEvent.createMany({
-        data: {
-          tenantId: event.tenantId,
-          studentId: event.studentId,
-          eventType: pointEventType,
-          points: rule.points,
-          reasonCode: rule.reasonCode,
-          sourceType: "GAMIFICATION_EVENT",
-          sourceId: event.sourceReference,
-          gamificationEventId: event.id,
-          dedupeKey: `gamification:${event.id}:${rule.code}`,
-        },
-        skipDuplicates: true,
-      });
-      const pointEvent = await client.pointEvent.findFirst({
-        where: { tenantId: event.tenantId, gamificationEventId: event.id },
-        select: { points: true },
-      });
-      const streak = await applyStreak(client, event);
-      const achievementsAwarded = await applyAchievements(client, event);
-
-      return {
-        event,
-        created: true,
-        pointsAwarded: pointEvent?.points ?? 0,
-        streak,
-        achievementsAwarded,
-      };
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+  return prisma.$transaction((client) => processInTransaction(input, client), {
+    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  });
 }
 
 /**
@@ -537,6 +541,7 @@ async function processOnce(
  */
 export async function processGamificationEvent(
   input: GamificationEventInput,
+  transactionClient?: Prisma.TransactionClient,
 ): Promise<GamificationEventResult> {
   const normalized = {
     ...input,
@@ -548,6 +553,8 @@ export async function processGamificationEvent(
     occurredAt: resolveEventDate(input.occurredAt),
     timezone: resolveTimezone(input.timezone),
   };
+
+  if (transactionClient) return processInTransaction(normalized, transactionClient);
 
   for (let attempt = 0; attempt < MAX_SERIALIZATION_RETRIES; attempt += 1) {
     try {
@@ -561,6 +568,63 @@ export async function processGamificationEvent(
     }
   }
   throw new Error("Gamification event transaction could not complete");
+}
+
+export interface AssignmentGamificationOutcome {
+  pointsAwarded: number;
+  currentStreak: number;
+  longestStreak: number;
+  badges: Array<{
+    code: string;
+    name: string;
+    description: string | null;
+    awardedAt: Date;
+  }>;
+}
+
+export async function getAssignmentGamificationOutcome(
+  tenantId: string,
+  studentId: string,
+  assignmentId: string,
+): Promise<AssignmentGamificationOutcome | null> {
+  const event = await prisma.gamificationEvent.findFirst({
+    where: {
+      tenantId,
+      studentId,
+      eventType: "ASSIGNMENT_COMPLETED",
+      sourceType: "ASSIGNMENT",
+      sourceReference: assignmentId,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!event) return null;
+
+  const [pointEvent, streak, awards] = await Promise.all([
+    prisma.pointEvent.findFirst({
+      where: { tenantId, studentId, gamificationEventId: event.id },
+      select: { points: true },
+    }),
+    prisma.gamificationStreakState.findUnique({
+      where: { tenantId_studentId: { tenantId, studentId } },
+      select: { currentDays: true, longestDays: true },
+    }),
+    prisma.studentAchievement.findMany({
+      where: { tenantId, studentId, sourceEventId: event.id },
+      select: {
+        awardedAt: true,
+        achievementDefinition: { select: { code: true, name: true, description: true } },
+      },
+      orderBy: [{ awardedAt: "asc" }, { id: "asc" }],
+    }),
+  ]);
+
+  return {
+    pointsAwarded: pointEvent?.points ?? 0,
+    currentStreak: streak?.currentDays ?? 0,
+    longestStreak: streak?.longestDays ?? 0,
+    badges: awards.map((award) => ({ ...award.achievementDefinition, awardedAt: award.awardedAt })),
+  };
 }
 
 async function readFoundationSummary(

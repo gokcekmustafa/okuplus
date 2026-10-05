@@ -3,6 +3,7 @@ import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { recordExerciseCompleted } from "../gamification/service.js";
+import { processGamificationEvent } from "../gamification/foundation.js";
 import { aggregateSessionProgress } from "../progress/aggregation.js";
 import {
   PROFICIENCY_LEVEL_CODES,
@@ -752,16 +753,56 @@ export async function completeExerciseSession(
   }
 
   if (session.assignmentId) {
-    await prisma.studentAssignment.updateMany({
-      where: {
-        assignmentId: session.assignmentId,
-        studentId: session.studentId,
-      },
-      data: {
-        status: "COMPLETED",
-        completedAt: updated.completedAt,
-      },
-    });
+    const assignmentCompletedAt = updated.completedAt ?? new Date();
+    const assignmentId = session.assignmentId;
+    const emitAssignmentGamification = !isSuperAdmin && actor.userId === session.studentId;
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.studentAssignment.updateMany({
+          where: {
+            tenantId: session.tenantId,
+            assignmentId,
+            studentId: session.studentId,
+          },
+          data: {
+            status: "COMPLETED",
+            completedAt: assignmentCompletedAt,
+          },
+        });
+        if (emitAssignmentGamification) {
+          await processGamificationEvent(
+            {
+              tenantId: session.tenantId,
+              studentId: session.studentId,
+              eventType: "ASSIGNMENT_COMPLETED",
+              sourceType: "ASSIGNMENT",
+              sourceReference: assignmentId,
+              idempotencyKey: `assignment-completed:${session.tenantId}:${session.studentId}:${assignmentId}`,
+              occurredAt: assignmentCompletedAt,
+              metadata: {
+                sessionId: session.id,
+                completedAt: assignmentCompletedAt.toISOString(),
+              },
+            },
+            tx,
+          );
+        }
+      });
+    } catch {
+      // The exercise is already completed. Keep the existing best-effort
+      // completion semantics if the optional reward side effect is unavailable.
+      await prisma.studentAssignment.updateMany({
+        where: {
+          tenantId: session.tenantId,
+          assignmentId,
+          studentId: session.studentId,
+        },
+        data: {
+          status: "COMPLETED",
+          completedAt: assignmentCompletedAt,
+        },
+      });
+    }
   }
 
   const shouldSyncLearningPath =
