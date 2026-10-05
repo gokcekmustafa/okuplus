@@ -4133,6 +4133,56 @@
                   Kurumunun veya öğretmeninin verdiği çalışmalara buradan devam et.
                 </p>
               </div>
+              <section
+                id="student-assignment-recommendations"
+                class="card"
+                style="padding: 16px; margin: 16px 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    gap: 12px;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    flex-wrap: wrap;
+                  "
+                >
+                  <div>
+                    <p class="insight-eyebrow">SANA UYGUN</p>
+                    <h3 style="margin: 0 0 4px">Önerilen çalışmalar</h3>
+                    <p class="muted" style="margin: 0">
+                      Ölçüm ve son ödev sonuçlarına göre sana uygun ek çalışmalar.
+                    </p>
+                  </div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap">
+                    <button
+                      id="student-recommendations-refresh"
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                    >
+                      Önerileri yenile
+                    </button>
+                    <button
+                      id="student-recommendations-auto"
+                      type="button"
+                      class="btn btn-primary btn-sm"
+                    >
+                      Uygun çalışmayı ata
+                    </button>
+                  </div>
+                </div>
+                <div
+                  id="student-recommendations-error"
+                  class="error-banner hidden"
+                  role="alert"
+                  style="margin-top: 12px"
+                ></div>
+                <div
+                  id="student-recommendation-list"
+                  class="learning-card-grid"
+                  style="margin-top: 12px"
+                ></div>
+              </section>
               <div id="student-assignment-cards" class="learning-card-grid"></div>
             </div>
             <div
@@ -4147,6 +4197,79 @@
                   Yetkili olduğun sınıf ve öğrencilerin sonuçlarını buradan takip et.
                 </p>
               </div>
+              <section
+                id="teacher-assignment-recommendations"
+                class="card"
+                style="padding: 16px; margin: 16px 0"
+              >
+                <div
+                  style="
+                    display: flex;
+                    gap: 12px;
+                    justify-content: space-between;
+                    align-items: center;
+                    flex-wrap: wrap;
+                  "
+                >
+                  <div>
+                    <p class="insight-eyebrow">ÖĞRENCİ DESTEĞİ</p>
+                    <h3 style="margin: 0 0 4px">Çalışma önerileri</h3>
+                    <p class="muted" style="margin: 0">
+                      Yetkili olduğun öğrenciler için açıklanabilir önerileri incele.
+                    </p>
+                  </div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                    <select
+                      id="teacher-recommendation-class"
+                      style="
+                        padding: 6px 10px;
+                        border: 1px solid var(--border);
+                        border-radius: var(--radius-sm);
+                      "
+                    >
+                      <option value="">Sınıf seçin…</option>
+                    </select>
+                    <label
+                      class="muted"
+                      style="display: inline-flex; gap: 6px; align-items: center"
+                    >
+                      <input id="teacher-recommendation-auto" type="checkbox" /> Otomatik ata
+                    </label>
+                    <button
+                      id="teacher-recommendations-save"
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                    >
+                      Ayarı kaydet
+                    </button>
+                    <button
+                      id="teacher-recommendations-run"
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                    >
+                      Şimdi çalıştır
+                    </button>
+                    <button
+                      id="teacher-recommendations-refresh"
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                    >
+                      Önerileri yenile
+                    </button>
+                  </div>
+                </div>
+                <div
+                  id="teacher-recommendations-error"
+                  class="error-banner hidden"
+                  role="alert"
+                  style="margin-top: 12px"
+                ></div>
+                <div
+                  id="teacher-recommendation-list"
+                  class="learning-card-grid"
+                  style="margin-top: 12px"
+                ></div>
+              </section>
             </div>
             <div class="card" style="padding: 16px; margin-bottom: 16px">
               <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">

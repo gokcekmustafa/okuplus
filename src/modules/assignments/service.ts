@@ -55,7 +55,7 @@ const ASSIGNMENT_LIST_SELECT = {
 export interface AssignmentListItem {
   id: string;
   tenantId: string;
-  classId: string;
+  classId: string | null;
   className: string;
   classStatus: string;
   templateId: string;
@@ -64,7 +64,7 @@ export interface AssignmentListItem {
   templateTitle: string;
   templateType: string;
   templateStatus: string;
-  teacherId: string;
+  teacherId: string | null;
   teacherName: string;
   title: string;
   dueDate: Date | null;
@@ -126,8 +126,8 @@ export async function listAssignments(query: ListAssignmentsQuery): Promise<Assi
       id: a.id,
       tenantId: a.tenantId,
       classId: a.classId,
-      className: cls.name,
-      classStatus: cls.status,
+      className: cls?.name ?? "Bireysel çalışma",
+      classStatus: cls?.status ?? "PERSONAL",
       templateId: a.templateId,
       learningStepId: a.learningStepId,
       templateVersionId: a.templateVersionId,
@@ -135,7 +135,7 @@ export async function listAssignments(query: ListAssignmentsQuery): Promise<Assi
       templateType: template.type,
       templateStatus: template.status,
       teacherId: a.teacherId,
-      teacherName: teacher.displayName,
+      teacherName: teacher?.displayName ?? "OkuPratik",
       title: a.title,
       dueDate: a.dueDate,
       status: a.status,
@@ -351,8 +351,8 @@ export async function listClassAssignments(classId: string): Promise<AssignmentL
     id: a.id,
     tenantId: a.tenantId,
     classId: a.classId,
-    className: cls.name,
-    classStatus: cls.status,
+    className: cls?.name ?? "Bireysel çalışma",
+    classStatus: cls?.status ?? "PERSONAL",
     templateId: a.templateId,
     learningStepId: a.learningStepId,
     templateVersionId: a.templateVersionId,
@@ -360,7 +360,7 @@ export async function listClassAssignments(classId: string): Promise<AssignmentL
     templateType: template.type,
     templateStatus: template.status,
     teacherId: a.teacherId,
-    teacherName: teacher.displayName,
+    teacherName: teacher?.displayName ?? "OkuPratik",
     title: a.title,
     dueDate: a.dueDate,
     status: a.status,
@@ -390,20 +390,20 @@ function toAssignmentItem(
   row: {
     id: string;
     tenantId: string;
-    classId: string;
+    classId: string | null;
     templateId: string;
     learningStepId: string | null;
     templateVersionId: string | null;
-    teacherId: string;
+    teacherId: string | null;
     title: string;
     dueDate: Date | null;
     status: AssignmentStatus;
     assignedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
-    class: { name: string; status: string; deletedAt: Date | null };
+    class: { name: string; status: string; deletedAt: Date | null } | null;
     template: { title: string; type: string; status: string; deletedAt: Date | null };
-    teacher: { displayName: string; deletedAt: Date | null };
+    teacher: { displayName: string; deletedAt: Date | null } | null;
   },
   sessionCount: number,
 ): AssignmentDetail {
@@ -411,8 +411,8 @@ function toAssignmentItem(
     id: row.id,
     tenantId: row.tenantId,
     classId: row.classId,
-    className: row.class.name,
-    classStatus: row.class.status,
+    className: row.class?.name ?? "Bireysel çalışma",
+    classStatus: row.class?.status ?? "PERSONAL",
     templateId: row.templateId,
     learningStepId: row.learningStepId,
     templateVersionId: row.templateVersionId,
@@ -420,7 +420,7 @@ function toAssignmentItem(
     templateType: row.template.type,
     templateStatus: row.template.status,
     teacherId: row.teacherId,
-    teacherName: row.teacher.displayName,
+    teacherName: row.teacher?.displayName ?? "OkuPratik",
     title: row.title,
     dueDate: row.dueDate,
     status: row.status,
@@ -434,9 +434,10 @@ function toAssignmentItem(
 async function ensureClassStudentAssignments(assignment: {
   id: string;
   tenantId: string;
-  classId: string;
+  classId: string | null;
   dueDate: Date | null;
 }) {
+  if (!assignment.classId) return;
   const enrollments = await prisma.enrollment.findMany({
     where: { classId: assignment.classId, status: "ACTIVE", deletedAt: null },
     select: { studentId: true },

@@ -241,8 +241,8 @@ export async function listTeacherAssignments(
   return {
     items: rows.map((row) => ({
       id: row.id,
-      classId: row.classId,
-      className: row.class.name,
+      classId: row.classId ?? "",
+      className: row.class?.name ?? "Sınıfı olmayan ödev",
       templateId: row.template.id,
       templateTitle: row.template.title,
       templateType: row.template.type,

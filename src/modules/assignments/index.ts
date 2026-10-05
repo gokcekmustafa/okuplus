@@ -12,6 +12,17 @@ export {
 } from "./service.js";
 export type { AssignmentDetail, AssignmentListItem, AssignmentListResult } from "./service.js";
 export {
+  acceptStudentRecommendation,
+  autoAssignStudentRecommendations,
+  evaluateStudentRecommendations,
+  listStudentRecommendations,
+  listTeacherAutomationSettings,
+  listTeacherRecommendations,
+  persistStudentRecommendations,
+  refreshTeacherRecommendations,
+  runTeacherAutomation,
+} from "./recommendation-service.js";
+export {
   createAssignmentSchema,
   listAssignmentsQuerySchema,
   updateAssignmentSchema,

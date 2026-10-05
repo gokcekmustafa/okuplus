@@ -74,7 +74,7 @@ const STUDENT_ASSIGNMENT_SELECT = {
 
 export async function resolveStudentAssignment(
   assignmentId: string,
-  assignmentClassId: string,
+  assignmentClassId: string | null,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
 ): Promise<{ id: string; status: string; source: string; dueAt: Date | null } | null> {
   const isSuperAdmin = actor.platformRole === "SUPER_ADMIN";
@@ -88,6 +88,7 @@ export async function resolveStudentAssignment(
     return directAssignment;
   }
 
+  if (!assignmentClassId) throw forbiddenError("Bu ödev için yetkiniz yok");
   const enrollment = await prisma.enrollment.findFirst({
     where: {
       studentId: actor.userId,
@@ -111,9 +112,7 @@ export async function listStudentAssignments(
 
   const where: Prisma.AssignmentWhereInput = {
     deletedAt: null,
-    class: { deletedAt: null },
     template: { deletedAt: null },
-    teacher: { deletedAt: null },
     status: { in: [...VISIBLE_STATUSES] },
     ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     OR: [
@@ -202,8 +201,8 @@ export async function listStudentAssignments(
       return {
         id: r.id,
         title: r.title,
-        className: r.class.name,
-        teacherName: r.teacher.displayName,
+        className: r.class?.name ?? "Bireysel çalışma",
+        teacherName: r.teacher?.displayName ?? "OkuPratik",
         templateTitle: r.template.title,
         templateType: r.template.type,
         learningStepId: r.learningStepId,
@@ -242,9 +241,7 @@ export async function getStudentAssignment(
     where: {
       id,
       deletedAt: null,
-      class: { deletedAt: null },
       template: { deletedAt: null },
-      teacher: { deletedAt: null },
       status: { in: [...VISIBLE_STATUSES] },
       ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     },
@@ -252,7 +249,7 @@ export async function getStudentAssignment(
   });
   if (!row) throw notFoundError("Ödev bulunamadı");
 
-  const studentAssignment = await resolveStudentAssignment(id, row.class.id, actor);
+  const studentAssignment = await resolveStudentAssignment(id, row.class?.id ?? null, actor);
 
   const inProgressSession = await prisma.exerciseSession.findFirst({
     where: {
@@ -277,8 +274,8 @@ export async function getStudentAssignment(
   return {
     id: row.id,
     title: row.title,
-    className: row.class.name,
-    teacherName: row.teacher.displayName,
+    className: row.class?.name ?? "Bireysel çalışma",
+    teacherName: row.teacher?.displayName ?? "OkuPratik",
     templateTitle: row.template.title,
     templateType: row.template.type,
     learningStepId: row.learningStepId,
@@ -312,9 +309,7 @@ export async function startAssignmentSession(
     where: {
       id,
       deletedAt: null,
-      class: { deletedAt: null },
       template: { deletedAt: null },
-      teacher: { deletedAt: null },
       status: { in: ["SCHEDULED", "ACTIVE"] },
       ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     },

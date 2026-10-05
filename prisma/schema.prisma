@@ -185,6 +185,13 @@ enum StudentAssignmentStatus {
   COMPLETED
 }
 
+enum AssignmentRecommendationStatus {
+  PENDING
+  ACCEPTED
+  DISMISSED
+  EXPIRED
+}
+
 enum SessionContext {
   INDIVIDUAL
   ASSIGNMENT
@@ -499,6 +506,9 @@ model User {
   trainingSessions         TrainingSession[]
   assignments              Assignment[]
   studentAssignments       StudentAssignment[]
+  assignmentRecommendationsForStudent AssignmentRecommendation[] @relation("AssignmentRecommendationStudent")
+  assignmentRecommendationsAccepted AssignmentRecommendation[] @relation("AssignmentRecommendationAcceptedBy")
+  assignmentAutomationSettings AssignmentAutomationSetting[]
   studentBadges            StudentBadge[]
   pointEvents              PointEvent[]
   studentStreaks           StudentStreak[]
@@ -602,6 +612,8 @@ model Tenant {
   assessments              Assessment[]
   assignments              Assignment[]
   studentAssignments       StudentAssignment[]
+  assignmentRecommendations AssignmentRecommendation[]
+  assignmentAutomationSettings AssignmentAutomationSetting[]
   sessions                 ExerciseSession[]
   trainingSessions         TrainingSession[]
   studentProfiles          StudentProfile[]
@@ -695,6 +707,7 @@ model Class {
   enrollments        Enrollment[]
   teacherAssignments TeacherClassAssignment[]
   assignments        Assignment[]
+  assignmentAutomationSettings AssignmentAutomationSetting[]
 
   @@unique([branchId, academicYearId, name])
   @@index([tenantId, branchId, academicYearId])
@@ -821,6 +834,7 @@ model Skill {
   studentProgress StudentProgress[]
   templates       ExerciseTemplate[]
   learningSteps   LearningStep[]
+  assignmentRecommendations AssignmentRecommendation[]
 }
 
 model Level {
@@ -1013,6 +1027,7 @@ model ExerciseTemplate {
 
   versions    ExerciseTemplateVersion[]
   assignments Assignment[]
+  recommendations AssignmentRecommendation[]
   content     Content?                  @relation(fields: [contentId], references: [id])
   contentId   String?
 
@@ -1042,6 +1057,7 @@ model ExerciseTemplateVersion {
   trainingSessionItems TrainingSessionItem[]
   guestDiagnosticSessions GuestDiagnosticSession[]          @relation("GuestDiagnosticSource")
   learningSteps LearningStep[]
+  assignmentRecommendations AssignmentRecommendation[]
 
   @@unique([templateId, version])
   @@index([templateId, status])
@@ -1208,16 +1224,16 @@ model Assignment {
   id         String           @id @default(dbgenerated("uuidv7()"))
   tenantId   String
   tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  classId    String
-  class      Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  classId    String?
+  class      Class?           @relation(fields: [classId], references: [id], onDelete: Restrict)
   templateId String
   template   ExerciseTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
   // Nullable for compatibility with existing assignments. New assignments
   // pin the published version at creation time.
   templateVersionId String?
   templateVersion   ExerciseTemplateVersion? @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
-  teacherId  String
-  teacher    User             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  teacherId  String?
+  teacher    User?            @relation(fields: [teacherId], references: [id], onDelete: Restrict)
   learningStepId String?
   learningStep   LearningStep?    @relation(fields: [learningStepId], references: [id], onDelete: SetNull)
   title      String
@@ -1230,12 +1246,72 @@ model Assignment {
 
   sessions           ExerciseSession[]
   studentAssignments StudentAssignment[]
+  recommendation     AssignmentRecommendation? @relation("AssignmentRecommendationAssignment")
 
   @@index([classId, status])
   @@index([teacherId, status])
   @@index([templateId])
   @@index([templateVersionId])
   @@index([learningStepId])
+}
+
+/// Deterministic, explainable need signal. Recommendation is not an assignment;
+/// accepting it creates the real StudentAssignment record.
+model AssignmentRecommendation {
+  id               String                              @id @default(dbgenerated("uuidv7()"))
+  tenantId         String
+  tenant           Tenant                              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId        String
+  student          User                                @relation("AssignmentRecommendationStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  skillId          String
+  skill            Skill                               @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  templateId       String
+  template         ExerciseTemplate                    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersionId String
+  templateVersion  ExerciseTemplateVersion             @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  learningStepId   String?
+  learningStep     LearningStep?                       @relation(fields: [learningStepId], references: [id], onDelete: SetNull)
+  status           AssignmentRecommendationStatus     @default(PENDING)
+  reasonCode       String
+  reason           String
+  evidence         Json
+  generatedAt      DateTime                            @default(now())
+  evaluatedAt      DateTime                            @default(now())
+  acceptedAt       DateTime?
+  dismissedAt      DateTime?
+  expiresAt        DateTime?
+  acceptedById     String?
+  acceptedBy       User?                               @relation("AssignmentRecommendationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+  assignmentId     String?                             @unique
+  assignment       Assignment?                         @relation("AssignmentRecommendationAssignment", fields: [assignmentId], references: [id], onDelete: SetNull)
+  createdAt        DateTime                            @default(now())
+  updatedAt        DateTime                            @updatedAt
+
+  @@unique([tenantId, studentId, skillId, templateVersionId])
+  @@index([tenantId, studentId, status])
+  @@index([tenantId, skillId, status])
+  @@index([templateId, status])
+}
+
+/// Teacher-controlled switch for a student or an authorized class.
+/// Exactly one of studentId/classId is accepted by the service layer.
+model AssignmentAutomationSetting {
+  id                  String   @id @default(dbgenerated("uuidv7()"))
+  tenantId            String
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  studentId           String?
+  student             User?    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId             String?
+  class               Class?   @relation(fields: [classId], references: [id], onDelete: Restrict)
+  enabled             Boolean  @default(false)
+  maxActiveAssignments Int     @default(1)
+  cooldownHours       Int      @default(168)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([tenantId, studentId])
+  @@unique([tenantId, classId])
+  @@index([tenantId, enabled])
 }
 
 /// A specific student receiving an assignment. Legacy class-wide assignments
@@ -1680,6 +1756,7 @@ model LearningStep {
   updatedAt                 DateTime                 @updatedAt
 
   assignments Assignment[]
+  recommendations AssignmentRecommendation[]
   progress    StudentLearningStepProgress[]
   currentEnrollments StudentLearningPath[] @relation("CurrentLearningStep")
   exerciseSessions ExerciseSession[]

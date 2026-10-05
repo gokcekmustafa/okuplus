@@ -59,6 +59,67 @@ export const createTeacherAssignmentSchema = z.object({
   status: teacherAssignmentStatusSchema.default("ACTIVE"),
 });
 
+const recommendationStatusSchema = z.enum(["PENDING", "ACCEPTED", "DISMISSED"]);
+const recommendationTargetSchema = z.object({
+  studentId: z.string().trim().min(1).optional(),
+  classId: z.string().trim().min(1).optional(),
+});
+
+/** Öğrenci/öğretmen öneri listesi sorgusu. */
+export const listAssignmentRecommendationsQuerySchema = z.object({
+  studentId: z.string().trim().min(1).optional(),
+  classId: z.string().trim().min(1).optional(),
+  status: recommendationStatusSchema.optional(),
+});
+
+/** Öğrenci veya sınıf için önerileri yeniden değerlendirir. */
+export const refreshAssignmentRecommendationsSchema = z.object({
+  studentId: z.string().trim().min(1, "Öğrenci gerekli"),
+  classId: z.string().trim().min(1).optional(),
+});
+
+export const refreshTeacherAssignmentRecommendationsSchema = recommendationTargetSchema.refine(
+  (value) => Boolean(value.studentId) !== Boolean(value.classId),
+  { message: "Öğrenci veya sınıf hedeflerinden yalnızca biri seçilebilir" },
+);
+
+export const acceptAssignmentRecommendationSchema = z.object({
+  classId: z.string().trim().min(1).optional(),
+});
+
+/** Öğretmen otomasyon ayarının hedefi. */
+export const assignmentAutomationSettingSchema = recommendationTargetSchema
+  .extend({
+    enabled: z.boolean(),
+    maxActiveAssignments: z.coerce.number().int().min(1).max(3).optional(),
+    cooldownHours: z.coerce.number().int().min(1).max(720).optional(),
+  })
+  .refine((value) => Boolean(value.studentId) !== Boolean(value.classId), {
+    message: "Öğrenci veya sınıf hedeflerinden yalnızca biri seçilebilir",
+  });
+
+/** Öğretmen otomasyonunu tek bir öğrenci veya sınıf için çalıştırır. */
+export const runAssignmentAutomationSchema = recommendationTargetSchema.refine(
+  (value) => Boolean(value.studentId) !== Boolean(value.classId),
+  { message: "Öğrenci veya sınıf hedeflerinden yalnızca biri seçilebilir" },
+);
+
+export type AssignmentRecommendationStatus = z.infer<typeof recommendationStatusSchema>;
+export type ListAssignmentRecommendationsQuery = z.infer<
+  typeof listAssignmentRecommendationsQuerySchema
+>;
+export type RefreshAssignmentRecommendationsInput = z.infer<
+  typeof refreshAssignmentRecommendationsSchema
+>;
+export type RefreshTeacherAssignmentRecommendationsInput = z.infer<
+  typeof refreshTeacherAssignmentRecommendationsSchema
+>;
+export type AcceptAssignmentRecommendationInput = z.infer<
+  typeof acceptAssignmentRecommendationSchema
+>;
+export type AssignmentAutomationSettingInput = z.infer<typeof assignmentAutomationSettingSchema>;
+export type RunAssignmentAutomationInput = z.infer<typeof runAssignmentAutomationSchema>;
+
 export type CreateAssignmentInput = z.infer<typeof createAssignmentSchema>;
 export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;
 export type UpdateAssignmentStatusInput = z.infer<typeof updateAssignmentStatusSchema>;
