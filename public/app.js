@@ -1059,6 +1059,7 @@ function showDashboard(me) {
   const isPlatform = Boolean(user.platformRole);
   isPlatformUser = isPlatform;
   isTeacherUser = !isPlatform && tenantContext?.role === "TEACHER";
+  currentTenantType = tenantContext?.tenantType ?? null;
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
 
@@ -13614,6 +13615,7 @@ let assignmentEditingId = null;
 let assignmentDetailCurrent = null;
 let isPlatformUser = null;
 let isTeacherUser = false;
+let currentTenantType = null;
 
 function assignmentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -13636,6 +13638,168 @@ function teacherAssignmentApi(path, options = {}) {
 function teacherApi(path, options = {}) {
   const method = options.method ?? "GET";
   return authenticatedFetch(`/teacher${path}`, { ...options, method });
+}
+
+function studentRecommendationApi(path, options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/student/assignment-recommendations${path}`, { ...options, method });
+}
+
+function teacherRecommendationApi(path, options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/teacher/assignment-recommendations${path}`, { ...options, method });
+}
+
+function teacherAutomationApi(path, options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/teacher/assignment-automation${path}`, { ...options, method });
+}
+
+function showRecommendationError(id, message) {
+  const element = $(id);
+  if (!element) return;
+  element.textContent = message;
+  element.classList.remove("hidden");
+}
+
+function hideRecommendationError(id) {
+  $(id)?.classList.add("hidden");
+}
+
+function recommendationStatusLabel(status) {
+  return status === "ACCEPTED" ? "Atandı" : status === "DISMISSED" ? "Gizlendi" : "Yeni";
+}
+
+function recommendationTemplateTypeLabel(type) {
+  return (
+    {
+      MULTIPLE_CHOICE: "Çoktan seçmeli çalışma",
+      TRUE_FALSE: "Doğru / yanlış çalışması",
+      SHORT_ANSWER: "Kısa cevap çalışması",
+    }[type] || "Ek çalışma"
+  );
+}
+
+function renderStudentRecommendations(payload) {
+  const list = $("student-recommendation-list");
+  if (!list) return;
+  const items = payload?.items ?? [];
+  const unavailable = payload?.unavailable ?? [];
+  const cards = items.map((item) => {
+    const action =
+      item.status === "PENDING"
+        ? `<button type="button" class="btn btn-primary btn-sm" data-student-recommendation-accept="${escapeHtml(item.id)}">Çalışmayı ekle</button>`
+        : `<span class="badge badge-success">${escapeHtml(recommendationStatusLabel(item.status))}</span>`;
+    return `<article class="learning-card assignment-student-card"><div class="learning-card-icon" aria-hidden="true">💡</div><div class="learning-card-content"><div class="learning-card-topline"><span class="badge badge-info">${escapeHtml(item.skill.name)}</span><span class="muted">${escapeHtml(recommendationTemplateTypeLabel(item.template.type))}</span></div><h3>${escapeHtml(item.template.title)}</h3><p class="muted">${escapeHtml(item.reason)}</p><div class="learning-card-actions">${action}</div></div></article>`;
+  });
+  const unavailableMarkup = unavailable
+    .map((item) => `<p class="muted">${escapeHtml(item.skillName)}: ${escapeHtml(item.reason)}</p>`)
+    .join("");
+  list.innerHTML =
+    cards.join("") ||
+    `<p class="muted">Şu an yeni bir çalışma önerisi yok.</p>${unavailableMarkup}`;
+}
+
+async function loadStudentRecommendations() {
+  if (isPlatformUser !== false || isTeacherUser) return;
+  $("student-recommendations-auto")?.classList.toggle(
+    "hidden",
+    currentTenantType === "ORGANIZATION",
+  );
+  hideRecommendationError("student-recommendations-error");
+  const list = $("student-recommendation-list");
+  if (list) list.innerHTML = '<p class="muted">Öneriler yükleniyor…</p>';
+  try {
+    renderStudentRecommendations(
+      await parseResponse(
+        await studentRecommendationApi("/refresh", {
+          method: "POST",
+          body: JSON.stringify({ studentId: currentUserId }),
+        }),
+      ),
+    );
+  } catch (err) {
+    showRecommendationError(
+      "student-recommendations-error",
+      err.message || "Öneriler yüklenemedi.",
+    );
+    if (list) list.innerHTML = "";
+  }
+}
+
+function renderTeacherRecommendations(payload) {
+  const list = $("teacher-recommendation-list");
+  if (!list) return;
+  const items = payload?.items ?? [];
+  list.innerHTML = items.length
+    ? items
+        .map(
+          (item) =>
+            `<article class="learning-card assignment-student-card"><div class="learning-card-icon" aria-hidden="true">🎯</div><div class="learning-card-content"><div class="learning-card-topline"><span class="badge badge-info">${escapeHtml(item.studentName || "Öğrenci")}</span><span class="muted">${escapeHtml(item.skill.name)}</span></div><h3>${escapeHtml(item.template.title)}</h3><p class="muted">${escapeHtml(item.reason)}</p><div class="learning-card-actions">${item.status === "PENDING" ? `<button type="button" class="btn btn-primary btn-sm" data-teacher-recommendation-accept="${escapeHtml(item.id)}">Ödevi ata</button><button type="button" class="btn btn-ghost btn-sm" data-teacher-recommendation-dismiss="${escapeHtml(item.id)}">Gizle</button>` : `<span class="badge badge-success">${escapeHtml(recommendationStatusLabel(item.status))}</span>`}</div></div></article>`,
+        )
+        .join("")
+    : '<p class="muted">Yetki alanındaki öğrenciler için bekleyen öneri yok.</p>';
+}
+
+async function loadTeacherRecommendations() {
+  if (!isTeacherUser) return;
+  hideRecommendationError("teacher-recommendations-error");
+  const list = $("teacher-recommendation-list");
+  if (list) list.innerHTML = '<p class="muted">Öneriler yükleniyor…</p>';
+  try {
+    renderTeacherRecommendations(await parseResponse(await teacherRecommendationApi("")));
+    await populateTeacherRecommendationClasses();
+  } catch (err) {
+    showRecommendationError(
+      "teacher-recommendations-error",
+      err.message || "Öneriler yüklenemedi.",
+    );
+    if (list) list.innerHTML = "";
+  }
+}
+
+async function refreshTeacherRecommendationsForTarget() {
+  const classId = $("teacher-recommendation-class")?.value;
+  if (!classId) throw new Error("Öneri üretmek için önce bir sınıf seçin.");
+  renderTeacherRecommendations(
+    await parseResponse(
+      await teacherRecommendationApi("/refresh", {
+        method: "POST",
+        body: JSON.stringify({ classId }),
+      }),
+    ),
+  );
+}
+
+async function populateTeacherRecommendationClasses() {
+  const select = $("teacher-recommendation-class");
+  if (!select) return;
+  const classes = await parseResponse(await teacherApi("/classes"));
+  select.innerHTML = `<option value="">Sınıf seçin…</option>${(classes ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+}
+
+async function saveTeacherAutomation() {
+  const classId = $("teacher-recommendation-class")?.value;
+  if (!classId) throw new Error("Önce bir sınıf seçin.");
+  await parseResponse(
+    await teacherAutomationApi("", {
+      method: "PUT",
+      body: JSON.stringify({
+        classId,
+        enabled: Boolean($("teacher-recommendation-auto")?.checked),
+        maxActiveAssignments: 1,
+        cooldownHours: 168,
+      }),
+    }),
+  );
+}
+
+async function runTeacherAutomation() {
+  const classId = $("teacher-recommendation-class")?.value;
+  if (!classId) throw new Error("Önce bir sınıf seçin.");
+  await parseResponse(
+    await teacherAutomationApi("/run", { method: "POST", body: JSON.stringify({ classId }) }),
+  );
 }
 
 function assignmentStatusBadge(status) {
@@ -13745,9 +13909,57 @@ async function loadAssignments() {
     const body = await parseResponse(res);
     assignmentData = body.items;
     renderAssignmentList(body.total);
+    if (isTeacherUser) {
+      void loadTeacherRecommendations();
+    } else if (isPlatformUser === false) {
+      void loadStudentRecommendations();
+    }
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">—</td></tr>';
     showAssignmentError(err.message || "Ödevler yüklenemedi.");
+  }
+}
+
+async function acceptStudentRecommendationFromCard(id) {
+  try {
+    await parseResponse(
+      await studentRecommendationApi(`/${encodeURIComponent(id)}/accept`, { method: "POST" }),
+    );
+    await loadAssignments();
+  } catch (err) {
+    showRecommendationError(
+      "student-recommendations-error",
+      err.message || "Önerilen çalışma eklenemedi.",
+    );
+  }
+}
+
+async function acceptTeacherRecommendationFromCard(id) {
+  try {
+    const classId = $("teacher-recommendation-class")?.value;
+    await parseResponse(
+      await teacherRecommendationApi(`/${encodeURIComponent(id)}/accept`, {
+        method: "POST",
+        body: JSON.stringify(classId ? { classId } : {}),
+      }),
+    );
+    await loadAssignments();
+  } catch (err) {
+    showRecommendationError(
+      "teacher-recommendations-error",
+      err.message || "Önerilen ödev atanamadı.",
+    );
+  }
+}
+
+async function dismissTeacherRecommendationFromCard(id) {
+  try {
+    await parseResponse(
+      await teacherRecommendationApi(`/${encodeURIComponent(id)}/dismiss`, { method: "POST" }),
+    );
+    await loadTeacherRecommendations();
+  } catch (err) {
+    showRecommendationError("teacher-recommendations-error", err.message || "Öneri gizlenemedi.");
   }
 }
 
@@ -14208,6 +14420,99 @@ async function submitTeacherAssignmentForm(event) {
 }
 
 function setupAssignmentEvents() {
+  $("student-recommendation-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-student-recommendation-accept]");
+    if (button)
+      void acceptStudentRecommendationFromCard(button.dataset.studentRecommendationAccept);
+  });
+  $("teacher-recommendation-list")?.addEventListener("click", (event) => {
+    const accept = event.target.closest("[data-teacher-recommendation-accept]");
+    const dismiss = event.target.closest("[data-teacher-recommendation-dismiss]");
+    if (accept)
+      void acceptTeacherRecommendationFromCard(accept.dataset.teacherRecommendationAccept);
+    if (dismiss)
+      void dismissTeacherRecommendationFromCard(dismiss.dataset.teacherRecommendationDismiss);
+  });
+  $("student-recommendations-refresh")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    hideRecommendationError("student-recommendations-error");
+    try {
+      await parseResponse(
+        await studentRecommendationApi("/refresh", {
+          method: "POST",
+          body: JSON.stringify({ studentId: currentUserId }),
+        }),
+      );
+      await loadStudentRecommendations();
+    } catch (err) {
+      showRecommendationError(
+        "student-recommendations-error",
+        err.message || "Öneriler yenilenemedi.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("student-recommendations-auto")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await parseResponse(await studentRecommendationApi("/auto-assign", { method: "POST" }));
+      await loadAssignments();
+    } catch (err) {
+      showRecommendationError(
+        "student-recommendations-error",
+        err.message || "Uygun çalışma atanamadı.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("teacher-recommendations-refresh")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await refreshTeacherRecommendationsForTarget();
+    } catch (err) {
+      showRecommendationError(
+        "teacher-recommendations-error",
+        err.message || "Öneriler yenilenemedi.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("teacher-recommendations-save")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await saveTeacherAutomation();
+      await loadTeacherRecommendations();
+    } catch (err) {
+      showRecommendationError(
+        "teacher-recommendations-error",
+        err.message || "Otomasyon ayarı kaydedilemedi.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+  $("teacher-recommendations-run")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await runTeacherAutomation();
+      await loadAssignments();
+    } catch (err) {
+      showRecommendationError(
+        "teacher-recommendations-error",
+        err.message || "Otomasyon çalıştırılamadı.",
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("assignment-list-body").addEventListener("click", (event) => {
     const detailBtn = event.target.closest("[data-assignment-detail-id]");
     const editBtn = event.target.closest("[data-assignment-edit-id]");

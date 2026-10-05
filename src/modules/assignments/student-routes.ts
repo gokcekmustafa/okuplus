@@ -9,6 +9,13 @@ import {
   startAssignmentSession,
 } from "./student-service.js";
 import { getStudentAssignmentResult } from "./results-service.js";
+import {
+  acceptStudentRecommendation,
+  autoAssignStudentRecommendations,
+  listStudentRecommendations,
+  persistStudentRecommendations,
+} from "./recommendation-service.js";
+import { refreshAssignmentRecommendationsSchema } from "./schemas.js";
 
 function readParamId(request: FastifyRequest, label: string, key = "id"): string {
   const id = (request.params as Record<string, string | undefined>)[key];
@@ -29,6 +36,69 @@ export async function assignmentStudentRoutes(
 ): Promise<void> {
   const { authProvider } = opts;
   const requireStudentAuth = [requireAuth(authProvider)];
+
+  app.get(
+    "/student/assignment-recommendations",
+    { preHandler: requireStudentAuth },
+    async (request) => {
+      return ok(
+        await listStudentRecommendations({
+          userId: request.authUser!.id,
+          tenantId: request.tenantContext?.tenantId ?? null,
+          platformRole: request.authUser!.platformRole ?? null,
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/student/assignment-recommendations/refresh",
+    { preHandler: requireStudentAuth },
+    async (request) => {
+      const input = refreshAssignmentRecommendationsSchema.parse(request.body);
+      if (input.studentId !== request.authUser!.id) {
+        throw validationError("Yalnızca kendi önerilerinizi yenileyebilirsiniz");
+      }
+      return ok(
+        await persistStudentRecommendations({
+          userId: request.authUser!.id,
+          tenantId: request.tenantContext?.tenantId ?? null,
+          platformRole: request.authUser!.platformRole ?? null,
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/student/assignment-recommendations/auto-assign",
+    { preHandler: requireStudentAuth },
+    async (request) => {
+      return ok(
+        await autoAssignStudentRecommendations({
+          userId: request.authUser!.id,
+          tenantId: request.tenantContext?.tenantId ?? null,
+          platformRole: request.authUser!.platformRole ?? null,
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/student/assignment-recommendations/:id/accept",
+    { preHandler: requireStudentAuth },
+    async (request) => {
+      return ok(
+        await acceptStudentRecommendation(
+          {
+            userId: request.authUser!.id,
+            tenantId: request.tenantContext?.tenantId ?? null,
+            platformRole: request.authUser!.platformRole ?? null,
+          },
+          readParamId(request, "Öneri"),
+        ),
+      );
+    },
+  );
 
   app.get("/student/assignments", { preHandler: requireStudentAuth }, async (request) => {
     const actor = {

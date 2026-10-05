@@ -5,6 +5,7 @@ import { assertTeacherClassAccess, type TeacherAssignmentActor } from "./teacher
 import { resolveStudentAssignment } from "./student-service.js";
 
 export interface AssignmentSkillResult {
+  skillId: string;
   code: string;
   name: string;
   totalQuestions: number;
@@ -82,7 +83,10 @@ const SESSION_RESULT_SELECT = {
           questionVersion: {
             select: {
               question: {
-                select: { skill: { select: { code: true, name: true } }, deletedAt: true },
+                select: {
+                  skill: { select: { id: true, code: true, name: true } },
+                  deletedAt: true,
+                },
               },
             },
           },
@@ -139,12 +143,13 @@ function buildSessionResult(session: SessionResultRow): AssignmentSessionResult 
 
   const skillMap = new Map<
     string,
-    { name: string; totalQuestions: number; answered: number; correct: number }
+    { skillId: string; name: string; totalQuestions: number; answered: number; correct: number }
   >();
   for (const question of questions) {
     const skill = question.questionVersion.question.skill;
     if (!skill) continue;
     const current = skillMap.get(skill.code) ?? {
+      skillId: skill.id,
       name: skill.name,
       totalQuestions: 0,
       answered: 0,
@@ -172,6 +177,7 @@ function buildSessionResult(session: SessionResultRow): AssignmentSessionResult 
     startedAt: session.startedAt,
     completedAt: session.completedAt,
     skills: [...skillMap.entries()].map(([code, value]) => ({
+      skillId: value.skillId,
       code,
       name: value.name,
       totalQuestions: value.totalQuestions,
@@ -208,6 +214,68 @@ async function loadSessions(
     byStudent.set(row.studentId, current);
   }
   return byStudent;
+}
+
+export interface RecentAssignmentSkillSignal {
+  skillId: string;
+  skillCode: string;
+  skillName: string;
+  scores: number[];
+}
+
+/**
+ * Shared assignment-result signal for recommendation and teacher analytics.
+ * Training and assessment sessions are intentionally excluded here.
+ */
+export async function getRecentAssignmentSkillSignals(
+  studentId: string,
+  tenantId: string,
+  limit = 3,
+): Promise<RecentAssignmentSkillSignal[]> {
+  const sessions = await prisma.exerciseSession.findMany({
+    where: {
+      studentId,
+      tenantId,
+      assignmentId: { not: null },
+      context: "ASSIGNMENT",
+      sessionType: "PRACTICE",
+      status: "COMPLETED",
+    },
+    select: SESSION_RESULT_SELECT,
+    orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+    take: Math.max(limit * 4, limit),
+  });
+  const bySkill = new Map<
+    string,
+    { skillCode: string; skillName: string; entries: Array<{ at: number; score: number }> }
+  >();
+  for (const session of sessions) {
+    const result = buildSessionResult(session);
+    for (const skill of result.skills) {
+      if (skill.percentage === null) continue;
+      const current = bySkill.get(skill.skillId) ?? {
+        skillCode: skill.code,
+        skillName: skill.name,
+        entries: [],
+      };
+      current.entries.push({
+        at: session.completedAt?.getTime() ?? session.createdAt.getTime(),
+        score: skill.percentage / 100,
+      });
+      bySkill.set(skill.skillId, current);
+    }
+  }
+  return [...bySkill.entries()]
+    .map(([skillId, value]) => ({
+      skillId,
+      skillCode: value.skillCode,
+      skillName: value.skillName,
+      scores: value.entries
+        .sort((a, b) => a.at - b.at)
+        .slice(-limit)
+        .map((entry) => entry.score),
+    }))
+    .sort((a, b) => a.skillCode.localeCompare(b.skillCode));
 }
 
 async function buildStudentResults(
@@ -265,7 +333,6 @@ export async function getStudentAssignmentResult(
       id,
       deletedAt: null,
       status: { in: ["SCHEDULED", "ACTIVE", "CLOSED"] },
-      class: { deletedAt: null },
       template: { deletedAt: null },
       ...(actor.tenantId ? { tenantId: actor.tenantId } : {}),
     },
@@ -313,7 +380,7 @@ export async function getStudentAssignmentResult(
     assignment: {
       id: assignment.id,
       title: assignment.title,
-      className: assignment.class.name,
+      className: assignment.class?.name ?? "Bireysel çalışma",
       templateTitle: assignment.template.title,
       dueDate: assignment.dueDate,
     },
@@ -338,6 +405,7 @@ export async function getTeacherAssignmentResults(
     },
   });
   if (!assignment) throw notFoundError("Ödev bulunamadı");
+  if (!assignment.classId || !assignment.class) throw notFoundError("Sınıf ödevi bulunamadı");
   await assertTeacherClassAccess(actor, assignment.classId);
 
   const enrolledStudents = await prisma.enrollment.findMany({
