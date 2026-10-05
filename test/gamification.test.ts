@@ -6,6 +6,7 @@ import { loadEnv } from "../src/config/env.js";
 import { ScryptPasswordHasher } from "../src/modules/auth/index.js";
 import {
   evaluateBasicBadges,
+  processGamificationEvent,
   recordCorrectAnswer,
   recordExerciseCompleted,
   updateStreak,
@@ -32,6 +33,16 @@ let attemptId = "";
 let createdBadgeId: string | null = null;
 
 async function cleanup() {
+  await prisma.studentAchievement.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
+  await prisma.gamificationStreakDay.deleteMany({
+    where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+  });
+  await prisma.gamificationStreakState.deleteMany({
+    where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+  });
+  await prisma.gamificationEvent.deleteMany({
+    where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+  });
   await prisma.studentBadge.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
   await prisma.pointEvent.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
   await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
@@ -55,6 +66,9 @@ async function cleanup() {
   await prisma.membership.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
   await prisma.user.deleteMany({ where: { id: { in: [STUDENT_A, STUDENT_B, ADMIN] } } });
   await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
+  await prisma.achievementDefinition.deleteMany({
+    where: { code: { in: ["FIRST_ASSIGNMENT", "FIRST_STUDY", "FIVE_STUDIES"] } },
+  });
   if (createdBadgeId) await prisma.badge.deleteMany({ where: { id: createdBadgeId } });
 }
 
@@ -192,6 +206,25 @@ describe.sequential("gamification MVP", () => {
       });
       createdBadgeId = created.id;
     }
+    await prisma.achievementDefinition.createMany({
+      data: [
+        {
+          code: "FIRST_ASSIGNMENT",
+          name: "İlk ödev",
+          description: "İlk ödevini tamamladın.",
+        },
+        {
+          code: "FIRST_STUDY",
+          name: "İlk çalışma",
+          description: "İlk uygun öğrenme çalışmanı tamamladın.",
+        },
+        {
+          code: "FIVE_STUDIES",
+          name: "5 çalışma",
+          description: "Beş uygun öğrenme çalışmasını tamamladın.",
+        },
+      ],
+    });
     app = await buildApp(loadEnv());
     await app.ready();
   });
@@ -341,6 +374,110 @@ describe.sequential("gamification MVP", () => {
     expect(streak).toMatchObject({ currentDays: 1, longestDays: 3 });
   });
 
+  it("foundation event duplicate olduğunda tek puan ve tek streak günü üretir", async () => {
+    const first = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "TRAINING_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "training-1",
+      idempotencyKey: "foundation-training-1",
+      occurredAt: new Date("2026-02-01T12:00:00Z"),
+      timezone: "UTC",
+    });
+    const replay = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "TRAINING_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "training-1",
+      idempotencyKey: "foundation-training-1",
+      occurredAt: new Date("2026-02-01T12:00:00Z"),
+      timezone: "UTC",
+    });
+
+    expect(first.created).toBe(true);
+    expect(first.pointsAwarded).toBe(15);
+    expect(replay.created).toBe(false);
+    expect(replay.pointsAwarded).toBe(15);
+    expect(
+      await prisma.pointEvent.count({
+        where: { tenantId: TENANT_B, gamificationEventId: first.event.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.gamificationStreakDay.count({
+        where: { tenantId: TENANT_B, studentId: STUDENT_B },
+      }),
+    ).toBe(1);
+  });
+
+  it("foundation streak aynı gün artmaz, sonraki gün bir kez artar", async () => {
+    const nextDay = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "LEARNING_ACTIVITY_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "learning-2",
+      idempotencyKey: "foundation-learning-2",
+      occurredAt: new Date("2026-02-02T12:00:00Z"),
+      timezone: "UTC",
+    });
+    expect(nextDay.streak).toMatchObject({ currentDays: 2, longestDays: 2 });
+
+    const sameDay = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "TRAINING_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "training-2",
+      idempotencyKey: "foundation-training-2",
+      occurredAt: new Date("2026-02-02T18:00:00Z"),
+      timezone: "UTC",
+    });
+    expect(sameDay.streak).toMatchObject({ currentDays: 2, longestDays: 2 });
+    expect(
+      await prisma.gamificationStreakDay.count({
+        where: { tenantId: TENANT_B, studentId: STUDENT_B },
+      }),
+    ).toBe(2);
+  });
+
+  it("foundation achievement duplicate award ile çoğalmaz", async () => {
+    const first = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "ASSIGNMENT_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "assignment-1",
+      idempotencyKey: "foundation-assignment-1",
+      occurredAt: new Date("2026-02-10T12:00:00Z"),
+      timezone: "UTC",
+    });
+    const replay = await processGamificationEvent({
+      tenantId: TENANT_B,
+      studentId: STUDENT_B,
+      eventType: "ASSIGNMENT_COMPLETED",
+      sourceType: "FOUNDATION_TEST",
+      sourceReference: "assignment-1",
+      idempotencyKey: "foundation-assignment-1",
+      occurredAt: new Date("2026-02-10T12:00:00Z"),
+      timezone: "UTC",
+    });
+
+    expect(first.achievementsAwarded.map((award) => award.code)).toContain("FIRST_ASSIGNMENT");
+    expect(replay.created).toBe(false);
+    expect(
+      await prisma.studentAchievement.count({
+        where: {
+          tenantId: TENANT_B,
+          studentId: STUDENT_B,
+          achievementDefinition: { code: "FIRST_ASSIGNMENT" },
+        },
+      }),
+    ).toBe(1);
+  });
+
   it("student yalnızca kendi verisini görür", async () => {
     tokenB = await login(EMAIL_B);
     const response = await app.inject({
@@ -349,7 +486,7 @@ describe.sequential("gamification MVP", () => {
       headers: headers(tokenB, TENANT_B),
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json().data.totalPoints).toBe(0);
+    expect(response.json().data.totalPoints).toBe(100);
     expect(
       response
         .json()
