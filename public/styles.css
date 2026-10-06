@@ -3210,6 +3210,24 @@ body {
 #page-exercise label.answer-card[aria-disabled="true"] {
   cursor: default;
 }
+#page-exercise label.answer-card[aria-disabled="true"]:hover,
+#page-exercise label.answer-card[aria-disabled="true"]:active {
+  cursor: default;
+  transform: none;
+}
+#page-exercise
+  label.answer-card[aria-disabled="true"]:not(.selected):not(.correct):not(.wrong):hover,
+#page-exercise
+  label.answer-card[aria-disabled="true"]:not(.selected):not(.correct):not(.wrong):active {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+#page-exercise label.answer-card[aria-disabled="true"]:focus,
+#page-exercise label.answer-card[aria-disabled="true"]:focus-visible {
+  outline: 2px solid var(--border);
+  outline-offset: 2px;
+}
 #exercise-current-question > * {
   animation: exercise-enter 180ms ease-out;
 }

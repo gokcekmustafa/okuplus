@@ -8727,6 +8727,7 @@ let exerciseGamificationRequest = 0;
 let exerciseRequest = null;
 let exerciseRequestedSessionId = null;
 let exerciseScope = null;
+let exerciseQuestionRenderToken = 0;
 let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
@@ -11247,6 +11248,7 @@ function resetDailyTrainingState() {
   rememberDailyTrainingState(null);
 }
 function resetExerciseState() {
+  exerciseQuestionRenderToken++;
   exerciseSession = null;
   exerciseQuestions = [];
   exerciseAttempts.clear();
@@ -11257,6 +11259,19 @@ function resetExerciseState() {
   exerciseGamification = null;
   exerciseGamificationRequest++;
   currentExerciseQuestionIndex = 0;
+}
+function setExerciseSubmitButtonState(busy, label) {
+  const button = $("exercise-submit-attempt");
+  if (!button) return;
+  const labelEl = button.querySelector(".btn-label");
+  const spinner = button.querySelector(".btn-spinner");
+  if (labelEl) labelEl.textContent = label;
+  else button.textContent = label;
+  button.disabled = busy;
+  button.classList.toggle("is-pending", busy);
+  if (busy) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
+  spinner?.classList.toggle("hidden", !busy);
 }
 async function refreshExerciseGamification() {
   const requestId = ++exerciseGamificationRequest;
@@ -11409,7 +11424,7 @@ async function loadExercisePage() {
     exerciseLoading = false;
     if (exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
       const button = $("exercise-submit-attempt");
-      if (button) button.disabled = false;
+      if (button) button.disabled = exerciseBusy;
     }
   }
 }
@@ -11710,6 +11725,8 @@ function renderExerciseQuestion() {
   }
   const q = exerciseQuestions[currentExerciseQuestionIndex];
   if (!q) return;
+  const renderToken = ++exerciseQuestionRenderToken;
+  const renderedQuestionVersionId = q.questionVersionId;
   if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
     recordPilotTelemetry("QUESTION_VIEWED", {
       sessionId: exerciseSession?.id,
@@ -11750,12 +11767,13 @@ function renderExerciseQuestion() {
         }
         if (type === "MULTIPLE_CHOICE") {
           const opts = Array.isArray(q.options) ? q.options : [];
+          const allowMultiple = q.allowMultiple === true;
           html +=
-            `<div class="stack ${fastClass}" style="gap:12px" id="exercise-mc-options" data-training-family="${escapeHtml(trainingFamily ?? "")}" data-renderer-key="${escapeHtml(rendererKey ?? "")}" role="radiogroup" aria-labelledby="exercise-prompt">` +
+            `<div class="stack ${fastClass}" style="gap:12px" id="exercise-mc-options" data-training-family="${escapeHtml(trainingFamily ?? "")}" data-renderer-key="${escapeHtml(rendererKey ?? "")}" data-allow-multiple="${allowMultiple ? "true" : "false"}" role="${allowMultiple ? "group" : "radiogroup"}" aria-labelledby="exercise-prompt">` +
             opts
               .map(
                 (o) =>
-                  `<label class="answer-card" tabindex="0" role="radio" aria-checked="false"><input type="radio" name="exercise-mc" value="${escapeHtml(o.id)}" data-exercise-opt hidden><span>${escapeHtml(o.text)}</span></label>`,
+                  `<label class="answer-card" tabindex="0" role="${allowMultiple ? "checkbox" : "radio"}" aria-checked="false"><input type="${allowMultiple ? "checkbox" : "radio"}" name="exercise-mc" value="${escapeHtml(o.id)}" data-exercise-opt hidden><span>${escapeHtml(o.text)}</span></label>`,
               )
               .join("") +
             `</div>`;
@@ -11801,7 +11819,7 @@ function renderExerciseQuestion() {
         html += `<div class="info-item"><dt>Tip</dt><dd>${escapeHtml(type)}</dd></div>`;
         if (type === "MULTIPLE_CHOICE") {
           const opts = Array.isArray(q.options) ? q.options : [];
-          const isMultiple = false;
+          const isMultiple = q.allowMultiple === true;
           html +=
             `<div class="stack" id="exercise-mc-options">` +
             opts
@@ -11864,7 +11882,13 @@ function renderExerciseQuestion() {
         }
       }
       // Store current version for submit
-      container.dataset.questionVersionId = q.questionVersionId;
+      if (
+        renderToken !== exerciseQuestionRenderToken ||
+        exerciseQuestions[currentExerciseQuestionIndex]?.questionVersionId !==
+          renderedQuestionVersionId
+      )
+        return;
+      container.dataset.questionVersionId = renderedQuestionVersionId;
       container.dataset.questionType = type;
       container.innerHTML = html;
       if (!exerciseQuestionTelemetry.has(q.questionVersionId)) {
@@ -11877,11 +11901,19 @@ function renderExerciseQuestion() {
       syncExerciseDisclosures(container);
       if (isStudentLocal) {
         const cards = [...container.querySelectorAll("label.answer-card")];
+        const allowMultiple = q.allowMultiple === true;
         cards.forEach((card, index) => {
           const input = card.querySelector("input");
           card.addEventListener("click", (event) => {
             event.preventDefault();
             if (exerciseBusy || exerciseAwaitingNext) return;
+            if (allowMultiple) {
+              input.checked = !input.checked;
+              card.classList.toggle("selected", input.checked);
+              card.setAttribute("aria-checked", String(input.checked));
+              card.tabIndex = 0;
+              return;
+            }
             input.checked = true;
             for (const c of cards) {
               const checked = c === card;
@@ -11902,7 +11934,8 @@ function renderExerciseQuestion() {
                   ? -1
                   : 0;
               const target = cards[(index + delta + cards.length) % cards.length];
-              target.click();
+              if (allowMultiple) target.focus();
+              else target.click();
               target.focus();
             }
           });
@@ -11911,11 +11944,10 @@ function renderExerciseQuestion() {
       }
       exerciseAwaitingNext = false;
       $("exercise-attempt-error").classList.add("hidden");
-      const button = $("exercise-submit-attempt");
       // The question can render before optional page state finishes loading.
       // Keep the CTA aligned with the submit guard until that load completes.
-      button.disabled = exerciseLoading;
-      button.textContent = "Cevabı kontrol et";
+      if (!exerciseBusy) setExerciseSubmitButtonState(false, "Cevabı kontrol et");
+      $("exercise-submit-attempt").disabled = exerciseLoading || exerciseBusy;
       const previous = exerciseAttempts.get(q.questionVersionId);
       const isRetrying = exerciseRetryingQuestionVersionId === q.questionVersionId;
       if (previous && !isRetrying) showExerciseFeedback(previous);
@@ -11936,7 +11968,16 @@ function lockExerciseInputs(locked) {
     });
   $("exercise-current-question")
     .querySelectorAll("label.answer-card")
-    .forEach((el) => el.setAttribute("aria-disabled", String(locked)));
+    .forEach((el) => {
+      el.setAttribute("aria-disabled", String(locked));
+      if (locked) {
+        if (!el.dataset.enabledTabIndex) el.dataset.enabledTabIndex = el.tabIndex;
+        el.tabIndex = -1;
+      } else {
+        el.tabIndex = Number(el.dataset.enabledTabIndex ?? 0);
+        delete el.dataset.enabledTabIndex;
+      }
+    });
 }
 function syncExerciseDisclosures(root) {
   root.querySelectorAll("details[data-exercise-disclosure]").forEach((details) => {
@@ -11991,11 +12032,14 @@ function showExerciseFeedback(data) {
   el.style.display = "block";
   exerciseAwaitingNext = true;
   lockExerciseInputs(true);
-  $("exercise-submit-attempt").textContent = firstWrong
-    ? "Tekrar Cevapla"
-    : currentExerciseQuestionIndex < exerciseQuestions.length - 1
-      ? "Devam Et"
-      : "Tamamla";
+  setExerciseSubmitButtonState(
+    false,
+    firstWrong
+      ? "Tekrar Cevapla"
+      : currentExerciseQuestionIndex < exerciseQuestions.length - 1
+        ? "Devam Et"
+        : "Tamamla",
+  );
 }
 
 function exerciseAnswerLabel(answer, question) {
@@ -12043,9 +12087,10 @@ async function handleExerciseSubmitAttempt() {
       container.querySelectorAll("label.answer-card").forEach((card) => {
         card.classList.remove("selected");
         card.setAttribute("aria-checked", "false");
+        card.tabIndex = 0;
       });
       $("exercise-attempt-feedback").style.display = "none";
-      $("exercise-submit-attempt").textContent = "Cevabı kontrol et";
+      setExerciseSubmitButtonState(false, "Cevabı kontrol et");
       return;
     }
     if (currentExerciseQuestionIndex === exerciseQuestions.length - 1) {
@@ -12109,8 +12154,7 @@ async function handleExerciseSubmitAttempt() {
 
   const btn = $("exercise-submit-attempt");
   exerciseBusy = true;
-  btn.disabled = true;
-  btn.textContent = "Gönderiliyor…";
+  setExerciseSubmitButtonState(true, "Cevap kontrol ediliyor…");
   lockExerciseInputs(true);
   const sessionId = exerciseSession.id;
   const previousAttempt = exerciseAttempts.get(questionVersionId);
@@ -12221,17 +12265,22 @@ async function handleExerciseSubmitAttempt() {
     if (isPremiumLimitError(err)) {
       errEl.textContent = err.message || "Günlük ücretsiz soru hakkın doldu.";
       errEl.classList.remove("hidden");
+      exerciseRequest = null;
+      lockExerciseInputs(false);
+      setExerciseSubmitButtonState(false, "Cevabı kontrol et");
       return;
     }
     errEl.textContent = isDailyTrainingExercise()
       ? formatDailyTrainingError(err)
       : formatExerciseSubmissionError(err);
     errEl.classList.remove("hidden");
-    btn.textContent = "Tekrar dene";
+    setExerciseSubmitButtonState(false, "Tekrar dene");
     lockExerciseInputs(exerciseRequest !== null);
   } finally {
     exerciseBusy = false;
     btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    btn.querySelector(".btn-spinner")?.classList.add("hidden");
   }
 }
 async function handleExerciseComplete() {
@@ -12241,8 +12290,12 @@ async function handleExerciseComplete() {
   const btn = $(student ? "exercise-submit-attempt" : "exercise-complete-btn");
   const errEl = $(student ? "exercise-attempt-error" : "exercise-complete-error");
   errEl.classList.add("hidden");
-  btn.disabled = true;
-  btn.textContent = "Tamamlanıyor…";
+  if (student) setExerciseSubmitButtonState(true, "Tamamlanıyor…");
+  else {
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    btn.textContent = "Tamamlanıyor…";
+  }
   try {
     // The prior completion response might have been lost. GET is source of truth.
     const fresh = student ? await fetchStudentExercise(exerciseSession.id) : null;
@@ -12342,8 +12395,12 @@ async function handleExerciseComplete() {
     exerciseAwaitingNext = true;
   } finally {
     exerciseBusy = false;
-    btn.disabled = false;
-    btn.textContent = student ? "Tekrar dene" : "Oturumu Tamamla";
+    if (student) setExerciseSubmitButtonState(false, "Tekrar dene");
+    else {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      btn.textContent = "Oturumu Tamamla";
+    }
   }
 }
 function setupExerciseEvents() {

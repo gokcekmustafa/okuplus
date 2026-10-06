@@ -24,10 +24,21 @@ function parseTimestamp(value: string | undefined, label: string): Date | null {
   return date;
 }
 
-function duration(now: Date, start: Date | null, label: string): number | null {
+function safeTimestamp(value: Date | null, sessionStartedAt: Date, now: Date): Date | null {
+  if (!value) return null;
+  const timestamp = value.getTime();
+  const sessionStart = sessionStartedAt.getTime();
+  const current = now.getTime();
+  // Client clocks can be ahead of the server clock. Telemetry is optional and
+  // must never prevent the authoritative answer from being stored.
+  if (timestamp < sessionStart || timestamp > current) return null;
+  return value;
+}
+
+function duration(now: Date, start: Date | null): number | null {
   if (!start) return null;
   const value = now.getTime() - start.getTime();
-  if (value < 0 || value > MAX_MEASUREMENT_MS) throw new Error(`${label} ölçümü geçersiz`);
+  if (value < 0 || value > MAX_MEASUREMENT_MS) return null;
   return value;
 }
 
@@ -38,29 +49,25 @@ export function validateAttemptTelemetry(
   responseOrder = 1,
   isCorrect: boolean | null = null,
 ): AttemptTelemetry {
-  const exposureStartedAt = parseTimestamp(input.exposureStartedAt, "Soru başlangıcı");
-  const answerStartedAt = parseTimestamp(input.answerStartedAt, "Cevap başlangıcı");
-  if (exposureStartedAt && exposureStartedAt < sessionStartedAt) {
-    throw new Error("Soru başlangıcı oturum başlangıcından önce olamaz");
-  }
-  if (answerStartedAt && answerStartedAt < sessionStartedAt) {
-    throw new Error("Cevap başlangıcı oturum başlangıcından önce olamaz");
-  }
+  const exposureStartedAt = safeTimestamp(
+    parseTimestamp(input.exposureStartedAt, "Soru başlangıcı"),
+    sessionStartedAt,
+    now,
+  );
+  let answerStartedAt = safeTimestamp(
+    parseTimestamp(input.answerStartedAt, "Cevap başlangıcı"),
+    sessionStartedAt,
+    now,
+  );
   if (exposureStartedAt && answerStartedAt && answerStartedAt < exposureStartedAt) {
-    throw new Error("Cevap başlangıcı soru başlangıcından önce olamaz");
-  }
-  if (exposureStartedAt && exposureStartedAt > now) {
-    throw new Error("Soru başlangıcı gelecekte olamaz");
-  }
-  if (answerStartedAt && answerStartedAt > now) {
-    throw new Error("Cevap başlangıcı gelecekte olamaz");
+    answerStartedAt = null;
   }
   return {
     exposureStartedAt,
     answerStartedAt,
     submittedAt: now,
-    interactionDurationMs: duration(now, exposureStartedAt, "Etkileşim süresi"),
-    answerDurationMs: duration(now, answerStartedAt, "Cevap süresi"),
+    interactionDurationMs: duration(now, exposureStartedAt),
+    answerDurationMs: duration(now, answerStartedAt),
     hintUsed: input.hintUsed === true,
     finalResult:
       input.isFinal === true || responseOrder > 1 || isCorrect === true ? isCorrect : null,

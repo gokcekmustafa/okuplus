@@ -44,20 +44,40 @@ describe("server-validated attempt telemetry", () => {
     expect(result).not.toHaveProperty("timeSpentMs");
   });
 
-  it("rejects impossible timestamps", () => {
-    expect(() =>
+  it("ignores impossible client timestamps without blocking the answer", () => {
+    expect(
       validateAttemptTelemetry(
         { answerStartedAt: "2026-09-14T09:59:59.000Z" },
         sessionStartedAt,
         now,
       ),
-    ).toThrow("oturum başlangıcından önce");
-    expect(() =>
+    ).toMatchObject({ answerStartedAt: null, answerDurationMs: null });
+    expect(
       validateAttemptTelemetry(
         { exposureStartedAt: "2026-09-14T10:00:06.000Z" },
         sessionStartedAt,
         now,
       ),
-    ).toThrow("gelecekte");
+    ).toMatchObject({ exposureStartedAt: null, interactionDurationMs: null });
+  });
+
+  it("does not fail when a client clock is ahead of the server", () => {
+    const result = validateAttemptTelemetry(
+      {
+        exposureStartedAt: "2026-09-14T10:00:06.000Z",
+        answerStartedAt: "2026-09-14T10:00:07.000Z",
+      },
+      sessionStartedAt,
+      now,
+      1,
+      true,
+    );
+    expect(result).toMatchObject({
+      exposureStartedAt: null,
+      answerStartedAt: null,
+      interactionDurationMs: null,
+      answerDurationMs: null,
+      finalResult: true,
+    });
   });
 });
