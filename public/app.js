@@ -13616,7 +13616,6 @@ let assignmentDetailCurrent = null;
 let isPlatformUser = null;
 let isTeacherUser = false;
 let currentTenantType = null;
-let teacherClassAnalyticsPayload = null;
 let teacherResultsPayload = null;
 
 function assignmentApi(path, options = {}) {
@@ -13751,7 +13750,6 @@ function renderTeacherClassAnalytics(payload) {
   const section = $("teacher-class-analytics");
   const body = $("teacher-class-analytics-body");
   if (!section || !body) return;
-  teacherClassAnalyticsPayload = payload;
   const summary = payload.summary;
   const skills = payload.skills ?? [];
   const recommendations = payload.recommendations ?? [];
@@ -13776,7 +13774,6 @@ async function loadTeacherClassAnalytics(classId) {
   const body = $("teacher-class-analytics-body");
   if (!section || !body) return;
   if (!classId) {
-    teacherClassAnalyticsPayload = null;
     section.classList.add("hidden");
     body.replaceChildren();
     return;
