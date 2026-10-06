@@ -295,19 +295,19 @@
             <span class="nav-icon" aria-hidden="true">🧑‍🤝‍🧑</span>
             <span class="nav-label">Kullanıcılar</span>
           </button>
-          <button class="nav-item" data-page="students" data-admin type="button">
+          <button class="nav-item" data-page="students" data-admin data-organization type="button">
             <span class="nav-icon" aria-hidden="true">👥</span>
             <span class="nav-label">Öğrenciler</span>
           </button>
-          <button class="nav-item" data-page="teachers" data-admin type="button">
+          <button class="nav-item" data-page="teachers" data-admin data-organization type="button">
             <span class="nav-icon" aria-hidden="true">🧑‍🏫</span>
             <span class="nav-label">Öğretmenler</span>
           </button>
-          <button class="nav-item" data-page="branches" data-admin type="button">
+          <button class="nav-item" data-page="branches" data-admin data-organization type="button">
             <span class="nav-icon" aria-hidden="true">🏬</span>
             <span class="nav-label">Şubeler</span>
           </button>
-          <button class="nav-item" data-page="classes" data-admin type="button">
+          <button class="nav-item" data-page="classes" data-admin data-organization type="button">
             <span class="nav-icon" aria-hidden="true">🏫</span>
             <span class="nav-label">Sınıflar</span>
           </button>
@@ -330,6 +330,15 @@
           <button class="nav-item" data-page="levels" data-admin type="button">
             <span class="nav-icon" aria-hidden="true">🪜</span>
             <span class="nav-label">Seviyeler</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="organization-dashboard"
+            data-organization
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true">▦</span>
+            <span class="nav-label">Kurum Paneli</span>
           </button>
           <button class="nav-item" data-page="assignments" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">📝</span>
@@ -1034,6 +1043,45 @@
           </section>
 
           <!-- Kurumlar -->
+          <section id="page-organization-dashboard" class="page-view hidden">
+            <div class="page-head">
+              <div>
+                <span class="eyebrow">KURUMSAL YÖNETİM</span>
+                <h2 id="organization-dashboard-title">Kurum Paneli</h2>
+                <p class="muted" id="organization-dashboard-subtitle">
+                  Kurumunuzun şube, öğretmen, öğrenci ve sınıf akışını yönetin.
+                </p>
+              </div>
+            </div>
+            <div class="stat-grid organization-dashboard-grid">
+              <button class="card dashboard-link-card" data-page="branches" type="button">
+                <span class="eyebrow">YAPILANMA</span>
+                <strong>Şubeler</strong>
+                <span class="muted">Şubeleri ve yöneticilerini yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="teachers" type="button">
+                <span class="eyebrow">EKİP</span>
+                <strong>Öğretmenler</strong>
+                <span class="muted">Öğretmenleri ve şube bağlantılarını yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="students" type="button">
+                <span class="eyebrow">ÖĞRENCİLER</span>
+                <strong>Öğrenciler</strong>
+                <span class="muted">Öğrenci hesaplarını ve sınıf kayıtlarını yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="classes" type="button">
+                <span class="eyebrow">SINIFLAR</span>
+                <strong>Sınıflar</strong>
+                <span class="muted">Sınıf, öğretmen ve öğrenci kapsamını yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="assignments" type="button">
+                <span class="eyebrow">AKTİVİTELER</span>
+                <strong>Ödevler</strong>
+                <span class="muted">Mevcut ödev ve sonuç akışına erişin.</span>
+              </button>
+            </div>
+          </section>
+
           <section id="page-tenants" class="page-view hidden">
             <div class="page-head">
               <h2>Kurumlar</h2>
@@ -1151,6 +1199,30 @@
                       placeholder="https://…"
                     />
                   </label>
+                  <fieldset id="tenant-form-admin-fields" class="form-section">
+                    <legend>Kurum yöneticisi</legend>
+                    <p class="field-hint">
+                      Kurum oluşturulurken bu bilgilerle tek transaction içinde ORG_ADMIN hesabı
+                      açılır.
+                    </p>
+                    <label class="field">
+                      <span>Ad soyad *</span>
+                      <input id="tenant-form-admin-name" type="text" maxlength="120" />
+                    </label>
+                    <label class="field">
+                      <span>E-posta *</span>
+                      <input id="tenant-form-admin-email" type="email" maxlength="254" />
+                    </label>
+                    <label class="field">
+                      <span>İlk şifre *</span>
+                      <input
+                        id="tenant-form-admin-password"
+                        type="password"
+                        minlength="8"
+                        maxlength="128"
+                      />
+                    </label>
+                  </fieldset>
                   <p id="tenant-form-error" class="error hidden" role="alert"></p>
                   <div class="modal-actions">
                     <button id="tenant-form-cancel" type="button" class="btn btn-ghost">

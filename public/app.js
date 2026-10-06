@@ -1058,8 +1058,12 @@ function showDashboard(me) {
   insightsIdentity = user.id + ":" + (tenantContext?.tenantId || "");
   const isPlatform = Boolean(user.platformRole);
   isPlatformUser = isPlatform;
-  isTeacherUser = !isPlatform && tenantContext?.role === "TEACHER";
+  const organizationRoles = ["OWNER", "ORG_ADMIN", "BRANCH_MANAGER"];
+  isOrganizationUser = !isPlatform && organizationRoles.includes(tenantContext?.role);
+  isTeacherUser = !isPlatform && !isOrganizationUser && tenantContext?.role === "TEACHER";
   currentTenantType = tenantContext?.tenantType ?? null;
+  currentTenantId = tenantContext?.tenantId ?? null;
+  currentTenantName = tenantContext?.tenantName ?? "Kurum";
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
 
@@ -1070,10 +1074,17 @@ function showDashboard(me) {
       ? "Kişisel"
       : tenantContext.tenantName || `Kuruluş: ${tenantContext.tenantId}`
     : "Platform";
+  configureOrganizationScopeUi();
 
-  // Platform yetkilileri dışında admin menülerini gizle.
+  // Platform menülerini yalnızca platform kullanıcılarına göster.
   for (const item of document.querySelectorAll(".nav-item[data-admin]")) {
-    item.classList.toggle("hidden", !isPlatform);
+    item.classList.toggle("hidden", !isPlatform && !item.hasAttribute("data-organization"));
+  }
+  for (const item of document.querySelectorAll("[data-organization]")) {
+    item.classList.toggle("hidden", !isPlatform && !isOrganizationUser);
+  }
+  for (const item of document.querySelectorAll('.nav-item[data-page="assignments"]')) {
+    item.classList.toggle("hidden", isPlatform);
   }
   for (const item of document.querySelectorAll("[data-teacher]")) {
     item.classList.toggle("hidden", !isTeacherUser);
@@ -1081,17 +1092,23 @@ function showDashboard(me) {
   // Admin-only assignment elements
   for (const item of document.querySelectorAll("[data-admin]")) {
     if (item.classList.contains("nav-item")) continue;
-    item.classList.toggle("hidden", !isPlatform);
+    item.classList.toggle("hidden", !isPlatform && !isOrganizationUser);
   }
   for (const item of document.querySelectorAll("[data-student]")) {
-    item.classList.toggle("hidden", isPlatform);
+    item.classList.toggle("hidden", isPlatform || isOrganizationUser);
   }
   for (const item of document.querySelectorAll("[data-student-secondary]")) {
-    item.classList.toggle("hidden", isPlatform);
+    item.classList.toggle(
+      "hidden",
+      isPlatform || (isOrganizationUser && !item.hasAttribute("data-organization")),
+    );
+  }
+  for (const item of document.querySelectorAll("[data-student-primary]")) {
+    item.classList.toggle("hidden", isOrganizationUser);
   }
 
   // Student shell toggle
-  $("view-app").classList.toggle("student-shell", !isPlatform);
+  $("view-app").classList.toggle("student-shell", !isPlatform && !isOrganizationUser);
   var bottomNav = $("student-bottom-nav");
   if (bottomNav) bottomNav.classList.toggle("hidden", isPlatform);
   var gamif = $("topbar-gamification");
@@ -1105,10 +1122,44 @@ function showDashboard(me) {
   void loadContextsAndRender();
   if (isPlatform) {
     navigate("dashboard");
+  } else if (isOrganizationUser) {
+    navigate("organization-dashboard");
   } else if (isTeacherUser) {
     navigate("teacher-classes");
   } else {
     void maybeShowOnboarding();
+  }
+}
+
+function organizationTenantOption(select) {
+  if (!select || !isOrganizationUser || !currentTenantId) return false;
+  select.innerHTML = `<option value="${escapeHtml(currentTenantId)}" data-type="ORGANIZATION">${escapeHtml(currentTenantName)}</option>`;
+  select.value = currentTenantId;
+  return true;
+}
+
+function configureOrganizationScopeUi() {
+  if (!isOrganizationUser || !currentTenantId) return;
+  for (const id of [
+    "student-tenant-filter",
+    "teacher-tenant-filter",
+    "branch-tenant-filter",
+    "class-tenant-filter",
+  ]) {
+    const select = $(id);
+    if (!organizationTenantOption(select)) continue;
+    select.disabled = true;
+    select.closest("label.field")?.classList.add("hidden");
+  }
+  for (const id of [
+    "student-form-tenant",
+    "teacher-form-tenant",
+    "branch-form-tenant",
+    "class-form-tenant",
+  ]) {
+    const select = $(id);
+    if (!organizationTenantOption(select)) continue;
+    select.closest("label.field")?.classList.add("hidden");
   }
 }
 
@@ -3550,6 +3601,7 @@ function setupLessonEvents() {
 
 const PAGES = [
   "dashboard",
+  "organization-dashboard",
   "onboarding",
   "premium-info",
   "billing-account",
@@ -3867,9 +3919,21 @@ function openTenantForm(mode, tenant = null) {
   $("tenant-form-type").value = tenant?.type ?? "ORGANIZATION";
   $("tenant-form-slug").value = tenant?.slug ?? "";
   $("tenant-form-logo").value = tenant?.logoUrl ?? "";
+  $("tenant-form-admin-name").value = "";
+  $("tenant-form-admin-email").value = "";
+  $("tenant-form-admin-password").value = "";
+  updateTenantAdminFields();
   $("tenant-form-error").classList.add("hidden");
   $("tenant-form-modal").classList.remove("hidden");
   $("tenant-form-name").focus();
+}
+
+function updateTenantAdminFields() {
+  const fields = $("tenant-form-admin-fields");
+  if (!fields) return;
+  const visible = tenantFormMode === "create" && $("tenant-form-type").value === "ORGANIZATION";
+  fields.classList.toggle("hidden", !visible);
+  for (const input of fields.querySelectorAll("input")) input.required = visible;
 }
 
 function closeTenantForm() {
@@ -3896,6 +3960,21 @@ async function submitTenantForm(event) {
   const logoUrl = $("tenant-form-logo").value.trim();
   if (slug) payload.slug = slug;
   if (logoUrl) payload.logoUrl = logoUrl;
+
+  if (tenantFormMode === "create" && payload.type === "ORGANIZATION") {
+    const admin = {
+      displayName: $("tenant-form-admin-name").value.trim(),
+      email: $("tenant-form-admin-email").value.trim(),
+      password: $("tenant-form-admin-password").value,
+    };
+    if (!admin.displayName || !admin.email || admin.password.length < 8) {
+      errorEl.textContent =
+        "Kurum yöneticisi adı, e-postası ve en az 8 karakterli ilk şifre gereklidir.";
+      errorEl.classList.remove("hidden");
+      return;
+    }
+    payload.admin = admin;
+  }
 
   if (!payload.name) {
     errorEl.textContent = "Kurum adı gereklidir.";
@@ -4052,6 +4131,7 @@ function setupTenantEvents() {
   $("tenant-form").addEventListener("submit", submitTenantForm);
   $("tenant-form-close").addEventListener("click", closeTenantForm);
   $("tenant-form-cancel").addEventListener("click", closeTenantForm);
+  $("tenant-form-type").addEventListener("change", updateTenantAdminFields);
 
   $("tenant-detail-close").addEventListener("click", () => {
     $("tenant-detail-modal").classList.add("hidden");
@@ -4212,6 +4292,9 @@ for (const item of document.querySelectorAll(".bottom-nav-item")) {
   item.addEventListener("click", () =>
     navigateFromMenu(item.dataset.bottomPage || item.dataset.page),
   );
+}
+for (const item of document.querySelectorAll("[data-page].dashboard-link-card")) {
+  item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }
 
 $("user-menu-toggle")?.addEventListener("click", () => {
@@ -4916,6 +4999,11 @@ function enrollmentStatusBadge(status) {
 
 async function populateStudentTenantFilter() {
   const select = $("student-tenant-filter");
+  if (organizationTenantOption(select)) {
+    select.disabled = true;
+    select.closest("label.field")?.classList.add("hidden");
+    return;
+  }
   if (studentFilterTenantsLoaded) return;
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
@@ -5023,6 +5111,7 @@ async function populateStudentLevelSelects() {
 
 async function populateStudentTenantSelect() {
   const select = $("student-form-tenant");
+  if (organizationTenantOption(select)) return;
   select.innerHTML = `<option value="">Kurum seçin…</option>`;
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
@@ -5107,10 +5196,15 @@ function openStudentForm(mode, student = null) {
   $("student-form-started-field").classList.toggle("hidden", isCreate);
 
   if (isCreate) {
-    $("student-form-tenant").value = "";
+    $("student-form-tenant").value = isOrganizationUser ? currentTenantId : "";
     $("student-form-academic-year").innerHTML = `<option value="">Akademik yıl seçin…</option>`;
     $("student-form-class").innerHTML = `<option value="">Sınıf seçin…</option>`;
-    void populateStudentTenantSelect();
+    if (isOrganizationUser) {
+      void loadStudentAcademicYears(currentTenantId);
+      void loadStudentClasses(currentTenantId, "");
+    } else {
+      void populateStudentTenantSelect();
+    }
   } else {
     $("student-form-current-level").value = student?.profile?.currentLevel?.id ?? "";
     $("student-form-target-level").value = student?.profile?.targetLevel?.id ?? "";
@@ -5597,6 +5691,11 @@ function hideTeacherError() {
 
 async function populateTeacherTenantFilter() {
   const select = $("teacher-tenant-filter");
+  if (organizationTenantOption(select)) {
+    select.disabled = true;
+    select.closest("label.field")?.classList.add("hidden");
+    return;
+  }
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
       headers: authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
@@ -5683,6 +5782,7 @@ function renderTeacherList() {
 
 async function populateTeacherTenantSelect() {
   const select = $("teacher-form-tenant");
+  if (organizationTenantOption(select)) return;
   select.innerHTML = `<option value="">Kurum seçin…</option>`;
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
@@ -5723,8 +5823,12 @@ function openTeacherForm(mode, teacher = null) {
   $("teacher-form-tenant-field").classList.toggle("hidden", !isCreate);
 
   if (isCreate) {
-    $("teacher-form-tenant").value = "";
-    void populateTeacherTenantSelect();
+    $("teacher-form-tenant").value = isOrganizationUser ? currentTenantId : "";
+    if (isOrganizationUser) {
+      organizationTenantOption($("teacher-form-tenant"));
+    } else {
+      void populateTeacherTenantSelect();
+    }
   }
 
   $("teacher-form-error").classList.add("hidden");
@@ -6365,6 +6469,11 @@ function branchStatusBadge(status) {
 
 async function populateBranchTenantFilter() {
   const select = $("branch-tenant-filter");
+  if (organizationTenantOption(select)) {
+    select.disabled = true;
+    select.closest("label.field")?.classList.add("hidden");
+    return;
+  }
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
       headers: authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
@@ -6449,6 +6558,7 @@ function renderBranchList() {
 
 async function populateBranchFormTenantSelect() {
   const select = $("branch-form-tenant");
+  if (organizationTenantOption(select)) return;
   select.innerHTML = `<option value="">Kurum seçin…</option>`;
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
@@ -6507,9 +6617,14 @@ function openBranchForm(mode, branch = null) {
   $("branch-form-manager-field").classList.toggle("hidden", !isCreate);
 
   if (isCreate) {
-    $("branch-form-tenant").value = "";
-    void populateBranchFormTenantSelect();
-    $("branch-form-manager").innerHTML = `<option value="">Kurum seçin…</option>`;
+    $("branch-form-tenant").value = isOrganizationUser ? currentTenantId : "";
+    if (isOrganizationUser) {
+      organizationTenantOption($("branch-form-tenant"));
+      void populateBranchFormManagers(currentTenantId);
+    } else {
+      void populateBranchFormTenantSelect();
+      $("branch-form-manager").innerHTML = `<option value="">Kurum seçin…</option>`;
+    }
   }
 
   $("branch-form-error").classList.add("hidden");
@@ -6818,6 +6933,12 @@ function classStatusBadge(status) {
 async function populateClassTenantFilter() {
   const select = $("class-tenant-filter");
   const yearSelect = $("class-year-filter");
+  if (organizationTenantOption(select)) {
+    select.disabled = true;
+    select.closest("label.field")?.classList.add("hidden");
+    void populateClassYearFilter(currentTenantId);
+    return;
+  }
   yearSelect.innerHTML = `<option value="">Tüm akademik yıllar</option>`;
   yearSelect.disabled = true;
   try {
@@ -6932,6 +7053,7 @@ function renderClassList() {
 
 async function populateClassFormTenantSelect() {
   const select = $("class-form-tenant");
+  if (organizationTenantOption(select)) return;
   select.innerHTML = `<option value="">Kurum seçin…</option>`;
   try {
     const res = await fetch("/admin/tenants?page=1&pageSize=100", {
@@ -7023,13 +7145,19 @@ function openClassForm(mode, cls = null) {
   $("class-form-year-field").classList.toggle("hidden", !isCreate);
 
   if (isCreate) {
-    $("class-form-tenant").value = "";
+    $("class-form-tenant").value = isOrganizationUser ? currentTenantId : "";
     $("class-form-branch").innerHTML = `<option value="">Önce kurum seçin…</option>`;
     $("class-form-branch").disabled = true;
     $("class-form-year").innerHTML = `<option value="">Önce kurum seçin…</option>`;
     $("class-form-year").disabled = true;
     $("class-form-individual-hint").classList.add("hidden");
-    void populateClassFormTenantSelect();
+    if (isOrganizationUser) {
+      organizationTenantOption($("class-form-tenant"));
+      void populateClassFormBranches(currentTenantId);
+      void populateClassFormYears(currentTenantId);
+    } else {
+      void populateClassFormTenantSelect();
+    }
   }
 
   $("class-form-error").classList.add("hidden");
@@ -7646,6 +7774,7 @@ let questionAuthoringContext = null;
 let contentAuthoringReturnAfterVersion = false;
 let currentUserId = null;
 let currentPlatformRole = null;
+let isOrganizationUser = false;
 
 const QUESTION_TYPE_LABELS = {
   MULTIPLE_CHOICE: "Çoktan Seçmeli",
@@ -13623,6 +13752,8 @@ let assignmentEditingId = null;
 let assignmentDetailCurrent = null;
 let isPlatformUser = null;
 let isTeacherUser = false;
+let currentTenantId = null;
+let currentTenantName = "Kurum";
 let currentTenantType = null;
 let teacherResultsPayload = null;
 let teacherStudentProgressPayload = null;

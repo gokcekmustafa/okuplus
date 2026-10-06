@@ -3,7 +3,24 @@ import { ok } from "../../lib/response.js";
 import { validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
-import { requirePlatformRole } from "../../middleware/require-platform.js";
+import { requirePlatformOrOrganizationManagement } from "../../middleware/require-management-scope.js";
+import type { OrganizationActorInput } from "../organization-admin/policy.js";
+import {
+  addOrganizationTeacherBranch,
+  addOrganizationTeacherClass,
+  createOrganizationTeacher,
+  deleteOrganizationTeacher,
+  getOrganizationTeacher,
+  listOrganizationBranchesOption,
+  listOrganizationClassesOption,
+  listOrganizationTeacherCandidates,
+  listOrganizationTeachers,
+  removeOrganizationTeacherBranch,
+  removeOrganizationTeacherClass,
+  updateOrganizationTeacher,
+  updateOrganizationTeacherBranch,
+  updateOrganizationTeacherClass,
+} from "../organization-admin/service.js";
 import {
   addTeacherBranch,
   addTeacherClass,
@@ -39,6 +56,19 @@ function readParamId(request: FastifyRequest): string {
   return id;
 }
 
+function isOrganizationRequest(request: FastifyRequest): boolean {
+  return request.authUser?.platformRole === null;
+}
+
+function organizationActor(request: FastifyRequest): OrganizationActorInput {
+  return {
+    userId: request.authUser!.id,
+    tenantId: request.tenantContext?.tenantId ?? null,
+    role: request.tenantContext?.role ?? null,
+    platformRole: null,
+  };
+}
+
 /**
  * Admin / Öğretmen yönetimi uçları (yalnızca SUPER_ADMIN).
  *
@@ -61,76 +91,185 @@ export async function teacherAdminRoutes(
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const { authProvider } = opts;
-  const platformOnly = [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])];
+  const platformOrOrganization = [
+    requireAuth(authProvider),
+    requirePlatformOrOrganizationManagement(["SUPER_ADMIN"]),
+  ];
 
-  app.get("/admin/teachers", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/teachers", { preHandler: platformOrOrganization }, async (request) => {
     const query = listTeachersQuerySchema.parse(request.query);
+    if (isOrganizationRequest(request)) {
+      return ok(await listOrganizationTeachers(organizationActor(request), query));
+    }
     return ok(await listTeachers(query));
   });
 
-  app.post("/admin/teachers", { preHandler: platformOnly }, async (request) => {
+  app.post("/admin/teachers", { preHandler: platformOrOrganization }, async (request) => {
     const input = createTeacherSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(await createOrganizationTeacher(organizationActor(request), input));
+    }
     return ok(await createTeacher(input));
   });
 
-  app.get("/admin/teachers/:id", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/teachers/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(await getOrganizationTeacher(organizationActor(request), readParamId(request)));
+    }
     return ok(await getTeacher(readParamId(request)));
   });
 
-  app.patch("/admin/teachers/:id", { preHandler: platformOnly }, async (request) => {
+  app.patch("/admin/teachers/:id", { preHandler: platformOrOrganization }, async (request) => {
     const input = updateTeacherSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(
+        await updateOrganizationTeacher(organizationActor(request), readParamId(request), input),
+      );
+    }
     return ok(await updateTeacher(readParamId(request), input));
   });
 
-  app.delete("/admin/teachers/:id", { preHandler: platformOnly }, async (request) => {
+  app.delete("/admin/teachers/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(await deleteOrganizationTeacher(organizationActor(request), readParamId(request)));
+    }
     return ok(await softDeleteTeacher(readParamId(request)));
   });
 
-  app.post("/admin/teachers/:id/branches", { preHandler: platformOnly }, async (request) => {
-    const input = createTeacherBranchSchema.parse(request.body);
-    return ok(await addTeacherBranch(readParamId(request), input));
-  });
+  app.post(
+    "/admin/teachers/:id/branches",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = createTeacherBranchSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await addOrganizationTeacherBranch(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
+      return ok(await addTeacherBranch(readParamId(request), input));
+    },
+  );
 
-  app.patch("/admin/teacher-branches/:id", { preHandler: platformOnly }, async (request) => {
-    const input = updateTeacherBranchSchema.parse(request.body);
-    return ok(await updateTeacherBranch(readParamId(request), input));
-  });
+  app.patch(
+    "/admin/teacher-branches/:id",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = updateTeacherBranchSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await updateOrganizationTeacherBranch(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
+      return ok(await updateTeacherBranch(readParamId(request), input));
+    },
+  );
 
-  app.delete("/admin/teacher-branches/:id", { preHandler: platformOnly }, async (request) => {
-    return ok(await removeTeacherBranch(readParamId(request)));
-  });
+  app.delete(
+    "/admin/teacher-branches/:id",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await removeOrganizationTeacherBranch(organizationActor(request), readParamId(request)),
+        );
+      }
+      return ok(await removeTeacherBranch(readParamId(request)));
+    },
+  );
 
-  app.post("/admin/teachers/:id/classes", { preHandler: platformOnly }, async (request) => {
-    const input = createTeacherClassSchema.parse(request.body);
-    return ok(await addTeacherClass(readParamId(request), input));
-  });
+  app.post(
+    "/admin/teachers/:id/classes",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = createTeacherClassSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await addOrganizationTeacherClass(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
+      return ok(await addTeacherClass(readParamId(request), input));
+    },
+  );
 
   app.patch(
     "/admin/teacher-class-assignments/:id",
-    { preHandler: platformOnly },
+    { preHandler: platformOrOrganization },
     async (request) => {
       const input = updateTeacherClassSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await updateOrganizationTeacherClass(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
       return ok(await updateTeacherClass(readParamId(request), input));
     },
   );
 
   app.delete(
     "/admin/teacher-class-assignments/:id",
-    { preHandler: platformOnly },
+    { preHandler: platformOrOrganization },
     async (request) => {
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await removeOrganizationTeacherClass(organizationActor(request), readParamId(request)),
+        );
+      }
       return ok(await removeTeacherClass(readParamId(request)));
     },
   );
 
   // ---- Lookup (yalnızca okuma; Branch/Class/AcademicYear CRUD değil) ----
 
-  app.get("/admin/teacher-options/branches", { preHandler: platformOnly }, async (request) => {
-    const query = listBranchesQuerySchema.parse(request.query);
-    return ok(await listBranches(query.tenantId));
-  });
+  app.get(
+    "/admin/teacher-options/branches",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const query = listBranchesQuerySchema.parse(request.query);
+      if (isOrganizationRequest(request)) {
+        return ok(await listOrganizationBranchesOption(organizationActor(request)));
+      }
+      return ok(await listBranches(query.tenantId));
+    },
+  );
 
-  app.get("/admin/teacher-options/classes", { preHandler: platformOnly }, async (request) => {
-    const query = listClassesQuerySchema.parse(request.query);
-    return ok(await listClasses(query.tenantId, query.academicYearId));
-  });
+  app.get(
+    "/admin/teacher-options/classes",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const query = listClassesQuerySchema.parse(request.query);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await listOrganizationClassesOption(organizationActor(request), query.academicYearId),
+        );
+      }
+      return ok(await listClasses(query.tenantId, query.academicYearId));
+    },
+  );
+
+  app.get(
+    "/admin/teacher-options/candidates",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      if (isOrganizationRequest(request)) {
+        return ok(await listOrganizationTeacherCandidates(organizationActor(request)));
+      }
+      return ok([]);
+    },
+  );
 }
