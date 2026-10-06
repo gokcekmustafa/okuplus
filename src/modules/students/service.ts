@@ -56,6 +56,7 @@ export interface StudentDetail {
     displayName: string;
     email: string | null;
     phone: string | null;
+    nationalId: string | null;
     birthYear: number | null;
     status: UserStatus;
     emailVerifiedAt: Date | null;
@@ -86,6 +87,8 @@ export interface MembershipSummary {
 export interface EnrollmentSummary {
   id: string;
   status: EnrollmentStatus;
+  classId: string;
+  academicYearId: string;
   className: string;
   academicYearName: string;
   enrolledAt: Date;
@@ -186,6 +189,7 @@ export async function getStudent(profileId: string): Promise<StudentDetail> {
           displayName: true,
           email: true,
           phone: true,
+          nationalId: true,
           birthYear: true,
           status: true,
           emailVerifiedAt: true,
@@ -229,6 +233,7 @@ export async function getStudent(profileId: string): Promise<StudentDetail> {
       displayName: student.displayName,
       email: student.email,
       phone: student.phone,
+      nationalId: student.nationalId,
       birthYear: student.birthYear,
       status: student.status,
       emailVerifiedAt: student.emailVerifiedAt,
@@ -254,6 +259,8 @@ export async function getStudent(profileId: string): Promise<StudentDetail> {
     enrollments: enrollments.map(({ class: c, academicYear, ...e }) => ({
       id: e.id,
       status: e.status,
+      classId: c.id,
+      academicYearId: academicYear.id,
       className: c.name,
       academicYearName: academicYear.name,
       enrolledAt: e.enrolledAt,
@@ -325,6 +332,7 @@ export async function createStudent(input: CreateStudentInput): Promise<StudentD
           displayName: input.displayName,
           email: input.email,
           ...(input.phone ? { phone: input.phone } : {}),
+          ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
           ...(input.birthYear ? { birthYear: input.birthYear } : {}),
           ...(input.status ? { status: input.status } : {}),
           passwordHash,
@@ -413,6 +421,7 @@ export async function updateStudent(
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
         ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       };
@@ -424,6 +433,13 @@ export async function updateStudent(
         ...(input.startedAt !== undefined ? { startedAt: input.startedAt } : {}),
       };
       await tx.studentProfile.update({ where: { id: profileId }, data: profileData });
+      if (
+        input.enrollmentId !== undefined ||
+        input.classId !== undefined ||
+        input.academicYearId !== undefined
+      ) {
+        await updateEnrollmentPlacement(tx, profile.studentId, profile.tenantId, input);
+      }
     });
 
     return await getStudent(profileId);
@@ -486,6 +502,9 @@ function translateStudentError(err: unknown): never {
       if (target === "email") {
         throw conflictError("Bu e-posta adresi zaten kullanımda");
       }
+      if (target.toLowerCase().includes("nationalid")) {
+        throw conflictError("Bu TC Kimlik No zaten kullanımda");
+      }
       if (
         String(err.meta?.target ?? "")
           .toLowerCase()
@@ -504,4 +523,73 @@ function translateStudentError(err: unknown): never {
     }
   }
   throw err;
+}
+
+async function updateEnrollmentPlacement(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  tenantId: string,
+  input: UpdateStudentInput,
+): Promise<void> {
+  const enrollment = input.enrollmentId
+    ? await tx.enrollment.findFirst({
+        where: { id: input.enrollmentId, studentId, tenantId, deletedAt: null },
+        select: { id: true },
+      })
+    : await tx.enrollment.findFirst({
+        where: { studentId, tenantId, status: "ACTIVE", deletedAt: null },
+        orderBy: { enrolledAt: "desc" },
+        select: { id: true },
+      });
+  if (input.enrollmentId && !enrollment) throw notFoundError("Sınıf kaydı bulunamadı");
+
+  if (input.classId === null) {
+    if (enrollment) {
+      await tx.enrollment.update({
+        where: { id: enrollment.id },
+        data: { status: "LEFT", leftAt: new Date() },
+      });
+    }
+    return;
+  }
+  if (input.classId === undefined) return;
+
+  const cls = await tx.class.findFirst({
+    where: { id: input.classId, tenantId, deletedAt: null },
+    select: { id: true, academicYearId: true },
+  });
+  if (!cls) throw validationError("Seçilen sınıf bu kuruma ait değil");
+  if (input.academicYearId && input.academicYearId !== cls.academicYearId) {
+    throw validationError("Seçilen akademik yıl, sınıfın akademik yılıyla uyuşmuyor");
+  }
+
+  if (enrollment) {
+    const clash = await tx.enrollment.findFirst({
+      where: {
+        studentId,
+        academicYearId: cls.academicYearId,
+        status: "ACTIVE",
+        deletedAt: null,
+        id: { not: enrollment.id },
+      },
+      select: { id: true },
+    });
+    if (clash) throw conflictError("Aynı akademik yılda aktif sınıf kaydı zaten var");
+    await tx.enrollment.update({
+      where: { id: enrollment.id },
+      data: { classId: cls.id, academicYearId: cls.academicYearId, status: "ACTIVE", leftAt: null },
+    });
+    return;
+  }
+
+  await tx.enrollment.create({
+    data: {
+      tenantId,
+      studentId,
+      classId: cls.id,
+      academicYearId: cls.academicYearId,
+      status: "ACTIVE",
+      enrolledAt: new Date(),
+    },
+  });
 }

@@ -326,6 +326,15 @@ function translateCreateError(err: unknown): never {
     err.code === "P2002" &&
     String(err.meta?.target ?? "")
       .toLowerCase()
+      .includes("nationalid")
+  ) {
+    throw conflictError("Kurum yöneticisi TC Kimlik No zaten kullanımda");
+  }
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002" &&
+    String(err.meta?.target ?? "")
+      .toLowerCase()
       .includes("email")
   ) {
     throw conflictError("Kurum yöneticisi e-posta adresi zaten kullanımda");

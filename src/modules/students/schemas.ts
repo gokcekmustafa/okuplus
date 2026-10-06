@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Öğrenci ve kurum akademik yıl yönetimi Zod şemaları.
@@ -17,13 +18,6 @@ const emailSchema = z
   .toLowerCase()
   .email("Geçerli bir e-posta adresi olmalı")
   .max(254, "E-posta en fazla 254 karakter olmalı");
-
-const phoneSchema = z
-  .string()
-  .trim()
-  .max(30, "Telefon en fazla 30 karakter olmalı")
-  .nullable()
-  .optional();
 
 const birthYearSchema = z
   .number()
@@ -54,7 +48,8 @@ export const listStudentsQuerySchema = z.object({
 export const createStudentSchema = z.object({
   displayName: displayNameSchema,
   email: emailSchema,
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   password: z
     .string()
@@ -72,12 +67,16 @@ export const createStudentSchema = z.object({
 export const updateStudentSchema = z.object({
   displayName: displayNameSchema.optional(),
   email: emailSchema.optional(),
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   status: userStatusSchema.optional(),
   currentLevelId: levelIdSchema,
   targetLevelId: levelIdSchema,
   startedAt: z.coerce.date().optional(),
+  enrollmentId: z.string().trim().min(1).nullable().optional(),
+  academicYearId: z.string().trim().min(1).nullable().optional(),
+  classId: z.string().trim().min(1).nullable().optional(),
 });
 
 const enrollmentStatusSchema = z.enum(["ACTIVE", "LEFT", "COMPLETED"]);
@@ -91,6 +90,8 @@ export const createEnrollmentSchema = z.object({
 /** Sınıf kaydı durum güncelleme gövdesi. */
 export const updateEnrollmentSchema = z.object({
   status: enrollmentStatusSchema,
+  classId: z.string().trim().min(1).optional(),
+  academicYearId: z.string().trim().min(1).optional(),
 });
 
 /** Tenant akademik yıl listesi sorgusu. */

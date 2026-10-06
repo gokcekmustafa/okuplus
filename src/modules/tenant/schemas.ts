@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Tenant / Kurum yönetimi Zod şemaları.
@@ -29,6 +30,8 @@ const settingsSchema = z.record(z.string(), z.unknown()).nullable().optional();
 const organizationAdminSchema = z.object({
   displayName: z.string().trim().min(1, "Kurum yöneticisi adı gerekli").max(120),
   email: z.string().trim().toLowerCase().email("Geçerli bir yönetici e-postası gerekli").max(254),
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   password: z.string().min(8, "İlk şifre en az 8 karakter olmalı").max(128),
 });
 

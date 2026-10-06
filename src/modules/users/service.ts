@@ -33,6 +33,7 @@ const USER_DETAIL_SELECT = {
   displayName: true,
   email: true,
   phone: true,
+  nationalId: true,
   birthYear: true,
   status: true,
   platformRole: true,
@@ -61,6 +62,7 @@ export interface UserDetail {
   displayName: string;
   email: string | null;
   phone: string | null;
+  nationalId: string | null;
   birthYear: number | null;
   status: User["status"];
   platformRole: User["platformRole"];
@@ -176,6 +178,7 @@ export async function createUser(input: CreateUserInput): Promise<UserDetail> {
         displayName: input.displayName,
         email: input.email,
         ...(input.phone !== undefined && input.phone !== null ? { phone: input.phone } : {}),
+        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
         ...(input.birthYear !== undefined && input.birthYear !== null
           ? { birthYear: input.birthYear }
           : {}),
@@ -187,7 +190,7 @@ export async function createUser(input: CreateUserInput): Promise<UserDetail> {
     return toUserDetail(created, []);
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw conflictError("Bu e-posta adresi zaten kullanımda");
+      throw conflictError(uniqueViolationMessage(err));
     }
     throw err;
   }
@@ -203,6 +206,7 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
     ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
     ...(input.email !== undefined ? { email: input.email } : {}),
     ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
     ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
     ...(input.status !== undefined ? { status: input.status } : {}),
   };
@@ -217,7 +221,7 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
     return toUserDetail(updated, memberships);
   } catch (err) {
     if (isUniqueViolation(err)) {
-      throw conflictError("Bu e-posta adresi zaten kullanımda");
+      throw conflictError(uniqueViolationMessage(err));
     }
     throw err;
   }
@@ -277,6 +281,7 @@ function toUserDetail(
     displayName: string;
     email: string | null;
     phone: string | null;
+    nationalId: string | null;
     birthYear: number | null;
     status: User["status"];
     platformRole: User["platformRole"];
@@ -292,4 +297,11 @@ function toUserDetail(
 
 function isUniqueViolation(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+}
+
+function uniqueViolationMessage(err: unknown): string {
+  const target = String((err as Prisma.PrismaClientKnownRequestError).meta?.target ?? "");
+  return target.toLowerCase().includes("nationalid")
+    ? "Bu TC Kimlik No zaten kullanımda"
+    : "Bu e-posta adresi zaten kullanımda";
 }

@@ -255,10 +255,14 @@ export async function teacherAdminRoutes(
       const query = listClassesQuerySchema.parse(request.query);
       if (isOrganizationRequest(request)) {
         return ok(
-          await listOrganizationClassesOption(organizationActor(request), query.academicYearId),
+          await listOrganizationClassesOption(
+            organizationActor(request),
+            query.academicYearId,
+            query.branchId,
+          ),
         );
       }
-      return ok(await listClasses(query.tenantId, query.academicYearId));
+      return ok(await listClasses(query.tenantId, query.academicYearId, query.branchId));
     },
   );
 

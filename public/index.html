@@ -109,6 +109,30 @@
             />
           </label>
           <label class="field">
+            <span>Telefon</span>
+            <input
+              id="signup-phone"
+              name="phone"
+              type="tel"
+              inputmode="numeric"
+              maxlength="30"
+              autocomplete="tel"
+              placeholder="0 (5xx) xxx xx xx"
+            />
+          </label>
+          <label class="field">
+            <span>TC Kimlik No</span>
+            <input
+              id="signup-national-id"
+              name="nationalId"
+              type="text"
+              inputmode="numeric"
+              maxlength="11"
+              autocomplete="off"
+              placeholder="11 haneli TC Kimlik No"
+            />
+          </label>
+          <label class="field">
             <span>Şifre</span>
             <input
               id="signup-password"
@@ -1239,9 +1263,6 @@
             <div id="academic-year-empty" class="management-empty-state hidden" role="status">
               <strong>Henüz akademik yıl oluşturulmamış.</strong>
               <span>Sınıf oluşturmadan önce kurumunuz için bir akademik yıl ekleyin.</span>
-              <button id="academic-year-empty-create" type="button" class="btn btn-primary">
-                Akademik yıl ekle
-              </button>
             </div>
             <div class="card table-card" id="academic-year-table-card">
               <div class="table-wrap">
@@ -1455,6 +1476,26 @@
                       <input id="tenant-form-admin-email" type="email" maxlength="254" />
                     </label>
                     <label class="field">
+                      <span>Telefon</span>
+                      <input
+                        id="tenant-form-admin-phone"
+                        type="tel"
+                        inputmode="numeric"
+                        maxlength="30"
+                        placeholder="0 (5xx) xxx xx xx"
+                      />
+                    </label>
+                    <label class="field">
+                      <span>TC Kimlik No</span>
+                      <input
+                        id="tenant-form-admin-national-id"
+                        type="text"
+                        inputmode="numeric"
+                        maxlength="11"
+                        placeholder="11 haneli TC Kimlik No"
+                      />
+                    </label>
+                    <label class="field">
                       <span>İlk şifre *</span>
                       <input
                         id="tenant-form-admin-password"
@@ -1615,7 +1656,17 @@
                       id="user-form-phone"
                       type="text"
                       maxlength="30"
-                      placeholder="+90 555 000 00 00"
+                      placeholder="0 (5xx) xxx xx xx"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>TC Kimlik No</span>
+                    <input
+                      id="user-form-national-id"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="11"
+                      placeholder="11 haneli TC Kimlik No"
                     />
                   </label>
                   <label class="field">
@@ -1817,7 +1868,17 @@
                       id="student-form-phone"
                       type="text"
                       maxlength="30"
-                      placeholder="+90 555 000 00 00"
+                      placeholder="0 (5xx) xxx xx xx"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>TC Kimlik No</span>
+                    <input
+                      id="student-form-national-id"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="11"
+                      placeholder="11 haneli TC Kimlik No"
                     />
                   </label>
                   <label class="field">
@@ -2058,7 +2119,17 @@
                       id="teacher-form-phone"
                       type="text"
                       maxlength="30"
-                      placeholder="+90 555 000 00 00"
+                      placeholder="0 (5xx) xxx xx xx"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>TC Kimlik No</span>
+                    <input
+                      id="teacher-form-national-id"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="11"
+                      placeholder="11 haneli TC Kimlik No"
                     />
                   </label>
                   <label class="field">
@@ -2497,7 +2568,7 @@
                         id="branch-form-phone"
                         type="text"
                         maxlength="30"
-                        placeholder="Telefon (isteğe bağlı)"
+                        placeholder="0 (5xx) xxx xx xx"
                       />
                     </label>
                     <label class="field" id="branch-form-manager-field">
@@ -5683,6 +5754,52 @@
               <h2>Profil</h2>
               <p class="muted">Hesabını, tercihlerini ve destek seçeneklerini yönet.</p>
             </div>
+            <section class="settings-card card" aria-labelledby="account-profile-title">
+              <div>
+                <span class="eyebrow">KİŞİSEL BİLGİLER</span>
+                <h3 id="account-profile-title">Profil bilgilerin</h3>
+                <p class="muted">Hesabındaki kişi bilgilerini güncel tut.</p>
+              </div>
+              <form id="account-profile-form" class="settings-form" novalidate>
+                <label class="field">
+                  <span>Ad Soyad *</span>
+                  <input id="account-profile-name" type="text" maxlength="120" required />
+                </label>
+                <label class="field">
+                  <span>E-posta *</span>
+                  <input id="account-profile-email" type="email" maxlength="254" required />
+                </label>
+                <label class="field">
+                  <span>Telefon</span>
+                  <input
+                    id="account-profile-phone"
+                    type="tel"
+                    inputmode="numeric"
+                    maxlength="30"
+                    placeholder="0 (5xx) xxx xx xx"
+                  />
+                </label>
+                <label class="field">
+                  <span>TC Kimlik No</span>
+                  <input
+                    id="account-profile-national-id"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="11"
+                    placeholder="11 haneli TC Kimlik No"
+                  />
+                </label>
+                <label class="field">
+                  <span>Doğum yılı</span>
+                  <input id="account-profile-birthyear" type="number" min="1900" max="2026" />
+                </label>
+                <p id="account-profile-error" class="error hidden" role="alert"></p>
+                <p id="account-profile-status" class="muted" role="status"></p>
+                <button id="account-profile-submit" type="submit" class="btn btn-primary">
+                  Kaydet
+                </button>
+              </form>
+            </section>
             <section
               class="card premium-account-card"
               data-student

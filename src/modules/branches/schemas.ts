@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Şube yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
@@ -34,13 +35,6 @@ const addressSchema = z
   .nullable()
   .optional();
 
-const phoneSchema = z
-  .string()
-  .trim()
-  .max(30, "Telefon en fazla 30 karakter olmalı")
-  .nullable()
-  .optional();
-
 const managerUserIdSchema = z.string().trim().min(1, "Müdür kimliği gerekli").nullable();
 
 /** Yeni şube oluşturma gövdesi. */
@@ -49,7 +43,7 @@ export const createBranchSchema = z.object({
   name: nameSchema,
   code: codeSchema,
   address: addressSchema,
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
   managerUserId: managerUserIdSchema.optional(),
 });
 
@@ -58,7 +52,7 @@ export const updateBranchSchema = z.object({
   name: nameSchema.optional(),
   code: codeSchema.optional(),
   address: addressSchema,
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
 });
 
 /** Şube durumu değiştirme gövdesi (ACTIVE/INACTIVE/CLOSED). */
