@@ -3,7 +3,18 @@ import { ok } from "../../lib/response.js";
 import { validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
-import { requirePlatformRole } from "../../middleware/require-platform.js";
+import { requirePlatformOrOrganizationManagement } from "../../middleware/require-management-scope.js";
+import {
+  assignOrganizationBranchManager,
+  createOrganizationBranch,
+  deleteOrganizationBranch,
+  getOrganizationBranch,
+  listOrganizationBranches,
+  listOrganizationManagerCandidates,
+  updateOrganizationBranch,
+  updateOrganizationBranchStatus,
+} from "../organization-admin/service.js";
+import type { OrganizationActorInput } from "../organization-admin/policy.js";
 import {
   createBranch,
   getBranch,
@@ -31,6 +42,19 @@ function readParamId(request: FastifyRequest): string {
   return id;
 }
 
+function isOrganizationRequest(request: FastifyRequest): boolean {
+  return request.authUser?.platformRole === null;
+}
+
+function organizationActor(request: FastifyRequest): OrganizationActorInput {
+  return {
+    userId: request.authUser!.id,
+    tenantId: request.tenantContext?.tenantId ?? null,
+    role: request.tenantContext?.role ?? null,
+    platformRole: null,
+  };
+}
+
 /**
  * Admin / Şube yönetimi uçları (yalnızca SUPER_ADMIN).
  *
@@ -48,45 +72,98 @@ export async function branchAdminRoutes(
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const { authProvider } = opts;
-  const platformOnly = [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])];
+  const platformOrOrganization = [
+    requireAuth(authProvider),
+    requirePlatformOrOrganizationManagement(["SUPER_ADMIN"]),
+  ];
 
-  app.get("/admin/branches", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/branches", { preHandler: platformOrOrganization }, async (request) => {
     const query = listBranchesQuerySchema.parse(request.query);
+    if (isOrganizationRequest(request)) {
+      return ok(await listOrganizationBranches(organizationActor(request), query));
+    }
     return ok(await listBranches(query));
   });
 
-  app.post("/admin/branches", { preHandler: platformOnly }, async (request) => {
+  app.post("/admin/branches", { preHandler: platformOrOrganization }, async (request) => {
     const input = createBranchSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(await createOrganizationBranch(organizationActor(request), input));
+    }
     return ok(await createBranch(input));
   });
 
-  app.get("/admin/branches/:id", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/branches/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(await getOrganizationBranch(organizationActor(request), readParamId(request)));
+    }
     return ok(await getBranch(readParamId(request)));
   });
 
-  app.patch("/admin/branches/:id", { preHandler: platformOnly }, async (request) => {
+  app.patch("/admin/branches/:id", { preHandler: platformOrOrganization }, async (request) => {
     const input = updateBranchSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(
+        await updateOrganizationBranch(organizationActor(request), readParamId(request), input),
+      );
+    }
     return ok(await updateBranch(readParamId(request), input));
   });
 
-  app.patch("/admin/branches/:id/status", { preHandler: platformOnly }, async (request) => {
-    const input = updateBranchStatusSchema.parse(request.body);
-    return ok(await updateBranchStatus(readParamId(request), input));
-  });
+  app.patch(
+    "/admin/branches/:id/status",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = updateBranchStatusSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await updateOrganizationBranchStatus(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
+      return ok(await updateBranchStatus(readParamId(request), input));
+    },
+  );
 
-  app.patch("/admin/branches/:id/manager", { preHandler: platformOnly }, async (request) => {
-    const input = updateBranchManagerSchema.parse(request.body);
-    return ok(await updateBranchManager(readParamId(request), input));
-  });
+  app.patch(
+    "/admin/branches/:id/manager",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = updateBranchManagerSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await assignOrganizationBranchManager(
+            organizationActor(request),
+            readParamId(request),
+            input,
+          ),
+        );
+      }
+      return ok(await updateBranchManager(readParamId(request), input));
+    },
+  );
 
-  app.delete("/admin/branches/:id", { preHandler: platformOnly }, async (request) => {
+  app.delete("/admin/branches/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(await deleteOrganizationBranch(organizationActor(request), readParamId(request)));
+    }
     return ok(await softDeleteBranch(readParamId(request)));
   });
 
   // ---- Lookup (yalnızca okuma) ----
 
-  app.get("/admin/branch-options/managers", { preHandler: platformOnly }, async (request) => {
-    const query = listBranchManagersQuerySchema.parse(request.query);
-    return ok(await listBranchManagers(query.tenantId));
-  });
+  app.get(
+    "/admin/branch-options/managers",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const query = listBranchManagersQuerySchema.parse(request.query);
+      if (isOrganizationRequest(request)) {
+        return ok(await listOrganizationManagerCandidates(organizationActor(request)));
+      }
+      return ok(await listBranchManagers(query.tenantId));
+    },
+  );
 }

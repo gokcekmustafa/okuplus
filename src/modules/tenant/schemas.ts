@@ -26,6 +26,12 @@ const logoUrlSchema = z
 
 const settingsSchema = z.record(z.string(), z.unknown()).nullable().optional();
 
+const organizationAdminSchema = z.object({
+  displayName: z.string().trim().min(1, "Kurum yöneticisi adı gerekli").max(120),
+  email: z.string().trim().toLowerCase().email("Geçerli bir yönetici e-postası gerekli").max(254),
+  password: z.string().min(8, "İlk şifre en az 8 karakter olmalı").max(128),
+});
+
 /** Yeni kurum oluşturma gövdesi. */
 export const createTenantSchema = z.object({
   type: tenantTypeSchema,
@@ -33,10 +39,11 @@ export const createTenantSchema = z.object({
   slug: slugSchema.nullable().optional(),
   logoUrl: logoUrlSchema,
   settings: settingsSchema,
+  admin: organizationAdminSchema.optional(),
 });
 
 /** Kurum güncelleme gövdesi (kısmi). */
-export const updateTenantSchema = createTenantSchema.partial();
+export const updateTenantSchema = createTenantSchema.omit({ admin: true }).partial();
 
 /** Kurum durum değişikliği gövdesi. */
 export const updateTenantStatusSchema = z.object({

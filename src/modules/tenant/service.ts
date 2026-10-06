@@ -1,12 +1,15 @@
 import { Prisma, type Tenant, type TenantType } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError } from "../../lib/errors.js";
+import { ScryptPasswordHasher } from "../auth/index.js";
 import type {
   CreateTenantInput,
   ListTenantsQuery,
   UpdateTenantInput,
   UpdateTenantStatusInput,
 } from "./schemas.js";
+
+const hasher = new ScryptPasswordHasher();
 
 /**
  * Tenant / Kurum yönetimi servisi (yalnızca platform yetkilileri için).
@@ -147,19 +150,48 @@ export async function getTenant(id: string): Promise<TenantDetail> {
 }
 
 export async function createTenant(input: CreateTenantInput): Promise<TenantDetail> {
-  const data: Prisma.TenantCreateInput = {
-    type: input.type,
-    name: input.name,
-    ...(input.slug !== undefined && input.slug !== null ? { slug: input.slug } : {}),
-    ...(input.logoUrl !== undefined && input.logoUrl !== null ? { logoUrl: input.logoUrl } : {}),
-    ...(input.settings !== undefined && input.settings !== null
-      ? { settings: input.settings as Prisma.InputJsonValue }
-      : {}),
-  };
-
   try {
-    await assertSlugAvailable(input.slug ?? null);
-    const created = await prisma.tenant.create({ data, select: DETAIL_SELECT });
+    const created = await prisma.$transaction(async (tx) => {
+      await assertSlugAvailable(input.slug ?? null, undefined, tx);
+      const data: Prisma.TenantCreateInput = {
+        type: input.type,
+        name: input.name,
+        ...(input.slug !== undefined && input.slug !== null ? { slug: input.slug } : {}),
+        ...(input.logoUrl !== undefined && input.logoUrl !== null
+          ? { logoUrl: input.logoUrl }
+          : {}),
+        ...(input.settings !== undefined && input.settings !== null
+          ? { settings: input.settings as Prisma.InputJsonValue }
+          : {}),
+      };
+      const tenant = await tx.tenant.create({ data, select: DETAIL_SELECT });
+
+      if (input.admin) {
+        if (input.type !== "ORGANIZATION") {
+          throw conflictError("Kurum yöneticisi yalnızca organization kurumunda oluşturulabilir");
+        }
+        const passwordHash = await hasher.hash(input.admin.password);
+        const user = await tx.user.create({
+          data: {
+            displayName: input.admin.displayName,
+            email: input.admin.email,
+            passwordHash,
+            status: "ACTIVE",
+          },
+          select: { id: true },
+        });
+        await tx.membership.create({
+          data: {
+            tenantId: tenant.id,
+            userId: user.id,
+            role: "ORG_ADMIN",
+            status: "ACTIVE",
+            startedAt: new Date(),
+          },
+        });
+      }
+      return tenant;
+    });
     return toDetail(created);
   } catch (err) {
     throw translateCreateError(err);
@@ -233,10 +265,14 @@ export async function softDeleteTenant(id: string): Promise<{ id: string; delete
 
 // -------- özel yardımcılar --------
 
-async function assertSlugAvailable(slug: string | null, excludeId?: string): Promise<void> {
+async function assertSlugAvailable(
+  slug: string | null,
+  excludeId?: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<void> {
   if (!slug) return;
 
-  const clash = await prisma.tenant.findFirst({
+  const clash = await client.tenant.findFirst({
     where: {
       type: "ORGANIZATION",
       slug,
@@ -284,6 +320,15 @@ function toDetail(row: {
 function translateCreateError(err: unknown): never {
   if (isUniqueViolation(err, "uq_tenant_slug_org")) {
     throw conflictError("Bu slug zaten kullanımda");
+  }
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002" &&
+    String(err.meta?.target ?? "")
+      .toLowerCase()
+      .includes("email")
+  ) {
+    throw conflictError("Kurum yöneticisi e-posta adresi zaten kullanımda");
   }
   throw err;
 }

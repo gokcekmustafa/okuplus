@@ -63,6 +63,7 @@ export const createTeacherSchema = z.object({
     .min(8, "Parola en az 8 karakter olmalı")
     .max(128, "Parola en fazla 128 karakter"),
   tenantId: z.string().trim().min(1, "Kurum gerekli"),
+  branchId: z.string().trim().min(1).optional(),
   status: userStatusSchema.optional(),
 });
 

@@ -3,7 +3,17 @@ import { ok } from "../../lib/response.js";
 import { validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
-import { requirePlatformRole } from "../../middleware/require-platform.js";
+import { requirePlatformOrOrganizationManagement } from "../../middleware/require-management-scope.js";
+import type { OrganizationActorInput } from "../organization-admin/policy.js";
+import {
+  createOrganizationAssignment,
+  deleteOrganizationAssignment,
+  getOrganizationAssignment,
+  listOrganizationAssignments,
+  listOrganizationClassAssignments,
+  updateOrganizationAssignment,
+  updateOrganizationAssignmentStatus,
+} from "../organization-admin/service.js";
 import {
   createAssignment,
   deleteAssignment,
@@ -26,6 +36,19 @@ function readParamId(request: FastifyRequest, label: string, key = "id"): string
   return id;
 }
 
+function isOrganizationRequest(request: FastifyRequest): boolean {
+  return request.authUser?.platformRole === null;
+}
+
+function organizationActor(request: FastifyRequest): OrganizationActorInput {
+  return {
+    userId: request.authUser!.id,
+    tenantId: request.tenantContext?.tenantId ?? null,
+    role: request.tenantContext?.role ?? null,
+    platformRole: null,
+  };
+}
+
 /**
  * Ödev yönetimi uçları (SUPER_ADMIN).
  *
@@ -42,37 +65,93 @@ export async function assignmentAdminRoutes(
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const { authProvider } = opts;
-  const platformOnly = [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])];
+  const platformOrOrganization = [
+    requireAuth(authProvider),
+    requirePlatformOrOrganizationManagement(["SUPER_ADMIN"]),
+  ];
 
-  app.get("/admin/assignments", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/assignments", { preHandler: platformOrOrganization }, async (request) => {
     const query = listAssignmentsQuerySchema.parse(request.query);
+    if (isOrganizationRequest(request)) {
+      return ok(await listOrganizationAssignments(organizationActor(request), query));
+    }
     return ok(await listAssignments(query));
   });
 
-  app.post("/admin/assignments", { preHandler: platformOnly }, async (request) => {
+  app.post("/admin/assignments", { preHandler: platformOrOrganization }, async (request) => {
     const input = createAssignmentSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(await createOrganizationAssignment(organizationActor(request), input));
+    }
     return ok(await createAssignment(input, request.authUser?.id));
   });
 
-  app.get("/admin/assignments/:id", { preHandler: platformOnly }, async (request) => {
+  app.get("/admin/assignments/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(
+        await getOrganizationAssignment(organizationActor(request), readParamId(request, "Ödev")),
+      );
+    }
     return ok(await getAssignment(readParamId(request, "Ödev")));
   });
 
-  app.patch("/admin/assignments/:id", { preHandler: platformOnly }, async (request) => {
+  app.patch("/admin/assignments/:id", { preHandler: platformOrOrganization }, async (request) => {
     const input = updateAssignmentSchema.parse(request.body);
+    if (isOrganizationRequest(request)) {
+      return ok(
+        await updateOrganizationAssignment(
+          organizationActor(request),
+          readParamId(request, "Ödev"),
+          input,
+        ),
+      );
+    }
     return ok(await updateAssignment(readParamId(request, "Ödev"), input));
   });
 
-  app.patch("/admin/assignments/:id/status", { preHandler: platformOnly }, async (request) => {
-    const input = updateAssignmentStatusSchema.parse(request.body);
-    return ok(await updateAssignmentStatus(readParamId(request, "Ödev"), input));
-  });
+  app.patch(
+    "/admin/assignments/:id/status",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      const input = updateAssignmentStatusSchema.parse(request.body);
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await updateOrganizationAssignmentStatus(
+            organizationActor(request),
+            readParamId(request, "Ödev"),
+            input,
+          ),
+        );
+      }
+      return ok(await updateAssignmentStatus(readParamId(request, "Ödev"), input));
+    },
+  );
 
-  app.delete("/admin/assignments/:id", { preHandler: platformOnly }, async (request) => {
+  app.delete("/admin/assignments/:id", { preHandler: platformOrOrganization }, async (request) => {
+    if (isOrganizationRequest(request)) {
+      return ok(
+        await deleteOrganizationAssignment(
+          organizationActor(request),
+          readParamId(request, "Ödev"),
+        ),
+      );
+    }
     return ok(await deleteAssignment(readParamId(request, "Ödev")));
   });
 
-  app.get("/admin/classes/:classId/assignments", { preHandler: platformOnly }, async (request) => {
-    return ok(await listClassAssignments(readParamId(request, "Sınıf", "classId")));
-  });
+  app.get(
+    "/admin/classes/:classId/assignments",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      if (isOrganizationRequest(request)) {
+        return ok(
+          await listOrganizationClassAssignments(
+            organizationActor(request),
+            readParamId(request, "Sınıf", "classId"),
+          ),
+        );
+      }
+      return ok(await listClassAssignments(readParamId(request, "Sınıf", "classId")));
+    },
+  );
 }
