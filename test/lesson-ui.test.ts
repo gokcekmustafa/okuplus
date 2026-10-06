@@ -62,6 +62,50 @@ describe("student lesson UI", () => {
     expect(html).toContain("data-learning-step-complete");
   });
 
+  it("shows only the direct next step on the first lesson and keeps it at the content bottom", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({id:'lesson-1',title:'İlk ders',objective:'Başla',explanation:'Anlatım',workedExample:'Örnek',guidedPractice:'Uygula',completion:{completed:true}},{id:'step-1',type:'TEACHING',status:'completed',unitTitle:'Başlangıç'},{previousStep:null,nextStep:{id:'step-2',type:'TEACHING',status:'active',title:'İkinci ders'}})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).not.toContain("data-learning-step-previous");
+    expect(html).toContain("data-learning-step-next");
+    expect(html.lastIndexOf('class="lesson-navigation"')).toBeGreaterThan(
+      html.indexOf('id="lesson-detail-status"'),
+    );
+  });
+
+  it("shows both direct neighbors in the middle of a replay", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({id:'lesson-2',title:'Orta ders',objective:'İlerle',explanation:'Anlatım',workedExample:'Örnek',guidedPractice:'Uygula',completion:{completed:true}},{id:'step-2',type:'TEACHING',status:'completed',unitTitle:'Başlangıç'},{previousStep:{id:'step-1',type:'TEACHING',status:'completed',title:'İlk ders'},nextStep:{id:'step-3',type:'TEACHING',status:'completed',title:'Son ders'}})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).toContain("data-learning-step-previous");
+    expect(html).toContain("data-learning-step-next");
+    expect(html).toContain("Önceki");
+    expect(html).toContain("Sonraki");
+  });
+
+  it("does not expose a next button past a locked direct neighbor", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({id:'lesson-2',title:'Sınır dersi',objective:'İlerle',explanation:'Anlatım',workedExample:'Örnek',guidedPractice:'Uygula',completion:{completed:true}},{id:'step-2',type:'TEACHING',status:'completed',unitTitle:'Başlangıç'},{previousStep:{id:'step-1',type:'TEACHING',status:'completed',title:'İlk ders'},nextStep:{id:'step-3',type:'TEACHING',status:'locked',title:'Kilitli ders'}})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).toContain("data-learning-step-previous");
+    expect(html).not.toContain("data-learning-step-next");
+  });
+
+  it("calculates adjacency without skipping a locked node", () => {
+    const h = harness();
+    const result = h.run(
+      `learningPathAdjacentSteps([{id:'step-1',status:'completed'},{id:'step-2',status:'active'},{id:'step-3',status:'locked'},{id:'step-4',status:'active'}],'step-2')`,
+    ) as { previousStep: { id: string } | null; nextStep: { id: string } | null };
+    expect(result.previousStep?.id).toBe("step-1");
+    expect(result.nextStep).toBeNull();
+  });
+
   it("keeps replay continuation server-authoritative", () => {
     expect(source).toContain("exerciseSession.nextLearningStep");
     expect(source).toContain('id="exercise-next-step"');

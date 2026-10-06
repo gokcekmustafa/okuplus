@@ -5,6 +5,7 @@ export {
   completeLearningStep,
   completeLearningStepForContentVersion,
   completeLearningStepForSession,
+  getLearningStepNavigation,
   getNextLearningStep,
   getNextLearningStepAfter,
   getStudentLearningPath,
