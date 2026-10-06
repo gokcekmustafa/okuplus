@@ -42,9 +42,11 @@ import type { TeacherDetail, TeacherListResult } from "../teachers/service.js";
 import type {
   CreateEnrollmentInput,
   CreateStudentInput,
+  CreateAcademicYearInput,
   ListStudentsQuery,
   UpdateEnrollmentInput,
   UpdateStudentInput,
+  UpdateAcademicYearInput,
 } from "../students/schemas.js";
 import type { StudentDetail, StudentListResult } from "../students/service.js";
 import {
@@ -1247,8 +1249,83 @@ export async function listOrganizationAcademicYears(actor: OrganizationAssignmen
   return prisma.academicYear.findMany({
     where: { tenantId: scope.tenantId },
     orderBy: { startDate: "desc" },
-    select: { id: true, name: true, status: true, startDate: true, endDate: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+    },
   });
+}
+
+export async function createOrganizationAcademicYear(
+  actor: OrganizationAssignmentActor,
+  input: CreateAcademicYearInput,
+) {
+  const scope = await scopeOf(actor);
+  assertOrganizationAdmin(scope);
+  try {
+    return await prisma.academicYear.create({
+      data: {
+        tenantId: scope.tenantId,
+        name: input.name,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        status: input.status ?? "UPCOMING",
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+  } catch (error) {
+    throw translateOrganizationError(error, "Bu kurumda aynı isimde akademik yıl zaten mevcut");
+  }
+}
+
+export async function updateOrganizationAcademicYear(
+  actor: OrganizationAssignmentActor,
+  academicYearId: string,
+  input: UpdateAcademicYearInput,
+) {
+  const scope = await scopeOf(actor);
+  assertOrganizationAdmin(scope);
+  const current = await prisma.academicYear.findFirst({
+    where: { id: academicYearId, tenantId: scope.tenantId },
+    select: { id: true, startDate: true, endDate: true },
+  });
+  if (!current) throw notFoundError("Akademik yıl bulunamadı");
+
+  const startDate = input.startDate ?? current.startDate;
+  const endDate = input.endDate ?? current.endDate;
+  if (endDate <= startDate) {
+    throw validationError("Bitiş tarihi başlangıç tarihinden sonra olmalı");
+  }
+
+  try {
+    return await prisma.academicYear.update({
+      where: { id: academicYearId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.startDate !== undefined ? { startDate: input.startDate } : {}),
+        ...(input.endDate !== undefined ? { endDate: input.endDate } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+  } catch (error) {
+    throw translateOrganizationError(error, "Bu kurumda aynı isimde akademik yıl zaten mevcut");
+  }
 }
 
 export async function listOrganizationClasses(

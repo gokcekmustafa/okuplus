@@ -311,6 +311,17 @@
             <span class="nav-icon" aria-hidden="true">🏫</span>
             <span class="nav-label">Sınıflar</span>
           </button>
+          <button
+            class="nav-item"
+            data-page="academic-years"
+            data-admin
+            data-organization
+            data-organization-admin
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true">📅</span>
+            <span class="nav-label">Akademik Yıllar</span>
+          </button>
           <button class="nav-item" data-page="contents" data-admin type="button">
             <span class="nav-icon" aria-hidden="true">📚</span>
             <span class="nav-label">İçerikler</span>
@@ -335,10 +346,21 @@
             class="nav-item"
             data-page="organization-dashboard"
             data-organization
+            data-organization-admin
             type="button"
           >
             <span class="nav-icon" aria-hidden="true">▦</span>
             <span class="nav-label">Kurum Paneli</span>
+          </button>
+          <button
+            class="nav-item"
+            data-page="branch-dashboard"
+            data-organization
+            data-branch-manager
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true">▦</span>
+            <span class="nav-label">Şube Paneli</span>
           </button>
           <button class="nav-item" data-page="assignments" data-student-secondary type="button">
             <span class="nav-icon" aria-hidden="true">📝</span>
@@ -1049,11 +1071,55 @@
                 <span class="eyebrow">KURUMSAL YÖNETİM</span>
                 <h2 id="organization-dashboard-title">Kurum Paneli</h2>
                 <p class="muted" id="organization-dashboard-subtitle">
-                  Kurumunuzun şube, öğretmen, öğrenci ve sınıf akışını yönetin.
+                  Kurumunuzun günlük operasyonunu tek bir yönetim alanından izleyin.
                 </p>
               </div>
             </div>
-            <div class="stat-grid organization-dashboard-grid">
+            <div class="management-kpi-grid" data-management-kpis>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🏬</span
+                ><span class="management-kpi-label">Şubeler</span
+                ><strong class="management-kpi-value" data-management-kpi="branches">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🧑‍🏫</span
+                ><span class="management-kpi-label">Öğretmenler</span
+                ><strong class="management-kpi-value" data-management-kpi="teachers">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">👥</span
+                ><span class="management-kpi-label">Öğrenciler</span
+                ><strong class="management-kpi-value" data-management-kpi="students">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🏫</span
+                ><span class="management-kpi-label">Sınıflar</span
+                ><strong class="management-kpi-value" data-management-kpi="classes">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">📝</span
+                ><span class="management-kpi-label">Aktif ödevler</span
+                ><strong class="management-kpi-value" data-management-kpi="assignments">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">📅</span
+                ><span class="management-kpi-label">Akademik yıllar</span
+                ><strong class="management-kpi-value" data-management-kpi="academic-years"
+                  >—</strong
+                >
+              </article>
+            </div>
+            <div class="management-dashboard-status muted" data-management-status role="status">
+              Özet yükleniyor…
+            </div>
+            <div class="management-section-heading">
+              <div>
+                <span class="eyebrow">YÖNETİM ALANLARI</span>
+                <h3>Operasyonunuzu yönetin</h3>
+              </div>
+              <p class="muted">İhtiyacınız olan alana doğrudan geçin.</p>
+            </div>
+            <div class="management-action-grid">
               <button class="card dashboard-link-card" data-page="branches" type="button">
                 <span class="eyebrow">YAPILANMA</span>
                 <strong>Şubeler</strong>
@@ -1074,11 +1140,186 @@
                 <strong>Sınıflar</strong>
                 <span class="muted">Sınıf, öğretmen ve öğrenci kapsamını yönetin.</span>
               </button>
+              <button class="card dashboard-link-card" data-page="academic-years" type="button">
+                <span class="eyebrow">TAKVİM</span>
+                <strong>Akademik Yıllar</strong>
+                <span class="muted">Dönemleri oluşturun ve durumlarını yönetin.</span>
+              </button>
               <button class="card dashboard-link-card" data-page="assignments" type="button">
                 <span class="eyebrow">AKTİVİTELER</span>
                 <strong>Ödevler</strong>
                 <span class="muted">Mevcut ödev ve sonuç akışına erişin.</span>
               </button>
+            </div>
+          </section>
+
+          <section id="page-branch-dashboard" class="page-view hidden">
+            <div class="page-head">
+              <div>
+                <span class="eyebrow">ŞUBE YÖNETİMİ</span>
+                <h2 id="branch-dashboard-title">Şube Paneli</h2>
+                <p class="muted" id="branch-dashboard-subtitle">
+                  Yönettiğiniz şubelerin günlük öğrenci ve sınıf akışını izleyin.
+                </p>
+              </div>
+            </div>
+            <div class="management-kpi-grid" data-management-kpis>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🏬</span
+                ><span class="management-kpi-label">Yönettiğiniz şubeler</span
+                ><strong class="management-kpi-value" data-management-kpi="branches">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🧑‍🏫</span
+                ><span class="management-kpi-label">Öğretmenler</span
+                ><strong class="management-kpi-value" data-management-kpi="teachers">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">👥</span
+                ><span class="management-kpi-label">Öğrenciler</span
+                ><strong class="management-kpi-value" data-management-kpi="students">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">🏫</span
+                ><span class="management-kpi-label">Sınıflar</span
+                ><strong class="management-kpi-value" data-management-kpi="classes">—</strong>
+              </article>
+              <article class="management-kpi-card">
+                <span class="management-kpi-icon" aria-hidden="true">📝</span
+                ><span class="management-kpi-label">Aktif ödevler</span
+                ><strong class="management-kpi-value" data-management-kpi="assignments">—</strong>
+              </article>
+            </div>
+            <div class="management-dashboard-status muted" data-management-status role="status">
+              Özet yükleniyor…
+            </div>
+            <div class="management-section-heading">
+              <div>
+                <span class="eyebrow">ŞUBE ALANLARI</span>
+                <h3>Yönettiğiniz kapsam</h3>
+              </div>
+              <p class="muted">Yalnızca bağlı olduğunuz şubeler görüntülenir.</p>
+            </div>
+            <div class="management-action-grid">
+              <button class="card dashboard-link-card" data-page="branches" type="button">
+                <span class="eyebrow">YAPILANMA</span><strong>Şubeler</strong
+                ><span class="muted">Bağlı olduğunuz şubeleri görüntüleyin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="teachers" type="button">
+                <span class="eyebrow">EKİP</span><strong>Öğretmenler</strong
+                ><span class="muted">Şubenizdeki öğretmenleri görüntüleyin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="students" type="button">
+                <span class="eyebrow">ÖĞRENCİLER</span><strong>Öğrenciler</strong
+                ><span class="muted">Şubenizdeki öğrencileri yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="classes" type="button">
+                <span class="eyebrow">SINIFLAR</span><strong>Sınıflar</strong
+                ><span class="muted">Şubenizdeki sınıfları yönetin.</span>
+              </button>
+              <button class="card dashboard-link-card" data-page="assignments" type="button">
+                <span class="eyebrow">AKTİVİTELER</span><strong>Ödevler</strong
+                ><span class="muted">Şubenizdeki ödev akışına erişin.</span>
+              </button>
+            </div>
+          </section>
+
+          <section id="page-academic-years" class="page-view hidden">
+            <div class="page-head">
+              <div>
+                <span class="eyebrow">KURUMSAL TAKVİM</span>
+                <h2>Akademik Yıllar</h2>
+                <p class="muted">Sınıfların ve kayıtların bağlı olduğu dönemleri yönetin.</p>
+              </div>
+              <button id="academic-year-create-btn" type="button" class="btn btn-primary">
+                Akademik yıl ekle
+              </button>
+            </div>
+            <div id="academic-year-error" class="error-banner hidden" role="alert"></div>
+            <div id="academic-year-empty" class="management-empty-state hidden" role="status">
+              <strong>Henüz akademik yıl oluşturulmamış.</strong>
+              <span>Sınıf oluşturmadan önce kurumunuz için bir akademik yıl ekleyin.</span>
+              <button id="academic-year-empty-create" type="button" class="btn btn-primary">
+                Akademik yıl ekle
+              </button>
+            </div>
+            <div class="card table-card" id="academic-year-table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Akademik yıl</th>
+                      <th>Başlangıç</th>
+                      <th>Bitiş</th>
+                      <th>Durum</th>
+                      <th class="text-right">İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="academic-year-list-body">
+                    <tr>
+                      <td colspan="5" class="empty-cell">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="academic-year-form-modal" class="modal-backdrop hidden">
+              <div class="modal">
+                <div class="modal-head">
+                  <h3 id="academic-year-form-title">Yeni akademik yıl</h3>
+                  <button
+                    id="academic-year-form-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                </div>
+                <form id="academic-year-form" novalidate>
+                  <div class="modal-body">
+                    <div
+                      id="academic-year-form-error"
+                      class="error-banner hidden"
+                      role="alert"
+                    ></div>
+                    <label class="field"
+                      ><span>Ad *</span
+                      ><input
+                        id="academic-year-form-name"
+                        type="text"
+                        maxlength="120"
+                        placeholder="2026-2027"
+                        required
+                    /></label>
+                    <div class="form-grid">
+                      <label class="field"
+                        ><span>Başlangıç *</span
+                        ><input id="academic-year-form-start" type="date" required /></label
+                      ><label class="field"
+                        ><span>Bitiş *</span
+                        ><input id="academic-year-form-end" type="date" required
+                      /></label>
+                    </div>
+                    <label class="field"
+                      ><span>Durum</span
+                      ><select id="academic-year-form-status">
+                        <option value="UPCOMING">Yaklaşan</option>
+                        <option value="ACTIVE">Aktif</option>
+                        <option value="CLOSED">Kapalı</option>
+                      </select></label
+                    >
+                  </div>
+                  <div class="modal-actions">
+                    <button id="academic-year-form-cancel" type="button" class="btn btn-ghost">
+                      İptal</button
+                    ><button id="academic-year-form-submit" type="submit" class="btn btn-primary">
+                      <span class="btn-label">Kaydet</span
+                      ><span class="btn-spinner hidden" aria-hidden="true"></span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </section>
 
@@ -1730,7 +1971,12 @@
                   </select>
                 </label>
               </div>
-              <button id="teacher-create-btn" type="button" class="btn btn-primary">
+              <button
+                id="teacher-create-btn"
+                type="button"
+                class="btn btn-primary"
+                data-organization-admin
+              >
                 Yeni öğretmen
               </button>
             </div>
@@ -2024,6 +2270,17 @@
                       <select id="class-form-year" disabled>
                         <option value="">Önce kurum seçin…</option>
                       </select>
+                      <div
+                        id="class-form-year-empty"
+                        class="management-empty-state compact hidden"
+                        role="status"
+                      >
+                        <strong>Henüz akademik yıl oluşturulmamış.</strong>
+                        <span>Sınıf oluşturmak için önce bir dönem ekleyin.</span>
+                        <button id="class-form-create-year" type="button" class="btn btn-secondary">
+                          Akademik yıl ekle
+                        </button>
+                      </div>
                     </label>
                     <label class="field">
                       <span>Sınıf adı *</span>
@@ -2127,7 +2384,12 @@
                   </select>
                 </label>
               </div>
-              <button id="branch-create-btn" type="button" class="btn btn-primary">
+              <button
+                id="branch-create-btn"
+                type="button"
+                class="btn btn-primary"
+                data-organization-admin
+              >
                 Yeni Şube
               </button>
             </div>

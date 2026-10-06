@@ -1057,10 +1057,15 @@ function showDashboard(me) {
   latestEntitlements = null;
   insightsIdentity = user.id + ":" + (tenantContext?.tenantId || "");
   const isPlatform = Boolean(user.platformRole);
+  const tenantRole = tenantContext?.role ?? null;
   isPlatformUser = isPlatform;
-  const organizationRoles = ["OWNER", "ORG_ADMIN", "BRANCH_MANAGER"];
-  isOrganizationUser = !isPlatform && organizationRoles.includes(tenantContext?.role);
-  isTeacherUser = !isPlatform && !isOrganizationUser && tenantContext?.role === "TEACHER";
+  isOrganizationAdminUser = !isPlatform && (tenantRole === "OWNER" || tenantRole === "ORG_ADMIN");
+  isBranchManagerUser = !isPlatform && tenantRole === "BRANCH_MANAGER";
+  isOrganizationUser = isOrganizationAdminUser || isBranchManagerUser;
+  isTeacherUser = !isPlatform && tenantRole === "TEACHER";
+  isStudentUser = !isPlatform && tenantRole === "STUDENT";
+  isParentUser = !isPlatform && tenantRole === "PARENT";
+  isLearnerShellUser = isStudentUser || isParentUser;
   currentTenantType = tenantContext?.tenantType ?? null;
   currentTenantId = tenantContext?.tenantId ?? null;
   currentTenantName = tenantContext?.tenantName ?? "Kurum";
@@ -1078,10 +1083,19 @@ function showDashboard(me) {
 
   // Platform menülerini yalnızca platform kullanıcılarına göster.
   for (const item of document.querySelectorAll(".nav-item[data-admin]")) {
-    item.classList.toggle("hidden", !isPlatform && !item.hasAttribute("data-organization"));
+    item.classList.toggle(
+      "hidden",
+      item.hasAttribute("data-organization") ? !isOrganizationUser : !isPlatform,
+    );
   }
   for (const item of document.querySelectorAll("[data-organization]")) {
-    item.classList.toggle("hidden", !isPlatform && !isOrganizationUser);
+    item.classList.toggle("hidden", !isOrganizationUser);
+  }
+  for (const item of document.querySelectorAll("[data-organization-admin]")) {
+    item.classList.toggle("hidden", !isOrganizationAdminUser);
+  }
+  for (const item of document.querySelectorAll("[data-branch-manager]")) {
+    item.classList.toggle("hidden", !isBranchManagerUser);
   }
   for (const item of document.querySelectorAll('.nav-item[data-page="assignments"]')) {
     item.classList.toggle("hidden", isPlatform);
@@ -1095,26 +1109,25 @@ function showDashboard(me) {
     item.classList.toggle("hidden", !isPlatform && !isOrganizationUser);
   }
   for (const item of document.querySelectorAll("[data-student]")) {
-    item.classList.toggle("hidden", isPlatform || isOrganizationUser);
+    item.classList.toggle("hidden", !isLearnerShellUser);
   }
   for (const item of document.querySelectorAll("[data-student-secondary]")) {
-    item.classList.toggle(
-      "hidden",
-      isPlatform || (isOrganizationUser && !item.hasAttribute("data-organization")),
-    );
+    const page = item.dataset.page;
+    const visible = page === "assignments" ? !isPlatform : isLearnerShellUser;
+    item.classList.toggle("hidden", !visible);
   }
   for (const item of document.querySelectorAll("[data-student-primary]")) {
-    item.classList.toggle("hidden", isOrganizationUser);
+    item.classList.toggle("hidden", !isLearnerShellUser);
   }
 
   // Student shell toggle
-  $("view-app").classList.toggle("student-shell", !isPlatform && !isOrganizationUser);
+  $("view-app").classList.toggle("student-shell", isLearnerShellUser);
   var bottomNav = $("student-bottom-nav");
-  if (bottomNav) bottomNav.classList.toggle("hidden", isPlatform);
+  if (bottomNav) bottomNav.classList.toggle("hidden", !isLearnerShellUser);
   var gamif = $("topbar-gamification");
-  if (gamif) gamif.classList.toggle("hidden", isPlatform);
-  if (!isPlatform) void loadTopbarGamification();
-  if (!isPlatform) void loadClaimedGuestDiagnostic();
+  if (gamif) gamif.classList.toggle("hidden", !isStudentUser);
+  if (isStudentUser) void loadTopbarGamification();
+  if (isStudentUser) void loadClaimedGuestDiagnostic();
 
   if (isPlatform) {
     void loadTenants();
@@ -1122,7 +1135,9 @@ function showDashboard(me) {
   void loadContextsAndRender();
   if (isPlatform) {
     navigate("dashboard");
-  } else if (isOrganizationUser) {
+  } else if (isBranchManagerUser) {
+    navigate("branch-dashboard");
+  } else if (isOrganizationAdminUser) {
     navigate("organization-dashboard");
   } else if (isTeacherUser) {
     navigate("teacher-classes");
@@ -3602,6 +3617,7 @@ function setupLessonEvents() {
 const PAGES = [
   "dashboard",
   "organization-dashboard",
+  "branch-dashboard",
   "onboarding",
   "premium-info",
   "billing-account",
@@ -3611,6 +3627,7 @@ const PAGES = [
   "teachers",
   "branches",
   "classes",
+  "academic-years",
   "contents",
   "questions",
   "templates",
@@ -3626,8 +3643,78 @@ const PAGES = [
   "settings",
 ];
 
+const PLATFORM_PAGES = new Set([
+  "dashboard",
+  "tenants",
+  "users",
+  "contents",
+  "questions",
+  "templates",
+  "skills",
+  "levels",
+  "settings",
+]);
+const ORGANIZATION_ADMIN_PAGES = new Set([
+  "organization-dashboard",
+  "branches",
+  "teachers",
+  "students",
+  "classes",
+  "academic-years",
+  "assignments",
+  "settings",
+  "billing-account",
+]);
+const BRANCH_MANAGER_PAGES = new Set([
+  "branch-dashboard",
+  "branches",
+  "teachers",
+  "students",
+  "classes",
+  "assignments",
+  "settings",
+  "billing-account",
+]);
+const TEACHER_PAGES = new Set(["teacher-classes", "assignments", "settings", "billing-account"]);
+const LEARNER_PAGES = new Set([
+  "dashboard",
+  "onboarding",
+  "premium-info",
+  "billing-account",
+  "exercise",
+  "lessons",
+  "assignments",
+  "assessments",
+  "progress",
+  "badges",
+  "settings",
+]);
+
+function roleHomePage() {
+  if (isPlatformUser) return "dashboard";
+  if (isBranchManagerUser) return "branch-dashboard";
+  if (isOrganizationAdminUser) return "organization-dashboard";
+  if (isTeacherUser) return "teacher-classes";
+  return "dashboard";
+}
+
+function canAccessPage(page) {
+  if (isPlatformUser === null) return true;
+  if (isPlatformUser) return PLATFORM_PAGES.has(page);
+  if (isBranchManagerUser) return BRANCH_MANAGER_PAGES.has(page);
+  if (isOrganizationAdminUser) return ORGANIZATION_ADMIN_PAGES.has(page);
+  if (isTeacherUser) return TEACHER_PAGES.has(page);
+  if (isLearnerShellUser) return LEARNER_PAGES.has(page);
+  return false;
+}
+
 function navigate(page) {
   if (!PAGES.includes(page)) return;
+  if (!canAccessPage(page)) {
+    const fallback = roleHomePage();
+    if (fallback !== page) navigate(fallback);
+    return;
+  }
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && isPlatformUser !== false) return;
 
@@ -3676,6 +3763,8 @@ function navigate(page) {
   } else if (page === "classes") {
     void loadClasses();
     void populateClassTenantFilter();
+  } else if (page === "academic-years") {
+    void loadAcademicYears();
   } else if (page === "contents") {
     void loadContents();
     void populateContentFilters();
@@ -3701,6 +3790,10 @@ function navigate(page) {
     if (isTeacherUser) void loadTeacherManagedClasses();
   } else if (page === "assignments") {
     void loadAssignments();
+  } else if (page === "organization-dashboard") {
+    void loadManagementDashboard(page);
+  } else if (page === "branch-dashboard") {
+    void loadManagementDashboard(page);
   } else if (page === "assessments") {
     void loadAssessments();
   } else if (page === "progress") {
@@ -4278,7 +4371,11 @@ sidebarBackdrop.id = "sidebar-backdrop";
 document.body.appendChild(sidebarBackdrop);
 
 function navigateFromMenu(page) {
-  if (page === "lessons" && isPlatformUser === false) {
+  if (!canAccessPage(page)) {
+    navigate(page);
+    return;
+  }
+  if (page === "lessons" && isStudentUser) {
     activeLearningStepNode = null;
     learningPathEntryMode = true;
   }
@@ -5661,6 +5758,16 @@ function teacherAssignmentResourceApi(path, options = {}) {
   return fetch(`/admin/teachers${path}`, { ...options, method, headers });
 }
 
+// Kurum yönetimi öğretmen CRUD'u /teacher uçlarından ayrıdır. /teacher uçları
+// yalnızca giriş yapmış öğretmenin kendi çalışma alanına aittir.
+function teacherAdminApi(path, options = {}) {
+  const { accessToken, tenantId } = getStoredTokens();
+  const method = options.method ?? "GET";
+  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  if (method === "DELETE") delete headers["content-type"];
+  return fetch(`/admin/teachers${path}`, { ...options, method, headers });
+}
+
 function teacherOptionsApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
@@ -5733,7 +5840,7 @@ async function loadTeachers() {
   if (status) params.set("status", status);
 
   try {
-    const res = await teacherApi(`?${params.toString()}`);
+    const res = await teacherAdminApi(`?${params.toString()}`);
     const body = await parseResponse(res);
     teacherData = body.items;
     teacherTotal = body.total;
@@ -5900,8 +6007,8 @@ async function submitTeacherForm(event) {
   setTeacherFormLoading(true);
   try {
     const res = isCreate
-      ? await teacherApi("", { method: "POST", body: JSON.stringify(payload) })
-      : await teacherApi(`/${teacherEditingId}`, {
+      ? await teacherAdminApi("", { method: "POST", body: JSON.stringify(payload) })
+      : await teacherAdminApi(`/${teacherEditingId}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
@@ -5923,7 +6030,7 @@ async function openTeacherDetail(userId) {
   modal.classList.remove("hidden");
 
   try {
-    const res = await teacherApi(`/${encodeURIComponent(userId)}`);
+    const res = await teacherAdminApi(`/${encodeURIComponent(userId)}`);
     const detail = await parseResponse(res);
     teacherDetailCurrent = detail;
     renderTeacherDetail(detail);
@@ -6200,7 +6307,7 @@ async function addTeacherBranch() {
     return;
   }
   try {
-    const res = await teacherApi(`/${teacherDetailCurrent.user.id}/branches`, {
+    const res = await teacherAdminApi(`/${teacherDetailCurrent.user.id}/branches`, {
       method: "POST",
       body: JSON.stringify({ branchId }),
     });
@@ -6221,7 +6328,7 @@ async function addTeacherClass() {
   const payload = { classId };
   if (subject) payload.subject = subject;
   try {
-    const res = await teacherApi(`/${teacherDetailCurrent.user.id}/classes`, {
+    const res = await teacherAdminApi(`/${teacherDetailCurrent.user.id}/classes`, {
       method: "POST",
       body: JSON.stringify(payload),
     });
@@ -6299,7 +6406,7 @@ async function deleteTeacher(userId) {
   if (!window.confirm(`"${label}" öğretmenini silmek istediğinize emin misiniz?`)) return;
 
   try {
-    const res = await teacherApi(`/${encodeURIComponent(userId)}`, { method: "DELETE" });
+    const res = await teacherAdminApi(`/${encodeURIComponent(userId)}`, { method: "DELETE" });
     await parseResponse(res);
     teacherPage = 1;
     await loadTeachers();
@@ -6912,6 +7019,225 @@ function classSubApi(path, options = {}) {
   return fetch(`/admin${path}`, { ...options, method, headers });
 }
 
+const ACADEMIC_YEAR_STATUS_LABELS = {
+  UPCOMING: "Yaklaşan",
+  ACTIVE: "Aktif",
+  CLOSED: "Kapalı",
+};
+
+let academicYearData = [];
+let academicYearFormMode = "create";
+let academicYearEditingId = null;
+let managementDashboardRequest = 0;
+
+function academicYearApi(path = "", options = {}) {
+  const method = options.method ?? "GET";
+  return authenticatedFetch(`/admin/academic-years${path}`, { ...options, method });
+}
+
+function academicYearStatusBadge(status) {
+  const cls = {
+    UPCOMING: "badge badge-warning",
+    ACTIVE: "badge badge-success",
+    CLOSED: "badge badge-neutral",
+  }[status];
+  return `<span class="${cls ?? "badge"}">${ACADEMIC_YEAR_STATUS_LABELS[status] ?? status}</span>`;
+}
+
+function dateInputValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function showAcademicYearError(message) {
+  const error = $("academic-year-error");
+  if (!error) return;
+  error.textContent = message;
+  error.classList.remove("hidden");
+}
+
+function hideAcademicYearError() {
+  $("academic-year-error")?.classList.add("hidden");
+}
+
+function renderAcademicYearList() {
+  const tbody = $("academic-year-list-body");
+  const table = $("academic-year-table-card");
+  const empty = $("academic-year-empty");
+  if (!tbody || !table || !empty) return;
+
+  if (academicYearData.length === 0) {
+    tbody.innerHTML = "";
+    table.classList.add("hidden");
+    empty.classList.remove("hidden");
+    return;
+  }
+
+  table.classList.remove("hidden");
+  empty.classList.add("hidden");
+  tbody.innerHTML = academicYearData
+    .map(
+      (year) => `
+        <tr>
+          <td><strong>${escapeHtml(year.name)}</strong></td>
+          <td>${escapeHtml(formatDateTime(year.startDate))}</td>
+          <td>${escapeHtml(formatDateTime(year.endDate))}</td>
+          <td>${academicYearStatusBadge(year.status)}</td>
+          <td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-academic-year-edit="${escapeHtml(year.id)}">Düzenle</button></td>
+        </tr>`,
+    )
+    .join("");
+}
+
+async function loadAcademicYears() {
+  hideAcademicYearError();
+  const tbody = $("academic-year-list-body");
+  if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">Yükleniyor…</td></tr>';
+  try {
+    academicYearData = await parseResponse(await academicYearApi());
+    renderAcademicYearList();
+  } catch (err) {
+    academicYearData = [];
+    renderAcademicYearList();
+    showAcademicYearError(err.message || "Akademik yıllar yüklenemedi.");
+  }
+}
+
+function openAcademicYearForm(mode, year = null) {
+  academicYearFormMode = mode;
+  academicYearEditingId = year?.id ?? null;
+  $("academic-year-form-title").textContent =
+    mode === "create" ? "Yeni akademik yıl" : "Akademik yılı düzenle";
+  $("academic-year-form-name").value = year?.name ?? "";
+  $("academic-year-form-start").value = dateInputValue(year?.startDate);
+  $("academic-year-form-end").value = dateInputValue(year?.endDate);
+  $("academic-year-form-status").value = year?.status ?? "UPCOMING";
+  $("academic-year-form-error").classList.add("hidden");
+  $("academic-year-form-modal").classList.remove("hidden");
+  $("academic-year-form-name").focus();
+}
+
+function closeAcademicYearForm() {
+  $("academic-year-form-modal")?.classList.add("hidden");
+}
+
+async function submitAcademicYearForm(event) {
+  event.preventDefault();
+  const error = $("academic-year-form-error");
+  error.classList.add("hidden");
+  const name = $("academic-year-form-name").value.trim();
+  const startDate = $("academic-year-form-start").value;
+  const endDate = $("academic-year-form-end").value;
+  if (!name || !startDate || !endDate) {
+    error.textContent = "Ad, başlangıç ve bitiş tarihleri gereklidir.";
+    error.classList.remove("hidden");
+    return;
+  }
+  if (endDate <= startDate) {
+    error.textContent = "Bitiş tarihi başlangıç tarihinden sonra olmalı.";
+    error.classList.remove("hidden");
+    return;
+  }
+
+  const submit = $("academic-year-form-submit");
+  submit.disabled = true;
+  submit.querySelector(".btn-label")?.classList.add("hidden");
+  submit.querySelector(".btn-spinner")?.classList.remove("hidden");
+  try {
+    const payload = {
+      name,
+      startDate,
+      endDate,
+      status: $("academic-year-form-status").value,
+    };
+    const path =
+      academicYearFormMode === "create" ? "" : `/${encodeURIComponent(academicYearEditingId)}`;
+    await parseResponse(
+      await academicYearApi(path, {
+        method: academicYearFormMode === "create" ? "POST" : "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    );
+    closeAcademicYearForm();
+    await loadAcademicYears();
+  } catch (err) {
+    error.textContent = err.message || "Akademik yıl kaydedilemedi.";
+    error.classList.remove("hidden");
+  } finally {
+    submit.disabled = false;
+    submit.querySelector(".btn-label")?.classList.remove("hidden");
+    submit.querySelector(".btn-spinner")?.classList.add("hidden");
+  }
+}
+
+function setupAcademicYearEvents() {
+  $("academic-year-create-btn")?.addEventListener("click", () => openAcademicYearForm("create"));
+  $("academic-year-empty-create")?.addEventListener("click", () => openAcademicYearForm("create"));
+  $("academic-year-form")?.addEventListener("submit", submitAcademicYearForm);
+  $("academic-year-form-close")?.addEventListener("click", closeAcademicYearForm);
+  $("academic-year-form-cancel")?.addEventListener("click", closeAcademicYearForm);
+  $("academic-year-list-body")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-academic-year-edit]");
+    if (!button) return;
+    const year = academicYearData.find((item) => item.id === button.dataset.academicYearEdit);
+    if (year) openAcademicYearForm("edit", year);
+  });
+  $("class-form-create-year")?.addEventListener("click", () => {
+    closeClassForm();
+    navigate("academic-years");
+    openAcademicYearForm("create");
+  });
+}
+
+async function loadManagementDashboard(pageId) {
+  const root = $(
+    pageId === "branch-dashboard" ? "page-branch-dashboard" : "page-organization-dashboard",
+  );
+  if (!root) return;
+  const requestId = ++managementDashboardRequest;
+  const status = root.querySelector("[data-management-status]");
+  if (status) {
+    status.textContent = "Özet yükleniyor…";
+    status.classList.remove("hidden");
+  }
+  const resources = [
+    ["branches", "/admin/branches?page=1&pageSize=1"],
+    ["teachers", "/admin/teachers?page=1&pageSize=1"],
+    ["students", "/admin/students?page=1&pageSize=1"],
+    ["classes", "/admin/classes?page=1&pageSize=1"],
+    ["assignments", "/admin/assignments?page=1&pageSize=1&status=ACTIVE"],
+  ];
+  if (pageId === "organization-dashboard") {
+    resources.push(["academic-years", "/admin/academic-years"]);
+  }
+  const results = await Promise.allSettled(
+    resources.map(async ([key, path]) => [
+      key,
+      await parseResponse(await authenticatedFetch(path)),
+    ]),
+  );
+  if (requestId !== managementDashboardRequest) return;
+  let failures = 0;
+  for (const result of results) {
+    if (result.status === "rejected") {
+      failures += 1;
+      continue;
+    }
+    const [key, value] = result.value;
+    const total = Array.isArray(value) ? value.length : Number(value?.total ?? 0);
+    root
+      .querySelector(`[data-management-kpi="${key}"]`)
+      ?.replaceChildren(document.createTextNode(String(total)));
+  }
+  if (status) {
+    status.textContent = failures
+      ? "Bazı özetler yüklenemedi; ilgili yönetim alanından tekrar deneyebilirsiniz."
+      : "Güncel kurum özeti";
+    status.classList.toggle("hidden", failures === 0);
+  }
+}
+
 function showClassError(message) {
   const el = $("class-error");
   el.textContent = message;
@@ -7107,6 +7433,7 @@ async function populateClassFormYears(tenantId) {
   if (!tenantId) {
     select.innerHTML = `<option value="">Önce kurum seçin…</option>`;
     select.disabled = true;
+    setClassAcademicYearEmptyState(false);
     return;
   }
   select.innerHTML = `<option value="">Yükleniyor…</option>`;
@@ -7124,12 +7451,21 @@ async function populateClassFormYears(tenantId) {
       .join("");
     select.innerHTML = options
       ? `<option value="">Akademik yıl seçin…</option>${options}`
-      : `<option value="">Akademik yıl bulunamadı</option>`;
+      : `<option value="">Akademik yıl seçilmedi</option>`;
     select.disabled = false;
+    setClassAcademicYearEmptyState(body.length === 0);
   } catch (_e) {
     void _e;
     select.innerHTML = `<option value="">Akademik yıllar yüklenemedi</option>`;
+    setClassAcademicYearEmptyState(false);
   }
+}
+
+function setClassAcademicYearEmptyState(isEmpty) {
+  const empty = $("class-form-year-empty");
+  if (!empty) return;
+  empty.classList.toggle("hidden", !isEmpty || !isOrganizationUser);
+  $("class-form-create-year")?.classList.toggle("hidden", !isOrganizationAdminUser);
 }
 
 function openClassForm(mode, cls = null) {
@@ -7150,6 +7486,7 @@ function openClassForm(mode, cls = null) {
     $("class-form-branch").disabled = true;
     $("class-form-year").innerHTML = `<option value="">Önce kurum seçin…</option>`;
     $("class-form-year").disabled = true;
+    setClassAcademicYearEmptyState(false);
     $("class-form-individual-hint").classList.add("hidden");
     if (isOrganizationUser) {
       organizationTenantOption($("class-form-tenant"));
@@ -7775,6 +8112,11 @@ let contentAuthoringReturnAfterVersion = false;
 let currentUserId = null;
 let currentPlatformRole = null;
 let isOrganizationUser = false;
+let isOrganizationAdminUser = false;
+let isBranchManagerUser = false;
+let isStudentUser = false;
+let isParentUser = false;
+let isLearnerShellUser = false;
 
 const QUESTION_TYPE_LABELS = {
   MULTIPLE_CHOICE: "Çoktan Seçmeli",
@@ -14193,7 +14535,7 @@ function renderStudentRecommendations(payload) {
 }
 
 async function loadStudentRecommendations() {
-  if (isPlatformUser !== false || isTeacherUser) return;
+  if (!isLearnerShellUser || isTeacherUser) return;
   $("student-recommendations-auto")?.classList.toggle(
     "hidden",
     currentTenantType === "ORGANIZATION",
@@ -14513,16 +14855,13 @@ async function loadAssignments() {
   hideAssignmentError();
   const tbody = $("assignment-list-body");
   tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Yükleniyor…</td></tr>';
-  $("student-assignment-view")?.classList.toggle(
-    "hidden",
-    isPlatformUser !== false || isTeacherUser,
-  );
+  $("student-assignment-view")?.classList.toggle("hidden", !isLearnerShellUser || isTeacherUser);
   $("teacher-assignment-view")?.classList.toggle("hidden", !isTeacherUser);
   $("teacher-assignment-create-btn")?.classList.toggle("hidden", !isTeacherUser);
   document
     .querySelectorAll("#page-assignments > .card")
     .forEach((panel) =>
-      panel.classList.toggle("hidden", isPlatformUser === false && !isTeacherUser),
+      panel.classList.toggle("hidden", !isPlatformUser && !isOrganizationUser && !isTeacherUser),
     );
   const search = $("assignment-search").value.trim();
   const status = $("assignment-status-filter").value;
@@ -14534,7 +14873,7 @@ async function loadAssignments() {
   try {
     const apiFn = isTeacherUser
       ? teacherAssignmentApi
-      : isPlatformUser === false
+      : isLearnerShellUser
         ? studentAssignmentApi
         : assignmentApi;
     const res = await apiFn(`?${params.toString()}`);
@@ -14543,7 +14882,7 @@ async function loadAssignments() {
     renderAssignmentList(body.total);
     if (isTeacherUser) {
       void loadTeacherRecommendations();
-    } else if (isPlatformUser === false) {
+    } else if (isLearnerShellUser) {
       void loadStudentRecommendations();
     }
   } catch (err) {
@@ -14634,7 +14973,7 @@ function renderAssignmentList(total) {
     $("assignment-next-btn").disabled = assignmentPage >= totalPages;
     return;
   }
-  if (isPlatformUser === false) {
+  if (isLearnerShellUser) {
     const cards = $("student-assignment-cards");
     cards.innerHTML = assignmentData.length
       ? assignmentData
@@ -14663,7 +15002,7 @@ function renderAssignmentList(total) {
   }
   if (assignmentData.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="empty-cell">Ödev bulunamadı.</td></tr>';
-  } else if (isPlatformUser !== false) {
+  } else if (isPlatformUser || isOrganizationUser) {
     tbody.innerHTML = assignmentData
       .map(
         (a) => `
@@ -14824,7 +15163,7 @@ async function openAssignmentDetail(id) {
   try {
     const apiFn = isTeacherUser
       ? teacherAssignmentApi
-      : isPlatformUser === false
+      : isLearnerShellUser
         ? studentAssignmentApi
         : assignmentApi;
     const res = await apiFn(`/${encodeURIComponent(id)}`);
@@ -14847,7 +15186,7 @@ function renderAssignmentDetail(d) {
     startBtn.style.display = "none";
     editBtn.classList.add("hidden");
     deleteBtn.classList.add("hidden");
-  } else if (isPlatformUser !== false) {
+  } else if (isPlatformUser || isOrganizationUser) {
     const canEdit = d.status === "DRAFT" || d.status === "SCHEDULED";
     const canDelete = d.status === "DRAFT";
     startBtn.style.display = "none";
@@ -14874,10 +15213,10 @@ function renderAssignmentDetail(d) {
         <div class="info-item"><dt>Başlık</dt><dd>${escapeHtml(d.title)}</dd></div>
         <div class="info-item"><dt>Durum</dt><dd>${assignmentStatusBadge(d.status)}</dd></div>
         <div class="info-item"><dt>Sınıf</dt><dd>${escapeHtml(d.className)}</dd></div>
-        ${isPlatformUser !== false ? `<div class="info-item"><dt>Şablon</dt><dd>${escapeHtml(d.templateTitle)} (${escapeHtml(d.templateType)})</dd></div>` : ""}
+        ${isPlatformUser || isOrganizationUser ? `<div class="info-item"><dt>Şablon</dt><dd>${escapeHtml(d.templateTitle)} (${escapeHtml(d.templateType)})</dd></div>` : ""}
         <div class="info-item"><dt>Öğretmen</dt><dd>${escapeHtml(d.teacherName)}</dd></div>
         <div class="info-item"><dt>Son Tarih</dt><dd>${formatAssignmentDateTime(d.dueDate)}</dd></div>
-        ${isPlatformUser !== false ? `<div class="info-item"><dt>Oturum Sayısı</dt><dd>${d.sessionCount}</dd></div>` : `<div class="info-item"><dt>İlerleme</dt><dd>${studentProgressMarkup(d)}</dd></div>`}
+        ${isPlatformUser || isOrganizationUser ? `<div class="info-item"><dt>Oturum Sayısı</dt><dd>${d.sessionCount}</dd></div>` : `<div class="info-item"><dt>İlerleme</dt><dd>${studentProgressMarkup(d)}</dd></div>`}
         ${d.inProgressSessionId ? `<div class="info-item"><dt>Oturum Durumu</dt><dd><span class="badge badge-warning">Devam Ediyor</span></dd></div>` : ""}
       </dl>
     </section>`;
@@ -15356,6 +15695,7 @@ async function init() {
   setupTeacherEvents();
   setupBranchEvents();
   setupClassEvents();
+  setupAcademicYearEvents();
   setupContentEvents();
   setupQuestionEvents();
   setupTemplateEvents();

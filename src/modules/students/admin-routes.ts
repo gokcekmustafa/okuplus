@@ -1,12 +1,13 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ok } from "../../lib/response.js";
-import { validationError } from "../../lib/errors.js";
+import { forbiddenError, validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import { requirePlatformOrOrganizationManagement } from "../../middleware/require-management-scope.js";
 import type { OrganizationActorInput } from "../organization-admin/policy.js";
 import {
   createOrganizationEnrollment,
+  createOrganizationAcademicYear,
   createOrganizationStudent,
   deleteOrganizationStudent,
   getOrganizationStudent,
@@ -15,6 +16,7 @@ import {
   listOrganizationStudentEnrollments,
   listOrganizationStudents,
   updateOrganizationEnrollment,
+  updateOrganizationAcademicYear,
   updateOrganizationStudent,
 } from "../organization-admin/service.js";
 import {
@@ -34,11 +36,14 @@ import {
 } from "./enrollment-service.js";
 import {
   createEnrollmentSchema,
+  createAcademicYearSchema,
   createStudentSchema,
+  listAdminAcademicYearsQuerySchema,
   listAcademicYearsQuerySchema,
   listClassesQuerySchema,
   listStudentsQuerySchema,
   updateEnrollmentSchema,
+  updateAcademicYearSchema,
   updateStudentSchema,
 } from "./schemas.js";
 
@@ -75,7 +80,10 @@ function organizationActor(request: FastifyRequest): OrganizationActorInput {
  *  POST   /admin/students/:id/enrollments            — yeni sınıf kaydı
  *  PATCH  /admin/enrollments/:id                     — sınıf kaydı durumu
  *  GET    /admin/student-options/levels              — seviye kataloğu (okuma amaçlı)
- *  GET    /admin/student-options/academic-years      — tenant akademik yılları (okuma amaçlı)
+ *  GET    /admin/student-options/academic-years      — tenant akademik yılları (lookup)
+ *  GET    /admin/academic-years                     — akademik yıl listesi
+ *  POST   /admin/academic-years                     — kurum akademik yılı oluştur
+ *  PATCH  /admin/academic-years/:id                 — kurum akademik yılı güncelle
  *  GET    /admin/student-options/classes             — tenant sınıfları (okuma amaçlı)
  */
 export async function studentAdminRoutes(
@@ -172,7 +180,42 @@ export async function studentAdminRoutes(
     return ok(await updateEnrollment(readParamId(request), input));
   });
 
-  // ---- Lookup (yalnızca okuma; Class/AcademicYear CRUD değil) ----
+  app.get("/admin/academic-years", { preHandler: platformOrOrganization }, async (request) => {
+    const query = listAdminAcademicYearsQuerySchema.parse(request.query);
+    if (isOrganizationRequest(request)) {
+      return ok(await listOrganizationAcademicYears(organizationActor(request)));
+    }
+    if (!query.tenantId) throw validationError("Kurum gerekli");
+    return ok(await listAcademicYears(query.tenantId));
+  });
+
+  app.post("/admin/academic-years", { preHandler: platformOrOrganization }, async (request) => {
+    if (!isOrganizationRequest(request)) {
+      throw forbiddenError("Akademik yıl yalnızca kurum yönetiminden oluşturulabilir");
+    }
+    const input = createAcademicYearSchema.parse(request.body);
+    return ok(await createOrganizationAcademicYear(organizationActor(request), input));
+  });
+
+  app.patch(
+    "/admin/academic-years/:id",
+    { preHandler: platformOrOrganization },
+    async (request) => {
+      if (!isOrganizationRequest(request)) {
+        throw forbiddenError("Akademik yıl yalnızca kurum yönetiminden güncellenebilir");
+      }
+      const input = updateAcademicYearSchema.parse(request.body);
+      return ok(
+        await updateOrganizationAcademicYear(
+          organizationActor(request),
+          readParamId(request),
+          input,
+        ),
+      );
+    },
+  );
+
+  // ---- Lookup ----
 
   app.get("/admin/student-options/levels", { preHandler: platformOrOrganization }, async () => {
     return ok(await listLevels());

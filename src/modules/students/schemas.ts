@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 /**
- * Öğrenci yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
+ * Öğrenci ve kurum akademik yıl yönetimi Zod şemaları.
  *
  * Öğrenci = User (STUDENT rolünde Membership) + StudentProfile. Yeni sınıf
- * oluşturma (Class CRUD) bu modülde YOKTUR; yalnızca mevcut Class ve
- * AcademicYear kayıtlarının öğrenci kaydında seçilebilmesi sağlanır
- * (read-only lookup uçları). Schema/RLS değişikliği yapılmaz.
+ * oluşturma (Class CRUD) bu modülde YOKTUR; öğrenci kaydında mevcut Class ve
+ * AcademicYear kayıtlarının seçilebilmesi sağlanır. AcademicYear yönetimi
+ * kurum yönetimi endpoint'lerinde, mevcut model üzerinden yapılır.
  */
 
 const userStatusSchema = z.enum(["ACTIVE", "INVITED", "SUSPENDED", "CLOSED"]);
@@ -98,6 +98,52 @@ export const listAcademicYearsQuerySchema = z.object({
   tenantId: z.string().trim().min(1, "Kurum gerekli"),
 });
 
+const academicYearStatusSchema = z.enum(["UPCOMING", "ACTIVE", "CLOSED"]);
+const academicYearNameSchema = z
+  .string()
+  .trim()
+  .min(1, "Akademik yıl adı gerekli")
+  .max(120, "Akademik yıl adı en fazla 120 karakter olmalı");
+const academicYearDateSchema = z.coerce.date();
+
+function validateAcademicYearDates(
+  value: { startDate?: Date; endDate?: Date },
+  ctx: z.RefinementCtx,
+) {
+  if (value.startDate && value.endDate && value.endDate <= value.startDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endDate"],
+      message: "Bitiş tarihi başlangıç tarihinden sonra olmalı",
+    });
+  }
+}
+
+/** Platform lookup'u için tenant zorunlu, kurum yönetiminde context kullanılır. */
+export const listAdminAcademicYearsQuerySchema = z.object({
+  tenantId: z.string().trim().min(1, "Kurum gerekli").optional(),
+});
+
+/** Kurum yöneticisinin yeni akademik yıl oluşturma gövdesi. */
+export const createAcademicYearSchema = z
+  .object({
+    name: academicYearNameSchema,
+    startDate: academicYearDateSchema,
+    endDate: academicYearDateSchema,
+    status: academicYearStatusSchema.optional(),
+  })
+  .superRefine(validateAcademicYearDates);
+
+/** Akademik yıl güncelleme gövdesi (kısmi). */
+export const updateAcademicYearSchema = z
+  .object({
+    name: academicYearNameSchema.optional(),
+    startDate: academicYearDateSchema.optional(),
+    endDate: academicYearDateSchema.optional(),
+    status: academicYearStatusSchema.optional(),
+  })
+  .superRefine(validateAcademicYearDates);
+
 /** Tenant sınıf listesi sorgusu. */
 export const listClassesQuerySchema = z.object({
   tenantId: z.string().trim().min(1, "Kurum gerekli"),
@@ -110,4 +156,6 @@ export type ListStudentsQuery = z.infer<typeof listStudentsQuerySchema>;
 export type CreateEnrollmentInput = z.infer<typeof createEnrollmentSchema>;
 export type UpdateEnrollmentInput = z.infer<typeof updateEnrollmentSchema>;
 export type ListAcademicYearsQuery = z.infer<typeof listAcademicYearsQuerySchema>;
+export type CreateAcademicYearInput = z.infer<typeof createAcademicYearSchema>;
+export type UpdateAcademicYearInput = z.infer<typeof updateAcademicYearSchema>;
 export type ListClassesQuery = z.infer<typeof listClassesQuerySchema>;
