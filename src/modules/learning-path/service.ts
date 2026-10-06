@@ -510,36 +510,84 @@ export async function getNextLearningStep(actor: LearningPathActor) {
     : null;
 }
 
+type LearningPathNavigationStep = {
+  id: string;
+  type: string;
+  title: string;
+  unitTitle: string;
+  status: "completed" | "active";
+  templateVersionId: string | null;
+  contentVersionId: string | null;
+  assessmentId: string | null;
+};
+
+type LearningPathNavigationNode = {
+  id: string;
+  type: string;
+  label: string;
+  status: "completed" | "active" | "locked";
+  templateVersionId: string | null;
+  contentVersionId: string | null;
+  assessmentId: string | null;
+  unit: { title: string };
+};
+
+function navigationStep(
+  node: LearningPathNavigationNode & { status: "completed" | "active" },
+): LearningPathNavigationStep {
+  return {
+    id: node.id,
+    type: node.type,
+    title: node.label,
+    unitTitle: node.unit.title,
+    status: node.status,
+    templateVersionId: node.templateVersionId,
+    contentVersionId: node.contentVersionId,
+    assessmentId: node.assessmentId,
+  };
+}
+
+function isNavigationTarget(
+  node: LearningPathNavigationNode | undefined,
+): node is LearningPathNavigationNode & { status: "completed" | "active" } {
+  return Boolean(node && node.status !== "locked");
+}
+
 /**
- * Selects the first server-authorized station after the addressed station.
- * Completed stations remain valid replay targets, while the first locked
- * station is a hard progression boundary and stops the search.
+ * Returns only the immediately adjacent server-authorized stations. A locked
+ * neighbor is a hard boundary: later stations must never be exposed as a
+ * shortcut, even when their own progress row happens to be completed.
  */
-export async function getNextLearningStepAfter(actor: LearningPathActor, currentStepId: string) {
+export async function getLearningStepNavigation(
+  actor: LearningPathActor,
+  currentStepId: string,
+): Promise<{
+  previousStep: LearningPathNavigationStep | null;
+  nextStep: LearningPathNavigationStep | null;
+}> {
   assertStudent(actor);
   const path = await getStudentLearningPath(actor);
   const orderedNodes = (path?.paths ?? (path ? [path] : [])).flatMap(
     (projection) => projection.nodes ?? [],
   );
   const currentIndex = orderedNodes.findIndex((node) => node.id === currentStepId);
-  if (currentIndex < 0) return null;
+  if (currentIndex < 0) return { previousStep: null, nextStep: null };
 
-  for (const node of orderedNodes.slice(currentIndex + 1)) {
-    if (node.status === "locked") return null;
-    if (node.status === "completed" || node.status === "active") {
-      return {
-        id: node.id,
-        type: node.type,
-        title: node.label,
-        unitTitle: node.unit.title,
-        status: node.status,
-        templateVersionId: node.templateVersionId,
-        contentVersionId: node.contentVersionId,
-        assessmentId: node.assessmentId,
-      };
-    }
-  }
-  return null;
+  const previousNode = orderedNodes[currentIndex - 1];
+  const nextNode = orderedNodes[currentIndex + 1];
+  return {
+    previousStep: isNavigationTarget(previousNode) ? navigationStep(previousNode) : null,
+    nextStep: isNavigationTarget(nextNode) ? navigationStep(nextNode) : null,
+  };
+}
+
+/**
+ * Selects the immediately adjacent server-authorized station after the
+ * addressed station. Completed stations remain valid replay targets, while a
+ * locked station is a hard progression boundary and stops navigation.
+ */
+export async function getNextLearningStepAfter(actor: LearningPathActor, currentStepId: string) {
+  return (await getLearningStepNavigation(actor, currentStepId)).nextStep;
 }
 
 export async function assertLearningStepAccessible(actor: LearningPathActor, stepId: string) {

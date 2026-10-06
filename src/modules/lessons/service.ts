@@ -7,6 +7,7 @@ import { assertStudentActor } from "../student-learning/policy.js";
 import {
   assertLearningStepAccessible,
   completeLearningStep,
+  getLearningStepNavigation,
   getNextLearningStepAfter,
 } from "../learning-path/index.js";
 import {
@@ -158,6 +159,7 @@ export async function getStudentLearningStepLesson(stepId: string, actor: Lesson
   return {
     lesson: await findLessonForContentVersion(node.contentVersionId, actor),
     learningStep: learningStepView(node),
+    navigation: await getLearningStepNavigation(actor, stepId),
   };
 }
 

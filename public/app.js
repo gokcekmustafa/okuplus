@@ -2596,6 +2596,7 @@ async function startLearningPathNode(node, button) {
   var tv = node?.templateVersionId;
   var type = node?.type;
   activeLearningStepNode = node;
+  activeLearningStepNavigation = null;
   learningPathEntryMode = true;
   if (type === "TEACHING" || type === "SMALL_STUDY") {
     if (!node?.contentVersionId) {
@@ -3684,11 +3685,45 @@ function setLessonPageMode(focused) {
   if (listTitle) listTitle.textContent = "Sana uygun dersler";
 }
 
-function renderFocusedLesson(lesson, learningStep) {
+function learningPathAdjacentSteps(nodes, currentStepId) {
+  const ordered = Array.isArray(nodes) ? nodes.filter(Boolean) : [];
+  const currentIndex = ordered.findIndex((node) => node.id === currentStepId);
+  if (currentIndex < 0) return { previousStep: null, nextStep: null };
+  const isAvailable = (node) =>
+    node && ["active", "completed", "available"].includes(node.status) ? node : null;
+  return {
+    previousStep: isAvailable(ordered[currentIndex - 1]),
+    nextStep: isAvailable(ordered[currentIndex + 1]),
+  };
+}
+
+function normalizeLearningPathNavigation(navigation, learningStep) {
+  if (!navigation || !learningStep?.id) return { previousStep: null, nextStep: null };
+  const previousStep = navigation.previousStep || null;
+  const nextStep = navigation.nextStep || null;
+  const bounded = learningPathAdjacentSteps(
+    [previousStep, learningStep, nextStep],
+    learningStep.id,
+  );
+  return {
+    previousStep: bounded.previousStep?.id === previousStep?.id ? previousStep : null,
+    nextStep: bounded.nextStep?.id === nextStep?.id ? nextStep : null,
+  };
+}
+
+function renderFocusedLesson(lesson, learningStep, serverNavigation) {
   const detail = $("lesson-detail");
   if (!detail) return;
   const completed = Boolean(lesson?.completion?.completed);
   const stepTypeLabel = learningStep?.type === "SMALL_STUDY" ? "Küçük çalışma" : "Öğretim";
+  const navigation = normalizeLearningPathNavigation(serverNavigation, learningStep);
+  const navigationMarkup =
+    navigation.previousStep || navigation.nextStep
+      ? `<nav class="lesson-navigation" aria-label="Öğrenme yolu gezinmesi">
+          ${navigation.previousStep ? '<button type="button" class="btn btn-secondary" data-learning-step-previous><span class="btn-label">Önceki</span></button>' : ""}
+          ${navigation.nextStep ? '<button type="button" class="btn btn-primary" data-learning-step-next><span class="btn-label">Sonraki</span></button>' : ""}
+        </nav>`
+      : "";
   detail.innerHTML = lesson
     ? `
     <div class="learning-path-step-context">
@@ -3711,7 +3746,8 @@ function renderFocusedLesson(lesson, learningStep) {
       ${completed && learningStep?.templateVersionId ? '<button type="button" class="btn btn-ghost" data-learning-step-replay>Dersi tekrar et</button>' : ""}
       <button type="button" class="btn btn-primary" data-learning-step-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : "Dersi tamamladım ve sonraki adıma geç"}</button>
     </div>
-    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`
+    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
+    ${navigationMarkup}`
     : '<p class="muted">Bu öğrenme adımı için yayınlanmış ders bulunamadı.</p>';
 }
 
@@ -3765,6 +3801,7 @@ async function loadFocusedLearningPathStep() {
     }
     const node = activeLearningStepNode;
     if (!node) {
+      activeLearningStepNavigation = null;
       status.textContent = "Öğrenme yolundaki tüm durakları tamamladın.";
       renderFocusedLesson(null, null);
       return;
@@ -3775,9 +3812,12 @@ async function loadFocusedLearningPathStep() {
       return;
     }
     const data = await parseResponse(await learningPathStepApi(node.id, ""));
+    const learningStep = { ...node, ...(data?.learningStep || {}) };
+    activeLearningStepNode = learningStep;
+    activeLearningStepNavigation = normalizeLearningPathNavigation(data?.navigation, learningStep);
     lessonData = data?.lesson ? [data.lesson] : [];
     selectedLessonId = data?.lesson?.id || null;
-    renderFocusedLesson(data?.lesson || null, data?.learningStep || node);
+    renderFocusedLesson(data?.lesson || null, learningStep, activeLearningStepNavigation);
     status.textContent = "Bu adımı tamamladığında sonraki durak açılacak.";
   } catch (err) {
     status.textContent = "";
@@ -3788,6 +3828,27 @@ async function loadFocusedLearningPathStep() {
       );
       error.classList.remove("hidden");
     }
+  }
+}
+
+async function navigateLearningPathAdjacent(direction) {
+  const target =
+    direction === "previous"
+      ? activeLearningStepNavigation?.previousStep
+      : activeLearningStepNavigation?.nextStep;
+  const button = $("lesson-detail")?.querySelector(
+    direction === "previous" ? "[data-learning-step-previous]" : "[data-learning-step-next]",
+  );
+  if (!target || !button) return;
+  setAsyncButtonState(button, true, "Yükleniyor…");
+  try {
+    activeLearningStepNode = target;
+    learningPathEntryMode = true;
+    await startLearningPathNode(target, null);
+  } catch (error) {
+    setAsyncButtonState(button, false, "Yükleniyor…");
+    const status = $("lesson-detail-status");
+    if (status) status.textContent = formatStudentError(error, "Sonraki adım açılamadı.");
   }
 }
 
@@ -3852,6 +3913,7 @@ async function loadLessons() {
   if (!status) return;
   learningPathEntryMode = false;
   activeLearningStepNode = null;
+  activeLearningStepNavigation = null;
   setLessonPageMode(false);
   status.textContent = "Derslerin yükleniyor…";
   error?.classList.add("hidden");
@@ -3932,9 +3994,14 @@ function setupLessonEvents() {
     if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
     if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
     if (event.target.closest("[data-learning-step-replay]")) void replayLearningStep();
+    if (event.target.closest("[data-learning-step-previous]"))
+      void navigateLearningPathAdjacent("previous");
+    if (event.target.closest("[data-learning-step-next]"))
+      void navigateLearningPathAdjacent("next");
     if (event.target.closest("[data-learning-step-back]")) {
       learningPathEntryMode = false;
       activeLearningStepNode = null;
+      activeLearningStepNavigation = null;
       navigate("dashboard");
     }
   });
@@ -4804,6 +4871,7 @@ function navigateFromMenu(page) {
   }
   if (page === "lessons" && isStudentUser) {
     activeLearningStepNode = null;
+    activeLearningStepNavigation = null;
     learningPathEntryMode = true;
   }
   navigate(page);
@@ -8964,6 +9032,7 @@ let exerciseMode = null;
 let lessonData = [];
 let selectedLessonId = null;
 let activeLearningStepNode = null;
+let activeLearningStepNavigation = null;
 let learningPathEntryMode = false;
 
 let skillPage = 1;
