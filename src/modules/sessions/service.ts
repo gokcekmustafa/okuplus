@@ -20,7 +20,10 @@ import {
   loadTrainingRuntimeGraph,
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
-import { isIndependentTrainingSession } from "../training/session-origin.js";
+import {
+  isIndependentTrainingSession,
+  isLearningPathReplaySession,
+} from "../training/session-origin.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
 import { completeLearningStepForSession } from "../learning-path/index.js";
 import {
@@ -808,7 +811,8 @@ export async function completeExerciseSession(
   const shouldSyncLearningPath =
     !session.assignmentId &&
     !session.trainingSessionItem &&
-    !isIndependentTrainingSession(session.deviceInfo);
+    !isIndependentTrainingSession(session.deviceInfo) &&
+    !isLearningPathReplaySession(session.deviceInfo);
   if (session.tenantId && shouldSyncLearningPath) {
     const learningActor = {
       userId: session.studentId,

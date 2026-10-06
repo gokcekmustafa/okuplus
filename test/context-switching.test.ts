@@ -497,4 +497,25 @@ describe.sequential("context switching", () => {
     });
     expect(ctxs.json().data.contexts.length).toBe(0);
   });
+  it("19 organization student session cannot switch tenant context", async () => {
+    const orgLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: EMAIL, password: PASSWORD, tenantId: ORG_A },
+    });
+    const orgToken = orgLogin.json().data.tokens.accessToken;
+    const contexts = await app.inject({
+      method: "GET",
+      url: "/auth/contexts",
+      headers: { authorization: `Bearer ${orgToken}`, "x-tenant-id": ORG_A },
+    });
+    expect(contexts.statusCode).toBe(200);
+    expect(contexts.json().data.locked).toBe(true);
+    const switched = await app.inject({
+      method: "GET",
+      url: "/auth/me",
+      headers: { authorization: `Bearer ${orgToken}`, "x-tenant-id": personalTenantId },
+    });
+    expect(switched.statusCode).toBe(403);
+  });
 });

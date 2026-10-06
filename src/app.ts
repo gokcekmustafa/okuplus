@@ -22,7 +22,7 @@ import {
 import { branchAdminRoutes } from "./modules/branches/index.js";
 import { classAdminRoutes } from "./modules/classes/index.js";
 import { contentAdminRoutes } from "./modules/contents/index.js";
-import { entitlementRoutes } from "./modules/entitlements/index.js";
+import { entitlementAdminRoutes, entitlementRoutes } from "./modules/entitlements/index.js";
 import { billingRoutes } from "./modules/billing/index.js";
 import {
   gamificationFoundationRoutes,
@@ -141,6 +141,7 @@ export async function buildApp(
   await app.register(assessmentStudentRoutes, { authProvider });
   await app.register(progressStudentRoutes, { authProvider });
   await app.register(entitlementRoutes, { authProvider });
+  await app.register(entitlementAdminRoutes, { authProvider });
   await app.register(billingRoutes, { authProvider, env });
   await app.register(pilotRoutes, { authProvider, env });
   await app.register(gamificationStudentRoutes, { authProvider });

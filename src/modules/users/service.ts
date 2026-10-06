@@ -2,7 +2,12 @@ import { Prisma, type Membership, type TenantType, type User } from "@prisma/cli
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError } from "../../lib/errors.js";
 import { ScryptPasswordHasher } from "../auth/index.js";
-import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from "./schemas.js";
+import type {
+  CreateUserInput,
+  ListUsersQuery,
+  ResetUserPasswordInput,
+  UpdateUserInput,
+} from "./schemas.js";
 
 /**
  * User + Membership yönetimi servisi (yalnızca SUPER_ADMIN için).
@@ -71,6 +76,56 @@ export interface UserDetail {
   createdAt: Date;
   updatedAt: Date;
   memberships: MembershipSummary[];
+  branches: UserBranchSummary[];
+  classAssignments: UserClassAssignmentSummary[];
+  enrollments: UserEnrollmentSummary[];
+  entitlements: UserEntitlementSummary[];
+}
+
+export interface UserBranchSummary {
+  id: string;
+  name: string;
+  tenantId: string;
+  tenantName: string;
+  status: string;
+}
+
+export interface UserClassAssignmentSummary {
+  id: string;
+  classId: string;
+  className: string;
+  tenantId: string;
+  tenantName: string;
+  branchName: string;
+  academicYearName: string;
+  status: string;
+  subject: string | null;
+}
+
+export interface UserEnrollmentSummary {
+  id: string;
+  classId: string;
+  className: string;
+  tenantId: string;
+  tenantName: string;
+  branchName: string;
+  academicYearName: string;
+  status: string;
+  enrolledAt: Date;
+  leftAt: Date | null;
+}
+
+export interface UserEntitlementSummary {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  tenantType: TenantType;
+  scope: string;
+  plan: string;
+  active: boolean;
+  source: string;
+  effectiveAt: Date;
+  expiresAt: Date | null;
 }
 
 export interface MembershipSummary {
@@ -152,6 +207,78 @@ export async function getUser(id: string): Promise<UserDetail> {
     orderBy: { createdAt: "desc" },
   });
 
+  const tenantIds = memberships.map((membership) => membership.tenant.id);
+  const [branches, classAssignments, enrollments, entitlements] = await Promise.all([
+    prisma.teacherBranchMembership.findMany({
+      where: { teacherId: id },
+      select: {
+        id: true,
+        status: true,
+        branch: { select: { id: true, name: true, tenant: { select: { id: true, name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.teacherClassAssignment.findMany({
+      where: { teacherId: id },
+      select: {
+        id: true,
+        status: true,
+        subject: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+            branch: { select: { name: true } },
+            academicYear: { select: { name: true } },
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.enrollment.findMany({
+      where: { studentId: id },
+      select: {
+        id: true,
+        status: true,
+        enrolledAt: true,
+        leftAt: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+            branch: { select: { name: true } },
+            academicYear: { select: { name: true } },
+            tenant: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.entitlement.findMany({
+      where: {
+        OR: [
+          { userId: id },
+          ...(tenantIds.length
+            ? [{ tenantId: { in: tenantIds }, scope: "ORGANIZATION" as const, userId: null }]
+            : []),
+        ],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        scope: true,
+        plan: true,
+        active: true,
+        source: true,
+        effectiveAt: true,
+        expiresAt: true,
+        tenant: { select: { name: true, type: true } },
+      },
+      orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
+
   return {
     ...user,
     memberships: memberships.map(({ tenant, ...m }) => ({
@@ -165,6 +292,48 @@ export async function getUser(id: string): Promise<UserDetail> {
       startedAt: m.startedAt,
       endedAt: m.endedAt,
       createdAt: m.createdAt,
+    })),
+    branches: branches.map((item) => ({
+      id: item.id,
+      name: item.branch.name,
+      tenantId: item.branch.tenant.id,
+      tenantName: item.branch.tenant.name,
+      status: item.status,
+    })),
+    classAssignments: classAssignments.map((item) => ({
+      id: item.id,
+      classId: item.class.id,
+      className: item.class.name,
+      tenantId: item.class.tenant.id,
+      tenantName: item.class.tenant.name,
+      branchName: item.class.branch.name,
+      academicYearName: item.class.academicYear.name,
+      status: item.status,
+      subject: item.subject,
+    })),
+    enrollments: enrollments.map((item) => ({
+      id: item.id,
+      classId: item.class.id,
+      className: item.class.name,
+      tenantId: item.class.tenant.id,
+      tenantName: item.class.tenant.name,
+      branchName: item.class.branch.name,
+      academicYearName: item.class.academicYear.name,
+      status: item.status,
+      enrolledAt: item.enrolledAt,
+      leftAt: item.leftAt,
+    })),
+    entitlements: entitlements.map((item) => ({
+      id: item.id,
+      tenantId: item.tenantId,
+      tenantName: item.tenant.name,
+      tenantType: item.tenant.type,
+      scope: item.scope,
+      plan: item.plan,
+      active: item.active,
+      source: item.source,
+      effectiveAt: item.effectiveAt,
+      expiresAt: item.expiresAt,
     })),
   };
 }
@@ -244,6 +413,34 @@ export async function softDeleteUser(id: string): Promise<{ id: string; deletedA
   return { id: updated.id, deletedAt: updated.deletedAt };
 }
 
+export async function resetUserPassword(
+  id: string,
+  input: ResetUserPasswordInput,
+  actorUserId: string,
+): Promise<{ id: string; updated: true }> {
+  const existing = await prisma.user.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true },
+  });
+  if (!existing) throw notFoundError("Kullanıcı bulunamadı");
+  const passwordHash = await hasher.hash(input.password);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id }, data: { passwordHash } });
+    await tx.auditLog.create({
+      data: {
+        tenantId: null,
+        actorUserId,
+        action: "UPDATE",
+        entityType: "USER_PASSWORD",
+        entityId: id,
+        before: { changed: true },
+        after: { changed: true },
+      },
+    });
+  });
+  return { id, updated: true };
+}
+
 // -------- membership yardımcıları --------
 
 async function findMembershipSummaries(userId: string): Promise<MembershipSummary[]> {
@@ -292,7 +489,14 @@ function toUserDetail(
   },
   memberships: MembershipSummary[],
 ): UserDetail {
-  return { ...user, memberships };
+  return {
+    ...user,
+    memberships,
+    branches: [],
+    classAssignments: [],
+    enrollments: [],
+    entitlements: [],
+  };
 }
 
 function isUniqueViolation(err: unknown): boolean {

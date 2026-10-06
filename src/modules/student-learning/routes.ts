@@ -155,7 +155,12 @@ export async function studentLearningRoutes(
     );
   });
   app.post("/student/exercises/start", { preHandler: [requireAuth(authProvider)] }, async (req) => {
-    const body = (req.body as { templateVersionId?: string; clientSessionId?: string }) || {};
+    const body =
+      (req.body as {
+        templateVersionId?: string;
+        clientSessionId?: string;
+        replay?: boolean;
+      }) || {};
     return ok(
       await startPersonalExercise(
         {

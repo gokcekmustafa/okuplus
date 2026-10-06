@@ -39,6 +39,8 @@ export interface TokenPayload {
   iat: number;
   exp: number;
   fid?: string;
+  /** Kurum öğrencisi oturumunda tenant bağlamı değiştirmeyi engeller. */
+  lockedTenantId?: string;
 }
 
 /** Access + refresh token çifti. */

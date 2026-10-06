@@ -413,7 +413,11 @@ describe.sequential("8H-1 entitlement architecture", () => {
       },
     });
     const organization = await getEntitlements(orgActor);
-    expect(organization.plan).toMatchObject({ code: "PLAN_FREE", source: "DEFAULT" });
-    expect(organization.features.PRACTICE.dailyLimit).toBe(3);
+    expect(organization.plan).toMatchObject({
+      code: "PLAN_PREMIUM",
+      source: "TEST_ORG_GRANT",
+      sourceLabel: "Kurum tarafından yönetiliyor",
+    });
+    expect(organization.features.PRACTICE.dailyLimit).toBeNull();
   });
 });

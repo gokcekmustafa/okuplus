@@ -4,7 +4,6 @@ import { conflictError, forbiddenError, notFoundError, validationError } from ".
 import type { TeacherAssignmentActor } from "./teacher-service.js";
 import type {
   AddTeacherClassStudentInput,
-  CreateTeacherClassInput,
   UpdateTeacherClassInput,
   UpdateTeacherClassStatusInput,
 } from "./teacher-class-management-schemas.js";
@@ -46,17 +45,6 @@ export interface TeacherClassStudentOption {
 export interface TeacherClassDetail extends TeacherManagedClassItem {
   students: TeacherClassStudentItem[];
   studentOptions: TeacherClassStudentOption[];
-}
-
-export interface TeacherClassOptions {
-  branches: Array<{ id: string; name: string }>;
-  academicYears: Array<{
-    id: string;
-    name: string;
-    status: string;
-    startDate: Date;
-    endDate: Date;
-  }>;
 }
 
 async function assertTeacherTenant(actor: TeacherAssignmentActor, client: DbClient = prisma) {
@@ -106,32 +94,6 @@ async function getManagedClass(
   });
   if (!cls) throw forbiddenError("Bu sınıf için öğretmen yetkiniz yok");
   return cls;
-}
-
-export async function listTeacherClassOptions(
-  actor: TeacherAssignmentActor,
-): Promise<TeacherClassOptions> {
-  const tenantId = await assertTeacherTenant(actor);
-  const [branches, academicYears] = await Promise.all([
-    prisma.branch.findMany({
-      where: {
-        tenantId,
-        status: "ACTIVE",
-        deletedAt: null,
-        teacherMemberships: {
-          some: { tenantId, teacherId: actor.userId, status: "ACTIVE", deletedAt: null },
-        },
-      },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.academicYear.findMany({
-      where: { tenantId, status: { in: ["ACTIVE", "UPCOMING"] } },
-      select: { id: true, name: true, status: true, startDate: true, endDate: true },
-      orderBy: { startDate: "asc" },
-    }),
-  ]);
-  return { branches, academicYears };
 }
 
 export async function listTeacherManagedClasses(
@@ -280,55 +242,6 @@ export async function getTeacherClassDetail(
       enrollmentStatus: enrollmentByStudent.get(student.id)?.status ?? null,
     })),
   };
-}
-
-export async function createTeacherClass(
-  actor: TeacherAssignmentActor,
-  input: CreateTeacherClassInput,
-): Promise<TeacherClassDetail> {
-  const classId = await prisma.$transaction(async (tx) => {
-    const tenantId = await assertTeacherTenant(actor, tx);
-    const [branch, academicYear] = await Promise.all([
-      tx.branch.findFirst({
-        where: {
-          id: input.branchId,
-          tenantId,
-          status: "ACTIVE",
-          deletedAt: null,
-          teacherMemberships: {
-            some: { tenantId, teacherId: actor.userId, status: "ACTIVE", deletedAt: null },
-          },
-        },
-        select: { id: true },
-      }),
-      tx.academicYear.findFirst({
-        where: { id: input.academicYearId, tenantId, status: { in: ["ACTIVE", "UPCOMING"] } },
-        select: { id: true },
-      }),
-    ]);
-    if (!branch) throw forbiddenError("Bu şubede sınıf oluşturma yetkiniz yok");
-    if (!academicYear) throw validationError("Akademik yıl bu kurum için kullanılamıyor");
-
-    try {
-      const created = await tx.class.create({
-        data: {
-          tenantId,
-          branchId: branch.id,
-          academicYearId: academicYear.id,
-          name: input.name,
-          gradeLevel: input.gradeLevel,
-        },
-        select: { id: true },
-      });
-      await tx.teacherClassAssignment.create({
-        data: { tenantId, classId: created.id, teacherId: actor.userId, status: "ACTIVE" },
-      });
-      return created.id;
-    } catch (error) {
-      translateTeacherClassError(error);
-    }
-  });
-  return getTeacherClassDetail(actor, classId);
 }
 
 export async function updateTeacherClass(

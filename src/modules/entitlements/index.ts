@@ -1,4 +1,5 @@
 export { entitlementRoutes } from "./routes.js";
+export { entitlementAdminRoutes } from "./admin-routes.js";
 export {
   ENTITLEMENT_FEATURES,
   canAccess,

@@ -12,13 +12,6 @@ const gradeLevelSchema = z
   .min(1, "Sınıf düzeyi en az 1 olmalı")
   .max(12, "Sınıf düzeyi en fazla 12 olmalı");
 
-export const createTeacherClassSchema = z.object({
-  branchId: z.string().trim().min(1, "Şube gerekli"),
-  academicYearId: z.string().trim().min(1, "Akademik yıl gerekli"),
-  name: classNameSchema,
-  gradeLevel: gradeLevelSchema,
-});
-
 export const updateTeacherClassSchema = z
   .object({
     name: classNameSchema.optional(),
@@ -36,7 +29,6 @@ export const addTeacherClassStudentSchema = z.object({
   studentId: z.string().trim().min(1, "Öğrenci gerekli"),
 });
 
-export type CreateTeacherClassInput = z.infer<typeof createTeacherClassSchema>;
 export type UpdateTeacherClassInput = z.infer<typeof updateTeacherClassSchema>;
 export type UpdateTeacherClassStatusInput = z.infer<typeof updateTeacherClassStatusSchema>;
 export type AddTeacherClassStudentInput = z.infer<typeof addTeacherClassStudentSchema>;
