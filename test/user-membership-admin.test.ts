@@ -289,7 +289,7 @@ describe("user + membership admin", () => {
     expect(body.success).toBe(true);
     expect(body.data.displayName).toBe("Yeni Kullanıcı");
     expect(body.data.email).toBe("yeni-kullanici@example.com");
-    expect(body.data.phone).toBe("+905551112233");
+    expect(body.data.phone).toBe("0 (555) 111 22 33");
     expect(body.data.birthYear).toBe(1995);
     expect(body.data.status).toBe("INVITED");
     expect(body.data.memberships).toEqual([]);
@@ -396,7 +396,7 @@ describe("user + membership admin", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.data.displayName).toBe("Kullanıcı A Güncel");
-    expect(body.data.phone).toBe("+905550000000");
+    expect(body.data.phone).toBe("0 (555) 000 00 00");
     expect(body.data.birthYear).toBe(1992);
   });
 

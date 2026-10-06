@@ -607,7 +607,7 @@ describe("teacher admin", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json().data;
     expect(body.user.displayName).toBe("Ayşe Yılmaz");
-    expect(body.user.phone).toBe("+905551112244");
+    expect(body.user.phone).toBe("0 (555) 111 22 44");
     expect(body.user.status).toBe("SUSPENDED");
   });
 

@@ -371,7 +371,7 @@ describe("student admin", () => {
     orgUserId = body.data.user.id;
     expect(body.data.user.displayName).toBe("Ali Örnek");
     expect(body.data.user.email).toBe(ORG_EMAIL);
-    expect(body.data.user.phone).toBe("+905551112233");
+    expect(body.data.user.phone).toBe("0 (555) 111 22 33");
     expect(body.data.user.birthYear).toBe(2012);
     expect(body.data.tenant.id).toBe(ORG_TENANT);
     expect(body.data.profile.currentLevel?.code).toBe("A1");
@@ -609,7 +609,7 @@ describe("student admin", () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.data.user.phone).toBe("+905550000000");
+    expect(body.data.user.phone).toBe("0 (555) 000 00 00");
     expect(body.data.user.birthYear).toBe(2011);
     expect(body.data.profile.currentLevel?.code).toBe("A2");
     expect(body.data.profile.targetLevel).toBeNull();
