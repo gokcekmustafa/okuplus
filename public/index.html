@@ -468,7 +468,11 @@
                 </button>
                 <div id="user-menu" class="user-menu hidden" hidden aria-label="Kullanıcı menüsü">
                   <button type="button" data-user-menu-page="settings">⚙️ Profilim</button>
-                  <button type="button" data-user-menu-page="billing-account">
+                  <button
+                    id="user-menu-billing-item"
+                    type="button"
+                    data-user-menu-page="billing-account"
+                  >
                     💳 Hesap ve Ödeme
                   </button>
                   <button type="button" data-user-menu-action="logout">🚪 Çıkış yap</button>
@@ -852,6 +856,7 @@
                   type="button"
                   class="btn btn-secondary"
                   data-premium-action="OPEN_PREMIUM_INFO"
+                  data-personal-billing
                 >
                   Premium hakkında bilgi
                 </button>
@@ -881,7 +886,11 @@
             </div>
           </section>
 
-          <section id="page-premium-info" class="page-view hidden premium-info-page" data-student>
+          <section
+            id="page-premium-info"
+            class="page-view hidden premium-info-page"
+            data-personal-billing
+          >
             <header class="premium-info-heading">
               <div>
                 <p class="eyebrow">PLAN BİLGİSİ</p>
@@ -959,13 +968,13 @@
           <section
             id="page-billing-account"
             class="page-view hidden billing-account-page"
-            data-student
+            data-billing-account
           >
             <header class="billing-account-heading">
               <div>
                 <p class="eyebrow">HESAP VE ÖDEME</p>
-                <h2>Premium aboneliğini yönet</h2>
-                <p class="muted">
+                <h2 id="billing-account-title">Premium aboneliğini yönet</h2>
+                <p id="billing-account-description" class="muted">
                   Bu alan yalnızca kişisel hesabındaki doğrulanmış abonelik ve ödeme kayıtlarını
                   gösterir.
                 </p>
@@ -998,7 +1007,55 @@
               </button>
             </section>
 
-            <div class="billing-account-grid">
+            <section
+              id="billing-account-organization-details"
+              class="card billing-account-scope hidden"
+              aria-labelledby="billing-organization-title"
+            >
+              <div>
+                <span class="eyebrow">KURUM HESABI</span>
+                <h3 id="billing-organization-title">Kurum planı</h3>
+                <dl class="billing-account-details">
+                  <div>
+                    <dt>Kurum</dt>
+                    <dd id="billing-organization-name">—</dd>
+                  </div>
+                  <div>
+                    <dt>Plan durumu</dt>
+                    <dd id="billing-organization-status">—</dd>
+                  </div>
+                  <div>
+                    <dt>Plan başlangıcı</dt>
+                    <dd id="billing-organization-effective">—</dd>
+                  </div>
+                  <div>
+                    <dt>Plan bitişi</dt>
+                    <dd id="billing-organization-expiry">—</dd>
+                  </div>
+                  <div>
+                    <dt>Plan kaynağı</dt>
+                    <dd id="billing-organization-source">—</dd>
+                  </div>
+                </dl>
+              </div>
+              <div>
+                <p id="billing-organization-management" class="muted" role="status"></p>
+                <div class="billing-account-actions">
+                  <label class="field">
+                    <span>Kurum planı</span>
+                    <select id="billing-organization-plan">
+                      <option value="PLAN_FREE">Ücretsiz</option>
+                      <option value="PLAN_PREMIUM">Premium</option>
+                    </select>
+                  </label>
+                  <button id="billing-organization-plan-save" type="button" class="btn btn-primary">
+                    Kurum planını kaydet
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <div id="billing-account-personal-grid" class="billing-account-grid">
               <section
                 class="card billing-account-card"
                 aria-labelledby="billing-account-plan-title"
@@ -1064,6 +1121,7 @@
             </section>
 
             <section
+              id="billing-account-personal-history"
               class="card billing-account-history"
               aria-labelledby="billing-payment-history-title"
             >
@@ -1079,7 +1137,11 @@
               </div>
             </section>
 
-            <section class="card billing-account-invoice" aria-labelledby="billing-invoice-title">
+            <section
+              id="billing-account-personal-invoice"
+              class="card billing-account-invoice"
+              aria-labelledby="billing-invoice-title"
+            >
               <span class="eyebrow">FATURA</span>
               <h3 id="billing-invoice-title">Fatura ve e-belge</h3>
               <p id="billing-invoice-note" class="muted">
@@ -5787,7 +5849,7 @@
             </section>
             <section
               class="card premium-account-card"
-              data-student
+              data-personal-billing
               aria-labelledby="premium-account-title"
             >
               <div>
@@ -5977,7 +6039,12 @@
       </div>
       <p id="premium-paywall-benefit" class="premium-paywall-benefit"></p>
       <div class="premium-dialog-actions">
-        <button type="button" class="btn btn-primary" data-premium-action="OPEN_PREMIUM_INFO">
+        <button
+          type="button"
+          class="btn btn-primary"
+          data-premium-action="OPEN_PREMIUM_INFO"
+          data-personal-billing
+        >
           Premium hakkında bilgi
         </button>
         <button id="premium-paywall-close-secondary" type="button" class="btn btn-ghost">
