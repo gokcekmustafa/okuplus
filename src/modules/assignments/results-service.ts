@@ -42,6 +42,17 @@ export interface StudentAssignmentResult {
   history: AssignmentSessionResult[];
 }
 
+export interface TeacherStudentAssignmentHistoryItem {
+  id: string;
+  title: string;
+  templateTitle: string;
+  dueDate: Date | null;
+  status: string;
+  assignmentStatus: string;
+  latest: AssignmentSessionResult | null;
+  history: AssignmentSessionResult[];
+}
+
 export interface StudentAssignmentResultResponse {
   assignment: {
     id: string;
@@ -318,6 +329,73 @@ async function buildStudentResults(
       latest: history.at(-1) ?? null,
       history,
     };
+  });
+}
+
+export async function getTeacherStudentAssignmentHistory(
+  actor: TeacherAssignmentActor,
+  classId: string,
+  studentId: string,
+): Promise<TeacherStudentAssignmentHistoryItem[]> {
+  if (!actor.tenantId) throw forbiddenError("Öğretmen işlemi için kurum seçimi gerekli");
+  await assertTeacherClassAccess(actor, classId, studentId);
+
+  const assignments = await prisma.assignment.findMany({
+    where: { tenantId: actor.tenantId, classId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      dueDate: true,
+      status: true,
+      createdAt: true,
+      template: { select: { title: true } },
+      studentAssignments: {
+        where: { tenantId: actor.tenantId },
+        select: { studentId: true, status: true },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const assignmentIds = assignments.map((assignment) => assignment.id);
+  const sessions = assignmentIds.length
+    ? await prisma.exerciseSession.findMany({
+        where: {
+          tenantId: actor.tenantId,
+          studentId,
+          assignmentId: { in: assignmentIds },
+          context: "ASSIGNMENT",
+          sessionType: "PRACTICE",
+        },
+        select: { ...SESSION_RESULT_SELECT, assignmentId: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [];
+  const historyByAssignment = new Map<string, AssignmentSessionResult[]>();
+  for (const session of sessions) {
+    if (!session.assignmentId) continue;
+    const history = historyByAssignment.get(session.assignmentId) ?? [];
+    history.push(buildSessionResult(session));
+    historyByAssignment.set(session.assignmentId, history);
+  }
+
+  return assignments.flatMap((assignment) => {
+    const recipient = assignment.studentAssignments.find((item) => item.studentId === studentId);
+    if (assignment.studentAssignments.length > 0 && !recipient) return [];
+    const history = historyByAssignment.get(assignment.id) ?? [];
+    const latest = history.at(-1) ?? null;
+    return [
+      {
+        id: assignment.id,
+        title: assignment.title,
+        templateTitle: assignment.template.title,
+        dueDate: assignment.dueDate,
+        status: assignment.status,
+        assignmentStatus:
+          latest?.status === "COMPLETED" ? "COMPLETED" : (recipient?.status ?? "ASSIGNED"),
+        latest,
+        history,
+      },
+    ];
   });
 }
 

@@ -22,6 +22,7 @@ import {
 } from "./teacher-service.js";
 import { getTeacherAssignmentResults } from "./results-service.js";
 import { getTeacherClassAnalytics } from "./class-analytics-service.js";
+import { getTeacherStudentProgress } from "./teacher-student-progress-service.js";
 import {
   acceptTeacherRecommendation,
   acceptTeacherRecommendationsBatch,
@@ -130,6 +131,19 @@ export async function assignmentTeacherRoutes(
 
   app.get("/teacher/classes/:id/analytics", { preHandler: requireTeacherAuth }, async (request) =>
     ok(await getTeacherClassAnalytics(actorFrom(request), readParamId(request, "Sınıf"))),
+  );
+
+  app.get(
+    "/teacher/classes/:classId/students/:studentId/progress",
+    { preHandler: requireTeacherAuth },
+    async (request) =>
+      ok(
+        await getTeacherStudentProgress(
+          actorFrom(request),
+          readParamId(request, "Sınıf", "classId"),
+          readParamId(request, "Öğrenci", "studentId"),
+        ),
+      ),
   );
 
   app.get("/teacher/templates", { preHandler: requireTeacherAuth }, async (request) => {
