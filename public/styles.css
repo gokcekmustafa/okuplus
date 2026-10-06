@@ -2506,6 +2506,12 @@ body {
   border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(16, 24, 40, 0.18);
   padding: 20px;
+  transform: translate3d(var(--modal-x, 0px), var(--modal-y, 0px), 0);
+  will-change: transform;
+}
+
+.modal.is-dragging {
+  transition: none;
 }
 
 .modal-wide {
@@ -2537,6 +2543,17 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.modal.is-dragging .modal-head {
+  cursor: grabbing;
+}
+
+body.modal-dragging {
+  user-select: none;
 }
 
 .modal-head h3 {

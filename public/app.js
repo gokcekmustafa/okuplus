@@ -122,13 +122,85 @@ const BILLING_ACCOUNT_STATES = Object.freeze({
 });
 
 const BILLING_ACCOUNT_STATE_LABELS = Object.freeze({
-  FREE: "Ücretsiz plan",
-  PREMIUM_ACTIVE: "Premium aktif",
-  PREMIUM_PENDING: "Premium işlemi beklemede",
-  PREMIUM_CANCELING: "Premium iptali işleniyor",
-  PREMIUM_CANCELED: "Premium aboneliği iptal edildi",
-  PREMIUM_EXPIRED: "Premium aboneliği sona erdi",
+  FREE: "Ücretsiz Paket",
+  PREMIUM_ACTIVE: "Ücretli Paket aktif",
+  PREMIUM_PENDING: "Ücretli Paket işlemi beklemede",
+  PREMIUM_CANCELING: "Ücretli Paket iptali işleniyor",
+  PREMIUM_CANCELED: "Ücretli Paket aboneliği iptal edildi",
+  PREMIUM_EXPIRED: "Ücretli Paket süresi sona erdi",
 });
+
+const PLAN_LABELS = Object.freeze({
+  PLAN_FREE: "Ücretsiz Paket",
+  PLAN_PREMIUM: "Ücretli Paket",
+});
+
+const PLATFORM_ROLE_LABELS = Object.freeze({
+  SUPER_ADMIN: "Platform yöneticisi",
+});
+
+const ENTITLEMENT_SOURCE_LABELS = Object.freeze({
+  ADMIN: "Yönetici tarafından tanımlandı",
+  BILLING: "Ödeme ve abonelik",
+  SUBSCRIPTION: "Abonelik",
+  DEFAULT: "Varsayılan paket",
+  PREMIUM_TRIAL: "Ücretli Paket denemesi",
+});
+
+function planLabel(code) {
+  return PLAN_LABELS[code] || "Paket";
+}
+
+function platformRoleLabel(role) {
+  return PLATFORM_ROLE_LABELS[role] || "Yok";
+}
+
+function entitlementSourceLabel(source) {
+  return ENTITLEMENT_SOURCE_LABELS[source] || source || "Belirtilmemiş";
+}
+
+function generalStatusLabel(status) {
+  return (
+    {
+      ACTIVE: "Aktif",
+      INACTIVE: "Pasif",
+      PENDING: "Beklemede",
+      INVITED: "Davet edildi",
+      SUSPENDED: "Askıda",
+      CLOSED: "Kapatıldı",
+      LEFT: "Ayrıldı",
+      COMPLETED: "Tamamlandı",
+      REMOVED: "Kaldırıldı",
+    }[status] ||
+    status ||
+    "Belirtilmemiş"
+  );
+}
+
+function setAsyncButtonState(button, busy, pendingLabel) {
+  if (!button) return;
+  const label = button.querySelector(".btn-label");
+  if (busy) {
+    if (!button.dataset.idleLabel)
+      button.dataset.idleLabel = label?.textContent || button.textContent;
+    if (label) {
+      label.textContent = pendingLabel;
+      label.classList.remove("hidden");
+    } else {
+      button.textContent = pendingLabel;
+    }
+  } else if (button.dataset.idleLabel) {
+    if (label) {
+      label.textContent = button.dataset.idleLabel;
+      label.classList.remove("hidden");
+    } else button.textContent = button.dataset.idleLabel;
+    delete button.dataset.idleLabel;
+  }
+  button.disabled = busy;
+  button.toggleAttribute("aria-busy", busy);
+  button.classList.toggle("is-pending", busy);
+  button.querySelector(".btn-spinner")?.classList.toggle("hidden", !busy);
+}
 
 const PREMIUM_LIMIT_FEATURES = new Set(["PRACTICE", "PRACTICE_QUESTION"]);
 
@@ -900,7 +972,7 @@ function providerButtonMessage(provider) {
 function startGoogleLogin() {
   const button = $("google-login-btn");
   if (!button || button.disabled) return;
-  button.disabled = true;
+  setAsyncButtonState(button, true, "Yükleniyor…");
   $("social-login-status").textContent = "Google ile giriş yapılıyor…";
   window.location.assign("/auth/social/google/start");
 }
@@ -1243,8 +1315,7 @@ async function submitAccountProfile(event) {
       : null,
   };
   const button = $("account-profile-submit");
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
+  setAsyncButtonState(button, true, "Kaydediliyor…");
   status.textContent = "Profil kaydediliyor…";
   try {
     const tokens = getStoredTokens();
@@ -1253,6 +1324,7 @@ async function submitAccountProfile(event) {
         method: "PATCH",
         headers: {
           ...authHeaders(tokens.accessToken, tokens.tenantId),
+          ...csrfHeaders(),
           "content-type": "application/json",
         },
         body: JSON.stringify(payload),
@@ -1270,8 +1342,7 @@ async function submitAccountProfile(event) {
     errorEl.textContent = caughtError.message || "Profil bilgileri kaydedilemedi.";
     errorEl.classList.remove("hidden");
   } finally {
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
+    setAsyncButtonState(button, false, "Kaydediliyor…");
   }
 }
 
@@ -1815,7 +1886,7 @@ function showPremiumPaywall(details, message) {
     `Bugün ${usedToday}/${dailyLimit} ${premiumFeatureLabel(feature)} kullandın.`;
   $("premium-paywall-reset").textContent = formatPremiumResetAt(reset);
   $("premium-paywall-benefit").textContent =
-    "Premium ile alıştırma ve soru kullanımını günlük limit olmadan sürdürebilirsin.";
+    "Ücretli Paket ile alıştırma ve soru kullanımını günlük limit olmadan sürdürebilirsin.";
   recordPremiumTelemetry("LIMIT_REACHED");
   recordPremiumTelemetry("PAYWALL_VIEWED");
   if (!dialog.open && typeof dialog.showModal === "function") dialog.showModal();
@@ -1836,11 +1907,11 @@ function entitlementUxState(data) {
 function entitlementUxLabel(state) {
   return (
     {
-      [PREMIUM_UX_STATES.FREE_ACTIVE]: "Ücretsiz plan",
+      [PREMIUM_UX_STATES.FREE_ACTIVE]: "Ücretsiz Paket",
       [PREMIUM_UX_STATES.FREE_LIMIT_WARNING]: "Son günlük hak",
       [PREMIUM_UX_STATES.FREE_LIMIT_REACHED]: "Günlük hak doldu",
-      [PREMIUM_UX_STATES.PREMIUM_ACTIVE]: "Premium aktif",
-    }[state] || "Plan durumu"
+      [PREMIUM_UX_STATES.PREMIUM_ACTIVE]: "Ücretli Paket aktif",
+    }[state] || "Paket durumu"
   );
 }
 
@@ -1863,7 +1934,7 @@ async function loadEntitlements() {
     const practice = data.features?.PRACTICE || {};
     const questions = data.features?.PRACTICE_QUESTION || {};
     const uxState = entitlementUxState(data);
-    $("entitlement-title").textContent = plan.label || "Ücretsiz";
+    $("entitlement-title").textContent = planLabel(plan.code) || "Ücretsiz Paket";
     $("entitlement-scope").textContent =
       `${tenant.type === "ORGANIZATION" ? "Kurum alanı" : "Kişisel alan"}${plan.sourceLabel ? ` · ${plan.sourceLabel}` : ""}`;
     $("entitlement-plan-badge").textContent = plan.active ? "Aktif" : "Pasif";
@@ -1880,21 +1951,21 @@ async function loadEntitlements() {
       escapeHtml(usageValue(questions)) +
       "</strong></div>";
     $("entitlement-premium-note").textContent = !isPersonalBillingUser
-      ? "Plan ve kullanım kapsamı kurum tarafından yönetiliyor."
+      ? "Paket ve kullanım kapsamı kurum tarafından yönetiliyor."
       : plan.code === "PLAN_PREMIUM"
-        ? "Premium etkin. Alıştırma ve soru kullanımı günlük sınır olmadan devam eder."
+        ? "Ücretli Paket etkin. Alıştırma ve soru kullanımı günlük sınır olmadan devam eder."
         : uxState === PREMIUM_UX_STATES.FREE_LIMIT_REACHED
-          ? "Günlük ücretsiz hakkın doldu. Premium hakkında bilgi alabilirsin."
-          : "Ücretsiz planda günde 3 alıştırma ve 20 soru hakkı bulunur.";
+          ? "Günlük ücretsiz hakkın doldu. Ücretli Paket hakkında bilgi alabilirsin."
+          : "Ücretsiz pakette günde 3 alıştırma ve 20 soru hakkı bulunur.";
     const cta = $("entitlement-premium-cta");
-    cta.textContent = data.premium?.ctaLabel || "Premium hakkında bilgi";
+    cta.textContent = data.premium?.ctaLabel || "Ücretli Paket hakkında bilgi";
     cta.disabled = false;
     cta.classList.toggle("hidden", !isPersonalBillingUser);
     error?.classList.add("hidden");
     card.classList.remove("hidden");
   } catch (err) {
     if (error) {
-      error.textContent = err.message || "Plan bilgisi yüklenemedi";
+      error.textContent = err.message || "Paket bilgisi yüklenemedi";
       error.classList.remove("hidden");
     }
     card.classList.remove("hidden");
@@ -1914,11 +1985,11 @@ async function loadBillingCatalog() {
     const monthly = data?.plans?.find((plan) => plan.billingPeriod === "MONTHLY");
     start.disabled = !(data?.checkoutEnabled && monthly?.configured);
     note.textContent = data?.checkoutEnabled
-      ? "Bu ekran yalnız iyzico SANDBOX içindir. Tutar, kart bilgisi ve Premium kararı provider doğrulaması olmadan burada tutulmaz."
-      : "iyzico SANDBOX yapılandırması tamamlanmadı; gerçek ödeme başlatılmayacak.";
+      ? "Bu ekran yalnızca iyzico deneme ortamı içindir. Tutar, kart bilgisi ve Ücretli Paket kararı ödeme sağlayıcısı doğrulaması olmadan burada tutulmaz."
+      : "iyzico deneme ortamı yapılandırması tamamlanmadı; gerçek ödeme başlatılmayacak.";
   } catch (error) {
     start.disabled = true;
-    note.textContent = error?.message || "Sandbox checkout durumu alınamadı.";
+    note.textContent = error?.message || "Deneme ödeme durumu alınamadı.";
   }
 }
 
@@ -1936,10 +2007,10 @@ async function loadBillingSubscription() {
     const labels = {
       PENDING: "Ödeme bekleniyor",
       TRIAL: "Deneme durumu beklemede",
-      ACTIVE: "Premium aktif",
+      ACTIVE: "Ücretli Paket aktif",
       PAST_DUE: "Ödeme başarısız",
       CANCELED: "Abonelik iptal edildi",
-      EXPIRED: "Premium sona erdi",
+      EXPIRED: "Ücretli Paket sona erdi",
     };
     if (status) {
       status.textContent = data?.status
@@ -2069,7 +2140,7 @@ function renderBillingPaymentHistory(data) {
 }
 
 function renderBillingAccount({ entitlements, catalog, subscription, paymentHistory }) {
-  $("billing-account-title").textContent = "Premium aboneliğini yönet";
+  $("billing-account-title").textContent = "Ücretli Paket aboneliğini yönet";
   $("billing-account-description").textContent =
     "Bu alan yalnızca kişisel hesabındaki doğrulanmış abonelik ve ödeme kayıtlarını gösterir.";
   $("billing-account-scope-title").textContent = "Kişisel alan";
@@ -2078,7 +2149,7 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
   $("billing-account-free-benefits")?.classList.remove("hidden");
   $("billing-account-personal-history")?.classList.remove("hidden");
   $("billing-account-personal-invoice")?.classList.remove("hidden");
-  $("billing-account-back").textContent = "Premium bilgisine dön";
+  $("billing-account-back").textContent = "Ücretli Paket bilgisine dön";
   const state = resolveBillingAccountState(subscription, entitlements);
   const supportedState = state && BILLING_ACCOUNT_STATE_LABELS[state];
   const plan = entitlements?.plan || {};
@@ -2101,26 +2172,28 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
       ? "Kurum abonelikleri bu ekranın kapsamı dışındadır."
       : "Ödeme yönetimi yalnızca kişisel alanda kullanılabilir; kurum verisi bu ekranda gösterilmez.";
   $("billing-account-plan-title").textContent =
-    plan.code === "PLAN_PREMIUM" && plan.active ? "Premium" : "Ücretsiz";
+    plan.code === "PLAN_PREMIUM" && plan.active ? planLabel(plan.code) : planLabel("PLAN_FREE");
   stateLabel.textContent = supportedState || "Abonelik durumu doğrulanamadı";
   stateLabel.dataset.state = state || "UNKNOWN";
 
   if (state === BILLING_ACCOUNT_STATES.FREE) {
-    summary.textContent = `${billingFreeUsageSummary(entitlements)}. Premium avantajlarını inceleyebilirsin.`;
+    summary.textContent = `${billingFreeUsageSummary(entitlements)}. Ücretli Paket avantajlarını inceleyebilirsin.`;
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_ACTIVE) {
-    summary.textContent = "Premium avantajları doğrulanmış entitlement ile aktif.";
+    summary.textContent = "Ücretli Paket avantajları doğrulanmış paket haklarıyla aktif.";
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_PENDING) {
     summary.textContent =
-      "Ödeme sağlayıcısı doğrulaması bekleniyor. Doğrulama tamamlanana kadar Premium hakları açılmaz.";
+      "Ödeme sağlayıcısı doğrulaması bekleniyor. Doğrulama tamamlanana kadar Ücretli Paket hakları açılmaz.";
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_CANCELING) {
     summary.textContent = "İptal isteği ödeme sağlayıcısı sözleşmesine göre işleniyor.";
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_CANCELED) {
-    summary.textContent = "Abonelik iptal edildi. Yeni Premium için yeni checkout başlatabilirsin.";
+    summary.textContent =
+      "Abonelik iptal edildi. Yeni Ücretli Paket için yeni ödeme başlatabilirsin.";
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_EXPIRED) {
     summary.textContent =
-      "Premium aboneliği sona erdi. Yeni Premium için yeni checkout başlatabilirsin.";
+      "Ücretli Paket aboneliği sona erdi. Yeni paket için yeni ödeme başlatabilirsin.";
   } else {
-    summary.textContent = "Provider durumu doğrulanamadığı için yönetim işlemleri gösterilmiyor.";
+    summary.textContent =
+      "Ödeme sağlayıcısı durumu doğrulanamadığı için yönetim işlemleri gösterilmiyor.";
   }
 
   period.textContent = subscription
@@ -2145,8 +2218,8 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
   checkout.textContent =
     state === BILLING_ACCOUNT_STATES.PREMIUM_CANCELED ||
     state === BILLING_ACCOUNT_STATES.PREMIUM_EXPIRED
-      ? "Yeni Premium aboneliği başlat"
-      : "Premium'a geç";
+      ? "Yeni Ücretli Paket aboneliği başlat"
+      : "Ücretli Pakete geç";
 
   const cancelState = ["PENDING", "TRIAL", "ACTIVE", "PAST_DUE"].includes(subscription?.status);
   const canCancel = Boolean(cancelState && subscription?.providerSubscriptionId);
@@ -2161,8 +2234,8 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
     management.textContent = "Abonelik durumu doğrulanamadığı için işlem düğmeleri kapatıldı.";
   } else if (state === BILLING_ACCOUNT_STATES.FREE) {
     management.textContent = checkoutEnabled
-      ? "Premium'a geçiş yeni bir checkout akışı başlatır. Haklar yalnızca doğrulanmış webhook sonrası açılır."
-      : "iyzico SANDBOX yapılandırması tamamlanmadı; gerçek ödeme başlatılmayacak.";
+      ? "Ücretli Pakete geçiş yeni bir ödeme akışı başlatır. Haklar yalnızca doğrulanmış bildirim sonrası açılır."
+      : "iyzico deneme ortamı yapılandırması tamamlanmadı; gerçek ödeme başlatılmayacak.";
   } else if (state === BILLING_ACCOUNT_STATES.PREMIUM_PENDING) {
     management.textContent = canCancel
       ? "Ödeme sağlayıcısı doğrulaması bekleniyor. İstersen bekleyen abonelik işlemini iptal edebilirsin."
@@ -2176,7 +2249,7 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
       "İptal isteği işleniyor. Geçerli dönem sonu ödeme sağlayıcısı tarafından bildirilmedikçe varsayım yapılmaz.";
   } else {
     management.textContent =
-      "Eski abonelik yeniden ACTIVE yapılmaz. Premium almak için yeni checkout başlatılır.";
+      "Eski abonelik yeniden aktif yapılmaz. Ücretli Paket almak için yeni ödeme başlatılır.";
   }
   renderBillingPaymentHistory(paymentHistory);
 }
@@ -2189,10 +2262,10 @@ function renderOrganizationBillingAccount(data) {
 
   $("billing-account-title").textContent = "Kurum Hesabı ve Ödeme";
   $("billing-account-description").textContent =
-    "Kurumunuzun planı ve entitlement kapsamı burada gösterilir; kişisel abonelik bilgileri bu alana dahil değildir.";
+    "Kurumunuzun paketi ve kullanım hakları burada gösterilir; kişisel abonelik bilgileri bu alana dahil değildir.";
   $("billing-account-scope-title").textContent = "Kurum alanı";
   $("billing-account-scope-note").textContent =
-    "Plan kaynağı kurum entitlement'ıdır ve bu kurumun bağlı kullanıcılarına uygulanır.";
+    "Paket kaynağı kurum kullanım haklarıdır ve bu kurumun bağlı kullanıcılarına uygulanır.";
   $("billing-account-back").textContent = "Kurum paneline dön";
   $("billing-account-organization-details")?.classList.remove("hidden");
   $("billing-account-personal-grid")?.classList.add("hidden");
@@ -2200,7 +2273,7 @@ function renderOrganizationBillingAccount(data) {
   $("billing-account-personal-history")?.classList.add("hidden");
   $("billing-account-personal-invoice")?.classList.add("hidden");
   $("billing-organization-name").textContent = organization.name || "—";
-  $("billing-organization-status").textContent = isPremium ? "Premium" : "Ücretsiz";
+  $("billing-organization-status").textContent = isPremium ? "Ücretli Paket" : "Ücretsiz Paket";
   $("billing-organization-plan").value = plan.code || "PLAN_FREE";
   $("billing-organization-effective").textContent = plan.effectiveAt
     ? formatBillingDate(plan.effectiveAt)
@@ -2224,26 +2297,27 @@ async function updateOrganizationPlan() {
   const select = $("billing-organization-plan");
   const status = $("billing-organization-management");
   if (!button || !select || !status) return;
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  status.textContent = "Kurum planı kaydediliyor…";
+  setAsyncButtonState(button, true, "Kaydediliyor…");
+  status.textContent = "Kurum paketi kaydediliyor…";
   try {
     const tokens = getStoredTokens();
     const result = await parseResponse(
       await fetch("/billing/organization/plan", {
         method: "PATCH",
-        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+        headers: {
+          ...authHeaders(tokens.accessToken, tokens.tenantId),
+          ...csrfHeaders(),
+        },
         body: JSON.stringify({ plan: select.value }),
       }),
     );
     latestEntitlements = result.entitlements;
     renderOrganizationBillingAccount(result);
-    status.textContent = "Kurum planı güncellendi.";
+    status.textContent = "Kurum paketi güncellendi.";
   } catch (error) {
-    status.textContent = error?.message || "Kurum planı güncellenemedi.";
+    status.textContent = error?.message || "Kurum paketi güncellenemedi.";
   } finally {
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
+    setAsyncButtonState(button, false, "Kaydediliyor…");
   }
 }
 
@@ -2321,30 +2395,33 @@ async function startPremiumSandboxCheckout(options = {}) {
   } catch {
     idempotencyKey = `billing-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
-  start.disabled = true;
+  setAsyncButtonState(start, true, "Ödeme hazırlanıyor…");
   try {
     const res = await fetch("/billing/checkout", {
       method: "POST",
       headers: {
         ...authHeaders(tokens.accessToken, tokens.tenantId),
+        ...csrfHeaders(),
         "idempotency-key": idempotencyKey,
       },
       body: JSON.stringify({ billingPeriod: "MONTHLY" }),
     });
     const data = await parseResponse(res);
     const checkoutMessage =
-      "Sandbox checkout hazırlandı. Premium, doğrulanmış webhook gelene kadar açılmaz.";
+      "Deneme ödeme akışı hazırlandı. Ücretli Paket, doğrulanmış bildirim gelene kadar açılmaz.";
     feedback.textContent = checkoutMessage;
     const rendered = data.redirectUrl ? false : renderIyzicoCheckout(data.checkoutFormContent);
     if (data.redirectUrl) window.location.assign(data.redirectUrl);
-    else if (!rendered) feedback.textContent = "Sandbox checkout içeriği alınamadı.";
+    else if (!rendered) feedback.textContent = "Deneme ödeme içeriği alınamadı.";
     if (options.account) {
       await loadBillingAccount();
       if (!data.redirectUrl && rendered) feedback.textContent = checkoutMessage;
     }
+    setAsyncButtonState(start, false, "Ödeme hazırlanıyor…");
+    start.disabled = true;
   } catch (error) {
-    feedback.textContent = error?.message || "Sandbox checkout başlatılamadı.";
-    start.disabled = false;
+    feedback.textContent = error?.message || "Deneme ödeme akışı başlatılamadı.";
+    setAsyncButtonState(start, false, "Ödeme hazırlanıyor…");
   }
 }
 
@@ -2353,7 +2430,7 @@ function openBillingCancellationDialog() {
   const dialog = $("billing-cancel-dialog");
   if (!subscription || !dialog) return;
   $("billing-cancel-impact").textContent =
-    "Mevcut backend kontratı provider'a anında iptal isteği gönderir. İptal sonrasında Premium hakları devam etmeyebilir.";
+    "Mevcut ödeme sözleşmesine anında iptal isteği gönderilir. İptal sonrasında paket hakları devam etmeyebilir.";
   $("billing-cancel-period").textContent = subscription.currentPeriodEnd
     ? `Bilinen dönem sonu: ${formatBillingDate(subscription.currentPeriodEnd)}. İptalin bu tarihe kadar sürüp sürmeyeceği bu kontratta garanti edilmez.`
     : "Geçerli dönem sonu backend tarafından bildirilmedi; hak kaybı zamanı için varsayım yapılmayacaktır.";
@@ -2384,12 +2461,15 @@ async function submitBillingCancellation() {
     const tokens = getStoredTokens();
     const res = await fetch("/billing/subscription/cancel", {
       method: "POST",
-      headers: authHeaders(tokens.accessToken, tokens.tenantId),
+      headers: {
+        ...authHeaders(tokens.accessToken, tokens.tenantId),
+        ...csrfHeaders(),
+      },
       body: JSON.stringify({}),
     });
     const data = await parseResponse(res);
     const message = data?.canceled
-      ? "Abonelik iptal edildi. Premium hakları provider/backend sonucu doğrultusunda güncellendi."
+      ? "Abonelik iptal edildi. Paket hakları ödeme sağlayıcısı sonucu doğrultusunda güncellendi."
       : "Bu abonelik için iptal isteği daha önce işlendi.";
     result.textContent = message;
     if (legacyStatus) legacyStatus.textContent = message;
@@ -2515,13 +2595,13 @@ function activeLearningPathNodeFromData(data) {
 async function startLearningPathNode(node, button) {
   var tv = node?.templateVersionId;
   var type = node?.type;
+  activeLearningStepNode = node;
+  learningPathEntryMode = true;
   if (type === "TEACHING" || type === "SMALL_STUDY") {
     if (!node?.contentVersionId) {
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
       return;
     }
-    activeLearningStepNode = node;
-    learningPathEntryMode = true;
     navigate("lessons");
     return;
   }
@@ -2533,7 +2613,7 @@ async function startLearningPathNode(node, button) {
     if (type === "SKILL") alert("Bu beceri için henüz içerik yok");
     return;
   }
-  if (button) button.disabled = true;
+  setAsyncButtonState(button, true, "Başlatılıyor…");
   try {
     var response = await authenticatedFetch("/student/exercises/start", {
       method: "POST",
@@ -2547,7 +2627,7 @@ async function startLearningPathNode(node, button) {
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (error) {
-    if (button) button.disabled = false;
+    setAsyncButtonState(button, false, "Başlatılıyor…");
     if (!isPremiumLimitError(error)) alert(error.message);
   }
 }
@@ -3716,7 +3796,7 @@ async function completeFocusedLearningStep() {
   const button = $("lesson-detail")?.querySelector("[data-learning-step-complete]");
   const status = $("lesson-detail-status");
   if (!node || !button) return;
-  button.disabled = true;
+  setAsyncButtonState(button, true, "Yükleniyor…");
   if (status) status.textContent = "Adım tamamlanıyor…";
   try {
     const data = await parseResponse(
@@ -3729,11 +3809,11 @@ async function completeFocusedLearningStep() {
       navigate("dashboard");
       return;
     }
-    activeLearningStepNode = { ...nextStep, status: "active" };
+    activeLearningStepNode = nextStep;
     learningPathEntryMode = true;
     await startLearningPathNode(activeLearningStepNode, null);
   } catch (err) {
-    button.disabled = false;
+    setAsyncButtonState(button, false, "Yükleniyor…");
     if (status) {
       status.textContent = formatStudentError(err, "Ders tamamlanamadı. Tekrar deneyebilirsin.");
     }
@@ -3745,7 +3825,7 @@ async function replayLearningStep() {
   const button = $("lesson-detail")?.querySelector("[data-learning-step-replay]");
   const status = $("lesson-detail-status");
   if (!node?.templateVersionId || !button) return;
-  button.disabled = true;
+  setAsyncButtonState(button, true, "Tekrar başlatılıyor…");
   if (status) status.textContent = "Ders tekrar açılıyor…";
   try {
     const data = await parseResponse(
@@ -3761,7 +3841,7 @@ async function replayLearningStep() {
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (err) {
-    button.disabled = false;
+    setAsyncButtonState(button, false, "Tekrar başlatılıyor…");
     if (status) status.textContent = formatStudentError(err, "Ders tekrar açılamadı.");
   }
 }
@@ -4087,6 +4167,63 @@ function setupModalAccessibility() {
     modal.setAttribute("aria-modal", "true");
     const title = modal.querySelector("h2[id], h3[id]");
     if (title) modal.setAttribute("aria-labelledby", title.id);
+
+    // Form modals are intentionally not dismissible through the backdrop.
+    // This prevents an accidental click from discarding entered data.
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
+
+    const panel = modal.querySelector(".modal");
+    const header = panel?.querySelector(".modal-head");
+    if (!panel || !header) continue;
+    let drag = null;
+    const controls = 'button, input, select, textarea, a, [contenteditable="true"]';
+    const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+
+    header.addEventListener("pointerdown", (event) => {
+      if ((event.button !== 0 && event.pointerType !== "touch") || event.target.closest(controls))
+        return;
+      const rect = panel.getBoundingClientRect();
+      const currentX = parseFloat(getComputedStyle(panel).getPropertyValue("--modal-x")) || 0;
+      const currentY = parseFloat(getComputedStyle(panel).getPropertyValue("--modal-y")) || 0;
+      drag = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        currentX,
+        currentY,
+        baseLeft: rect.left - currentX,
+        baseTop: rect.top - currentY,
+      };
+      panel.classList.add("is-dragging");
+      document.body.classList.add("modal-dragging");
+      header.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+    header.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const width = panel.getBoundingClientRect().width;
+      const height = panel.getBoundingClientRect().height;
+      const nextX = drag.currentX + event.clientX - drag.startX;
+      const nextY = drag.currentY + event.clientY - drag.startY;
+      const left = clamp(drag.baseLeft + nextX, 12, window.innerWidth - width - 12);
+      const top = clamp(drag.baseTop + nextY, 12, window.innerHeight - height - 12);
+      panel.style.setProperty("--modal-x", `${left - drag.baseLeft}px`);
+      panel.style.setProperty("--modal-y", `${top - drag.baseTop}px`);
+    });
+    const stopDrag = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      header.releasePointerCapture?.(event.pointerId);
+      drag = null;
+      panel.classList.remove("is-dragging");
+      document.body.classList.remove("modal-dragging");
+    };
+    header.addEventListener("pointerup", stopDrag);
+    header.addEventListener("pointercancel", stopDrag);
   }
   const focusableSelector =
     'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
@@ -4147,7 +4284,11 @@ let tenantDetailCurrent = null;
 function tenantApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   // DELETE body'sizdir; boş JSON body Fastify'da FST_ERR_CTP_EMPTY_JSON_BODY
   // verir, bu yüzden content-type header'ı eklenmez.
   if (method === "DELETE") {
@@ -4317,10 +4458,7 @@ function closeTenantForm() {
 }
 
 function setTenantFormLoading(isLoading) {
-  const btn = $("tenant-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("tenant-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitTenantForm(event) {
@@ -4758,7 +4896,11 @@ let userDetailCurrent = null;
 function userApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -4780,7 +4922,11 @@ function entitlementAdminApi(path, options = {}) {
 function membershipApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -4952,10 +5098,7 @@ function closeUserForm() {
 }
 
 function setUserFormLoading(isLoading) {
-  const btn = $("user-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("user-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitUserForm(event) {
@@ -5055,7 +5198,7 @@ async function openUserDetail(id) {
   }
 }
 
-function renderUserDetail(u) {
+function renderUserDetail(u, notice = "") {
   $("user-detail-title").textContent = u.displayName;
 
   const rows = [
@@ -5067,7 +5210,9 @@ function renderUserDetail(u) {
     ["Durum", userStatusBadge(u.status)],
     [
       "Platform rolü",
-      u.platformRole ? `<span class="mono">${escapeHtml(u.platformRole)}</span>` : "Yok",
+      u.platformRole
+        ? `<span class="mono">${escapeHtml(platformRoleLabel(u.platformRole))}</span>`
+        : "Yok",
     ],
     [
       "E-posta doğrulandı",
@@ -5118,6 +5263,30 @@ function renderUserDetail(u) {
     : '<tr><td colspan="5" class="empty-cell">Üyelik yok.</td></tr>';
 
   $("user-detail-body").innerHTML = `
+    <form id="user-detail-form" class="detail-edit-form" novalidate>
+      <h4>Kullanıcı bilgileri</h4>
+      <div class="form-grid">
+        <label class="field"><span>Ad soyad *</span><input id="user-detail-name" type="text" maxlength="120" required value="${escapeHtml(u.displayName ?? "")}" /></label>
+        <label class="field"><span>E-posta *</span><input id="user-detail-email" type="email" maxlength="254" required value="${escapeHtml(u.email ?? "")}" /></label>
+        <label class="field"><span>Telefon</span><input id="user-detail-phone" type="text" maxlength="30" value="${escapeHtml(u.phone ?? "")}" /></label>
+        <label class="field"><span>TC Kimlik No</span><input id="user-detail-national-id" type="text" inputmode="numeric" maxlength="11" value="${escapeHtml(u.nationalId ?? "")}" /></label>
+        <label class="field"><span>Doğum yılı</span><input id="user-detail-birthyear" type="number" min="1900" max="${new Date().getFullYear()}" value="${u.birthYear ?? ""}" /></label>
+        <label class="field"><span>Durum *</span><select id="user-detail-status">${setSelectedOption(
+          Object.entries(USER_STATUS_LABELS)
+            .map(([value, label]) => `<option value="${value}">${label}</option>`)
+            .join(""),
+          u.status,
+        )}</select></label>
+      </div>
+      <div class="modal-actions detail-edit-actions">
+        <button id="user-detail-save" type="submit" class="btn btn-primary">
+          <span class="btn-label">Değişiklikleri kaydet</span>
+          <span class="btn-spinner hidden" aria-hidden="true"></span>
+        </button>
+      </div>
+      <p id="user-detail-save-status" class="muted" role="status" aria-live="polite">${escapeHtml(notice)}</p>
+    </form>
+
     <dl class="info-grid">${rows
       .map(
         ([k, v]) => `
@@ -5154,7 +5323,7 @@ function renderUserDetail(u) {
           <thead>
             <tr>
               <th>Kurum</th>
-              <th>Tenant Tipi</th>
+              <th>Kurum türü</th>
               <th>Rol</th>
               <th>Durum</th>
               <th class="text-right">İşlemler</th>
@@ -5178,18 +5347,18 @@ function renderUserDetail(u) {
     </section>
 
     <section class="detail-section"><h4>Kurum/şube bağlantıları</h4>
-      ${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(item.status)}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}
+      ${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(generalStatusLabel(item.status))}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}
     </section>
     <section class="detail-section"><h4>Öğretmen sınıf atamaları (${classAssignments.length})</h4>
-      ${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Ders</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.subject || "—")}</td><td>${escapeHtml(item.status)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}
+      ${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Ders</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.subject || "—")}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}
     </section>
     <section class="detail-section"><h4>Öğrenci kayıtları (${enrollments.length})</h4>
-      ${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.status)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}
+      ${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}
     </section>
-    <section class="detail-section"><h4>Plan ve entitlement (${entitlements.length})</h4>
-      ${entitlements.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Kapsam</th><th>Plan</th><th>Kaynak</th><th>Durum</th><th>Bitiş</th></tr></thead><tbody>${entitlements.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel"}</td><td>${item.plan === "PLAN_PREMIUM" ? "Premium" : "Ücretsiz"}</td><td>${escapeHtml(item.source)}</td><td>${item.active ? "Aktif" : "Pasif"}</td><td>${item.expiresAt ? escapeHtml(new Date(item.expiresAt).toLocaleDateString("tr-TR")) : "Süresiz"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tanımlı entitlement yok.</p>'}
+    <section class="detail-section"><h4>Paket ve kullanım hakları (${entitlements.length})</h4>
+      ${entitlements.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Kapsam</th><th>Paket</th><th>Kaynak</th><th>Durum</th><th>Bitiş</th></tr></thead><tbody>${entitlements.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel"}</td><td>${planLabel(item.plan)}</td><td>${escapeHtml(entitlementSourceLabel(item.source))}</td><td>${item.active ? "Aktif" : "Pasif"}</td><td>${item.expiresAt ? escapeHtml(new Date(item.expiresAt).toLocaleDateString("tr-TR")) : "Süresiz"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tanımlı paket ve kullanım hakkı yok.</p>'}
       <div class="membership-add-row">
-        <label class="field"><span>Kapsam tenant'ı</span><select id="user-detail-entitlement-tenant"><option value="">Tenant seçin…</option>${memberships
+        <label class="field"><span>Kapsam kurumu</span><select id="user-detail-entitlement-tenant"><option value="">Kurum seçin…</option>${memberships
           .filter(
             (item, index, all) =>
               all.findIndex((candidate) => candidate.tenantId === item.tenantId) === index,
@@ -5200,16 +5369,58 @@ function renderUserDetail(u) {
           )
           .join("")}</select></label>
         <label class="field"><span>Kapsam</span><select id="user-detail-entitlement-scope"><option value="PERSONAL">Kişisel</option><option value="ORGANIZATION">Kurum</option></select></label>
-        <label class="field"><span>Plan</span><select id="user-detail-entitlement-plan"><option value="PLAN_FREE">Ücretsiz</option><option value="PLAN_PREMIUM">Premium</option></select></label>
-        <label class="field"><span>Kaynak</span><input id="user-detail-entitlement-source" value="ADMIN" maxlength="80" /></label>
+        <label class="field"><span>Paket</span><select id="user-detail-entitlement-plan"><option value="PLAN_FREE">Ücretsiz Paket</option><option value="PLAN_PREMIUM">Ücretli Paket</option></select></label>
+        <label class="field"><span>Paket kaynağı</span><select id="user-detail-entitlement-source"><option value="ADMIN">Yönetici tarafından tanımlandı</option><option value="BILLING">Ödeme ve abonelik</option><option value="SUBSCRIPTION">Abonelik</option></select></label>
         <label class="field"><span>Başlangıç</span><input id="user-detail-entitlement-effective" type="datetime-local" /></label>
         <label class="field"><span>Bitiş</span><input id="user-detail-entitlement-expires" type="datetime-local" /></label>
-        <button id="user-detail-entitlement-btn" type="button" class="btn btn-primary">Entitlement kaydet</button>
+        <button id="user-detail-entitlement-btn" type="button" class="btn btn-primary"><span class="btn-label">Paket ve kullanım haklarını kaydet</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>
       </div>
-      <p id="user-detail-entitlement-status" class="muted" role="status" aria-live="polite"></p>
+      <p id="user-detail-entitlement-status" class="muted" role="status" aria-live="polite">Günlük alıştırma ve soru hakları seçilen pakete göre uygulanır.</p>
     </section>`;
 
   void populateMembershipTenantSelect();
+}
+
+function setUserDetailLoading(isLoading) {
+  setAsyncButtonState($("user-detail-save"), isLoading, "Kaydediliyor…");
+}
+
+async function submitUserDetailForm(event) {
+  event.preventDefault();
+  if (!userDetailCurrent) return;
+  const status = $("user-detail-save-status");
+  if (status) status.textContent = "";
+  const payload = {
+    displayName: $("user-detail-name").value.trim(),
+    email: $("user-detail-email").value.trim(),
+    phone: $("user-detail-phone").value.trim() || null,
+    nationalId: $("user-detail-national-id").value.trim() || null,
+    status: $("user-detail-status").value,
+  };
+  const birthYear = $("user-detail-birthyear").value.trim();
+  payload.birthYear = birthYear ? Number(birthYear) : null;
+  if (!payload.displayName || !payload.email) {
+    if (status) status.textContent = "Ad soyad ve e-posta gereklidir.";
+    return;
+  }
+  setUserDetailLoading(true);
+  try {
+    const updated = await parseResponse(
+      await userApi(`/${encodeURIComponent(userDetailCurrent.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    );
+    userDetailCurrent = updated;
+    renderUserDetail(updated, "Değişiklikler kaydedildi.");
+    const listItem = userData.find((item) => item.id === updated.id);
+    if (listItem) Object.assign(listItem, updated);
+    renderUserList();
+  } catch (err) {
+    if (status) status.textContent = err.message || "Değişiklikler kaydedilemedi.";
+  } finally {
+    setUserDetailLoading(false);
+  }
 }
 
 async function resetAdminUserPassword() {
@@ -5250,7 +5461,7 @@ async function createAdminUserEntitlement() {
   if (!button || !status || !tenantSelect || !scopeSelect || !userDetailCurrent) return;
   const tenantId = tenantSelect.value;
   if (!tenantId) {
-    status.textContent = "Tenant seçin.";
+    status.textContent = "Kurum seçin.";
     return;
   }
   const effectiveAt = $("user-detail-entitlement-effective").value;
@@ -5264,20 +5475,20 @@ async function createAdminUserEntitlement() {
     ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}),
     ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
   };
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  status.textContent = "Entitlement kaydediliyor…";
+  setAsyncButtonState(button, true, "Kaydediliyor…");
+  status.textContent = "Paket ve kullanım hakları kaydediliyor…";
   try {
     await parseResponse(
       await entitlementAdminApi("", { method: "POST", body: JSON.stringify(payload) }),
     );
-    status.textContent = "Entitlement kaydedildi.";
-    await openUserDetail(userDetailCurrent.id);
+    const userId = userDetailCurrent.id;
+    await openUserDetail(userId);
+    const savedStatus = $("user-detail-entitlement-status");
+    if (savedStatus) savedStatus.textContent = "Paket ve kullanım hakları kaydedildi.";
   } catch (err) {
-    status.textContent = err.message || "Entitlement kaydedilemedi.";
+    status.textContent = err.message || "Paket ve kullanım hakları kaydedilemedi.";
   } finally {
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
+    setAsyncButtonState(button, false, "Kaydediliyor…");
   }
 }
 
@@ -5446,6 +5657,9 @@ function setupUserEvents() {
     $("membership-add-role").innerHTML =
       `<option value="">Rol seçin…</option>${membershipRoleOptions(tenantType)}`;
   });
+  $("user-detail-body").addEventListener("submit", (event) => {
+    if (event.target.id === "user-detail-form") void submitUserDetailForm(event);
+  });
 
   $("user-detail-close").addEventListener("click", () => {
     $("user-detail-modal").classList.add("hidden");
@@ -5503,7 +5717,11 @@ let studentFilterTenantsLoaded = false;
 function studentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -5776,10 +5994,7 @@ function closeStudentForm() {
 }
 
 function setStudentFormLoading(isLoading) {
-  const btn = $("student-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("student-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitStudentForm(event) {
@@ -6246,7 +6461,11 @@ let teacherDetailCurrent = null;
 function teacherAssignmentResourceApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -6258,7 +6477,11 @@ function teacherAssignmentResourceApi(path, options = {}) {
 function teacherAdminApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") delete headers["content-type"];
   return fetch(`/admin/teachers${path}`, { ...options, method, headers });
 }
@@ -6447,10 +6670,7 @@ function closeTeacherForm() {
 }
 
 function setTeacherFormLoading(isLoading) {
-  const btn = $("teacher-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("teacher-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitTeacherForm(event) {
@@ -7098,7 +7318,11 @@ let branchDetailCurrent = null;
 function branchApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -7301,10 +7525,7 @@ function closeBranchForm() {
 }
 
 function setBranchFormLoading(isLoading) {
-  const btn = $("branch-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("branch-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitBranchForm(event) {
@@ -7558,7 +7779,11 @@ let classDetailTeachers = [];
 function classApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -7569,7 +7794,11 @@ function classApi(path, options = {}) {
 function classSubApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -8063,10 +8292,7 @@ function closeClassForm() {
 }
 
 function setClassFormLoading(isLoading) {
-  const btn = $("class-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("class-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitClassForm(event) {
@@ -8757,7 +8983,11 @@ let levelEditingId = null;
 function contentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (method === "DELETE") {
     delete headers["content-type"];
   }
@@ -9001,7 +9231,12 @@ function questionStatusBadge(status) {
 }
 function questionApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const method = options.method ?? "GET";
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (options.method === "DELETE") delete headers["content-type"];
   return fetch(`/admin${path}`, { ...options, headers });
 }
@@ -9175,7 +9410,7 @@ async function openQuestionDetail(id) {
         <div class="info-item"><dt>Yayınlanma</dt><dd>${escapeHtml(formatDateTime(q.publishedAt))}</dd></div>
         ${current?.reviewedByName ? `<div class="info-item"><dt>İnceleyen</dt><dd>${escapeHtml(current.reviewedByName)} · ${escapeHtml(formatDateTime(current.reviewedAt))}</dd></div>` : ""}
         ${current?.approvedByName ? `<div class="info-item"><dt>Onaylayan</dt><dd>${escapeHtml(current.approvedByName)} · ${escapeHtml(formatDateTime(current.approvedAt))}</dd></div>` : ""}
-        ${current?.prompt ? `<div class="info-item"><dt>Mevcut Sürüm Prompt</dt><dd>${escapeHtml(current.prompt)}</dd></div>` : ""}
+        ${current?.prompt ? `<div class="info-item"><dt>Mevcut sürüm soru metni</dt><dd>${escapeHtml(current.prompt)}</dd></div>` : ""}
         ${currentDetail ? `<div class="info-item detail-wide"><dt>Seçenekler</dt><dd>${renderQuestionOptions(currentDetail)}</dd></div><div class="info-item"><dt>Doğru cevap</dt><dd>${escapeHtml(formatQuestionCorrectAnswer(currentDetail.correctAnswer))}</dd></div><div class="info-item"><dt>Açıklama</dt><dd>${escapeHtml(currentDetail.explanation ?? "—")}</dd></div><div class="info-item"><dt>İpucu</dt><dd>${escapeHtml(currentDetail.hint ?? "—")}</dd></div>` : ""}
       </div>
       ${current?.status === "PUBLISHED" ? '<p class="field-hint muted">Yayınlanmış sürüm değiştirilemez. Değişiklik için yeni bir taslak sürüm oluşturun.</p>' : ""}`;
@@ -9366,7 +9601,7 @@ async function openQuestionVersionDetail(versionId) {
         <div class="info-item"><dt>Durum</dt><dd>${versionStatusBadge(v.status)}</dd></div>
         <div class="info-item"><dt>Oluşturulma</dt><dd>${escapeHtml(formatDateTime(v.createdAt))}</dd></div>
         <div class="info-item"><dt>Yayınlanma</dt><dd>${escapeHtml(formatDateTime(v.publishedAt))}</dd></div>
-        <div class="info-item"><dt>Prompt</dt><dd>${escapeHtml(v.prompt ?? "—")}</dd></div>
+        <div class="info-item"><dt>Soru metni</dt><dd>${escapeHtml(v.prompt ?? "—")}</dd></div>
         <div class="info-item"><dt>Soru Tipi</dt><dd>${escapeHtml(v.questionType ?? currentQuestionType ?? "—")}</dd></div>
         <div class="info-item"><dt>Seçenekler</dt><dd><pre style="white-space:pre-wrap; max-height:180px; overflow:auto;">${safeJson(v.options)}</pre></dd></div>
         <div class="info-item"><dt>Doğru Cevap</dt><dd><pre style="white-space:pre-wrap; max-height:180px; overflow:auto;">${safeJson(v.correctAnswer)}</pre></dd></div>
@@ -10113,7 +10348,7 @@ function addMatchingPair(leftId = "", rightId = "") {
 function addBlankField(blankId = "", accepted = "") {
   const div = document.createElement("div");
   div.className = "blank-row fieldset-group";
-  div.innerHTML = `<label class="field"><span>Blank ID</span><input type="text" value="${escapeHtml(blankId || uid("blank"))}" data-blank-id required></label><label class="field"><span>Kabul edilen cevaplar (virgülle)</span><input type="text" value="${escapeHtml(accepted)}" data-blank-accepted required></label><label class="field"><span>Regex</span><input type="text" data-blank-regex placeholder="^\\d+$"></label><label class="field"><span><input type="checkbox" data-blank-case> Büyük/küçük duyarlı</span></label><button type="button" class="btn btn-ghost btn-sm" data-blank-remove>Sil</button>`;
+  div.innerHTML = `<label class="field"><span>Boşluk kimliği</span><input type="text" value="${escapeHtml(blankId || uid("blank"))}" data-blank-id required></label><label class="field"><span>Kabul edilen cevaplar (virgülle)</span><input type="text" value="${escapeHtml(accepted)}" data-blank-accepted required></label><label class="field"><span>Biçim kuralı</span><input type="text" data-blank-regex placeholder="^\\d+$"></label><label class="field"><span><input type="checkbox" data-blank-case> Büyük/küçük duyarlı</span></label><button type="button" class="btn btn-ghost btn-sm" data-blank-remove>Sil</button>`;
   $("question-form-blank-list").appendChild(div);
 }
 function addOeRubric(criteria = "", points = 1) {
@@ -10123,10 +10358,7 @@ function addOeRubric(criteria = "", points = 1) {
   $("question-form-oe-rubric-list").appendChild(div);
 }
 function setQuestionFormLoading(isLoading) {
-  const btn = $("question-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("question-form-submit"), isLoading, "Kaydediliyor…");
 }
 async function submitQuestionForm(event) {
   event.preventDefault();
@@ -10271,7 +10503,7 @@ async function submitQuestionForm(event) {
               .map((s) => s.trim())
               .filter(Boolean)
           : [];
-        if (!blankId) throw new Error("Blank ID boş olamaz.");
+        if (!blankId) throw new Error("Boşluk kimliği boş olamaz.");
         if (acceptedAnswers.length === 0) throw new Error("Kabul edilen cevap boş olamaz.");
         const caseSensitive = r.querySelector("[data-blank-case]").checked || undefined;
         const regex = r.querySelector("[data-blank-regex]").value.trim() || null;
@@ -10385,7 +10617,12 @@ async function submitQuestionForm(event) {
 // ========== Exercise Template ==========
 function templateApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
-  const headers = { ...authHeaders(accessToken, tenantId), ...(options.headers ?? {}) };
+  const method = options.method ?? "GET";
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
   if (options.method === "DELETE") delete headers["content-type"];
   return fetch(`/admin${path}`, { ...options, headers });
 }
@@ -10947,13 +11184,7 @@ function resetTemplateForm() {
   if (tId) tId.value = "";
 }
 function setTemplateFormLoading(isLoading) {
-  const btn = $("template-form-submit");
-  if (!btn) return;
-  btn.disabled = isLoading;
-  const lbl = btn.querySelector(".btn-label");
-  const sp = btn.querySelector(".btn-spinner");
-  if (lbl) lbl.classList.toggle("hidden", isLoading);
-  if (sp) sp.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("template-form-submit"), isLoading, "Kaydediliyor…");
 }
 async function submitTemplateForm(event) {
   event.preventDefault();
@@ -11598,6 +11829,10 @@ function renderExerciseResult() {
         ?.review,
     );
     const isReview = exerciseReviewMode || isDailyReview;
+    const nextLearningStep =
+      typeof learningPathEntryMode !== "undefined" && learningPathEntryMode
+        ? exerciseSession.nextLearningStep
+        : null;
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
     const g = exerciseGamification;
     if (isIndependentActivity) {
@@ -11638,9 +11873,15 @@ function renderExerciseResult() {
           <div><dt>Günlük seri</dt><dd>${g ? g.currentDays : "—"}</dd></div>
         </dl>
         <p>Cevaplama ilerlemesi: ${s.attempted ?? 0} / ${s.totalQuestions ?? 0}</p>
-        <button id="exercise-return-path" type="button" class="btn btn-primary">Öğrenme Yoluna Dön</button>
+        <div class="training-home-actions">
+          ${nextLearningStep ? '<button id="exercise-next-step" type="button" class="btn btn-primary"><span class="btn-label">Sonraki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : '<button id="exercise-return-path" type="button" class="btn btn-primary">Öğrenme Yoluna Dön</button>'}
+        </div>
       </div>`;
-    $("exercise-return-path").addEventListener("click", returnToExercisePath);
+    if (nextLearningStep) {
+      $("exercise-next-step")?.addEventListener("click", () => void continueToNextLearningStep());
+    } else {
+      $("exercise-return-path")?.addEventListener("click", returnToExercisePath);
+    }
     return;
   }
   body.innerHTML = `
@@ -11651,6 +11892,24 @@ function renderExerciseResult() {
     <div class="info-item"><dt>Açık Uçlu Bekleyen</dt><dd>${(s.openEndedPending ?? s.pendingEvaluation) ? "Var" : "Yok"}</dd></div>
     <div class="info-item"><dt>Durum</dt><dd>${escapeHtml(exerciseSession.status)}</dd></div>
   `;
+}
+async function continueToNextLearningStep() {
+  if (exerciseBusy || !learningPathEntryMode) return;
+  const next = exerciseSession?.nextLearningStep;
+  const button = $("exercise-next-step");
+  if (!next || !button) return;
+  setAsyncButtonState(button, true, "Yükleniyor…");
+  activeLearningStepNode = next;
+  learningPathEntryMode = true;
+  rememberExerciseSession(null);
+  resetExerciseState();
+  try {
+    await startLearningPathNode(next, null);
+    if ($("exercise-next-step")) setAsyncButtonState(button, false, "Yükleniyor…");
+  } catch (error) {
+    setAsyncButtonState(button, false, "Yükleniyor…");
+    if (!isPremiumLimitError(error)) alert(error.message || "Sonraki adım açılamadı.");
+  }
 }
 async function handleExerciseCreate() {
   hideExerciseError();
@@ -11815,7 +12074,7 @@ function renderExerciseQuestion() {
             `</div>`;
         }
       } else {
-        html += `<div class="info-item"><dt>Prompt</dt><dd>${escapeHtml(q.prompt ?? "—")}</dd></div>`;
+        html += `<div class="info-item"><dt>Soru metni</dt><dd>${escapeHtml(q.prompt ?? "—")}</dd></div>`;
         html += `<div class="info-item"><dt>Tip</dt><dd>${escapeHtml(type)}</dd></div>`;
         if (type === "MULTIPLE_CHOICE") {
           const opts = Array.isArray(q.options) ? q.options : [];
@@ -12616,10 +12875,7 @@ function closeContentForm() {
 }
 
 function setContentFormLoading(isLoading) {
-  const btn = $("content-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("content-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitContentForm(event) {
@@ -12862,10 +13118,10 @@ function renderContentAuthoringMeta() {
   }
   meta.innerHTML = `
     <div class="authoring-meta-item"><span>İçerik</span><strong>${escapeHtml(content.title)}</strong></div>
-    <div class="authoring-meta-item"><span>Content ID</span><code>${escapeHtml(content.id)}</code></div>
-    <div class="authoring-meta-item"><span>Version</span><strong>${version ? `v${escapeHtml(String(version.version))}` : "—"}</strong></div>
+    <div class="authoring-meta-item"><span>İçerik kimliği</span><code>${escapeHtml(content.id)}</code></div>
+    <div class="authoring-meta-item"><span>Sürüm</span><strong>${version ? `v${escapeHtml(String(version.version))}` : "—"}</strong></div>
     <div class="authoring-meta-item"><span>Durum</span>${content.status ? contentStatusBadge(content.status) : "—"}</div>
-    <div class="authoring-meta-item"><span>Competency</span><strong>${content.skills?.length ? escapeHtml(content.skills.map((skill) => skill.code).join(", ")) : "Tanımlı değil"}</strong></div>
+    <div class="authoring-meta-item"><span>Yetkinlik</span><strong>${content.skills?.length ? escapeHtml(content.skills.map((skill) => skill.code).join(", ")) : "Tanımlı değil"}</strong></div>
     <div class="authoring-meta-item"><span>Zorluk</span><strong>${content.difficulty != null ? escapeHtml(difficultyLabel(content.difficulty)) : "Tanımlı değil"}</strong></div>
     <div class="authoring-meta-item"><span>Yazar</span><strong>${escapeHtml(version?.createdByName ?? content.createdByName ?? "—")}</strong></div>
     <div class="authoring-meta-item"><span>Son güncelleme</span><strong>${escapeHtml(formatDateTime(content.updatedAt))}</strong></div>`;
@@ -13646,10 +13902,7 @@ function updateVersionWordCount() {
 }
 
 function setVersionFormLoading(isLoading) {
-  const btn = $("version-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("version-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitVersionForm(event) {
@@ -13982,10 +14235,7 @@ function closeSkillForm() {
 }
 
 function setSkillFormLoading(isLoading) {
-  const btn = $("skill-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("skill-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitSkillForm(event) {
@@ -14143,10 +14393,7 @@ function closeLevelForm() {
 }
 
 function setLevelFormLoading(isLoading) {
-  const btn = $("level-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("level-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 async function submitLevelForm(event) {
@@ -14596,42 +14843,7 @@ function setupBranchEvents() {
   });
 }
 
-// Modal backdrop tıklamasıyla kapatma.
-for (const id of [
-  "tenant-form-modal",
-  "tenant-detail-modal",
-  "user-form-modal",
-  "user-detail-modal",
-  "student-form-modal",
-  "student-detail-modal",
-  "teacher-form-modal",
-  "teacher-detail-modal",
-  "branch-form-modal",
-  "branch-detail-modal",
-  "class-form-modal",
-  "class-detail-modal",
-  "content-form-modal",
-  "content-detail-modal",
-  "content-authoring-modal",
-  "version-form-modal",
-  "version-detail-modal",
-  "question-detail-modal",
-  "question-form-modal",
-  "question-version-detail-modal",
-  "template-detail-modal",
-  "template-version-detail-modal",
-  "template-form-modal",
-  "skill-form-modal",
-  "level-form-modal",
-  "question-media-detail-modal",
-  "question-version-media-detail-modal",
-]) {
-  $(id).addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) {
-      $(id).classList.add("hidden");
-    }
-  });
-}
+// Backdrop clicks are intentionally inert; modals close only through explicit actions.
 // ========== Question Version Media Detail ==========
 const QVMEDIA_ROLE_LABELS = {
   MAIN: "Ana Görsel",
@@ -15635,10 +15847,7 @@ function renderAssignmentList(total) {
 }
 
 function setAssignmentFormLoading(isLoading) {
-  const btn = $("assignment-form-submit");
-  btn.disabled = isLoading;
-  btn.querySelector(".btn-label")?.classList.toggle("hidden", isLoading);
-  btn.querySelector(".btn-spinner")?.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("assignment-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 function closeAssignmentForm() {
@@ -17191,13 +17400,7 @@ function renderAssessmentList(total) {
 }
 
 function setAssessmentFormLoading(isLoading) {
-  var btn = $("assessment-form-submit");
-  if (!btn) return;
-  btn.disabled = isLoading;
-  var label = btn.querySelector(".btn-label");
-  var spinner = btn.querySelector(".btn-spinner");
-  if (label) label.classList.toggle("hidden", isLoading);
-  if (spinner) spinner.classList.toggle("hidden", !isLoading);
+  setAsyncButtonState($("assessment-form-submit"), isLoading, "Kaydediliyor…");
 }
 
 function closeAssessmentForm() {

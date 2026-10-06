@@ -6,6 +6,7 @@ export {
   completeLearningStepForContentVersion,
   completeLearningStepForSession,
   getNextLearningStep,
+  getNextLearningStepAfter,
   getStudentLearningPath,
   markLearningStepInProgress,
   markLearningStepInProgressForTemplate,

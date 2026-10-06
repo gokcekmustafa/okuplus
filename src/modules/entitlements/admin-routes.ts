@@ -17,7 +17,7 @@ import {
 
 function readId(request: FastifyRequest): string {
   const id = (request.params as { id?: string }).id;
-  if (!id?.trim()) throw validationError("Entitlement kimliği gerekli");
+  if (!id?.trim()) throw validationError("Paket kaydı kimliği gerekli");
   return id;
 }
 

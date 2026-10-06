@@ -7,7 +7,7 @@ import { assertStudentActor } from "../student-learning/policy.js";
 import {
   assertLearningStepAccessible,
   completeLearningStep,
-  getNextLearningStep,
+  getNextLearningStepAfter,
 } from "../learning-path/index.js";
 import {
   completeLearningStepForContent,
@@ -193,7 +193,7 @@ export async function completeStudentLearningStepLesson(stepId: string, actor: L
   return {
     lesson: await findLessonForContentVersion(current.lesson.contentVersionId, actor),
     learningStep: { ...current.learningStep, status: "completed" as const },
-    nextStep: await getNextLearningStep(actor),
+    nextStep: await getNextLearningStepAfter(actor, stepId),
   };
 }
 

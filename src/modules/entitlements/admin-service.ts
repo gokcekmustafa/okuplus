@@ -86,7 +86,7 @@ export async function updateAdminEntitlement(
     where: { id },
     select: entitlementSelect,
   });
-  if (!existing) throw notFoundError("Entitlement bulunamadı");
+  if (!existing) throw notFoundError("Paket kaydı bulunamadı");
   const data: Prisma.EntitlementUpdateInput = {
     ...(input.plan !== undefined ? { plan: input.plan } : {}),
     ...(input.source !== undefined ? { source: input.source } : {}),
@@ -94,8 +94,7 @@ export async function updateAdminEntitlement(
     ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
     ...(input.active !== undefined ? { active: input.active } : {}),
   };
-  if (Object.keys(data).length === 0)
-    throw validationError("Güncellenecek entitlement alanı gerekli");
+  if (Object.keys(data).length === 0) throw validationError("Güncellenecek paket alanı gerekli");
   const nextEffectiveAt = input.effectiveAt ?? existing.effectiveAt;
   const nextExpiresAt = input.expiresAt === undefined ? existing.expiresAt : input.expiresAt;
   if (nextExpiresAt && nextExpiresAt <= nextEffectiveAt) {
@@ -136,20 +135,20 @@ async function validateTarget(tenantId: string, scope: EntitlementScope, userId:
     where: { id: tenantId, deletedAt: null },
     select: { id: true, type: true },
   });
-  if (!tenant) throw notFoundError("Tenant bulunamadı");
+  if (!tenant) throw notFoundError("Kurum bulunamadı");
   if (scope === "PERSONAL") {
     if (tenant.type !== "INDIVIDUAL" || !userId) {
       throw validationError(
-        "Kişisel entitlement yalnızca bireysel tenant ve kullanıcı için tanımlanabilir",
+        "Kişisel paket yalnızca bireysel kurum ve kullanıcı için tanımlanabilir",
       );
     }
     const membership = await prisma.membership.findFirst({
       where: { tenantId, userId, status: "ACTIVE", deletedAt: null },
       select: { id: true },
     });
-    if (!membership) throw validationError("Kullanıcının bu bireysel tenant'ta aktif üyeliği yok");
+    if (!membership) throw validationError("Kullanıcının bu bireysel kurumda aktif üyeliği yok");
   } else if (tenant.type !== "ORGANIZATION" || userId !== null) {
-    throw validationError("Kurum entitlement'ında kullanıcı seçilemez");
+    throw validationError("Kurum paketinde kullanıcı seçilemez");
   }
   return { tenantId: tenant.id, tenantType: tenant.type };
 }
