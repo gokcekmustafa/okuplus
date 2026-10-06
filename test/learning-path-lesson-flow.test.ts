@@ -13,7 +13,7 @@ describe("roadmap lesson flow contract", () => {
 
   it("completes only the addressed step and returns the server-selected next step", () => {
     expect(service).toContain("await completeLearningStep(actor, stepId)");
-    expect(service).toContain("nextStep: await getNextLearningStep(actor)");
+    expect(service).toContain("nextStep: await getNextLearningStepAfter(actor, stepId)");
     expect(service).not.toContain("nextStep = request");
   });
 

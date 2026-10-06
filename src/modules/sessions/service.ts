@@ -25,7 +25,10 @@ import {
   isLearningPathReplaySession,
 } from "../training/session-origin.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
-import { completeLearningStepForSession } from "../learning-path/index.js";
+import {
+  completeLearningStepForSession,
+  getNextLearningStepAfter,
+} from "../learning-path/index.js";
 import {
   completeLearningStep,
   completeLearningStepForAssessment,
@@ -60,6 +63,16 @@ export interface ExerciseSessionDetail {
   student: { id: string; displayName: string; email: string | null };
   questionCount: number;
   attemptCount: number;
+  nextLearningStep?: {
+    id: string;
+    type: string;
+    title: string;
+    unitTitle: string;
+    status: "completed" | "active";
+    templateVersionId: string | null;
+    contentVersionId: string | null;
+    assessmentId: string | null;
+  } | null;
 }
 
 export interface ExerciseOptionData {
@@ -854,7 +867,22 @@ export async function completeExerciseSession(
   // cevabı dönmeden önce tamamlanır. Hata, tamamlanmış oturumu geri almaz.
   await aggregateSessionProgress(id).catch(() => {});
 
-  return toSessionDetail(updated as any);
+  let nextLearningStep: ExerciseSessionDetail["nextLearningStep"] = null;
+  if (
+    session.tenantId &&
+    session.learningStepId &&
+    actor.userId === session.studentId &&
+    !session.assignmentId &&
+    !session.trainingSessionItem &&
+    !isIndependentTrainingSession(session.deviceInfo)
+  ) {
+    nextLearningStep = await getNextLearningStepAfter(
+      { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
+      session.learningStepId,
+    ).catch(() => null);
+  }
+
+  return { ...toSessionDetail(updated as any), nextLearningStep };
 }
 
 function toSessionDetail(row: any): ExerciseSessionDetail {

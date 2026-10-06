@@ -61,4 +61,16 @@ describe("student lesson UI", () => {
     expect(html).not.toContain("Sana uygun dersler");
     expect(html).toContain("data-learning-step-complete");
   });
+
+  it("keeps replay continuation server-authoritative", () => {
+    expect(source).toContain("exerciseSession.nextLearningStep");
+    expect(source).toContain('id="exercise-next-step"');
+    expect(source).toContain("function continueToNextLearningStep()");
+  });
+
+  it("does not dismiss modals through the backdrop and supports header drag", () => {
+    expect(source).toContain("Backdrop clicks are intentionally inert");
+    expect(source).toContain('header.addEventListener("pointerdown"');
+    expect(source).toContain("aria-modal");
+  });
 });

@@ -129,7 +129,7 @@ const ENTITLEMENT_FEATURE_SET = new Set<string>(Object.values(ENTITLEMENT_FEATUR
 
 function assertEntitlementFeature(feature: string): asserts feature is EntitlementFeature {
   if (!ENTITLEMENT_FEATURE_SET.has(feature)) {
-    throw validationError("Geçersiz entitlement özelliği", { feature });
+    throw validationError("Geçersiz kullanım hakkı özelliği", { feature });
   }
 }
 
@@ -145,7 +145,7 @@ function resetAt(date: Date, timezone: string): string {
 }
 
 function planLabel(plan: EntitlementPlan): string {
-  return plan === "PLAN_PREMIUM" ? "Premium" : "Ücretsiz";
+  return plan === "PLAN_PREMIUM" ? "Ücretli Paket" : "Ücretsiz Paket";
 }
 
 function featureLabel(feature: EntitlementFeature): string {
@@ -283,10 +283,10 @@ async function loadSnapshot(
         context.scope === "ORGANIZATION"
           ? "Kurum tarafından yönetiliyor"
           : grant?.source === "PREMIUM_TRIAL"
-            ? "Premium deneme"
+            ? "Ücretli Paket denemesi"
             : grant?.source
-              ? "Kişisel plan"
-              : "Varsayılan ücretsiz plan",
+              ? "Kişisel paket"
+              : "Varsayılan ücretsiz paket",
       effectiveAt: grant?.effectiveAt.toISOString() ?? null,
       expiresAt: grant?.expiresAt?.toISOString() ?? null,
     },
@@ -295,7 +295,7 @@ async function loadSnapshot(
     features,
     premium: {
       paymentAvailable: premiumCheckoutAvailable(),
-      ctaLabel: premiumCheckoutAvailable() ? "Premium'u sandbox'ta dene" : "Premium hakkında bilgi",
+      ctaLabel: premiumCheckoutAvailable() ? "Ücretli Paketi dene" : "Ücretli Paket hakkında bilgi",
       activeCapabilities: ["Sınırsız alıştırma", "Sınırsız soru"],
       plannedCapabilities: ["ADS_FREE", "ADVANCED_PROGRESS", "ADVANCED_REVIEW", "PREMIUM_CONTENT"],
     },
@@ -348,7 +348,7 @@ async function recordUsageInTransactionCore(
 ): Promise<UsageResult> {
   assertEntitlementFeature(feature);
   if (!idempotencyKey.trim() || idempotencyKey.length > 200) {
-    throw validationError("Entitlement kullanım anahtarı geçersiz");
+    throw validationError("Kullanım hakkı anahtarı geçersiz");
   }
   const context = await resolveScope(actor, tx);
   const timezone = configuredCalendarTimezone();
@@ -484,7 +484,7 @@ export async function recordUsageInTransaction(
 }
 
 export function entitlementLimitMessage(feature: EntitlementFeature): string {
-  return `Günlük ücretsiz ${featureLabel(feature)} hakkın doldu. Premium ile ${featureLabel(feature)} kullanımını günlük limit olmadan sürdürebilirsin.`;
+  return `Günlük ücretsiz ${featureLabel(feature)} hakkın doldu. Ücretli Paket ile ${featureLabel(feature)} kullanımını günlük limit olmadan sürdürebilirsin.`;
 }
 
 export async function enforceUsage(

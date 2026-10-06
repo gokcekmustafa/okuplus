@@ -502,11 +502,44 @@ export async function getNextLearningStep(actor: LearningPathActor) {
         type: node.type,
         title: node.label,
         unitTitle: node.unit.title,
+        status: node.status,
         templateVersionId: node.templateVersionId,
         contentVersionId: node.contentVersionId,
         assessmentId: node.assessmentId,
       }
     : null;
+}
+
+/**
+ * Selects the first server-authorized station after the addressed station.
+ * Completed stations remain valid replay targets, while the first locked
+ * station is a hard progression boundary and stops the search.
+ */
+export async function getNextLearningStepAfter(actor: LearningPathActor, currentStepId: string) {
+  assertStudent(actor);
+  const path = await getStudentLearningPath(actor);
+  const orderedNodes = (path?.paths ?? (path ? [path] : [])).flatMap(
+    (projection) => projection.nodes ?? [],
+  );
+  const currentIndex = orderedNodes.findIndex((node) => node.id === currentStepId);
+  if (currentIndex < 0) return null;
+
+  for (const node of orderedNodes.slice(currentIndex + 1)) {
+    if (node.status === "locked") return null;
+    if (node.status === "completed" || node.status === "active") {
+      return {
+        id: node.id,
+        type: node.type,
+        title: node.label,
+        unitTitle: node.unit.title,
+        status: node.status,
+        templateVersionId: node.templateVersionId,
+        contentVersionId: node.contentVersionId,
+        assessmentId: node.assessmentId,
+      };
+    }
+  }
+  return null;
 }
 
 export async function assertLearningStepAccessible(actor: LearningPathActor, stepId: string) {
@@ -619,7 +652,8 @@ export async function markLearningStepInProgress(actor: LearningPathActor, stepI
 }
 
 export async function completeLearningStep(actor: LearningPathActor, stepId: string) {
-  await assertLearningStepAccessible(actor, stepId);
+  const node = await assertLearningStepAccessible(actor, stepId);
+  if (node.status === "completed") return;
   await updateProgress(actor, stepId, "COMPLETED");
 }
 

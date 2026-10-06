@@ -834,19 +834,19 @@
             >
               <div class="entitlement-card-head">
                 <div>
-                  <span class="eyebrow">Hesap planı</span>
-                  <h3 id="entitlement-title">Ücretsiz</h3>
+                  <span class="eyebrow">Hesap paketi</span>
+                  <h3 id="entitlement-title">Ücretsiz Paket</h3>
                   <p id="entitlement-scope" class="muted">Kişisel alan</p>
                 </div>
                 <div class="entitlement-badges">
                   <span id="entitlement-plan-badge" class="badge badge-info">Aktif</span>
-                  <span id="entitlement-state" class="badge badge-neutral">Ücretsiz plan</span>
+                  <span id="entitlement-state" class="badge badge-neutral">Ücretsiz Paket</span>
                 </div>
               </div>
               <div id="entitlement-usage" class="entitlement-usage" aria-live="polite"></div>
               <div id="entitlement-premium" class="entitlement-premium">
                 <div>
-                  <strong>Premium bilgisi</strong>
+                  <strong>Ücretli Paket bilgisi</strong>
                   <p id="entitlement-premium-note" class="muted">
                     Ödeme bağlantısı henüz etkin değil.
                   </p>
@@ -858,7 +858,7 @@
                   data-premium-action="OPEN_PREMIUM_INFO"
                   data-personal-billing
                 >
-                  Premium hakkında bilgi
+                  Ücretli Paket hakkında bilgi
                 </button>
               </div>
               <p id="entitlement-error" class="error hidden" role="alert"></p>
@@ -893,10 +893,11 @@
           >
             <header class="premium-info-heading">
               <div>
-                <p class="eyebrow">PLAN BİLGİSİ</p>
-                <h2>Premium nedir?</h2>
+                <p class="eyebrow">PAKET BİLGİSİ</p>
+                <h2>Ücretli Paket nedir?</h2>
                 <p class="muted">
-                  Premium, alıştırma ve soru kullanımındaki günlük sınırı kaldıran plan seçeneğidir.
+                  Ücretli Paket, alıştırma ve soru kullanımındaki günlük sınırı kaldıran paket
+                  seçeneğidir.
                 </p>
               </div>
               <button id="premium-info-back" type="button" class="btn btn-ghost">
@@ -906,7 +907,7 @@
             <div class="premium-info-grid">
               <section class="card premium-info-card" aria-labelledby="premium-free-title">
                 <span class="premium-info-icon" aria-hidden="true">🌱</span>
-                <h3 id="premium-free-title">Ücretsiz planda</h3>
+                <h3 id="premium-free-title">Ücretsiz pakette</h3>
                 <ul>
                   <li>Günde 3 alıştırma hakkı vardır.</li>
                   <li>Günde 20 soru hakkı vardır.</li>
@@ -918,7 +919,7 @@
                 aria-labelledby="premium-active-title"
               >
                 <span class="premium-info-icon" aria-hidden="true">✨</span>
-                <h3 id="premium-active-title">Premium ile</h3>
+                <h3 id="premium-active-title">Ücretli Paket ile</h3>
                 <ul>
                   <li>Alıştırma kullanımında günlük sınır olmaz.</li>
                   <li>Soru kullanımında günlük sınır olmaz.</li>
@@ -929,8 +930,8 @@
             <section class="card premium-info-note" aria-labelledby="premium-future-title">
               <h3 id="premium-future-title">İleride değerlendirilecek yetenekler</h3>
               <p>
-                Reklamsız kullanım, gelişmiş ilerleme, gelişmiş tekrar ve Premium içerik bu aşamada
-                etkin değildir.
+                Reklamsız kullanım, gelişmiş ilerleme, gelişmiş tekrar ve Ücretli Paket içeriği bu
+                aşamada etkin değildir.
               </p>
               <p class="muted">
                 Ödeme şu anda kullanıma açık değildir. Bu ekranda fiyat, kampanya, kart veya satın
@@ -947,14 +948,14 @@
             </section>
             <section class="card billing-sandbox-panel" aria-labelledby="billing-sandbox-title">
               <span class="eyebrow">TEST ORTAMI</span>
-              <h3 id="billing-sandbox-title">iyzico sandbox aboneliği</h3>
+              <h3 id="billing-sandbox-title">iyzico deneme aboneliği</h3>
               <p id="billing-sandbox-note" class="muted">
-                Sandbox yapılandırması tamamlanmadan checkout başlatılmaz; Premium durumu yalnızca
-                doğrulanmış provider webhook'u ile değişir.
+                Deneme ortamı yapılandırması tamamlanmadan ödeme başlatılmaz; Ücretli Paket durumu
+                yalnızca doğrulanmış ödeme bildirimiyle değişir.
               </p>
               <div class="billing-sandbox-actions">
                 <button id="premium-checkout-start" type="button" class="btn btn-primary" disabled>
-                  Sandbox checkout başlat
+                  Deneme ödeme akışını başlat
                 </button>
                 <button id="premium-subscription-cancel" type="button" class="btn btn-ghost hidden">
                   Aboneliği iptal et
@@ -973,14 +974,14 @@
             <header class="billing-account-heading">
               <div>
                 <p class="eyebrow">HESAP VE ÖDEME</p>
-                <h2 id="billing-account-title">Premium aboneliğini yönet</h2>
+                <h2 id="billing-account-title">Ücretli Paket aboneliğini yönet</h2>
                 <p id="billing-account-description" class="muted">
                   Bu alan yalnızca kişisel hesabındaki doğrulanmış abonelik ve ödeme kayıtlarını
                   gösterir.
                 </p>
               </div>
               <button id="billing-account-back" type="button" class="btn btn-ghost">
-                Premium bilgisine dön
+                Ücretli Paket bilgisine dön
               </button>
             </header>
 
@@ -1014,26 +1015,26 @@
             >
               <div>
                 <span class="eyebrow">KURUM HESABI</span>
-                <h3 id="billing-organization-title">Kurum planı</h3>
+                <h3 id="billing-organization-title">Kurum paketi</h3>
                 <dl class="billing-account-details">
                   <div>
                     <dt>Kurum</dt>
                     <dd id="billing-organization-name">—</dd>
                   </div>
                   <div>
-                    <dt>Plan durumu</dt>
+                    <dt>Paket durumu</dt>
                     <dd id="billing-organization-status">—</dd>
                   </div>
                   <div>
-                    <dt>Plan başlangıcı</dt>
+                    <dt>Paket başlangıcı</dt>
                     <dd id="billing-organization-effective">—</dd>
                   </div>
                   <div>
-                    <dt>Plan bitişi</dt>
+                    <dt>Paket bitişi</dt>
                     <dd id="billing-organization-expiry">—</dd>
                   </div>
                   <div>
-                    <dt>Plan kaynağı</dt>
+                    <dt>Paket kaynağı</dt>
                     <dd id="billing-organization-source">—</dd>
                   </div>
                 </dl>
@@ -1042,14 +1043,14 @@
                 <p id="billing-organization-management" class="muted" role="status"></p>
                 <div class="billing-account-actions">
                   <label class="field">
-                    <span>Kurum planı</span>
+                    <span>Kurum paketi</span>
                     <select id="billing-organization-plan">
-                      <option value="PLAN_FREE">Ücretsiz</option>
-                      <option value="PLAN_PREMIUM">Premium</option>
+                      <option value="PLAN_FREE">Ücretsiz Paket</option>
+                      <option value="PLAN_PREMIUM">Ücretli Paket</option>
                     </select>
                   </label>
                   <button id="billing-organization-plan-save" type="button" class="btn btn-primary">
-                    Kurum planını kaydet
+                    Kurum paketini kaydet
                   </button>
                 </div>
               </div>
@@ -1060,10 +1061,10 @@
                 class="card billing-account-card"
                 aria-labelledby="billing-account-plan-title"
               >
-                <span class="eyebrow">MEVCUT PLAN</span>
-                <h3 id="billing-account-plan-title">Ücretsiz</h3>
+                <span class="eyebrow">MEVCUT PAKET</span>
+                <h3 id="billing-account-plan-title">Ücretsiz Paket</h3>
                 <p id="billing-account-state" class="billing-account-state" role="status">
-                  Plan bilgisi yükleniyor…
+                  Paket bilgisi yükleniyor…
                 </p>
                 <p id="billing-account-summary" class="muted"></p>
                 <dl class="billing-account-details">
@@ -1096,7 +1097,7 @@
                     class="btn btn-primary"
                     disabled
                   >
-                    Yeni Premium aboneliği başlat
+                    Yeni Ücretli Paket aboneliği başlat
                   </button>
                   <button id="billing-account-cancel" type="button" class="btn btn-danger hidden">
                     Aboneliği iptal et
@@ -1110,13 +1111,13 @@
               class="card billing-account-benefits"
               aria-labelledby="billing-account-free-title"
             >
-              <span class="eyebrow">ÜCRETSİZ PLAN</span>
-              <h3 id="billing-account-free-title">Premium avantajlarını incele</h3>
+              <span class="eyebrow">ÜCRETSİZ PAKET</span>
+              <h3 id="billing-account-free-title">Ücretli Paket avantajlarını incele</h3>
               <p class="muted">Günlük alıştırma ve soru haklarını kullanmaya devam edebilirsin.</p>
               <ul>
                 <li>Günde 3 alıştırma hakkı</li>
                 <li>Günde 20 soru hakkı</li>
-                <li>Premium ile bu iki kullanım sınırı kaldırılır.</li>
+                <li>Ücretli Paket ile bu iki kullanım sınırı kaldırılır.</li>
               </ul>
             </section>
 
@@ -5854,16 +5855,16 @@
               aria-labelledby="premium-account-title"
             >
               <div>
-                <span class="eyebrow">HESAP VE PLAN</span>
-                <h3 id="premium-account-title">Planını ve kullanımını gör</h3>
-                <p class="muted">Ücretsiz günlük haklarını ve Premium bilgisini incele.</p>
+                <span class="eyebrow">HESAP VE PAKET</span>
+                <h3 id="premium-account-title">Paketini ve kullanımını gör</h3>
+                <p class="muted">Ücretsiz günlük haklarını ve Ücretli Paket bilgisini incele.</p>
               </div>
               <button
                 type="button"
                 class="btn btn-secondary"
                 data-premium-action="OPEN_PREMIUM_INFO"
               >
-                Premium hakkında bilgi
+                Ücretli Paket hakkında bilgi
               </button>
               <button
                 id="settings-billing-account"
@@ -6046,7 +6047,7 @@
           data-premium-action="OPEN_PREMIUM_INFO"
           data-personal-billing
         >
-          Premium hakkında bilgi
+          Ücretli Paket hakkında bilgi
         </button>
         <button id="premium-paywall-close-secondary" type="button" class="btn btn-ghost">
           Kapat
@@ -6073,7 +6074,7 @@
         </button>
       </div>
       <p id="billing-cancel-warning" role="alert">
-        Bu işlem Premium aboneliğini sonlandırma isteği gönderir. İptalden sonra Premium hakları
+        Bu işlem Ücretli Paket aboneliğini sonlandırma isteği gönderir. İptalden sonra paket hakları
         devam etmeyebilir.
       </p>
       <div class="premium-paywall-details">

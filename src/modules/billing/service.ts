@@ -110,7 +110,7 @@ async function customerInput(actor: BillingActor, client: Db = prisma) {
     where: { id: actor.userId, status: "ACTIVE", deletedAt: null },
     select: { email: true, displayName: true, phone: true },
   });
-  if (!user?.email) throw validationError("Premium checkout için doğrulanmış e-posta gerekli");
+  if (!user?.email) throw validationError("Ücretli Paket işlemi için doğrulanmış e-posta gerekli");
   const name = splitDisplayName(user.displayName);
   return { ...name, email: user.email, ...(user.phone ? { gsmNumber: user.phone } : {}) };
 }
@@ -168,7 +168,7 @@ export function billingCatalog(env: Env) {
         configured: Boolean(env.IYZICO_SUBSCRIPTION_PLAN_YEARLY),
       },
     ],
-    note: "Sandbox entegrasyonu; tutar ve vergi gösterimi iş kararı tamamlanana kadar UI tarafından gösterilmez.",
+    note: "Deneme ortamı entegrasyonu; tutar ve vergi gösterimi iş kararı tamamlanana kadar uygulamada gösterilmez.",
   };
 }
 
@@ -196,7 +196,7 @@ export async function getOrganizationBillingAccount(actor: BillingActor) {
       providerAvailable: false,
       canPurchase: false,
       message:
-        "Kurum planı bu aşamada ödeme sağlayıcısı üzerinden satın alınamaz. Plan, kurum entitlement yönetimiyle güncellenir.",
+        "Kurum paketi bu aşamada ödeme sağlayıcısı üzerinden satın alınamaz. Paket, kurum kullanım hakkı yönetimiyle güncellenir.",
     },
   };
 }
@@ -262,7 +262,7 @@ export async function createCheckout(actor: BillingActor, input: CreateCheckoutI
   const tenantId = await assertPersonalOwner(actor);
   if (!iyzicoCheckoutConfigured(env)) {
     throw serviceUnavailableError(
-      "iyzico sandbox checkout yapılandırılmamış; gerçek credential veya fiyat uydurulmadı",
+      "iyzico deneme ödeme akışı yapılandırılmamış; gerçek kimlik bilgisi veya fiyat uydurulmadı",
     );
   }
   const idempotencyKey = input.idempotencyKey ?? crypto.randomUUID();
@@ -300,7 +300,7 @@ export async function createCheckout(actor: BillingActor, input: CreateCheckoutI
     select: { id: true },
   });
   if (activeSubscription)
-    throw conflictError("Bu kişisel alanda zaten açık bir Premium abonelik işlemi var");
+    throw conflictError("Bu kişisel alanda zaten açık bir Ücretli Paket abonelik işlemi var");
 
   const created = await prisma.$transaction(async (tx) => {
     await applyTenantContext(tx, { userId: actor.userId, tenantId, platformRole: null });
@@ -357,7 +357,7 @@ export async function createCheckout(actor: BillingActor, input: CreateCheckoutI
       data: { status: "UNKNOWN" },
     });
     recordBillingTelemetry(actor, "PREMIUM_CHECKOUT_FAILED");
-    throw serviceUnavailableError("iyzico sandbox checkout başlatılamadı");
+    throw serviceUnavailableError("iyzico deneme ödeme akışı başlatılamadı");
   }
 }
 
@@ -401,7 +401,7 @@ async function updateFromProviderCheckout(
   provider: PaymentProvider,
 ) {
   if (!checkout.providerCheckoutId || !checkout.subscription)
-    throw notFoundError("Checkout provider tokenı bulunamadı");
+    throw notFoundError("Ödeme sağlayıcısı anahtarı bulunamadı");
   const subscription = checkout.subscription;
   const remote = await provider.getCheckout({ providerCheckoutId: checkout.providerCheckoutId });
   await prisma.$transaction(async (tx) => {
@@ -568,7 +568,7 @@ export async function cancelCurrentSubscription(
     },
     orderBy: { createdAt: "desc" },
   });
-  if (!subscription) throw notFoundError("Aktif Premium aboneliği bulunamadı");
+  if (!subscription) throw notFoundError("Aktif Ücretli Paket aboneliği bulunamadı");
   if (!subscription.providerSubscriptionId)
     throw conflictError("Provider abonelik doğrulaması henüz tamamlanmadı");
   const result = await createIyzicoProvider(env).cancelSubscription({
@@ -635,7 +635,7 @@ export async function refundPayment(
   if (payment.refundIdempotencyKey === idempotencyKey)
     return { status: payment.status, providerRefundId: payment.providerRefundId };
   if (!payment.providerPaymentId || payment.status !== "SUCCEEDED")
-    throw conflictError("Refund için doğrulanmış provider ödeme kimliği gerekli");
+    throw conflictError("İade için doğrulanmış ödeme kimliği gerekli");
   const requestedAmount = amountMinor ?? payment.amountMinor;
   if (requestedAmount === null || requestedAmount <= 0)
     throw conflictError("Refund için doğrulanmış ödeme tutarı gerekli");
