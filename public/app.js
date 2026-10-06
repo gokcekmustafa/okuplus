@@ -1109,8 +1109,19 @@ function showDashboard(me) {
   currentTenantType = tenantContext?.tenantType ?? null;
   currentTenantId = tenantContext?.tenantId ?? null;
   currentTenantName = tenantContext?.tenantName ?? "Kurum";
+  isPersonalBillingUser =
+    !isPlatform && currentTenantType === "INDIVIDUAL" && (isStudentUser || isParentUser);
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
+
+  const billingMenuItem = $("user-menu-billing-item");
+  const canViewBilling = isPersonalBillingUser || isOrganizationAdminUser;
+  if (billingMenuItem) {
+    billingMenuItem.classList.toggle("hidden", !canViewBilling);
+    billingMenuItem.textContent = isOrganizationAdminUser
+      ? "💳 Kurum Hesabı ve Ödeme"
+      : "💳 Hesap ve Ödeme";
+  }
 
   $("welcome-name").textContent = user.displayName;
   $("user-name").textContent = user.displayName;
@@ -1158,6 +1169,9 @@ function showDashboard(me) {
   }
   for (const item of document.querySelectorAll("[data-student-primary]")) {
     item.classList.toggle("hidden", !isLearnerShellUser);
+  }
+  for (const item of document.querySelectorAll("[data-personal-billing]")) {
+    item.classList.toggle("hidden", !isPersonalBillingUser);
   }
 
   // Student shell toggle
@@ -1230,6 +1244,8 @@ async function submitAccountProfile(event) {
   };
   const button = $("account-profile-submit");
   button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  status.textContent = "Profil kaydediliyor…";
   try {
     const tokens = getStoredTokens();
     const data = await parseResponse(
@@ -1255,6 +1271,7 @@ async function submitAccountProfile(event) {
     errorEl.classList.remove("hidden");
   } finally {
     button.disabled = false;
+    button.removeAttribute("aria-busy");
   }
 }
 
@@ -1862,8 +1879,9 @@ async function loadEntitlements() {
       '</strong></div><div class="entitlement-usage-row"><span>Günlük soru</span><strong>' +
       escapeHtml(usageValue(questions)) +
       "</strong></div>";
-    $("entitlement-premium-note").textContent =
-      plan.code === "PLAN_PREMIUM"
+    $("entitlement-premium-note").textContent = !isPersonalBillingUser
+      ? "Plan ve kullanım kapsamı kurum tarafından yönetiliyor."
+      : plan.code === "PLAN_PREMIUM"
         ? "Premium etkin. Alıştırma ve soru kullanımı günlük sınır olmadan devam eder."
         : uxState === PREMIUM_UX_STATES.FREE_LIMIT_REACHED
           ? "Günlük ücretsiz hakkın doldu. Premium hakkında bilgi alabilirsin."
@@ -1871,6 +1889,7 @@ async function loadEntitlements() {
     const cta = $("entitlement-premium-cta");
     cta.textContent = data.premium?.ctaLabel || "Premium hakkında bilgi";
     cta.disabled = false;
+    cta.classList.toggle("hidden", !isPersonalBillingUser);
     error?.classList.add("hidden");
     card.classList.remove("hidden");
   } catch (err) {
@@ -2050,6 +2069,16 @@ function renderBillingPaymentHistory(data) {
 }
 
 function renderBillingAccount({ entitlements, catalog, subscription, paymentHistory }) {
+  $("billing-account-title").textContent = "Premium aboneliğini yönet";
+  $("billing-account-description").textContent =
+    "Bu alan yalnızca kişisel hesabındaki doğrulanmış abonelik ve ödeme kayıtlarını gösterir.";
+  $("billing-account-scope-title").textContent = "Kişisel alan";
+  $("billing-account-organization-details")?.classList.add("hidden");
+  $("billing-account-personal-grid")?.classList.remove("hidden");
+  $("billing-account-free-benefits")?.classList.remove("hidden");
+  $("billing-account-personal-history")?.classList.remove("hidden");
+  $("billing-account-personal-invoice")?.classList.remove("hidden");
+  $("billing-account-back").textContent = "Premium bilgisine dön";
   const state = resolveBillingAccountState(subscription, entitlements);
   const supportedState = state && BILLING_ACCOUNT_STATE_LABELS[state];
   const plan = entitlements?.plan || {};
@@ -2152,6 +2181,72 @@ function renderBillingAccount({ entitlements, catalog, subscription, paymentHist
   renderBillingPaymentHistory(paymentHistory);
 }
 
+function renderOrganizationBillingAccount(data) {
+  const plan = data?.plan ?? data?.entitlements?.plan ?? {};
+  const isPremium = plan.code === "PLAN_PREMIUM" && plan.active;
+  const organization = data?.organization ?? {};
+  const management = data?.management?.message ?? "Kurum planı yönetim durumu doğrulanamadı.";
+
+  $("billing-account-title").textContent = "Kurum Hesabı ve Ödeme";
+  $("billing-account-description").textContent =
+    "Kurumunuzun planı ve entitlement kapsamı burada gösterilir; kişisel abonelik bilgileri bu alana dahil değildir.";
+  $("billing-account-scope-title").textContent = "Kurum alanı";
+  $("billing-account-scope-note").textContent =
+    "Plan kaynağı kurum entitlement'ıdır ve bu kurumun bağlı kullanıcılarına uygulanır.";
+  $("billing-account-back").textContent = "Kurum paneline dön";
+  $("billing-account-organization-details")?.classList.remove("hidden");
+  $("billing-account-personal-grid")?.classList.add("hidden");
+  $("billing-account-free-benefits")?.classList.add("hidden");
+  $("billing-account-personal-history")?.classList.add("hidden");
+  $("billing-account-personal-invoice")?.classList.add("hidden");
+  $("billing-organization-name").textContent = organization.name || "—";
+  $("billing-organization-status").textContent = isPremium ? "Premium" : "Ücretsiz";
+  $("billing-organization-plan").value = plan.code || "PLAN_FREE";
+  $("billing-organization-effective").textContent = plan.effectiveAt
+    ? formatBillingDate(plan.effectiveAt)
+    : "Belirtilmemiş";
+  $("billing-organization-expiry").textContent = plan.expiresAt
+    ? formatBillingDate(plan.expiresAt)
+    : "Süresiz";
+  $("billing-organization-source").textContent = plan.sourceLabel || "Kurum tarafından yönetiliyor";
+  $("billing-organization-management").textContent = management;
+  latestBillingAccount = {
+    entitlements: data?.entitlements ?? null,
+    catalog: null,
+    subscription: null,
+    paymentHistory: { payments: [] },
+    state: isPremium ? BILLING_ACCOUNT_STATES.PREMIUM_ACTIVE : BILLING_ACCOUNT_STATES.FREE,
+  };
+}
+
+async function updateOrganizationPlan() {
+  const button = $("billing-organization-plan-save");
+  const select = $("billing-organization-plan");
+  const status = $("billing-organization-management");
+  if (!button || !select || !status) return;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  status.textContent = "Kurum planı kaydediliyor…";
+  try {
+    const tokens = getStoredTokens();
+    const result = await parseResponse(
+      await fetch("/billing/organization/plan", {
+        method: "PATCH",
+        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+        body: JSON.stringify({ plan: select.value }),
+      }),
+    );
+    latestEntitlements = result.entitlements;
+    renderOrganizationBillingAccount(result);
+    status.textContent = "Kurum planı güncellendi.";
+  } catch (error) {
+    status.textContent = error?.message || "Kurum planı güncellenemedi.";
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+}
+
 async function loadBillingAccount() {
   const page = $("page-billing-account");
   if (!page) return;
@@ -2162,6 +2257,15 @@ async function loadBillingAccount() {
   try {
     const tokens = getStoredTokens();
     const headers = authHeaders(tokens.accessToken, tokens.tenantId);
+    if (isOrganizationAdminUser) {
+      const organizationAccount = await fetch("/billing/organization", { headers }).then(
+        parseResponse,
+      );
+      if (request !== billingAccountRequest || scope !== insightScope()) return;
+      latestEntitlements = organizationAccount.entitlements;
+      renderOrganizationBillingAccount(organizationAccount);
+      return;
+    }
     const [entitlements, catalog, subscription, paymentHistory] = await Promise.all([
       fetch("/account/entitlements", { headers }).then(parseResponse),
       fetch("/billing/catalog", { headers }).then(parseResponse),
@@ -2179,7 +2283,7 @@ async function loadBillingAccount() {
     if (error) {
       error.textContent =
         err?.status === 403
-          ? "Ödeme yönetimi yalnızca aktif kişisel alanda kullanılabilir. Kurum ödeme verisi gösterilmez."
+          ? "Bu hesap için ödeme yönetimi yetkisi bulunmuyor."
           : err?.message || "Ödeme bilgileri yüklenemedi.";
       error.classList.remove("hidden");
     }
@@ -3817,9 +3921,8 @@ const BRANCH_MANAGER_PAGES = new Set([
   "classes",
   "assignments",
   "settings",
-  "billing-account",
 ]);
-const TEACHER_PAGES = new Set(["teacher-classes", "assignments", "settings", "billing-account"]);
+const TEACHER_PAGES = new Set(["teacher-classes", "assignments", "settings"]);
 const LEARNER_PAGES = new Set([
   "dashboard",
   "onboarding",
@@ -3844,6 +3947,8 @@ function roleHomePage() {
 
 function canAccessPage(page) {
   if (isPlatformUser === null) return true;
+  if (page === "premium-info") return isPersonalBillingUser;
+  if (page === "billing-account") return isPersonalBillingUser || isOrganizationAdminUser;
   if (isPlatformUser) return PLATFORM_PAGES.has(page);
   if (isBranchManagerUser) return BRANCH_MANAGER_PAGES.has(page);
   if (isOrganizationAdminUser) return ORGANIZATION_ADMIN_PAGES.has(page);
@@ -3860,7 +3965,7 @@ function navigate(page) {
     return;
   }
   if (page === "premium-info" && isPlatformUser !== false) return;
-  if (page === "billing-account" && isPlatformUser !== false) return;
+  if (page === "billing-account" && !canAccessPage(page)) return;
 
   setUserMenuOpen(false);
   for (const name of PAGES) {
@@ -6216,6 +6321,7 @@ async function populateTeacherTenantFilter() {
 async function loadTeachers() {
   hideTeacherError();
   const tbody = $("teacher-list-body");
+  tbody.setAttribute("aria-busy", "true");
   tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Yükleniyor…</td></tr>';
 
   const search = $("teacher-search").value.trim();
@@ -6238,6 +6344,8 @@ async function loadTeachers() {
   } catch (err) {
     tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">—</td></tr>';
     showTeacherError(err.message || "Öğretmenler yüklenemedi.");
+  } finally {
+    tbody.removeAttribute("aria-busy");
   }
 }
 
@@ -6708,10 +6816,13 @@ async function populateTeacherDetailClasses(tenantId, academicYearId, branchId) 
 
 async function addTeacherBranch() {
   const branchId = $("tbranch-add-branch")?.value;
+  const button = document.querySelector("[data-tbranch-add]");
   if (!branchId || !teacherDetailCurrent) {
     showTeacherError("Lütfen bir şube seçin.");
     return;
   }
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherAdminApi(`/${teacherDetailCurrent.user.id}/branches`, {
       method: "POST",
@@ -6721,11 +6832,15 @@ async function addTeacherBranch() {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Şube üyeliği eklenemedi.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
 async function addTeacherClass() {
   const classId = $("teacher-class-select")?.value;
+  const button = document.querySelector("[data-tclass-add]");
   if (!classId || !teacherDetailCurrent) {
     showTeacherError("Lütfen bir sınıf seçin.");
     return;
@@ -6733,6 +6848,8 @@ async function addTeacherClass() {
   const subject = $("teacher-class-subject").value.trim();
   const payload = { classId };
   if (subject) payload.subject = subject;
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherAdminApi(`/${teacherDetailCurrent.user.id}/classes`, {
       method: "POST",
@@ -6742,12 +6859,18 @@ async function addTeacherClass() {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Sınıf ataması eklenemedi.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
 async function updateTeacherBranch(branchMembershipId) {
   const statusSelect = document.querySelector(`[data-tbranch-status="${branchMembershipId}"]`);
+  const button = document.querySelector(`[data-tbranch-update="${branchMembershipId}"]`);
   if (!statusSelect) return;
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherSubApi(`/teacher-branches/${encodeURIComponent(branchMembershipId)}`, {
       method: "PATCH",
@@ -6757,6 +6880,9 @@ async function updateTeacherBranch(branchMembershipId) {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Şube üyeliği güncellenemedi.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
@@ -6764,6 +6890,9 @@ async function removeTeacherBranch(branchMembershipId) {
   const branch = teacherDetailCurrent?.branches?.find((b) => b.id === branchMembershipId);
   const label = branch ? branch.branchName : branchMembershipId;
   if (!window.confirm(`"${label}" şube üyeliğini kaldırmak istediğinize emin misiniz?`)) return;
+  const button = document.querySelector(`[data-tbranch-remove="${branchMembershipId}"]`);
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherSubApi(`/teacher-branches/${encodeURIComponent(branchMembershipId)}`, {
       method: "DELETE",
@@ -6772,12 +6901,18 @@ async function removeTeacherBranch(branchMembershipId) {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Şube üyeliği kaldırılamadı.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
 async function updateTeacherClass(assignmentId) {
   const statusSelect = document.querySelector(`[data-tclass-status="${assignmentId}"]`);
+  const button = document.querySelector(`[data-tclass-update="${assignmentId}"]`);
   if (!statusSelect) return;
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherSubApi(
       `/teacher-class-assignments/${encodeURIComponent(assignmentId)}`,
@@ -6787,6 +6922,9 @@ async function updateTeacherClass(assignmentId) {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Sınıf ataması güncellenemedi.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
@@ -6794,6 +6932,9 @@ async function removeTeacherClass(assignmentId) {
   const assignment = teacherDetailCurrent?.classAssignments?.find((c) => c.id === assignmentId);
   const label = assignment ? assignment.className : assignmentId;
   if (!window.confirm(`"${label}" sınıf atamasını kaldırmak istediğinize emin misiniz?`)) return;
+  const button = document.querySelector(`[data-tclass-remove="${assignmentId}"]`);
+  button?.setAttribute("aria-busy", "true");
+  if (button) button.disabled = true;
   try {
     const res = await teacherSubApi(
       `/teacher-class-assignments/${encodeURIComponent(assignmentId)}`,
@@ -6803,6 +6944,9 @@ async function removeTeacherClass(assignmentId) {
     await openTeacherDetail(teacherDetailCurrent.user.id);
   } catch (err) {
     showTeacherError(err.message || "Sınıf ataması kaldırılamadı.");
+  } finally {
+    button?.removeAttribute("aria-busy");
+    if (button) button.disabled = false;
   }
 }
 
@@ -12256,6 +12400,7 @@ function setupPremiumExperienceEvents() {
     const action = target.getAttribute("data-premium-action");
     if (action === "OPEN_BILLING_ACCOUNT") {
       event.preventDefault();
+      if (!isPersonalBillingUser && !isOrganizationAdminUser) return;
       const dialog = $("premium-paywall-dialog");
       if (dialog?.open) dialog.close();
       navigate("billing-account");
@@ -12263,6 +12408,7 @@ function setupPremiumExperienceEvents() {
     }
     if (action !== "OPEN_PREMIUM_INFO") return;
     event.preventDefault();
+    if (!isPersonalBillingUser) return;
     const dialog = $("premium-paywall-dialog");
     if (dialog?.open) dialog.close();
     recordPremiumTelemetry("PREMIUM_CTA_CLICKED");
@@ -12277,7 +12423,9 @@ function setupPremiumExperienceEvents() {
   $("premium-paywall-close")?.addEventListener("click", closePaywall);
   $("premium-paywall-close-secondary")?.addEventListener("click", closePaywall);
   $("premium-info-back")?.addEventListener("click", () => navigate("dashboard"));
-  $("billing-account-back")?.addEventListener("click", () => navigate("premium-info"));
+  $("billing-account-back")?.addEventListener("click", () =>
+    navigate(isOrganizationAdminUser ? "organization-dashboard" : "premium-info"),
+  );
   $("premium-checkout-start")?.addEventListener("click", () => void startPremiumSandboxCheckout());
   $("billing-account-checkout-start")?.addEventListener(
     "click",
@@ -12294,6 +12442,10 @@ function setupPremiumExperienceEvents() {
   );
   $("billing-account-cancel")?.addEventListener("click", openBillingCancellationDialog);
   $("billing-account-refresh")?.addEventListener("click", () => void loadBillingAccount());
+  $("billing-organization-plan-save")?.addEventListener(
+    "click",
+    () => void updateOrganizationPlan(),
+  );
   $("billing-cancel-close")?.addEventListener("click", closeBillingCancellationDialog);
   $("billing-cancel-secondary")?.addEventListener("click", closeBillingCancellationDialog);
   $("billing-cancel-confirm")?.addEventListener("click", () => void submitBillingCancellation());
@@ -14506,6 +14658,7 @@ let assignmentEditingId = null;
 let assignmentDetailCurrent = null;
 let isPlatformUser = null;
 let isTeacherUser = false;
+let isPersonalBillingUser = false;
 let currentTenantId = null;
 let currentTenantName = "Kurum";
 let currentTenantType = null;

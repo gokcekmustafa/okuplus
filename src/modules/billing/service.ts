@@ -10,7 +10,8 @@ import {
 import { prisma } from "../../lib/prisma.js";
 import { applyTenantContext } from "../tenant/index.js";
 import { recordPilotEvent } from "../pilot/service.js";
-import type { EntitlementActor } from "../entitlements/index.js";
+import { createAdminEntitlement } from "../entitlements/admin-service.js";
+import { getEntitlements, type EntitlementActor } from "../entitlements/index.js";
 import {
   createIyzicoProvider,
   iyzicoCheckoutConfigured,
@@ -23,7 +24,11 @@ import {
   parseIyzicoWebhook,
 } from "./providers/iyzico/index.js";
 import type { BillingState, PaymentProvider } from "./providers/types.js";
-import type { CancelSubscriptionInput, CreateCheckoutInput } from "./schemas.js";
+import type {
+  CancelSubscriptionInput,
+  CreateCheckoutInput,
+  UpdateOrganizationPlanInput,
+} from "./schemas.js";
 import { isTerminalLifecycleState, resolveBillingEntitlement } from "./lifecycle.js";
 
 const PROVIDER_CODE = "iyzico";
@@ -49,7 +54,7 @@ async function assertPersonalOwner(actor: BillingActor, client: Db = prisma): Pr
     where: {
       tenantId,
       userId: actor.userId,
-      role: "STUDENT",
+      role: { in: ["STUDENT", "PARENT"] },
       status: "ACTIVE",
       deletedAt: null,
     },
@@ -57,6 +62,39 @@ async function assertPersonalOwner(actor: BillingActor, client: Db = prisma): Pr
   });
   if (!membership) throw forbiddenError("Kişisel ödeme sahibi üyeliği gerekli");
   return tenantId;
+}
+
+/**
+ * Personal billing is intentionally limited to an active individual tenant.
+ * Organization members must never fall through to the personal checkout or
+ * payment-history scope, even if they call the endpoint directly.
+ */
+export async function assertPersonalBillingAccess(actor: BillingActor): Promise<void> {
+  await assertPersonalOwner(actor);
+}
+
+async function assertOrganizationBillingAdmin(actor: BillingActor) {
+  if (!actor.tenantId) throw forbiddenError("Aktif kurum context gerekli");
+  if (actor.platformRole !== null) {
+    throw forbiddenError("Platform hesabı kurum aboneliği sahibi değildir");
+  }
+  const tenant = await prisma.tenant.findFirst({
+    where: { id: actor.tenantId, type: "ORGANIZATION", status: "ACTIVE", deletedAt: null },
+    select: { id: true, name: true, status: true },
+  });
+  if (!tenant) throw forbiddenError("Aktif kurum context bulunamadı");
+  const membership = await prisma.membership.findFirst({
+    where: {
+      tenantId: tenant.id,
+      userId: actor.userId,
+      role: { in: ["OWNER", "ORG_ADMIN"] },
+      status: "ACTIVE",
+      deletedAt: null,
+    },
+    select: { id: true, role: true },
+  });
+  if (!membership) throw forbiddenError("Kurum aboneliğini yönetme yetkiniz yok");
+  return { ...tenant, role: membership.role };
 }
 
 function splitDisplayName(displayName: string): { name: string; surname: string } {
@@ -132,6 +170,56 @@ export function billingCatalog(env: Env) {
     ],
     note: "Sandbox entegrasyonu; tutar ve vergi gösterimi iş kararı tamamlanana kadar UI tarafından gösterilmez.",
   };
+}
+
+/**
+ * Organization billing is entitlement-backed at this stage. The payment
+ * provider currently models personal checkout only, so this endpoint exposes
+ * the real organization plan and an explicit non-purchase management state;
+ * it never fabricates a checkout or writes production data.
+ */
+export async function getOrganizationBillingAccount(actor: BillingActor) {
+  const tenant = await assertOrganizationBillingAdmin(actor);
+  const entitlements = await getEntitlements(actor);
+  return {
+    scope: "ORGANIZATION" as const,
+    organization: {
+      id: tenant.id,
+      name: tenant.name,
+      status: tenant.status,
+    },
+    plan: entitlements.plan,
+    entitlements,
+    subscription: null,
+    paymentHistory: { payments: [] },
+    management: {
+      providerAvailable: false,
+      canPurchase: false,
+      message:
+        "Kurum planı bu aşamada ödeme sağlayıcısı üzerinden satın alınamaz. Plan, kurum entitlement yönetimiyle güncellenir.",
+    },
+  };
+}
+
+export async function updateOrganizationPlan(
+  actor: BillingActor,
+  input: UpdateOrganizationPlanInput,
+) {
+  const tenant = await assertOrganizationBillingAdmin(actor);
+  await createAdminEntitlement(
+    {
+      tenantId: tenant.id,
+      userId: null,
+      scope: "ORGANIZATION",
+      plan: input.plan,
+      source: "ORG_ADMIN",
+      effectiveAt: new Date(),
+      ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
+      active: true,
+    },
+    actor.userId,
+  );
+  return getOrganizationBillingAccount(actor);
 }
 
 async function ensureCustomer(

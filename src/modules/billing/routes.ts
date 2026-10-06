@@ -7,15 +7,22 @@ import type { AuthProvider } from "../auth/index.js";
 import {
   billingActor,
   billingCatalog,
+  assertPersonalBillingAccess,
   cancelCurrentSubscription,
   createCheckout,
+  getOrganizationBillingAccount,
   getCheckout,
   getCurrentSubscription,
   getPaymentHistory,
   handleCheckoutCallback,
   processIyzicoWebhook,
+  updateOrganizationPlan,
 } from "./service.js";
-import { cancelSubscriptionSchema, createCheckoutSchema } from "./schemas.js";
+import {
+  cancelSubscriptionSchema,
+  createCheckoutSchema,
+  updateOrganizationPlanSchema,
+} from "./schemas.js";
 
 function actor(request: FastifyRequest) {
   return billingActor({
@@ -60,8 +67,25 @@ export async function billingRoutes(
       },
     );
   }
-  app.get("/billing/catalog", { preHandler: [requireAuth(opts.authProvider)] }, async () =>
-    ok(billingCatalog(opts.env)),
+  app.get("/billing/catalog", { preHandler: [requireAuth(opts.authProvider)] }, async (request) => {
+    await assertPersonalBillingAccess(actor(request));
+    return ok(billingCatalog(opts.env));
+  });
+  app.get(
+    "/billing/organization",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request) => ok(await getOrganizationBillingAccount(actor(request))),
+  );
+  app.patch(
+    "/billing/organization/plan",
+    { preHandler: [requireAuth(opts.authProvider)] },
+    async (request) =>
+      ok(
+        await updateOrganizationPlan(
+          actor(request),
+          updateOrganizationPlanSchema.parse(request.body),
+        ),
+      ),
   );
   app.get(
     "/billing/subscription",

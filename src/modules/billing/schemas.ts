@@ -15,5 +15,17 @@ export const cancelSubscriptionSchema = z
   })
   .strict();
 
+export const updateOrganizationPlanSchema = z
+  .object({
+    plan: z.enum(["PLAN_FREE", "PLAN_PREMIUM"]),
+    expiresAt: z.coerce.date().nullable().optional(),
+  })
+  .strict()
+  .refine((input) => !input.expiresAt || input.expiresAt > new Date(), {
+    message: "Kurum planı bitiş tarihi gelecekte olmalı",
+    path: ["expiresAt"],
+  });
+
 export type CreateCheckoutInput = z.infer<typeof createCheckoutSchema>;
 export type CancelSubscriptionInput = z.infer<typeof cancelSubscriptionSchema>;
+export type UpdateOrganizationPlanInput = z.infer<typeof updateOrganizationPlanSchema>;

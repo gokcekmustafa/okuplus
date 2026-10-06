@@ -494,10 +494,10 @@ export async function listOrganizationTeachers(
   query: ListTeachersQuery,
 ): Promise<TeacherListResult> {
   const scope = await scopeOf(actor);
-  const where = teacherWhere(scope, query);
-  const [rows, total] = await Promise.all([
+  const [tenant, rows, total] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: scope.tenantId }, select: { name: true } }),
     prisma.membership.findMany({
-      where,
+      where: teacherWhere(scope, query),
       select: {
         id: true,
         tenantId: true,
@@ -508,7 +508,7 @@ export async function listOrganizationTeachers(
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     }),
-    prisma.membership.count({ where }),
+    prisma.membership.count({ where: teacherWhere(scope, query) }),
   ]);
   const ids = rows.map((row) => row.userId);
   const [branchGroups, classGroups] = ids.length
@@ -551,7 +551,7 @@ export async function listOrganizationTeachers(
       phone: row.user.phone,
       birthYear: row.user.birthYear,
       tenantId: scope.tenantId,
-      tenantName: "",
+      tenantName: tenant?.name ?? "",
       tenantType: "ORGANIZATION",
       status: row.user.status,
       branchCount: branches.get(key(row.userId)) ?? 0,
@@ -769,7 +769,10 @@ export async function addOrganizationTeacherBranch(
   input: CreateTeacherBranchInput,
 ): Promise<unknown> {
   const scope = await scopeOf(actor);
-  await assertTeacherScope(scope, userId);
+  // A branch manager is allowed to add a tenant teacher to their own branch.
+  // Requiring an existing membership here made the first assignment
+  // impossible; the target branch check below is the actual scope guard.
+  await assertTenantUser(scope, userId, "TEACHER");
   const branch = await assertBranchAccess(scope, input.branchId);
   try {
     const row = await prisma.teacherBranchMembership.create({
