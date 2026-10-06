@@ -62,7 +62,7 @@ export async function assertTeacherClassAccess(
   classId: string,
   studentId?: string,
   client: Prisma.TransactionClient | typeof prisma = prisma,
-): Promise<{ id: string; tenantId: string; name: string }> {
+): Promise<{ id: string; tenantId: string; name: string; gradeLevel: number }> {
   if (!actor.tenantId) throw forbiddenError("Öğretmen işlemi için kurum seçimi gerekli");
 
   const membership = await client.membership.findFirst({
@@ -93,7 +93,7 @@ export async function assertTeacherClassAccess(
         },
       },
     },
-    select: { id: true, tenantId: true, name: true },
+    select: { id: true, tenantId: true, name: true, gradeLevel: true },
   });
   if (!cls) throw forbiddenError("Bu sınıf için öğretmen yetkiniz yok");
 
@@ -197,7 +197,7 @@ export async function listTeacherTemplates(
 
 export async function listTeacherAssignments(
   actor: TeacherAssignmentActor,
-  query: Pick<ListAssignmentsQuery, "search" | "status" | "page" | "pageSize"> = {
+  query: Pick<ListAssignmentsQuery, "search" | "classId" | "status" | "page" | "pageSize"> = {
     page: 1,
     pageSize: 20,
   },
@@ -207,6 +207,7 @@ export async function listTeacherAssignments(
     tenantId,
     teacherId: actor.userId,
     deletedAt: null,
+    ...(query.classId ? { classId: query.classId } : {}),
     class: {
       deletedAt: null,
       teacherAssignments: {

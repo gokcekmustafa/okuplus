@@ -87,6 +87,12 @@ export const acceptAssignmentRecommendationSchema = z.object({
   classId: z.string().trim().min(1).optional(),
 });
 
+/** Öğretmenin aynı sınıftaki uygun önerileri topluca ataması. */
+export const acceptTeacherRecommendationsBatchSchema = z.object({
+  classId: z.string().trim().min(1, "Sınıf gerekli"),
+  recommendationIds: z.array(z.string().trim().min(1)).min(1).max(100),
+});
+
 /** Öğretmen otomasyon ayarının hedefi. */
 export const assignmentAutomationSettingSchema = recommendationTargetSchema
   .extend({
@@ -116,6 +122,9 @@ export type RefreshTeacherAssignmentRecommendationsInput = z.infer<
 >;
 export type AcceptAssignmentRecommendationInput = z.infer<
   typeof acceptAssignmentRecommendationSchema
+>;
+export type AcceptTeacherRecommendationsBatchInput = z.infer<
+  typeof acceptTeacherRecommendationsBatchSchema
 >;
 export type AssignmentAutomationSettingInput = z.infer<typeof assignmentAutomationSettingSchema>;
 export type RunAssignmentAutomationInput = z.infer<typeof runAssignmentAutomationSchema>;
