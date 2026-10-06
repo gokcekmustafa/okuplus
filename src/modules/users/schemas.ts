@@ -58,6 +58,13 @@ export const updateUserSchema = z.object({
   status: userStatusSchema.optional(),
 });
 
+export const resetUserPasswordSchema = z.object({
+  password: z
+    .string()
+    .min(8, "Parola en az 8 karakter olmalı")
+    .max(128, "Parola en fazla 128 karakter"),
+});
+
 /** Kullanıcı listeleme sorgu parametreleri. */
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
@@ -104,6 +111,7 @@ export const updateMembershipSchema = z.object({
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+export type ResetUserPasswordInput = z.infer<typeof resetUserPasswordSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;
 export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;

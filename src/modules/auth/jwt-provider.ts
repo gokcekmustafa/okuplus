@@ -105,7 +105,11 @@ export class JwtAuthProvider implements AuthProvider {
     }
 
     const tenantContext = await this.resolveTenantContext(user, requestedTenantId);
-    const tokens = await this.createPersistedSession(user.id, metadata);
+    const tokens = await this.createPersistedSession(
+      user.id,
+      metadata,
+      this.lockedTenantIdFor(tenantContext),
+    );
 
     return { user: this.toPublicUser(user), tokens, tenantContext };
   }
@@ -117,7 +121,11 @@ export class JwtAuthProvider implements AuthProvider {
   ): Promise<AuthSession> {
     const user = await this.findActiveUser(userId);
     const tenantContext = await this.resolveTenantContext(user, requestedTenantId);
-    const tokens = await this.createPersistedSession(user.id, metadata);
+    const tokens = await this.createPersistedSession(
+      user.id,
+      metadata,
+      this.lockedTenantIdFor(tenantContext),
+    );
     return { user: this.toPublicUser(user), tokens, tenantContext };
   }
 
@@ -129,7 +137,17 @@ export class JwtAuthProvider implements AuthProvider {
 
     // Kullanıcıyı kendi kimliğiyle oku (user_read: id = app.user_id).
     const user = await this.findActiveUser(payload.sub);
-    const tenantContext = await this.resolveTenantContext(user, requestedTenantId);
+    const lockedTenantId = payload.lockedTenantId ?? null;
+    if (lockedTenantId && requestedTenantId && requestedTenantId !== lockedTenantId) {
+      throw forbiddenError("Bu kurum oturumunun bağlamı değiştirilemez");
+    }
+    const tenantContext = await this.resolveTenantContext(
+      user,
+      lockedTenantId ?? requestedTenantId,
+    );
+    if (lockedTenantId && tenantContext.tenantId !== lockedTenantId) {
+      throw forbiddenError("Bu kurum oturumu artık geçerli değil");
+    }
 
     return { user: this.toPublicUser(user), tenantContext };
   }
@@ -141,7 +159,12 @@ export class JwtAuthProvider implements AuthProvider {
 
     const presentedHash = this.hashToken(refreshToken);
     const nextSessionId = randomUUID();
-    const nextTokens = await this.createTokenPair(payload.sub, payload.fid, nextSessionId);
+    const nextTokens = await this.createTokenPair(
+      payload.sub,
+      payload.fid,
+      nextSessionId,
+      payload.lockedTenantId,
+    );
 
     const rotated = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw<Array<{ acquired: number }>>`
@@ -350,10 +373,11 @@ export class JwtAuthProvider implements AuthProvider {
   private async createPersistedSession(
     userId: string,
     metadata: SessionMetadata,
+    lockedTenantId?: string | null,
   ): Promise<AuthTokens> {
     const sessionId = randomUUID();
     const familyId = randomUUID();
-    const tokens = await this.createTokenPair(userId, familyId, sessionId);
+    const tokens = await this.createTokenPair(userId, familyId, sessionId, lockedTenantId);
     await prisma.authSession.create({
       data: {
         id: sessionId,
@@ -372,10 +396,12 @@ export class JwtAuthProvider implements AuthProvider {
     userId: string,
     familyId: string,
     sessionId: string,
+    lockedTenantId?: string | null,
   ): Promise<AuthTokens> {
     const nowSeconds = Math.floor(Date.now() / 1000);
 
-    const accessToken = await new SignJWT({ type: "access", fid: familyId })
+    const tenantClaim = lockedTenantId ? { lockedTenantId } : {};
+    const accessToken = await new SignJWT({ type: "access", fid: familyId, ...tenantClaim })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(userId)
       .setJti(randomUUID())
@@ -383,7 +409,7 @@ export class JwtAuthProvider implements AuthProvider {
       .setExpirationTime(nowSeconds + this.accessTtlSeconds)
       .sign(this.secretKey);
 
-    const refreshToken = await new SignJWT({ type: "refresh", fid: familyId })
+    const refreshToken = await new SignJWT({ type: "refresh", fid: familyId, ...tenantClaim })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject(userId)
       .setJti(sessionId)
@@ -434,6 +460,12 @@ export class JwtAuthProvider implements AuthProvider {
       { userId: SYSTEM_USER_ID, tenantId: null, platformRole: "SUPER_ADMIN" },
       fn,
     );
+  }
+
+  private lockedTenantIdFor(tenantContext: AuthSession["tenantContext"]): string | null {
+    return tenantContext.tenantType === "ORGANIZATION" && tenantContext.role === "STUDENT"
+      ? tenantContext.tenantId
+      : null;
   }
 
   private toPublicUser(user: AuthUserRow): AuthenticatedUser {

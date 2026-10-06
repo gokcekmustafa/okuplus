@@ -25,7 +25,10 @@ import {
   getNextLearningStep,
   markLearningStepInProgressForTemplate,
 } from "../learning-path/index.js";
-import { independentTrainingDeviceInfo } from "../training/session-origin.js";
+import {
+  independentTrainingDeviceInfo,
+  learningPathReplayDeviceInfo,
+} from "../training/session-origin.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -714,6 +717,24 @@ async function assertLearningPathTemplateAccessible(
   if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
 }
 
+async function assertLearningPathReplayAccessible(
+  actor: { userId: string; tenantId: string; platformRole: PlatformRole | null },
+  templateVersionId: string,
+) {
+  const persistedPath = await getStudentLearningPath(actor);
+  const node = persistedPath
+    ? (persistedPath.paths ?? [persistedPath])
+        .flatMap((projection) => projection.nodes)
+        .find((item) => item.templateVersionId === templateVersionId)
+    : (await getLearningPath(actor))?.nodes?.find(
+        (item) => item.templateVersionId === templateVersionId,
+      );
+  if (!node) throw forbiddenError("Bu egzersiz öğrenme yolunda bulunmuyor");
+  if (node.status !== "completed") {
+    throw forbiddenError("Yalnızca tamamlanmış öğrenme adımları tekrar edilebilir");
+  }
+}
+
 export async function getHistory(
   actor: { userId: string; tenantId: string | null; platformRole: string | null },
   opts: { page: number; pageSize: number },
@@ -753,6 +774,7 @@ export async function startPersonalExercise(
     templateVersionId?: string;
     clientSessionId?: string;
     enforceLearningPathOrder?: boolean;
+    replay?: boolean;
     independentTraining?: boolean;
     independentTrainingActivityId?: string;
   },
@@ -762,6 +784,10 @@ export async function startPersonalExercise(
     throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
   }
   const independentTraining = input.independentTraining === true;
+  const replay = input.replay === true;
+  if (replay && independentTraining) {
+    throw validationError("Bağımsız antrenman öğrenme yolu tekrarı olarak başlatılamaz");
+  }
   const suppliedClientSessionId = input.clientSessionId?.trim() || null;
   const clientSessionId =
     independentTraining && suppliedClientSessionId
@@ -808,7 +834,12 @@ export async function startPersonalExercise(
     if (tv.template.tenantId && tv.template.tenantId !== tenantId)
       throw forbiddenError("Şablon tenant uyuşmazlığı");
     selectedTemplateConfig = tv.config;
-    if (input.enforceLearningPathOrder) {
+    if (replay) {
+      await assertLearningPathReplayAccessible(
+        { userId: actor.userId, tenantId, platformRole: actor.platformRole },
+        templateVersionId,
+      );
+    } else if (input.enforceLearningPathOrder) {
       await assertLearningPathTemplateAccessible(
         { userId: actor.userId, tenantId, platformRole: actor.platformRole },
         templateVersionId,
@@ -883,15 +914,17 @@ export async function startPersonalExercise(
         sessionType: "PRACTICE",
         status: "IN_PROGRESS",
         clientSessionId,
-        deviceInfo: independentTraining
-          ? independentTrainingDeviceInfo(input.independentTrainingActivityId)
-          : undefined,
+        deviceInfo: replay
+          ? learningPathReplayDeviceInfo()
+          : independentTraining
+            ? independentTrainingDeviceInfo(input.independentTrainingActivityId)
+            : undefined,
       },
       select: { id: true },
     });
     return { sessionId: created.id, isNew: true };
   });
-  if (result.isNew && !independentTraining) {
+  if (result.isNew && !independentTraining && !replay) {
     await markLearningStepInProgressForTemplate(actor, templateVersionId).catch(() => {});
   }
   return result;

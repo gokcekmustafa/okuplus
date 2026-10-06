@@ -50,6 +50,7 @@ export interface EntitlementSnapshot {
     label: string;
     active: boolean;
     source: string;
+    sourceLabel: string;
     effectiveAt: string | null;
     expiresAt: string | null;
   };
@@ -244,11 +245,7 @@ async function loadSnapshot(
   const timezone = configuredCalendarTimezone();
   const usageDate = entitlementUsageDate(now, timezone);
   const [grant, counts] = await Promise.all([
-    // 8H-2 deliberately keeps Premium personal-only. Organization scope is
-    // still resolved and quota-protected, but has no active Premium grant.
-    context.scope === "PERSONAL"
-      ? currentGrant(actor, context.scope, context.tenantId, now, client)
-      : Promise.resolve(null),
+    currentGrant(actor, context.scope, context.tenantId, now, client),
     usageCounts(actor, context.tenantId, usageDate, client),
   ]);
   const plan = grant?.plan ?? "PLAN_FREE";
@@ -282,6 +279,14 @@ async function loadSnapshot(
       label: planLabel(plan),
       active: true,
       source: grant?.source ?? "DEFAULT",
+      sourceLabel:
+        context.scope === "ORGANIZATION"
+          ? "Kurum tarafından yönetiliyor"
+          : grant?.source === "PREMIUM_TRIAL"
+            ? "Premium deneme"
+            : grant?.source
+              ? "Kişisel plan"
+              : "Varsayılan ücretsiz plan",
       effectiveAt: grant?.effectiveAt.toISOString() ?? null,
       expiresAt: grant?.expiresAt?.toISOString() ?? null,
     },
@@ -348,10 +353,7 @@ async function recordUsageInTransactionCore(
   const context = await resolveScope(actor, tx);
   const timezone = configuredCalendarTimezone();
   const usageDate = entitlementUsageDate(now, timezone);
-  const grant =
-    context.scope === "PERSONAL"
-      ? await currentGrant(actor, context.scope, context.tenantId, now, tx)
-      : null;
+  const grant = await currentGrant(actor, context.scope, context.tenantId, now, tx);
   const plan = grant?.plan ?? "PLAN_FREE";
   const policy = PLAN_POLICIES[plan][feature];
 

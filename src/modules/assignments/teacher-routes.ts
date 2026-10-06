@@ -25,9 +25,7 @@ import { getTeacherClassAnalytics } from "./class-analytics-service.js";
 import { getTeacherStudentProgress } from "./teacher-student-progress-service.js";
 import {
   addTeacherClassStudent,
-  createTeacherClass,
   getTeacherClassDetail,
-  listTeacherClassOptions,
   listTeacherManagedClasses,
   removeTeacherClassStudent,
   updateTeacherClass,
@@ -35,7 +33,6 @@ import {
 } from "./teacher-class-management-service.js";
 import {
   addTeacherClassStudentSchema,
-  createTeacherClassSchema,
   updateTeacherClassSchema,
   updateTeacherClassStatusSchema,
 } from "./teacher-class-management-schemas.js";
@@ -147,15 +144,6 @@ export async function assignmentTeacherRoutes(
 
   app.get("/teacher/managed-classes", { preHandler: requireTeacherAuth }, async (request) => {
     return ok(await listTeacherManagedClasses(actorFrom(request)));
-  });
-
-  app.get("/teacher/class-options", { preHandler: requireTeacherAuth }, async (request) => {
-    return ok(await listTeacherClassOptions(actorFrom(request)));
-  });
-
-  app.post("/teacher/classes", { preHandler: requireTeacherAuth }, async (request) => {
-    const input = createTeacherClassSchema.parse(request.body);
-    return ok(await createTeacherClass(actorFrom(request), input));
   });
 
   app.get("/teacher/classes/:id", { preHandler: requireTeacherAuth }, async (request) => {

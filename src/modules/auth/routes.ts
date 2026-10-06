@@ -318,6 +318,9 @@ export async function authRoutes(
 
   app.get("/auth/contexts", { preHandler: [requireAuth(authProvider)] }, async (request) => {
     const contexts = await authProvider.listContexts(request.authUser!.id);
-    return ok({ contexts });
+    const locked =
+      request.tenantContext?.tenantType === "ORGANIZATION" &&
+      request.tenantContext.role === "STUDENT";
+    return ok({ contexts, locked });
   });
 }

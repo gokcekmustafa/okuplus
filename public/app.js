@@ -1300,6 +1300,11 @@ async function loadContextsAndRender() {
     var res = await authenticatedFetch("/auth/contexts");
     var data = await parseResponse(res);
     var contexts = data.contexts || [];
+    if (data.locked || (isStudentUser && currentTenantType === "ORGANIZATION")) {
+      sel.classList.add("hidden");
+      sel.innerHTML = "";
+      return;
+    }
     if (contexts.length <= 1) {
       sel.classList.add("hidden");
       sel.innerHTML = "";
@@ -1345,6 +1350,7 @@ async function loadTopbarGamification() {
 }
 
 async function switchContext(tenantId) {
+  if (isStudentUser && currentTenantType === "ORGANIZATION") return;
   resetInsights();
   localStorage.setItem(STORAGE_KEYS.tenantId, tenantId || "");
   var tokens = getStoredTokens();
@@ -1842,7 +1848,7 @@ async function loadEntitlements() {
     const uxState = entitlementUxState(data);
     $("entitlement-title").textContent = plan.label || "Ücretsiz";
     $("entitlement-scope").textContent =
-      tenant.type === "ORGANIZATION" ? "Kurum alanı" : "Kişisel alan";
+      `${tenant.type === "ORGANIZATION" ? "Kurum alanı" : "Kişisel alan"}${plan.sourceLabel ? ` · ${plan.sourceLabel}` : ""}`;
     $("entitlement-plan-badge").textContent = plan.active ? "Aktif" : "Pasif";
     $("entitlement-state").textContent = entitlementUxLabel(uxState);
     card.dataset.uxState = uxState;
@@ -2430,6 +2436,7 @@ async function startLearningPathNode(node, button) {
       body: JSON.stringify({
         templateVersionId: tv,
         clientSessionId: "path-" + node.id + "-" + Date.now(),
+        replay: node.status === "completed",
       }),
     });
     var data = await parseResponse(response);
@@ -2550,7 +2557,7 @@ function learningPathMapKind(node) {
 
 function learningPathActionLabel(node, visualStatus) {
   if (visualStatus === "locked") return "Henüz açık değil";
-  if (visualStatus === "completed") return "Tamamlandı";
+  if (visualStatus === "completed") return "Tekrar et";
   if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
   if (node?.type === "ASSESSMENT" || node?.type === "MEASUREMENT") return "Değerlendir";
   if (node?.type === "REINFORCEMENT") return "Pekiştir";
@@ -2628,7 +2635,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">OkuPratik</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
+    '<header class="learning-map-v6-header"><div><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
     escapeHtml(levelLabel) +
     "</strong><small>Seviye</small></span><span><strong>🔥 " +
     escapeHtml(streak) +
@@ -2649,7 +2656,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var label = node.label || node.code || "Öğrenme adımı";
       var statusLabel = learningPathStatusLabel(visualStatus);
       var areaLabel = learningPathAreaLabel(entry.area);
-      var disabled = visualStatus !== "active" ? " disabled" : "";
+      var disabled = visualStatus === "locked" ? " disabled" : "";
       var current = currentNode?.id === node.id ? ' aria-current="step"' : "";
       var aria = areaLabel + " · " + kind.label + " · " + label + " · " + statusLabel;
       var isCurrent = currentNode?.id === node.id;
@@ -2700,7 +2707,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         '</span><strong class="learning-map-v6-kind">' +
         escapeHtml(kind.label) +
         "</strong>" +
-        (isCurrent
+        (isCurrent || visualStatus === "completed"
           ? '<span class="learning-map-v6-action">' + escapeHtml(actionLabel) + " →</span>"
           : "") +
         lockMarkup +
@@ -3517,6 +3524,7 @@ function renderFocusedLesson(lesson, learningStep) {
     </div>
     <div class="lesson-actions">
       <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
+      ${completed && learningStep?.templateVersionId ? '<button type="button" class="btn btn-ghost" data-learning-step-replay>Dersi tekrar et</button>' : ""}
       <button type="button" class="btn btn-primary" data-learning-step-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : "Dersi tamamladım ve sonraki adıma geç"}</button>
     </div>
     <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`
@@ -3628,6 +3636,32 @@ async function completeFocusedLearningStep() {
   }
 }
 
+async function replayLearningStep() {
+  const node = activeLearningStepNode;
+  const button = $("lesson-detail")?.querySelector("[data-learning-step-replay]");
+  const status = $("lesson-detail-status");
+  if (!node?.templateVersionId || !button) return;
+  button.disabled = true;
+  if (status) status.textContent = "Ders tekrar açılıyor…";
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch("/student/exercises/start", {
+        method: "POST",
+        body: JSON.stringify({
+          templateVersionId: node.templateVersionId,
+          clientSessionId: `learning-replay-${node.id}-${Date.now()}`,
+          replay: true,
+        }),
+      }),
+    );
+    exerciseRequestedSessionId = data.sessionId;
+    navigate("exercise");
+  } catch (err) {
+    button.disabled = false;
+    if (status) status.textContent = formatStudentError(err, "Ders tekrar açılamadı.");
+  }
+}
+
 async function loadLessons() {
   const status = $("lessons-status");
   const error = $("lessons-error");
@@ -3713,6 +3747,7 @@ function setupLessonEvents() {
     if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
     if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
     if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
+    if (event.target.closest("[data-learning-step-replay]")) void replayLearningStep();
     if (event.target.closest("[data-learning-step-back]")) {
       learningPathEntryMode = false;
       activeLearningStepNode = null;
@@ -4625,6 +4660,18 @@ function userApi(path, options = {}) {
   return fetch(`/admin/users${path}`, { ...options, method, headers });
 }
 
+function entitlementAdminApi(path, options = {}) {
+  const { accessToken, tenantId } = getStoredTokens();
+  const method = options.method ?? "GET";
+  const headers = {
+    ...authHeaders(accessToken, tenantId),
+    ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.headers ?? {}),
+  };
+  if (options.body) headers["content-type"] = "application/json";
+  return fetch(`/admin/entitlements${path}`, { ...options, method, headers });
+}
+
 function membershipApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
   const method = options.method ?? "GET";
@@ -4930,6 +4977,10 @@ function renderUserDetail(u) {
     .join("");
 
   const memberships = u.memberships ?? [];
+  const branches = u.branches ?? [];
+  const classAssignments = u.classAssignments ?? [];
+  const enrollments = u.enrollments ?? [];
+  const entitlements = u.entitlements ?? [];
   const membershipRows = memberships.length
     ? memberships
         .map(
@@ -5007,9 +5058,122 @@ function renderUserDetail(u) {
           <tbody>${membershipRows}</tbody>
         </table>
       </div>
-    </div>`;
+    </div>
+
+    <section class="detail-section">
+      <h4>Parola yönetimi</h4>
+      <div class="membership-add-row">
+        <label class="field">
+          <span>Yeni parola</span>
+          <input id="user-detail-new-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" />
+        </label>
+        <button id="user-detail-password-btn" type="button" class="btn btn-primary">Yeni parola belirle</button>
+      </div>
+      <p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="detail-section"><h4>Kurum/şube bağlantıları</h4>
+      ${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(item.status)}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}
+    </section>
+    <section class="detail-section"><h4>Öğretmen sınıf atamaları (${classAssignments.length})</h4>
+      ${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Ders</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.subject || "—")}</td><td>${escapeHtml(item.status)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}
+    </section>
+    <section class="detail-section"><h4>Öğrenci kayıtları (${enrollments.length})</h4>
+      ${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.status)}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}
+    </section>
+    <section class="detail-section"><h4>Plan ve entitlement (${entitlements.length})</h4>
+      ${entitlements.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Kapsam</th><th>Plan</th><th>Kaynak</th><th>Durum</th><th>Bitiş</th></tr></thead><tbody>${entitlements.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel"}</td><td>${item.plan === "PLAN_PREMIUM" ? "Premium" : "Ücretsiz"}</td><td>${escapeHtml(item.source)}</td><td>${item.active ? "Aktif" : "Pasif"}</td><td>${item.expiresAt ? escapeHtml(new Date(item.expiresAt).toLocaleDateString("tr-TR")) : "Süresiz"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tanımlı entitlement yok.</p>'}
+      <div class="membership-add-row">
+        <label class="field"><span>Kapsam tenant'ı</span><select id="user-detail-entitlement-tenant"><option value="">Tenant seçin…</option>${memberships
+          .filter(
+            (item, index, all) =>
+              all.findIndex((candidate) => candidate.tenantId === item.tenantId) === index,
+          )
+          .map(
+            (item) =>
+              `<option value="${escapeHtml(item.tenantId)}" data-type="${escapeHtml(item.tenantType)}">${escapeHtml(item.tenantName)} (${tenantTypeLabel(item.tenantType)})</option>`,
+          )
+          .join("")}</select></label>
+        <label class="field"><span>Kapsam</span><select id="user-detail-entitlement-scope"><option value="PERSONAL">Kişisel</option><option value="ORGANIZATION">Kurum</option></select></label>
+        <label class="field"><span>Plan</span><select id="user-detail-entitlement-plan"><option value="PLAN_FREE">Ücretsiz</option><option value="PLAN_PREMIUM">Premium</option></select></label>
+        <label class="field"><span>Kaynak</span><input id="user-detail-entitlement-source" value="ADMIN" maxlength="80" /></label>
+        <label class="field"><span>Başlangıç</span><input id="user-detail-entitlement-effective" type="datetime-local" /></label>
+        <label class="field"><span>Bitiş</span><input id="user-detail-entitlement-expires" type="datetime-local" /></label>
+        <button id="user-detail-entitlement-btn" type="button" class="btn btn-primary">Entitlement kaydet</button>
+      </div>
+      <p id="user-detail-entitlement-status" class="muted" role="status" aria-live="polite"></p>
+    </section>`;
 
   void populateMembershipTenantSelect();
+}
+
+async function resetAdminUserPassword() {
+  const button = $("user-detail-password-btn");
+  const input = $("user-detail-new-password");
+  const status = $("user-detail-password-status");
+  if (!button || !input || !userDetailCurrent) return;
+  const password = input.value;
+  if (password.length < 8) {
+    status.textContent = "Parola en az 8 karakter olmalı.";
+    return;
+  }
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  status.textContent = "Parola güncelleniyor…";
+  try {
+    await parseResponse(
+      await userApi(`/${encodeURIComponent(userDetailCurrent.id)}/password`, {
+        method: "POST",
+        body: JSON.stringify({ password }),
+      }),
+    );
+    input.value = "";
+    status.textContent = "Yeni parola kaydedildi.";
+  } catch (err) {
+    status.textContent = err.message || "Parola güncellenemedi.";
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+}
+
+async function createAdminUserEntitlement() {
+  const button = $("user-detail-entitlement-btn");
+  const status = $("user-detail-entitlement-status");
+  const tenantSelect = $("user-detail-entitlement-tenant");
+  const scopeSelect = $("user-detail-entitlement-scope");
+  if (!button || !status || !tenantSelect || !scopeSelect || !userDetailCurrent) return;
+  const tenantId = tenantSelect.value;
+  if (!tenantId) {
+    status.textContent = "Tenant seçin.";
+    return;
+  }
+  const effectiveAt = $("user-detail-entitlement-effective").value;
+  const expiresAt = $("user-detail-entitlement-expires").value;
+  const payload = {
+    tenantId,
+    scope: scopeSelect.value,
+    userId: scopeSelect.value === "PERSONAL" ? userDetailCurrent.id : null,
+    plan: $("user-detail-entitlement-plan").value,
+    source: $("user-detail-entitlement-source").value.trim() || "ADMIN",
+    ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}),
+    ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
+  };
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  status.textContent = "Entitlement kaydediliyor…";
+  try {
+    await parseResponse(
+      await entitlementAdminApi("", { method: "POST", body: JSON.stringify(payload) }),
+    );
+    status.textContent = "Entitlement kaydedildi.";
+    await openUserDetail(userDetailCurrent.id);
+  } catch (err) {
+    status.textContent = err.message || "Entitlement kaydedilemedi.";
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
 }
 
 async function populateMembershipTenantSelect() {
@@ -5165,6 +5329,12 @@ function setupUserEvents() {
 
   // Üyelik ekleme bölümünde de kurum tipine göre rol filtresi.
   $("user-detail-body").addEventListener("change", (event) => {
+    if (event.target.id === "user-detail-entitlement-tenant") {
+      const type = event.target.selectedOptions[0]?.dataset?.type;
+      const scope = $("user-detail-entitlement-scope");
+      if (scope && type) scope.value = type === "ORGANIZATION" ? "ORGANIZATION" : "PERSONAL";
+      return;
+    }
     if (event.target.id !== "membership-add-tenant") return;
     const option = event.target.selectedOptions[0];
     const tenantType = option?.dataset?.type ?? "";
@@ -5191,8 +5361,14 @@ function setupUserEvents() {
     const addBtn = event.target.closest("#membership-add-btn");
     const updateBtn = event.target.closest("[data-mem-update]");
     const removeBtn = event.target.closest("[data-mem-remove]");
+    const passwordBtn = event.target.closest("#user-detail-password-btn");
+    const entitlementBtn = event.target.closest("#user-detail-entitlement-btn");
 
-    if (addBtn) {
+    if (entitlementBtn) {
+      void createAdminUserEntitlement();
+    } else if (passwordBtn) {
+      void resetAdminUserPassword();
+    } else if (addBtn) {
       void addMembership();
     } else if (updateBtn) {
       void updateMembership(updateBtn.dataset.memUpdate);
@@ -14376,7 +14552,6 @@ function teacherAutomationApi(path, options = {}) {
 
 let teacherManagedClasses = [];
 let teacherClassDetailCurrent = null;
-let teacherClassFormMode = "create";
 let teacherClassEditingId = null;
 
 function showTeacherClassError(message) {
@@ -14447,37 +14622,13 @@ async function loadTeacherManagedClasses() {
   }
 }
 
-async function loadTeacherClassOptions() {
-  const payload = await parseResponse(await teacherApi("/class-options"));
-  const branch = $("teacher-class-form-branch");
-  const year = $("teacher-class-form-year");
-  if (branch) {
-    branch.innerHTML = `<option value="">Şube seçin…</option>${(payload.branches ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
-  }
-  if (year) {
-    year.innerHTML = `<option value="">Akademik yıl seçin…</option>${(payload.academicYears ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.status === "UPCOMING" ? " (Yaklaşan)" : ""}</option>`).join("")}`;
-  }
-}
-
-async function openTeacherClassForm(mode, item = null) {
-  teacherClassFormMode = mode;
+async function openTeacherClassForm(item = null) {
   teacherClassEditingId = item?.id ?? null;
-  $("teacher-class-form-title").textContent = mode === "create" ? "Yeni sınıf" : "Sınıfı düzenle";
+  $("teacher-class-form-title").textContent = "Sınıfı düzenle";
   $("teacher-class-form-name").value = item?.name ?? "";
   $("teacher-class-form-grade").value = item?.gradeLevel ?? "";
   $("teacher-class-form-error").classList.add("hidden");
-  const isCreate = mode === "create";
-  $("teacher-class-form-branch-field").classList.toggle("hidden", !isCreate);
-  $("teacher-class-form-year-field").classList.toggle("hidden", !isCreate);
   $("teacher-class-form-modal").classList.remove("hidden");
-  if (isCreate) {
-    try {
-      await loadTeacherClassOptions();
-    } catch (err) {
-      $("teacher-class-form-error").textContent = err.message || "Sınıf seçenekleri yüklenemedi.";
-      $("teacher-class-form-error").classList.remove("hidden");
-    }
-  }
   $("teacher-class-form-name").focus();
 }
 
@@ -14493,21 +14644,15 @@ async function submitTeacherClassForm(event) {
   const name = $("teacher-class-form-name").value.trim();
   const gradeLevel = Number($("teacher-class-form-grade").value);
   const payload = { name, gradeLevel };
-  if (teacherClassFormMode === "create") {
-    payload.branchId = $("teacher-class-form-branch").value;
-    payload.academicYearId = $("teacher-class-form-year").value;
-  }
   button.disabled = true;
   try {
-    const path =
-      teacherClassFormMode === "create"
-        ? "/classes"
-        : `/classes/${encodeURIComponent(teacherClassEditingId)}`;
     const options = {
-      method: teacherClassFormMode === "create" ? "POST" : "PATCH",
+      method: "PATCH",
       body: JSON.stringify(payload),
     };
-    await parseResponse(await teacherApi(path, options));
+    await parseResponse(
+      await teacherApi(`/classes/${encodeURIComponent(teacherClassEditingId)}`, options),
+    );
     closeTeacherClassForm();
     await loadTeacherManagedClasses();
   } catch (err) {
@@ -14649,9 +14794,6 @@ async function openTeacherClassRelatedPage(classId, mode) {
 }
 
 function setupTeacherClassEvents() {
-  $("teacher-class-create-btn")?.addEventListener("click", () => {
-    void openTeacherClassForm("create");
-  });
   $("teacher-class-form")?.addEventListener("submit", submitTeacherClassForm);
   $("teacher-class-form-close")?.addEventListener("click", closeTeacherClassForm);
   $("teacher-class-form-cancel")?.addEventListener("click", closeTeacherClassForm);
@@ -14669,7 +14811,7 @@ function setupTeacherClassEvents() {
       const item = teacherManagedClasses.find(
         (candidate) => candidate.id === edit.dataset.teacherClassEdit,
       );
-      if (item) void openTeacherClassForm("edit", item);
+      if (item) void openTeacherClassForm(item);
       return;
     }
     const status = event.target.closest("[data-teacher-class-status]");

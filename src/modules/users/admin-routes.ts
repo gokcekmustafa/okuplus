@@ -4,7 +4,14 @@ import { validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import { requirePlatformRole } from "../../middleware/require-platform.js";
-import { createUser, getUser, listUsers, softDeleteUser, updateUser } from "./service.js";
+import {
+  createUser,
+  getUser,
+  listUsers,
+  resetUserPassword,
+  softDeleteUser,
+  updateUser,
+} from "./service.js";
 import {
   createMembership,
   listMemberships,
@@ -18,6 +25,7 @@ import {
   listUsersQuerySchema,
   updateMembershipSchema,
   updateUserSchema,
+  resetUserPasswordSchema,
 } from "./schemas.js";
 
 function readParamId(request: FastifyRequest): string {
@@ -69,6 +77,16 @@ export async function userAdminRoutes(
 
   app.delete("/admin/users/:id", { preHandler: platformOnly }, async (request) => {
     return ok(await softDeleteUser(readParamId(request)));
+  });
+
+  app.post("/admin/users/:id/password", { preHandler: platformOnly }, async (request) => {
+    return ok(
+      await resetUserPassword(
+        readParamId(request),
+        resetUserPasswordSchema.parse(request.body),
+        request.authUser!.id,
+      ),
+    );
   });
 
   app.get("/admin/memberships", { preHandler: platformOnly }, async (request) => {
