@@ -1678,6 +1678,130 @@ body {
   margin-bottom: 20px;
 }
 
+/* ---------- Kurumsal yönetim panelleri ---------- */
+.management-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 8px 0 24px;
+}
+
+.management-kpi-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.management-kpi-icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  font-size: 20px;
+}
+
+.management-kpi-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.management-kpi-value {
+  color: var(--text);
+  font-size: 25px;
+  line-height: 1.1;
+}
+
+.management-dashboard-status {
+  min-height: 20px;
+  margin: -10px 0 22px;
+  font-size: 13px;
+}
+
+.management-section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 10px 0 14px;
+}
+
+.management-section-heading h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+}
+
+.management-section-heading p {
+  margin: 0;
+}
+
+.management-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-link-card {
+  display: flex;
+  min-height: 132px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.dashboard-link-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 12px 28px rgba(28, 39, 75, 0.12);
+  transform: translateY(-1px);
+}
+
+.dashboard-link-card strong {
+  font-size: 17px;
+}
+
+.dashboard-link-card .muted {
+  line-height: 1.45;
+}
+
+.management-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 22px;
+  margin-bottom: 16px;
+  background: var(--surface-muted);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.management-empty-state.compact {
+  padding: 12px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.management-empty-state.compact .btn {
+  margin-top: 2px;
+}
+
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -2628,6 +2752,17 @@ body {
 
   .stat-value {
     font-size: 22px;
+  }
+
+  .management-kpi-grid,
+  .management-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .management-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }
 
