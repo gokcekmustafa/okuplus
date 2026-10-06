@@ -335,6 +335,10 @@
             <span class="nav-icon" aria-hidden="true">📝</span>
             <span class="nav-label">Ödevler</span>
           </button>
+          <button class="nav-item hidden" data-page="teacher-classes" data-teacher type="button">
+            <span class="nav-icon" aria-hidden="true">🏫</span>
+            <span class="nav-label">Sınıflarım</span>
+          </button>
           <button class="nav-item" data-page="exercise" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true">✏️</span>
             <span class="nav-label">Antrenman</span>
@@ -4106,6 +4110,41 @@
             </div>
           </section>
 
+          <section id="page-teacher-classes" class="page-view hidden">
+            <div class="page-head">
+              <div>
+                <h2>Sınıflarım</h2>
+                <p class="muted">Yetkili olduğun sınıfları ve öğrencileri buradan yönet.</p>
+              </div>
+              <button id="teacher-class-create-btn" type="button" class="btn btn-primary">
+                Yeni sınıf
+              </button>
+            </div>
+            <div id="teacher-class-error" class="error-banner hidden" role="alert"></div>
+            <div class="card table-card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Sınıf</th>
+                      <th>Şube</th>
+                      <th>Akademik yıl</th>
+                      <th>Durum</th>
+                      <th>Öğrenci</th>
+                      <th>Ödev</th>
+                      <th>İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="teacher-class-list-body">
+                    <tr>
+                      <td colspan="7" class="empty-cell">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
           <section id="page-assignments" class="page-view hidden">
             <div class="page-head">
               <h2>Ödevler</h2>
@@ -4471,6 +4510,79 @@
                 </button>
               </div>
               <div id="teacher-student-progress-body" class="modal-body"></div>
+            </div>
+          </div>
+
+          <div id="teacher-class-form-modal" class="modal-backdrop hidden">
+            <div class="modal">
+              <div class="modal-head">
+                <h3 id="teacher-class-form-title">Yeni sınıf</h3>
+                <button
+                  id="teacher-class-form-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <form id="teacher-class-form" novalidate>
+                <div class="modal-body">
+                  <div id="teacher-class-form-error" class="error-banner hidden" role="alert"></div>
+                  <label class="field">
+                    <span>Sınıf adı *</span>
+                    <input id="teacher-class-form-name" type="text" maxlength="120" required />
+                  </label>
+                  <label class="field" id="teacher-class-form-branch-field">
+                    <span>Şube *</span>
+                    <select id="teacher-class-form-branch">
+                      <option value="">Şube seçin…</option>
+                    </select>
+                  </label>
+                  <label class="field" id="teacher-class-form-year-field">
+                    <span>Akademik yıl *</span>
+                    <select id="teacher-class-form-year">
+                      <option value="">Akademik yıl seçin…</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Sınıf düzeyi *</span>
+                    <input
+                      id="teacher-class-form-grade"
+                      type="number"
+                      min="1"
+                      max="12"
+                      step="1"
+                      required
+                    />
+                  </label>
+                </div>
+                <div class="modal-actions">
+                  <button id="teacher-class-form-cancel" type="button" class="btn btn-ghost">
+                    İptal
+                  </button>
+                  <button id="teacher-class-form-submit" type="submit" class="btn btn-primary">
+                    Kaydet
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div id="teacher-class-detail-modal" class="modal-backdrop hidden">
+            <div class="modal modal-wide">
+              <div class="modal-head">
+                <h3 id="teacher-class-detail-title">Sınıf detayı</h3>
+                <button
+                  id="teacher-class-detail-close"
+                  type="button"
+                  class="btn btn-icon"
+                  aria-label="Kapat"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </div>
+              <div id="teacher-class-detail-body" class="modal-body"></div>
             </div>
           </div>
 

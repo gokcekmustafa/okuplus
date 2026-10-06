@@ -1075,6 +1075,9 @@ function showDashboard(me) {
   for (const item of document.querySelectorAll(".nav-item[data-admin]")) {
     item.classList.toggle("hidden", !isPlatform);
   }
+  for (const item of document.querySelectorAll("[data-teacher]")) {
+    item.classList.toggle("hidden", !isTeacherUser);
+  }
   // Admin-only assignment elements
   for (const item of document.querySelectorAll("[data-admin]")) {
     if (item.classList.contains("nav-item")) continue;
@@ -1102,6 +1105,8 @@ function showDashboard(me) {
   void loadContextsAndRender();
   if (isPlatform) {
     navigate("dashboard");
+  } else if (isTeacherUser) {
+    navigate("teacher-classes");
   } else {
     void maybeShowOnboarding();
   }
@@ -3561,6 +3566,7 @@ const PAGES = [
   "lessons",
   "skills",
   "levels",
+  "teacher-classes",
   "assignments",
   "assessments",
   "progress",
@@ -3639,6 +3645,8 @@ function navigate(page) {
     void loadSkills();
   } else if (page === "levels") {
     void loadLevels();
+  } else if (page === "teacher-classes") {
+    if (isTeacherUser) void loadTeacherManagedClasses();
   } else if (page === "assignments") {
     void loadAssignments();
   } else if (page === "assessments") {
@@ -13657,6 +13665,357 @@ function teacherAutomationApi(path, options = {}) {
   return authenticatedFetch(`/teacher/assignment-automation${path}`, { ...options, method });
 }
 
+let teacherManagedClasses = [];
+let teacherClassDetailCurrent = null;
+let teacherClassFormMode = "create";
+let teacherClassEditingId = null;
+
+function showTeacherClassError(message) {
+  const error = $("teacher-class-error");
+  if (!error) return;
+  error.textContent = message;
+  error.classList.remove("hidden");
+}
+
+function hideTeacherClassError() {
+  $("teacher-class-error")?.classList.add("hidden");
+}
+
+function teacherClassStatusBadge(status) {
+  const labels = { ACTIVE: "Aktif", ARCHIVED: "Arşivlendi" };
+  const classes = { ACTIVE: "badge badge-success", ARCHIVED: "badge badge-neutral" };
+  return `<span class="${classes[status] ?? "badge"}">${labels[status] ?? escapeHtml(status)}</span>`;
+}
+
+function enrollmentStatusBadgeForTeacher(status) {
+  const labels = { ACTIVE: "Aktif", LEFT: "Ayrıldı", COMPLETED: "Tamamlandı" };
+  const classes = {
+    ACTIVE: "badge badge-success",
+    LEFT: "badge badge-neutral",
+    COMPLETED: "badge badge-info",
+  };
+  return `<span class="${classes[status] ?? "badge"}">${labels[status] ?? escapeHtml(status)}</span>`;
+}
+
+function renderTeacherManagedClasses() {
+  const body = $("teacher-class-list-body");
+  if (!body) return;
+  if (teacherManagedClasses.length === 0) {
+    body.innerHTML =
+      '<tr><td colspan="7" class="empty-cell">Henüz yetkili olduğun bir sınıf yok.</td></tr>';
+    return;
+  }
+  body.innerHTML = teacherManagedClasses
+    .map(
+      (item) => `<tr>
+        <td><strong>${escapeHtml(item.name)}</strong><br><span class="muted">${item.gradeLevel}. sınıf</span></td>
+        <td>${escapeHtml(item.branchName)}</td>
+        <td>${escapeHtml(item.academicYearName)}</td>
+        <td>${teacherClassStatusBadge(item.status)}</td>
+        <td>${item.studentCount}</td>
+        <td>${item.assignmentCount}</td>
+        <td class="text-right"><div class="table-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-open="${escapeHtml(item.id)}">Öğrenciler</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-edit="${escapeHtml(item.id)}">Düzenle</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-assignments="${escapeHtml(item.id)}">Ödevler</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-status="${escapeHtml(item.id)}" data-status-target="${item.status === "ACTIVE" ? "ARCHIVED" : "ACTIVE"}">${item.status === "ACTIVE" ? "Arşivle" : "Etkinleştir"}</button>
+        </div></td>
+      </tr>`,
+    )
+    .join("");
+}
+
+async function loadTeacherManagedClasses() {
+  hideTeacherClassError();
+  const body = $("teacher-class-list-body");
+  if (body) body.innerHTML = '<tr><td colspan="7" class="empty-cell">Yükleniyor…</td></tr>';
+  try {
+    teacherManagedClasses = await parseResponse(await teacherApi("/managed-classes"));
+    renderTeacherManagedClasses();
+  } catch (err) {
+    if (body) body.innerHTML = '<tr><td colspan="7" class="empty-cell">—</td></tr>';
+    showTeacherClassError(err.message || "Sınıflar yüklenemedi.");
+  }
+}
+
+async function loadTeacherClassOptions() {
+  const payload = await parseResponse(await teacherApi("/class-options"));
+  const branch = $("teacher-class-form-branch");
+  const year = $("teacher-class-form-year");
+  if (branch) {
+    branch.innerHTML = `<option value="">Şube seçin…</option>${(payload.branches ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+  }
+  if (year) {
+    year.innerHTML = `<option value="">Akademik yıl seçin…</option>${(payload.academicYears ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}${item.status === "UPCOMING" ? " (Yaklaşan)" : ""}</option>`).join("")}`;
+  }
+}
+
+async function openTeacherClassForm(mode, item = null) {
+  teacherClassFormMode = mode;
+  teacherClassEditingId = item?.id ?? null;
+  $("teacher-class-form-title").textContent = mode === "create" ? "Yeni sınıf" : "Sınıfı düzenle";
+  $("teacher-class-form-name").value = item?.name ?? "";
+  $("teacher-class-form-grade").value = item?.gradeLevel ?? "";
+  $("teacher-class-form-error").classList.add("hidden");
+  const isCreate = mode === "create";
+  $("teacher-class-form-branch-field").classList.toggle("hidden", !isCreate);
+  $("teacher-class-form-year-field").classList.toggle("hidden", !isCreate);
+  $("teacher-class-form-modal").classList.remove("hidden");
+  if (isCreate) {
+    try {
+      await loadTeacherClassOptions();
+    } catch (err) {
+      $("teacher-class-form-error").textContent = err.message || "Sınıf seçenekleri yüklenemedi.";
+      $("teacher-class-form-error").classList.remove("hidden");
+    }
+  }
+  $("teacher-class-form-name").focus();
+}
+
+function closeTeacherClassForm() {
+  $("teacher-class-form-modal")?.classList.add("hidden");
+}
+
+async function submitTeacherClassForm(event) {
+  event.preventDefault();
+  const error = $("teacher-class-form-error");
+  const button = $("teacher-class-form-submit");
+  error.classList.add("hidden");
+  const name = $("teacher-class-form-name").value.trim();
+  const gradeLevel = Number($("teacher-class-form-grade").value);
+  const payload = { name, gradeLevel };
+  if (teacherClassFormMode === "create") {
+    payload.branchId = $("teacher-class-form-branch").value;
+    payload.academicYearId = $("teacher-class-form-year").value;
+  }
+  button.disabled = true;
+  try {
+    const path =
+      teacherClassFormMode === "create"
+        ? "/classes"
+        : `/classes/${encodeURIComponent(teacherClassEditingId)}`;
+    const options = {
+      method: teacherClassFormMode === "create" ? "POST" : "PATCH",
+      body: JSON.stringify(payload),
+    };
+    await parseResponse(await teacherApi(path, options));
+    closeTeacherClassForm();
+    await loadTeacherManagedClasses();
+  } catch (err) {
+    error.textContent = err.message || "Sınıf kaydedilemedi.";
+    error.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderTeacherClassDetail(detail) {
+  teacherClassDetailCurrent = detail;
+  $("teacher-class-detail-title").textContent = `${detail.name} · Sınıfı`;
+  const options = (detail.studentOptions ?? []).filter(
+    (item) => item.enrollmentStatus !== "ACTIVE",
+  );
+  const optionMarkup = options.length
+    ? options
+        .map(
+          (item) =>
+            `<option value="${escapeHtml(item.studentId)}">${escapeHtml(item.displayName)}${item.enrollmentStatus ? ` (${item.enrollmentStatus === "LEFT" ? "yeniden ekle" : "tamamlandı"})` : ""}</option>`,
+        )
+        .join("")
+    : '<option value="">Eklenebilecek öğrenci yok</option>';
+  const students = detail.students?.length
+    ? detail.students
+        .map(
+          (student) => `<tr>
+            <td><strong>${escapeHtml(student.displayName)}</strong>${student.email ? `<br><span class="muted">${escapeHtml(student.email)}</span>` : ""}</td>
+            <td>${enrollmentStatusBadgeForTeacher(student.enrollmentStatus)}</td>
+            <td>${student.lastActivityAt ? escapeHtml(insightDate(student.lastActivityAt, true)) : "—"}</td>
+            <td class="text-right">${student.enrollmentStatus === "ACTIVE" ? `<button type="button" class="btn btn-ghost btn-sm" data-teacher-class-progress="${escapeHtml(student.studentId)}">Gelişimi gör</button><button type="button" class="btn btn-ghost btn-sm" data-teacher-class-remove="${escapeHtml(student.studentId)}">Sınıftan çıkar</button>` : "—"}</td>
+          </tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="empty-cell">Bu sınıfta henüz öğrenci yok.</td></tr>';
+  $("teacher-class-detail-body").innerHTML = `
+    <div class="info-grid">
+      <div class="info-item"><dt>Durum</dt><dd>${teacherClassStatusBadge(detail.status)}</dd></div>
+      <div class="info-item"><dt>Şube</dt><dd>${escapeHtml(detail.branchName)}</dd></div>
+      <div class="info-item"><dt>Akademik yıl</dt><dd>${escapeHtml(detail.academicYearName)}</dd></div>
+      <div class="info-item"><dt>Özet</dt><dd>${detail.studentCount} öğrenci · ${detail.assignmentCount} ödev</dd></div>
+    </div>
+    <div class="modal-actions" style="justify-content: flex-start; padding: 12px 0 0">
+      <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-detail-assignments="${escapeHtml(detail.id)}">Ödevlere git</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-teacher-class-detail-analytics="${escapeHtml(detail.id)}">Sınıf gelişimi</button>
+    </div>
+    <section class="detail-section"><h4>Öğrenci ekle</h4><div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap"><label class="field" style="flex:1; min-width:220px; margin:0"><span>Öğrenci</span><select id="teacher-class-student-select">${optionMarkup}</select></label><button type="button" class="btn btn-primary" data-teacher-class-add-student="${escapeHtml(detail.id)}" ${options.length ? "" : "disabled"}>Öğrenciyi ekle</button></div><div id="teacher-class-detail-error" class="error-banner hidden" role="alert" style="margin-top:12px"></div></section>
+    <section class="detail-section"><h4>Öğrenciler</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Öğrenci</th><th>Katılım</th><th>Son aktivite</th><th></th></tr></thead><tbody>${students}</tbody></table></div></section>`;
+}
+
+async function openTeacherClassDetail(classId) {
+  $("teacher-class-detail-modal").classList.remove("hidden");
+  $("teacher-class-detail-body").innerHTML = '<p class="muted">Sınıf bilgileri yükleniyor…</p>';
+  try {
+    renderTeacherClassDetail(
+      await parseResponse(await teacherApi(`/classes/${encodeURIComponent(classId)}`)),
+    );
+  } catch (err) {
+    $("teacher-class-detail-body").innerHTML =
+      `<p class="error">${escapeHtml(err.message || "Sınıf bilgileri yüklenemedi.")}</p>`;
+  }
+}
+
+async function addTeacherClassStudentFromDetail(classId) {
+  const studentId = $("teacher-class-student-select")?.value;
+  const error = $("teacher-class-detail-error");
+  if (!studentId) return;
+  error.classList.add("hidden");
+  try {
+    renderTeacherClassDetail(
+      await parseResponse(
+        await teacherApi(`/classes/${encodeURIComponent(classId)}/students`, {
+          method: "POST",
+          body: JSON.stringify({ studentId }),
+        }),
+      ),
+    );
+    await loadTeacherManagedClasses();
+  } catch (err) {
+    error.textContent = err.message || "Öğrenci sınıfa eklenemedi.";
+    error.classList.remove("hidden");
+  }
+}
+
+async function removeTeacherClassStudentFromDetail(classId, studentId) {
+  if (
+    !window.confirm(
+      "Bu öğrenciyi sınıftan çıkarmak istediğine emin misin? Öğrencinin geçmiş verileri korunur.",
+    )
+  )
+    return;
+  try {
+    renderTeacherClassDetail(
+      await parseResponse(
+        await teacherApi(
+          `/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}`,
+          { method: "DELETE" },
+        ),
+      ),
+    );
+    await loadTeacherManagedClasses();
+  } catch (err) {
+    const error = $("teacher-class-detail-error");
+    error.textContent = err.message || "Öğrenci sınıftan çıkarılamadı.";
+    error.classList.remove("hidden");
+  }
+}
+
+async function updateTeacherClassStatusFromList(classId, status) {
+  try {
+    await parseResponse(
+      await teacherApi(`/classes/${encodeURIComponent(classId)}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    );
+    await loadTeacherManagedClasses();
+  } catch (err) {
+    showTeacherClassError(err.message || "Sınıf durumu güncellenemedi.");
+  }
+}
+
+async function openTeacherClassRelatedPage(classId, mode) {
+  navigate("assignments");
+  try {
+    await populateTeacherRecommendationClasses();
+    const recommendation = $("teacher-recommendation-class");
+    const filter = $("teacher-assignment-class-filter");
+    if (recommendation) recommendation.value = classId;
+    if (filter) filter.value = classId;
+    assignmentPage = 1;
+    await loadAssignments();
+    if (mode === "analytics") await loadTeacherClassAnalytics(classId);
+    else await loadTeacherRecommendations();
+  } catch (err) {
+    showAssignmentError(err.message || "Sınıf görünümü açılamadı.");
+  }
+}
+
+function setupTeacherClassEvents() {
+  $("teacher-class-create-btn")?.addEventListener("click", () => {
+    void openTeacherClassForm("create");
+  });
+  $("teacher-class-form")?.addEventListener("submit", submitTeacherClassForm);
+  $("teacher-class-form-close")?.addEventListener("click", closeTeacherClassForm);
+  $("teacher-class-form-cancel")?.addEventListener("click", closeTeacherClassForm);
+  $("teacher-class-detail-close")?.addEventListener("click", () =>
+    $("teacher-class-detail-modal").classList.add("hidden"),
+  );
+  $("teacher-class-list-body")?.addEventListener("click", (event) => {
+    const open = event.target.closest("[data-teacher-class-open]");
+    if (open) {
+      void openTeacherClassDetail(open.dataset.teacherClassOpen);
+      return;
+    }
+    const edit = event.target.closest("[data-teacher-class-edit]");
+    if (edit) {
+      const item = teacherManagedClasses.find(
+        (candidate) => candidate.id === edit.dataset.teacherClassEdit,
+      );
+      if (item) void openTeacherClassForm("edit", item);
+      return;
+    }
+    const status = event.target.closest("[data-teacher-class-status]");
+    if (status) {
+      void updateTeacherClassStatusFromList(
+        status.dataset.teacherClassStatus,
+        status.dataset.statusTarget,
+      );
+      return;
+    }
+    const assignments = event.target.closest("[data-teacher-class-assignments]");
+    if (assignments) {
+      void openTeacherClassRelatedPage(assignments.dataset.teacherClassAssignments, "assignments");
+    }
+  });
+  $("teacher-class-detail-body")?.addEventListener("click", (event) => {
+    if (!teacherClassDetailCurrent) return;
+    const add = event.target.closest("[data-teacher-class-add-student]");
+    if (add) {
+      void addTeacherClassStudentFromDetail(add.dataset.teacherClassAddStudent);
+      return;
+    }
+    const remove = event.target.closest("[data-teacher-class-remove]");
+    if (remove) {
+      void removeTeacherClassStudentFromDetail(
+        teacherClassDetailCurrent.id,
+        remove.dataset.teacherClassRemove,
+      );
+      return;
+    }
+    const progress = event.target.closest("[data-teacher-class-progress]");
+    if (progress) {
+      void loadTeacherStudentProgress(
+        teacherClassDetailCurrent.id,
+        progress.dataset.teacherClassProgress,
+      );
+      return;
+    }
+    const assignments = event.target.closest("[data-teacher-class-detail-assignments]");
+    if (assignments) {
+      $("teacher-class-detail-modal").classList.add("hidden");
+      void openTeacherClassRelatedPage(
+        assignments.dataset.teacherClassDetailAssignments,
+        "assignments",
+      );
+      return;
+    }
+    const analytics = event.target.closest("[data-teacher-class-detail-analytics]");
+    if (analytics) {
+      $("teacher-class-detail-modal").classList.add("hidden");
+      void openTeacherClassRelatedPage(analytics.dataset.teacherClassDetailAnalytics, "analytics");
+    }
+  });
+}
+
 function showRecommendationError(id, message) {
   const element = $(id);
   if (!element) return;
@@ -14875,6 +15234,7 @@ async function init() {
   setupSkillEvents();
   setupLevelEvents();
   setupQuestionVersionMediaEvents();
+  setupTeacherClassEvents();
   setupAssignmentEvents();
   setupProgressEvents();
   setupGamificationEvents();
