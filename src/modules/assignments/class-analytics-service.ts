@@ -46,6 +46,18 @@ export interface TeacherClassRecommendationAnalytics {
   recommendationIds: string[];
 }
 
+export interface TeacherClassStudentAnalytics {
+  studentId: string;
+  name: string;
+  email: string | null;
+  assigned: number;
+  started: number;
+  completed: number;
+  completionRate: number;
+  averagePercentage: number | null;
+  lastActivityAt: Date | null;
+}
+
 export interface TeacherClassAnalyticsResponse {
   class: { id: string; name: string; gradeLevel: number; studentCount: number };
   summary: {
@@ -59,6 +71,7 @@ export interface TeacherClassAnalyticsResponse {
     averageDurationMs: number | null;
   };
   assignments: TeacherClassAssignmentAnalytics[];
+  students: TeacherClassStudentAnalytics[];
   skills: TeacherClassSkillAnalytics[];
   recommendations: TeacherClassRecommendationAnalytics[];
 }
@@ -105,7 +118,7 @@ export async function getTeacherClassAnalytics(
         deletedAt: null,
         student: { status: "ACTIVE", deletedAt: null },
       },
-      select: { studentId: true },
+      select: { studentId: true, student: { select: { displayName: true, email: true } } },
       distinct: ["studentId"],
     }),
     prisma.assignment.findMany({
@@ -240,6 +253,51 @@ export async function getTeacherClassAnalytics(
   const started = assignmentAnalytics.reduce((sum, item) => sum + item.started, 0);
   const completed = assignmentAnalytics.reduce((sum, item) => sum + item.completed, 0);
 
+  const students = enrollments
+    .map((enrollment) => {
+      const percentages: number[] = [];
+      let assigned = 0;
+      let started = 0;
+      let completed = 0;
+      let eligibleAssignments = 0;
+      let lastActivityAt: Date | null = null;
+      for (const assignment of assignments) {
+        const recipient =
+          assignment.studentAssignments.length > 0
+            ? assignment.studentAssignments.find((item) => item.studentId === enrollment.studentId)
+            : { status: "ASSIGNED" };
+        if (!recipient) continue;
+        eligibleAssignments += 1;
+        const session = latestSessions.get(`${assignment.id}:${enrollment.studentId}`);
+        const status = statusFor(recipient.status, session?.result);
+        if (status === "ASSIGNED") assigned += 1;
+        if (status === "IN_PROGRESS" || status === "COMPLETED") started += 1;
+        if (status === "COMPLETED") {
+          completed += 1;
+          if (session?.result.percentage !== null && session?.result.percentage !== undefined) {
+            percentages.push(session.result.percentage);
+          }
+        }
+        const activityAt = session?.result.completedAt ?? session?.result.startedAt ?? null;
+        if (activityAt && (!lastActivityAt || activityAt > lastActivityAt)) {
+          lastActivityAt = activityAt;
+        }
+      }
+      return {
+        studentId: enrollment.studentId,
+        name: enrollment.student.displayName,
+        email: enrollment.student.email,
+        assigned,
+        started,
+        completed,
+        completionRate:
+          eligibleAssignments > 0 ? roundPercentage((completed / eligibleAssignments) * 100) : 0,
+        averagePercentage: average(percentages),
+        lastActivityAt,
+      } satisfies TeacherClassStudentAnalytics;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   const recommendationGroups = new Map<
     string,
     {
@@ -293,6 +351,7 @@ export async function getTeacherClassAnalytics(
           : null,
     },
     assignments: assignmentAnalytics,
+    students,
     skills: [...skillScores.values()]
       .map((skill) => ({
         skillId: skill.skillId,

@@ -13617,6 +13617,7 @@ let isPlatformUser = null;
 let isTeacherUser = false;
 let currentTenantType = null;
 let teacherResultsPayload = null;
+let teacherStudentProgressPayload = null;
 
 function assignmentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -13763,10 +13764,83 @@ function renderTeacherClassAnalytics(payload) {
       <div class="info-item"><dt>Ortalama başarı</dt><dd>${summary.averagePercentage === null ? "—" : `%${summary.averagePercentage}`}</dd></div>
       <div class="info-item"><dt>Ortalama süre</dt><dd>${formatTeacherDuration(summary.averageDurationMs)}</dd></div>
     </div>
+    <section class="detail-section"><h4>Öğrenci gelişimleri</h4>${payload.students?.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Öğrenci</th><th>Atandı</th><th>Başlandı</th><th>Tamamlandı</th><th>Oran</th><th>Başarı</th><th>Son çalışma</th><th></th></tr></thead><tbody>${payload.students.map((student) => `<tr><td><strong>${escapeHtml(student.name)}</strong>${student.email ? `<br><span class="muted">${escapeHtml(student.email)}</span>` : ""}</td><td>${student.assigned}</td><td>${student.started}</td><td>${student.completed}</td><td>%${student.completionRate}</td><td>${student.averagePercentage === null ? "—" : `%${student.averagePercentage}`}</td><td>${student.lastActivityAt ? escapeHtml(insightDate(student.lastActivityAt, true)) : "—"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-teacher-student-progress-id="${escapeHtml(student.studentId)}">Gelişimi gör</button></td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Bu sınıfta aktif öğrenci yok.</p>'}</section>
     <section class="detail-section"><h4>Beceri görünümü</h4>${skills.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Beceri</th><th>Ortalama</th><th>Öğrenci</th></tr></thead><tbody>${skills.map((skill) => `<tr><td>${escapeHtml(skill.name)}</td><td>%${skill.averagePercentage}</td><td>${skill.studentCount}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tamamlanmış beceri sonucu henüz yok.</p>'}</section>
     <section class="detail-section"><h4>Sınıf ödevleri</h4>${payload.assignments?.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Ödev</th><th>Durum</th><th>Atandı</th><th>Başlandı</th><th>Tamamlandı</th><th>Oran</th><th>Başarı</th></tr></thead><tbody>${payload.assignments.map((assignment) => `<tr><td>${escapeHtml(assignment.title)}</td><td>${assignmentStatusBadge(assignment.status)}</td><td>${assignment.assigned}</td><td>${assignment.started}</td><td>${assignment.completed}</td><td>%${assignment.completionRate}</td><td>${assignment.averagePercentage === null ? "—" : `%${assignment.averagePercentage}`}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Bu sınıfta henüz ödev yok.</p>'}</section>
     <section class="detail-section"><h4>Sınıf önerileri</h4>${recommendations.length ? `<div class="stack">${recommendations.map((item) => `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(item.skill.name)}</strong><span>${item.affectedStudentCount} öğrenci</span></div><p class="muted" style="margin:6px 0">${escapeHtml(item.template.title)}</p><button type="button" class="btn btn-primary btn-sm" data-teacher-bulk-recommendation="${escapeHtml(item.recommendationIds.join(","))}">Ödevi ata</button></div>`).join("")}</div>` : '<p class="muted">Bu sınıf için bekleyen öneri yok.</p>'}</section>`;
   section.classList.remove("hidden");
+}
+
+function teacherProgressSample(sample) {
+  return sample ? `%${sample.score} · ${insightDate(sample.at)}` : "—";
+}
+
+function teacherProgressStatusLabel(status) {
+  if (status === "active") return "Şu an";
+  if (status === "locked") return "Kilitli";
+  if (status === "completed" || status === "COMPLETED") return "Tamamlandı";
+  if (status === "IN_PROGRESS") return "Başlandı";
+  return "Atandı";
+}
+
+function renderTeacherStudentProgress(payload) {
+  teacherStudentProgressPayload = payload;
+  const student = payload.student;
+  const path = payload.learningPath;
+  const measurement = payload.measurement;
+  const skills = payload.skills ?? [];
+  const recommendations = payload.recommendations ?? [];
+  const assignments = payload.assignments ?? [];
+  $("teacher-student-progress-title").textContent = `${student.name} · Gelişim`;
+  $("teacher-student-progress-body").innerHTML = `
+    <p class="muted">${escapeHtml(student.className)}${student.email ? ` · ${escapeHtml(student.email)}` : ""}</p>
+    <section class="detail-section"><h4>Öğrenme yolu</h4>${path ? `<div class="info-grid"><div class="info-item"><dt>Seviye</dt><dd>${escapeHtml(path.currentLevel?.name || "—")}</dd></div>${path.paths.map((item) => `<div class="info-item"><dt>${escapeHtml(item.title)}</dt><dd>${item.completed}/${item.total} · %${item.percent}</dd></div>`).join("")}</div><div class="stack" style="margin-top:12px">${path.paths.map((item) => `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(item.title)}</strong><span>${item.currentStep ? escapeHtml(item.currentStep.title) : "Tamamlandı veya bekleyen adım yok"}</span></div>${item.currentStep ? `<p class="muted" style="margin:6px 0 0">${escapeHtml(item.currentStep.unitTitle)} · ${escapeHtml(teacherProgressStatusLabel(item.currentStep.status))}</p>` : ""}</div>`).join("")}</div>` : '<p class="muted">Bu öğrenci için yayınlanmış öğrenme yolu bulunamadı.</p>'}</section>
+    <section class="detail-section"><h4>Ölçme-değerlendirme</h4>${measurement.history.length ? `<div class="stack">${measurement.history.map((item) => `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(item.title)}</strong><span>${item.score === null ? "—" : `%${Math.round(item.score * 100)}`} · ${escapeHtml(insightDate(item.completedAt, true))}</span></div><p class="muted" style="margin:6px 0 0">${escapeHtml(item.source === "OFFICIAL_PLACEMENT" ? "Resmi başlangıç ölçümü" : item.source === "DEVELOPMENT_MEASUREMENT" ? "Gelişim ölçümü" : "Öğrenme yolu ölçümü")}</p></div>`).join("")}</div>` : '<p class="muted">Henüz tamamlanmış resmi ölçüm yok.</p>'}</section>
+    <section class="detail-section"><h4>Beceri durumu</h4>${skills.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Beceri</th><th>Durum</th><th>Ödev son / önceki</th><th>Ölçüm son / önceki</th><th>Çalışma</th></tr></thead><tbody>${skills.map((skill) => `<tr><td>${escapeHtml(skill.name)}</td><td>${escapeHtml(skill.statusLabel)}</td><td>${teacherProgressSample(skill.assignment.latest)}<br><span class="muted">${skill.assignment.previous ? teacherProgressSample(skill.assignment.previous) : "Önceki sonuç yok"}</span></td><td>${teacherProgressSample(skill.measurement.latest)}<br><span class="muted">${skill.measurement.previous ? teacherProgressSample(skill.measurement.previous) : "Önceki ölçüm yok"}</span></td><td>${skill.assignment.studyCount} ödev · ${skill.measurement.measurementCount} ölçüm</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Bu öğrenci için beceri sonucu henüz yok.</p>'}</section>
+    <section class="detail-section"><h4>Ödev performansı</h4>${
+      assignments.length
+        ? `<div class="stack">${assignments
+            .slice(0, 20)
+            .map(
+              (assignment) =>
+                `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(assignment.title)}</strong><span>${escapeHtml(teacherProgressStatusLabel(assignment.assignmentStatus))}</span></div><p class="muted" style="margin:6px 0">${escapeHtml(assignment.templateTitle)} · ${assignment.latest?.percentage === null || assignment.latest?.percentage === undefined ? "Başarı —" : `Başarı %${assignment.latest.percentage}`} · Süre ${formatTeacherDuration(assignment.latest?.timeSpentMs)}</p>${assignment.latest?.skills?.length ? `<p class="muted" style="margin:6px 0 0">${assignment.latest.skills.map((skill) => `${escapeHtml(skill.name)} %${skill.percentage ?? "—"}`).join(" · ")}</p>` : ""}${assignment.history.length > 1 ? `<small class="muted">${assignment.history.length} deneme kaydı</small>` : ""}</div>`,
+            )
+            .join("")}</div>`
+        : '<p class="muted">Bu sınıfta bu öğrenciye ait ödev sonucu yok.</p>'
+    }</section>
+    <section class="detail-section"><h4>Önerilen çalışmalar</h4>${recommendations.length ? `<div class="stack">${recommendations.map((item) => `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(item.skill.name)}</strong><span>${escapeHtml(item.template.title)}</span></div><p class="muted" style="margin:6px 0">${escapeHtml(item.reason)}</p><button type="button" class="btn btn-primary btn-sm" data-teacher-student-recommendation-accept="${escapeHtml(item.id)}">Ödevi ata</button></div>`).join("")}</div>` : '<p class="muted">Bu öğrenci için bekleyen ek çalışma önerisi yok.</p>'}</section>`;
+}
+
+async function loadTeacherStudentProgress(classId, studentId) {
+  const modal = $("teacher-student-progress-modal");
+  const body = $("teacher-student-progress-body");
+  if (!modal || !body) return;
+  teacherStudentProgressPayload = null;
+  modal.classList.remove("hidden");
+  body.innerHTML = '<p class="muted">Öğrenci gelişimi yükleniyor…</p>';
+  try {
+    renderTeacherStudentProgress(
+      await parseResponse(
+        await teacherApi(
+          `/classes/${encodeURIComponent(classId)}/students/${encodeURIComponent(studentId)}/progress`,
+        ),
+      ),
+    );
+  } catch (err) {
+    body.innerHTML = `<p class="error">${escapeHtml(err.message || "Öğrenci gelişimi yüklenemedi.")}</p>`;
+  }
+}
+
+async function acceptTeacherStudentRecommendation(id) {
+  const payload = teacherStudentProgressPayload;
+  if (!payload) return;
+  await parseResponse(
+    await teacherRecommendationApi(`/${encodeURIComponent(id)}/accept`, {
+      method: "POST",
+      body: JSON.stringify({ classId: payload.student.classId }),
+    }),
+  );
+  await loadTeacherStudentProgress(payload.student.classId, payload.student.id);
 }
 
 async function loadTeacherClassAnalytics(classId) {
@@ -14544,6 +14618,14 @@ function setupAssignmentEvents() {
       void dismissTeacherRecommendationFromCard(dismiss.dataset.teacherRecommendationDismiss);
   });
   $("teacher-class-analytics-body")?.addEventListener("click", (event) => {
+    const student = event.target.closest("[data-teacher-student-progress-id]");
+    if (student) {
+      const classId = $("teacher-recommendation-class")?.value;
+      if (classId) {
+        void loadTeacherStudentProgress(classId, student.dataset.teacherStudentProgressId);
+      }
+      return;
+    }
     const button = event.target.closest("[data-teacher-bulk-recommendation]");
     if (!button) return;
     const ids = (button.dataset.teacherBulkRecommendation || "").split(",").filter(Boolean);
@@ -14728,6 +14810,23 @@ function setupAssignmentEvents() {
   $("teacher-results-close")?.addEventListener("click", () =>
     $("teacher-results-modal").classList.add("hidden"),
   );
+  $("teacher-student-progress-close")?.addEventListener("click", () =>
+    $("teacher-student-progress-modal").classList.add("hidden"),
+  );
+  $("teacher-student-progress-body")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-teacher-student-recommendation-accept]");
+    if (!button) return;
+    button.disabled = true;
+    void acceptTeacherStudentRecommendation(
+      button.dataset.teacherStudentRecommendationAccept,
+    ).catch((err) => {
+      button.disabled = false;
+      button.insertAdjacentHTML(
+        "afterend",
+        `<p class="error">${escapeHtml(err.message || "Ödev atanamadı.")}</p>`,
+      );
+    });
+  });
   $("teacher-results-body")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-teacher-student-detail-index]");
     if (!button || !teacherResultsPayload) return;
