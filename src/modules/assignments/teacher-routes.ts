@@ -5,6 +5,7 @@ import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import {
   acceptAssignmentRecommendationSchema,
+  acceptTeacherRecommendationsBatchSchema,
   assignmentAutomationSettingSchema,
   createTeacherAssignmentSchema,
   listAssignmentRecommendationsQuerySchema,
@@ -20,8 +21,10 @@ import {
   type TeacherAssignmentActor,
 } from "./teacher-service.js";
 import { getTeacherAssignmentResults } from "./results-service.js";
+import { getTeacherClassAnalytics } from "./class-analytics-service.js";
 import {
   acceptTeacherRecommendation,
+  acceptTeacherRecommendationsBatch,
   dismissTeacherRecommendation,
   listTeacherAutomationSettings,
   listTeacherRecommendations,
@@ -66,6 +69,15 @@ export async function assignmentTeacherRoutes(
     async (request) => {
       const input = refreshTeacherAssignmentRecommendationsSchema.parse(request.body);
       return ok(await refreshTeacherRecommendations(actorFrom(request), input));
+    },
+  );
+
+  app.post(
+    "/teacher/assignment-recommendations/bulk-accept",
+    { preHandler: requireTeacherAuth },
+    async (request) => {
+      const input = acceptTeacherRecommendationsBatchSchema.parse(request.body);
+      return ok(await acceptTeacherRecommendationsBatch(actorFrom(request), input));
     },
   );
 
@@ -115,6 +127,10 @@ export async function assignmentTeacherRoutes(
   app.get("/teacher/classes", { preHandler: requireTeacherAuth }, async (request) => {
     return ok(await listTeacherClasses(actorFrom(request)));
   });
+
+  app.get("/teacher/classes/:id/analytics", { preHandler: requireTeacherAuth }, async (request) =>
+    ok(await getTeacherClassAnalytics(actorFrom(request), readParamId(request, "Sınıf"))),
+  );
 
   app.get("/teacher/templates", { preHandler: requireTeacherAuth }, async (request) => {
     return ok(await listTeacherTemplates(actorFrom(request)));

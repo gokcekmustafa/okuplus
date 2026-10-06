@@ -68,12 +68,23 @@ export interface TeacherAssignmentResultsResponse {
     assigned: number;
     started: number;
     completed: number;
+    completionRate: number;
     averagePercentage: number | null;
+    averageDurationMs: number | null;
   };
+  skills: TeacherAssignmentSkillSummary[];
   students: StudentAssignmentResult[];
 }
 
-const SESSION_RESULT_SELECT = {
+export interface TeacherAssignmentSkillSummary {
+  skillId: string;
+  code: string;
+  name: string;
+  averagePercentage: number;
+  studentCount: number;
+}
+
+export const SESSION_RESULT_SELECT = {
   id: true,
   status: true,
   startedAt: true,
@@ -129,7 +140,7 @@ function latestAttempts(session: SessionResultRow) {
   return latest;
 }
 
-function buildSessionResult(session: SessionResultRow): AssignmentSessionResult {
+export function buildSessionResult(session: SessionResultRow): AssignmentSessionResult {
   const questions = session.templateVersion.questions;
   const attempts = latestAttempts(session);
   let correct = 0;
@@ -310,10 +321,49 @@ async function buildStudentResults(
   });
 }
 
-function summaryFor(students: StudentAssignmentResult[]) {
+export function skillSummaryFor(
+  students: StudentAssignmentResult[],
+): TeacherAssignmentSkillSummary[] {
+  const bySkill = new Map<
+    string,
+    { skillId: string; code: string; name: string; scores: number[]; students: Set<string> }
+  >();
+  for (const student of students) {
+    if (student.latest?.status !== "COMPLETED") continue;
+    for (const skill of student.latest.skills) {
+      if (skill.percentage === null) continue;
+      const current = bySkill.get(skill.skillId) ?? {
+        skillId: skill.skillId,
+        code: skill.code,
+        name: skill.name,
+        scores: [],
+        students: new Set<string>(),
+      };
+      current.scores.push(skill.percentage);
+      current.students.add(student.studentId);
+      bySkill.set(skill.skillId, current);
+    }
+  }
+  return [...bySkill.values()]
+    .map((skill) => ({
+      skillId: skill.skillId,
+      code: skill.code,
+      name: skill.name,
+      averagePercentage: roundPercentage(
+        skill.scores.reduce((sum, value) => sum + value, 0) / skill.scores.length,
+      ),
+      studentCount: skill.students.size,
+    }))
+    .sort((a, b) => a.averagePercentage - b.averagePercentage || a.code.localeCompare(b.code));
+}
+
+export function summaryFor(students: StudentAssignmentResult[]) {
   const completed = students.filter((student) => student.assignmentStatus === "COMPLETED");
   const percentages = completed
     .map((student) => student.latest?.percentage)
+    .filter((value): value is number => value !== null && value !== undefined);
+  const durations = completed
+    .map((student) => student.latest?.timeSpentMs)
     .filter((value): value is number => value !== null && value !== undefined);
   return {
     totalStudents: students.length,
@@ -322,9 +372,15 @@ function summaryFor(students: StudentAssignmentResult[]) {
       ["IN_PROGRESS", "COMPLETED"].includes(student.assignmentStatus),
     ).length,
     completed: completed.length,
+    completionRate:
+      students.length > 0 ? roundPercentage((completed.length / students.length) * 100) : 0,
     averagePercentage:
       percentages.length > 0
         ? roundPercentage(percentages.reduce((sum, value) => sum + value, 0) / percentages.length)
+        : null,
+    averageDurationMs:
+      durations.length > 0
+        ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length)
         : null,
   };
 }
@@ -418,33 +474,44 @@ export async function getTeacherAssignmentResults(
   if (!assignment.classId || !assignment.class) throw notFoundError("Sınıf ödevi bulunamadı");
   await assertTeacherClassAccess(actor, assignment.classId);
 
-  const enrolledStudents = await prisma.enrollment.findMany({
-    where: {
-      tenantId: actor.tenantId,
-      classId: assignment.classId,
-      status: "ACTIVE",
-      deletedAt: null,
-      student: { status: "ACTIVE", deletedAt: null },
-    },
-    select: { studentId: true },
-  });
-  const enrolledStudentIds = enrolledStudents.map((enrollment) => enrollment.studentId);
-  const recipients =
-    enrolledStudentIds.length === 0
-      ? []
-      : await prisma.studentAssignment.findMany({
-          where: {
-            assignmentId: id,
-            tenantId: actor.tenantId,
-            studentId: { in: enrolledStudentIds },
-          },
-          select: {
-            studentId: true,
-            status: true,
-            student: { select: { displayName: true, email: true } },
-          },
-          orderBy: { student: { displayName: "asc" } },
-        });
+  const [enrolledStudents, assignedStudents] = await Promise.all([
+    prisma.enrollment.findMany({
+      where: {
+        tenantId: actor.tenantId,
+        classId: assignment.classId,
+        status: "ACTIVE",
+        deletedAt: null,
+        student: { status: "ACTIVE", deletedAt: null },
+      },
+      select: { studentId: true, student: { select: { displayName: true, email: true } } },
+    }),
+    prisma.studentAssignment.findMany({
+      where: { assignmentId: id, tenantId: actor.tenantId },
+      select: {
+        studentId: true,
+        status: true,
+        student: { select: { displayName: true, email: true } },
+      },
+      orderBy: { student: { displayName: "asc" } },
+    }),
+  ]);
+  const recipientByStudent = new Map<
+    string,
+    { studentId: string; status: string; student: { displayName: string; email: string | null } }
+  >();
+  for (const enrollment of enrolledStudents) {
+    recipientByStudent.set(enrollment.studentId, {
+      studentId: enrollment.studentId,
+      status: "ASSIGNED",
+      student: enrollment.student,
+    });
+  }
+  for (const recipient of assignedStudents) {
+    recipientByStudent.set(recipient.studentId, recipient);
+  }
+  const recipients = [...recipientByStudent.values()].sort((a, b) =>
+    a.student.displayName.localeCompare(b.student.displayName),
+  );
   const students = await buildStudentResults(id, recipients, actor.tenantId);
   return {
     assignment: {
@@ -456,6 +523,7 @@ export async function getTeacherAssignmentResults(
       dueDate: assignment.dueDate,
     },
     summary: summaryFor(students),
+    skills: skillSummaryFor(students),
     students,
   };
 }

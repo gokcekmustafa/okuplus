@@ -13616,6 +13616,8 @@ let assignmentDetailCurrent = null;
 let isPlatformUser = null;
 let isTeacherUser = false;
 let currentTenantType = null;
+let teacherClassAnalyticsPayload = null;
+let teacherResultsPayload = null;
 
 function assignmentApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -13741,14 +13743,66 @@ function renderTeacherRecommendations(payload) {
     : '<p class="muted">Yetki alanındaki öğrenciler için bekleyen öneri yok.</p>';
 }
 
+function formatTeacherDuration(ms) {
+  return ms === null || ms === undefined ? "—" : formatAssignmentDuration(ms);
+}
+
+function renderTeacherClassAnalytics(payload) {
+  const section = $("teacher-class-analytics");
+  const body = $("teacher-class-analytics-body");
+  if (!section || !body) return;
+  teacherClassAnalyticsPayload = payload;
+  const summary = payload.summary;
+  const skills = payload.skills ?? [];
+  const recommendations = payload.recommendations ?? [];
+  body.innerHTML = `
+    <div class="info-grid">
+      <div class="info-item"><dt>Öğrenci</dt><dd>${summary.totalStudents}</dd></div>
+      <div class="info-item"><dt>Ödev</dt><dd>${summary.totalAssignments}</dd></div>
+      <div class="info-item"><dt>Başlanan</dt><dd>${summary.started}</dd></div>
+      <div class="info-item"><dt>Tamamlanan</dt><dd>${summary.completed}</dd></div>
+      <div class="info-item"><dt>Tamamlanma</dt><dd>%${summary.completionRate}</dd></div>
+      <div class="info-item"><dt>Ortalama başarı</dt><dd>${summary.averagePercentage === null ? "—" : `%${summary.averagePercentage}`}</dd></div>
+      <div class="info-item"><dt>Ortalama süre</dt><dd>${formatTeacherDuration(summary.averageDurationMs)}</dd></div>
+    </div>
+    <section class="detail-section"><h4>Beceri görünümü</h4>${skills.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Beceri</th><th>Ortalama</th><th>Öğrenci</th></tr></thead><tbody>${skills.map((skill) => `<tr><td>${escapeHtml(skill.name)}</td><td>%${skill.averagePercentage}</td><td>${skill.studentCount}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tamamlanmış beceri sonucu henüz yok.</p>'}</section>
+    <section class="detail-section"><h4>Sınıf ödevleri</h4>${payload.assignments?.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Ödev</th><th>Durum</th><th>Atandı</th><th>Başlandı</th><th>Tamamlandı</th><th>Oran</th><th>Başarı</th></tr></thead><tbody>${payload.assignments.map((assignment) => `<tr><td>${escapeHtml(assignment.title)}</td><td>${assignmentStatusBadge(assignment.status)}</td><td>${assignment.assigned}</td><td>${assignment.started}</td><td>${assignment.completed}</td><td>%${assignment.completionRate}</td><td>${assignment.averagePercentage === null ? "—" : `%${assignment.averagePercentage}`}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Bu sınıfta henüz ödev yok.</p>'}</section>
+    <section class="detail-section"><h4>Sınıf önerileri</h4>${recommendations.length ? `<div class="stack">${recommendations.map((item) => `<div class="card" style="padding:12px"><div class="student-progress-label"><strong>${escapeHtml(item.skill.name)}</strong><span>${item.affectedStudentCount} öğrenci</span></div><p class="muted" style="margin:6px 0">${escapeHtml(item.template.title)}</p><button type="button" class="btn btn-primary btn-sm" data-teacher-bulk-recommendation="${escapeHtml(item.recommendationIds.join(","))}">Ödevi ata</button></div>`).join("")}</div>` : '<p class="muted">Bu sınıf için bekleyen öneri yok.</p>'}</section>`;
+  section.classList.remove("hidden");
+}
+
+async function loadTeacherClassAnalytics(classId) {
+  const section = $("teacher-class-analytics");
+  const body = $("teacher-class-analytics-body");
+  if (!section || !body) return;
+  if (!classId) {
+    teacherClassAnalyticsPayload = null;
+    section.classList.add("hidden");
+    body.replaceChildren();
+    return;
+  }
+  section.classList.remove("hidden");
+  body.innerHTML = '<p class="muted">Sınıf görünümü yükleniyor…</p>';
+  try {
+    renderTeacherClassAnalytics(
+      await parseResponse(await teacherApi(`/classes/${encodeURIComponent(classId)}/analytics`)),
+    );
+  } catch (err) {
+    body.innerHTML = `<p class="error">${escapeHtml(err.message || "Sınıf görünümü yüklenemedi.")}</p>`;
+  }
+}
+
 async function loadTeacherRecommendations() {
   if (!isTeacherUser) return;
   hideRecommendationError("teacher-recommendations-error");
   const list = $("teacher-recommendation-list");
   if (list) list.innerHTML = '<p class="muted">Öneriler yükleniyor…</p>';
   try {
-    renderTeacherRecommendations(await parseResponse(await teacherRecommendationApi("")));
+    const classId = $("teacher-recommendation-class")?.value;
+    const query = classId ? `?classId=${encodeURIComponent(classId)}` : "";
+    renderTeacherRecommendations(await parseResponse(await teacherRecommendationApi(query)));
     await populateTeacherRecommendationClasses();
+    if (classId) await loadTeacherClassAnalytics(classId);
   } catch (err) {
     showRecommendationError(
       "teacher-recommendations-error",
@@ -13769,13 +13823,28 @@ async function refreshTeacherRecommendationsForTarget() {
       }),
     ),
   );
+  await loadTeacherClassAnalytics(classId);
 }
 
 async function populateTeacherRecommendationClasses() {
   const select = $("teacher-recommendation-class");
-  if (!select) return;
+  const filter = $("teacher-assignment-class-filter");
+  if (!select && !filter) return;
   const classes = await parseResponse(await teacherApi("/classes"));
-  select.innerHTML = `<option value="">Sınıf seçin…</option>${(classes ?? []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+  const options = (classes ?? [])
+    .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
+    .join("");
+  const selectedRecommendation = select?.value ?? "";
+  const selectedFilter = filter?.value ?? "";
+  if (select) {
+    select.innerHTML = `<option value="">Sınıf seçin…</option>${options}`;
+    select.value = selectedRecommendation;
+  }
+  if (filter) {
+    filter.innerHTML = `<option value="">Tüm sınıflar</option>${options}`;
+    filter.value = selectedFilter;
+    filter.classList.toggle("hidden", !isTeacherUser);
+  }
 }
 
 async function saveTeacherAutomation() {
@@ -13899,6 +13968,8 @@ async function loadAssignments() {
   const params = new URLSearchParams({ page: assignmentPage, pageSize: ASSIGNMENT_PAGE_SIZE });
   if (search) params.set("search", search);
   if (status) params.set("status", status);
+  const classId = isTeacherUser ? $("teacher-assignment-class-filter")?.value : "";
+  if (classId) params.set("classId", classId);
   try {
     const apiFn = isTeacherUser
       ? teacherAssignmentApi
@@ -13950,6 +14021,19 @@ async function acceptTeacherRecommendationFromCard(id) {
       err.message || "Önerilen ödev atanamadı.",
     );
   }
+}
+
+async function acceptTeacherRecommendationsBatchFromCard(ids) {
+  const classId = $("teacher-recommendation-class")?.value;
+  if (!classId) throw new Error("Toplu atama için önce bir sınıf seçin.");
+  await parseResponse(
+    await teacherRecommendationApi("/bulk-accept", {
+      method: "POST",
+      body: JSON.stringify({ classId, recommendationIds: ids }),
+    }),
+  );
+  await loadAssignments();
+  await loadTeacherClassAnalytics(classId);
 }
 
 async function dismissTeacherRecommendationFromCard(id) {
@@ -14335,6 +14419,7 @@ async function openStudentAssignmentResult(id) {
 }
 
 function renderTeacherAssignmentResults(payload) {
+  teacherResultsPayload = payload;
   const s = payload.summary;
   $("teacher-results-title").textContent = `${payload.assignment.title} · Sonuçlar`;
   $("teacher-results-body").innerHTML = `
@@ -14343,10 +14428,13 @@ function renderTeacherAssignmentResults(payload) {
       <div class="info-item"><dt>Atanmış</dt><dd>${s.assigned}</dd></div>
       <div class="info-item"><dt>Başlayan</dt><dd>${s.started}</dd></div>
       <div class="info-item"><dt>Tamamlayan</dt><dd>${s.completed}</dd></div>
+      <div class="info-item"><dt>Tamamlanma</dt><dd>%${s.completionRate}</dd></div>
       <div class="info-item"><dt>Ortalama başarı</dt><dd>${s.averagePercentage === null ? "—" : `%${s.averagePercentage}`}</dd></div>
+      <div class="info-item"><dt>Ortalama süre</dt><dd>${formatTeacherDuration(s.averageDurationMs)}</dd></div>
     </div></section>
-    <section class="detail-section"><h4>Öğrenci sonuçları</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Öğrenci</th><th>Durum</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Başarı</th><th>Beceriler</th></tr></thead><tbody>${payload.students
-      .map((student) => {
+    <section class="detail-section"><h4>Beceri özeti</h4>${payload.skills?.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Beceri</th><th>Ortalama</th><th>Öğrenci</th></tr></thead><tbody>${payload.skills.map((skill) => `<tr><td>${escapeHtml(skill.name)}</td><td>%${skill.averagePercentage}</td><td>${skill.studentCount}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tamamlanmış beceri sonucu henüz yok.</p>'}</section>
+    <section class="detail-section"><h4>Öğrenci sonuçları</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Öğrenci</th><th>Durum</th><th>Doğru</th><th>Yanlış</th><th>Boş</th><th>Başarı</th><th>Süre</th><th>Beceriler</th><th></th></tr></thead><tbody>${payload.students
+      .map((student, index) => {
         const r = student.latest;
         const status =
           r?.status === "COMPLETED" || student.assignmentStatus === "COMPLETED"
@@ -14354,9 +14442,20 @@ function renderTeacherAssignmentResults(payload) {
             : student.assignmentStatus === "IN_PROGRESS"
               ? "Başlandı"
               : "Atandı";
-        return `<tr><td>${escapeHtml(student.studentName || student.studentEmail || "Öğrenci")}</td><td>${status}</td><td>${r ? r.correct : "—"}</td><td>${r ? r.wrong : "—"}</td><td>${r ? r.blank : "—"}</td><td>${r?.percentage === null || r?.percentage === undefined ? "—" : `%${r.percentage}`}</td><td>${r?.skills?.length ? r.skills.map((skill) => `${escapeHtml(skill.name)} %${skill.percentage ?? "—"}`).join(" · ") : "—"}</td></tr>`;
+        return `<tr><td>${escapeHtml(student.studentName || student.studentEmail || "Öğrenci")}</td><td>${status}</td><td>${r ? r.correct : "—"}</td><td>${r ? r.wrong : "—"}</td><td>${r ? r.blank : "—"}</td><td>${r?.percentage === null || r?.percentage === undefined ? "—" : `%${r.percentage}`}</td><td>${formatTeacherDuration(r?.timeSpentMs)}</td><td>${r?.skills?.length ? r.skills.map((skill) => `${escapeHtml(skill.name)} %${skill.percentage ?? "—"}`).join(" · ") : "—"}</td><td><button type="button" class="btn btn-ghost btn-sm" data-teacher-student-detail-index="${index}">Detay</button></td></tr>`;
       })
-      .join("")}</tbody></table></div></section>`;
+      .join(
+        "",
+      )}</tbody></table></div><div id="teacher-student-detail" class="hidden" style="margin-top:16px"></div></section>`;
+}
+
+function renderTeacherStudentDetail(student) {
+  const detail = $("teacher-student-detail");
+  if (!detail) return;
+  const latest = student.latest;
+  const history = [...(student.history ?? [])].reverse();
+  detail.innerHTML = `<div class="card" style="padding:16px"><div class="student-progress-label"><h4 style="margin:0">${escapeHtml(student.studentName || student.studentEmail || "Öğrenci")}</h4><span>${student.assignmentStatus === "COMPLETED" ? "Tamamlandı" : student.assignmentStatus === "IN_PROGRESS" ? "Başlandı" : "Atandı"}</span></div><h4>Sonuç</h4>${assignmentResultStatsMarkup(latest)}${latest?.skills?.length ? `<h4>Beceri kırılımı</h4><div class="stack">${latest.skills.map((skill) => `<div class="student-progress-label"><span>${escapeHtml(skill.name)}</span><strong>${skill.percentage === null ? "—" : `%${skill.percentage}`}</strong></div>`).join("")}</div>` : ""}${history.length > 1 ? `<h4 style="margin-top:16px">Deneme geçmişi</h4><div class="stack">${history.map((attempt, index) => `<div class="student-progress-label"><span>Deneme ${history.length - index}</span><span>${attempt.percentage === null ? "—" : `%${attempt.percentage}`} · ${formatTeacherDuration(attempt.timeSpentMs)}</span></div>`).join("")}</div>` : ""}</div>`;
+  detail.classList.remove("hidden");
 }
 
 async function openTeacherAssignmentResults(id) {
@@ -14446,6 +14545,18 @@ function setupAssignmentEvents() {
       void acceptTeacherRecommendationFromCard(accept.dataset.teacherRecommendationAccept);
     if (dismiss)
       void dismissTeacherRecommendationFromCard(dismiss.dataset.teacherRecommendationDismiss);
+  });
+  $("teacher-class-analytics-body")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-teacher-bulk-recommendation]");
+    if (!button) return;
+    const ids = (button.dataset.teacherBulkRecommendation || "").split(",").filter(Boolean);
+    button.disabled = true;
+    void acceptTeacherRecommendationsBatchFromCard(ids).catch((err) => {
+      showRecommendationError(
+        "teacher-recommendations-error",
+        err.message || "Önerilen ödevler atanamadı.",
+      );
+    });
   });
   $("student-recommendations-refresh")?.addEventListener("click", async (event) => {
     const button = event.currentTarget;
@@ -14620,6 +14731,29 @@ function setupAssignmentEvents() {
   $("teacher-results-close")?.addEventListener("click", () =>
     $("teacher-results-modal").classList.add("hidden"),
   );
+  $("teacher-results-body")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-teacher-student-detail-index]");
+    if (!button || !teacherResultsPayload) return;
+    const index = Number(button.dataset.teacherStudentDetailIndex);
+    const student = teacherResultsPayload.students[index];
+    if (student) renderTeacherStudentDetail(student);
+  });
+  $("teacher-recommendation-class")?.addEventListener("change", () => {
+    const classId = $("teacher-recommendation-class").value;
+    const filter = $("teacher-assignment-class-filter");
+    if (filter) filter.value = classId;
+    assignmentPage = 1;
+    void loadAssignments();
+    void loadTeacherRecommendations();
+  });
+  $("teacher-assignment-class-filter")?.addEventListener("change", () => {
+    const classId = $("teacher-assignment-class-filter").value;
+    const recommendationClass = $("teacher-recommendation-class");
+    if (recommendationClass) recommendationClass.value = classId;
+    assignmentPage = 1;
+    void loadAssignments();
+    void loadTeacherClassAnalytics(classId);
+  });
   $("teacher-assignment-class")?.addEventListener("change", (event) => {
     const classItem = teacherAssignmentClasses.find((item) => item.id === event.target.value);
     $("teacher-assignment-student").innerHTML =

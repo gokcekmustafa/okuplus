@@ -777,6 +777,81 @@ export async function acceptTeacherRecommendation(
   return result;
 }
 
+export async function acceptTeacherRecommendationsBatch(
+  actor: TeacherAssignmentActor,
+  input: { classId: string; recommendationIds: string[] },
+) {
+  const tenantId = requireTenant(actor);
+  await assertTeacherClassAccess(actor, input.classId);
+  const recommendationIds = [...new Set(input.recommendationIds)];
+  const activeStudents = await prisma.enrollment.findMany({
+    where: {
+      tenantId,
+      classId: input.classId,
+      status: "ACTIVE",
+      deletedAt: null,
+      student: { status: "ACTIVE", deletedAt: null },
+    },
+    select: { studentId: true },
+    distinct: ["studentId"],
+  });
+  const studentIds = activeStudents.map((student) => student.studentId);
+  const recommendations =
+    studentIds.length === 0
+      ? []
+      : await prisma.assignmentRecommendation.findMany({
+          where: {
+            id: { in: recommendationIds },
+            tenantId,
+            studentId: { in: studentIds },
+            status: "PENDING",
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+          select: { id: true, studentId: true },
+          orderBy: [{ generatedAt: "asc" }, { id: "asc" }],
+        });
+  const settings = await prisma.assignmentAutomationSetting.findMany({
+    where: {
+      tenantId,
+      OR: [{ classId: input.classId }, { studentId: { in: studentIds } }],
+    },
+    select: { classId: true, studentId: true, maxActiveAssignments: true },
+  });
+  const classSetting = settings.find((setting) => setting.classId === input.classId);
+  const studentSettings = new Map(
+    settings
+      .filter((setting) => setting.studentId)
+      .map((setting) => [setting.studentId!, setting.maxActiveAssignments]),
+  );
+  const created: Array<{ recommendationId: string; assignmentId: string; studentId: string }> = [];
+  for (const recommendation of recommendations) {
+    const result = await createRecommendationAssignment({
+      recommendationId: recommendation.id,
+      tenantId,
+      studentId: recommendation.studentId,
+      classId: input.classId,
+      source: "MANUAL",
+      acceptedById: actor.userId,
+      maxActiveAssignments:
+        studentSettings.get(recommendation.studentId) ??
+        classSetting?.maxActiveAssignments ??
+        ASSIGNMENT_RECOMMENDATION_RULES.defaultMaxActiveAssignments,
+    });
+    if (result) {
+      created.push({
+        recommendationId: recommendation.id,
+        assignmentId: result.assignmentId,
+        studentId: recommendation.studentId,
+      });
+    }
+  }
+  const createdIds = new Set(created.map((item) => item.recommendationId));
+  return {
+    created,
+    skippedRecommendationIds: recommendationIds.filter((id) => !createdIds.has(id)),
+  };
+}
+
 export async function dismissTeacherRecommendation(
   actor: TeacherAssignmentActor,
   recommendationId: string,
