@@ -59,6 +59,7 @@ const MEMBERSHIP_BASE_SELECT = {
       displayName: true,
       email: true,
       phone: true,
+      nationalId: true,
       birthYear: true,
       status: true,
       createdAt: true,
@@ -95,6 +96,7 @@ export interface TeacherDetail {
     displayName: string;
     email: string | null;
     phone: string | null;
+    nationalId: string | null;
     birthYear: number | null;
     status: UserStatus;
     emailVerifiedAt: Date | null;
@@ -240,6 +242,7 @@ export async function getTeacher(userId: string): Promise<TeacherDetail> {
       displayName: true,
       email: true,
       phone: true,
+      nationalId: true,
       birthYear: true,
       status: true,
       emailVerifiedAt: true,
@@ -358,6 +361,7 @@ export async function createTeacher(input: CreateTeacherInput): Promise<TeacherD
           displayName: input.displayName,
           email: input.email,
           ...(input.phone ? { phone: input.phone } : {}),
+          ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
           ...(input.birthYear ? { birthYear: input.birthYear } : {}),
           ...(input.status ? { status: input.status } : {}),
           passwordHash,
@@ -398,6 +402,7 @@ export async function updateTeacher(
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
       ...(input.email !== undefined ? { email: input.email } : {}),
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
       ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
     };
@@ -712,9 +717,14 @@ export async function listBranches(tenantId: string) {
   });
 }
 
-export async function listClasses(tenantId: string, academicYearId?: string) {
+export async function listClasses(tenantId: string, academicYearId?: string, branchId?: string) {
   return prisma.class.findMany({
-    where: { tenantId, deletedAt: null, ...(academicYearId ? { academicYearId } : {}) },
+    where: {
+      tenantId,
+      deletedAt: null,
+      ...(academicYearId ? { academicYearId } : {}),
+      ...(branchId ? { branchId } : {}),
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -734,6 +744,9 @@ function translateTeacherError(err: unknown): never {
       const target = String(err.meta?.target ?? "");
       if (target.toLowerCase().includes("email")) {
         throw conflictError("Bu e-posta adresi zaten kullanımda");
+      }
+      if (target.toLowerCase().includes("nationalid")) {
+        throw conflictError("Bu TC Kimlik No zaten kullanımda");
       }
       if (target.toLowerCase().includes("uq_teacher_branch_active")) {
         throw conflictError("Bu öğretmen aynı şubede zaten aktif üye");

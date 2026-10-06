@@ -129,6 +129,7 @@ const TEACHER_SELECT = {
   displayName: true,
   email: true,
   phone: true,
+  nationalId: true,
   birthYear: true,
   status: true,
   createdAt: true,
@@ -657,6 +658,7 @@ export async function getOrganizationTeacher(
       displayName: user.displayName,
       email: user.email,
       phone: user.phone,
+      nationalId: user.nationalId,
       birthYear: user.birthYear,
       status: user.status,
       emailVerifiedAt: user.emailVerifiedAt,
@@ -702,6 +704,7 @@ export async function createOrganizationTeacher(
           displayName: input.displayName,
           email: input.email,
           phone: input.phone ?? null,
+          nationalId: input.nationalId ?? null,
           birthYear: input.birthYear ?? null,
           status: input.status ?? "ACTIVE",
           passwordHash,
@@ -949,6 +952,7 @@ export async function getOrganizationStudent(
           displayName: true,
           email: true,
           phone: true,
+          nationalId: true,
           birthYear: true,
           status: true,
           emailVerifiedAt: true,
@@ -987,8 +991,8 @@ export async function getOrganizationStudent(
         status: true,
         enrolledAt: true,
         leftAt: true,
-        class: { select: { name: true } },
-        academicYear: { select: { name: true } },
+        class: { select: { id: true, name: true } },
+        academicYear: { select: { id: true, name: true } },
       },
       orderBy: { enrolledAt: "desc" },
     }),
@@ -1012,6 +1016,8 @@ export async function getOrganizationStudent(
     })),
     enrollments: enrollments.map(({ class: cls, academicYear, ...enrollment }) => ({
       ...enrollment,
+      classId: cls.id,
+      academicYearId: academicYear.id,
       className: cls.name,
       academicYearName: academicYear.name,
     })),
@@ -1036,6 +1042,7 @@ export async function createOrganizationStudent(
           displayName: input.displayName,
           email: input.email,
           phone: input.phone ?? null,
+          nationalId: input.nationalId ?? null,
           birthYear: input.birthYear ?? null,
           status: input.status ?? "ACTIVE",
           passwordHash,
@@ -1101,11 +1108,12 @@ export async function updateOrganizationStudent(
     await tx.user.update({
       where: { id: existing.studentId },
       data: {
-        displayName: input.displayName,
-        email: input.email,
-        phone: input.phone,
-        birthYear: input.birthYear,
-        status: input.status,
+        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
+        ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
       },
     });
     await tx.studentProfile.update({
@@ -1225,23 +1233,61 @@ export async function updateOrganizationEnrollment(
   const scope = await scopeOf(actor);
   const enrollment = await prisma.enrollment.findFirst({
     where: { id: enrollmentId, tenantId: scope.tenantId, deletedAt: null },
-    select: { id: true, classId: true },
+    select: { id: true, studentId: true, academicYearId: true, classId: true, status: true },
   });
   if (!enrollment) throw notFoundError("Sınıf kaydı bulunamadı");
   await assertClassAccess(scope, enrollment.classId);
-  const row = await prisma.enrollment.update({
-    where: { id: enrollmentId },
-    data: { status: input.status, ...(input.status === "LEFT" ? { leftAt: new Date() } : {}) },
-    select: {
-      id: true,
-      status: true,
-      enrolledAt: true,
-      leftAt: true,
-      class: { select: { name: true } },
-      academicYear: { select: { name: true } },
-    },
-  });
-  return { ...row, className: row.class.name, academicYearName: row.academicYear.name };
+  let academicYearId = enrollment.academicYearId;
+  let classId: string | undefined;
+  if (input.classId) {
+    const cls = await assertClassAccess(scope, input.classId);
+    if (input.academicYearId && input.academicYearId !== cls.academicYearId) {
+      throw validationError("Seçilen akademik yıl, sınıfın akademik yılıyla uyuşmuyor");
+    }
+    academicYearId = cls.academicYearId;
+    classId = cls.id;
+  }
+  if (input.status === "ACTIVE") {
+    const clash = await prisma.enrollment.findFirst({
+      where: {
+        id: { not: enrollmentId },
+        tenantId: scope.tenantId,
+        studentId: enrollment.studentId,
+        academicYearId,
+        status: "ACTIVE",
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (clash) throw conflictError("Aynı akademik yılda aktif sınıf kaydı zaten var");
+  }
+  try {
+    const row = await prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        status: input.status,
+        ...(classId ? { classId, academicYearId } : {}),
+        ...(input.status === "ACTIVE" ? { leftAt: null } : { leftAt: new Date() }),
+      },
+      select: {
+        id: true,
+        status: true,
+        enrolledAt: true,
+        leftAt: true,
+        class: { select: { id: true, name: true } },
+        academicYear: { select: { id: true, name: true } },
+      },
+    });
+    return {
+      ...row,
+      classId: row.class.id,
+      academicYearId: row.academicYear.id,
+      className: row.class.name,
+      academicYearName: row.academicYear.name,
+    };
+  } catch (error) {
+    throw translateOrganizationError(error, "Bu öğrencinin sınıf kaydı zaten mevcut");
+  }
 }
 
 export async function listOrganizationAcademicYears(actor: OrganizationAssignmentActor) {
@@ -1671,10 +1717,15 @@ export async function listOrganizationBranchesOption(actor: OrganizationAssignme
 export async function listOrganizationClassesOption(
   actor: OrganizationAssignmentActor,
   academicYearId?: string,
+  branchId?: string,
 ) {
   const scope = await scopeOf(actor);
   return prisma.class.findMany({
-    where: { ...scopedClassWhere(scope), ...(academicYearId ? { academicYearId } : {}) },
+    where: {
+      ...scopedClassWhere(scope),
+      ...(academicYearId ? { academicYearId } : {}),
+      ...(branchId ? { branchId } : {}),
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -1866,7 +1917,11 @@ export async function listOrganizationTeacherCandidates(actor: OrganizationAssig
 }
 
 function translateOrganizationError(error: unknown, message: string): never {
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
-    throw conflictError(message);
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    const target = String(error.meta?.target ?? "").toLowerCase();
+    throw conflictError(
+      target.includes("nationalid") ? "Bu TC Kimlik No zaten kullanımda" : message,
+    );
+  }
   throw error;
 }

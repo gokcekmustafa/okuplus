@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * User + Membership yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
@@ -19,13 +20,6 @@ const emailSchema = z
   .email("Geçerli bir e-posta adresi olmalı")
   .max(254, "E-posta en fazla 254 karakter olmalı");
 
-const phoneSchema = z
-  .string()
-  .trim()
-  .max(30, "Telefon en fazla 30 karakter olmalı")
-  .nullable()
-  .optional();
-
 const birthYearSchema = z
   .number()
   .int("Doğum yılı tam sayı olmalı")
@@ -44,7 +38,8 @@ const displayNameSchema = z
 export const createUserSchema = z.object({
   displayName: displayNameSchema,
   email: emailSchema,
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   status: userStatusSchema.optional(),
   password: z
@@ -57,7 +52,8 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   displayName: displayNameSchema.optional(),
   email: emailSchema.optional(),
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   status: userStatusSchema.optional(),
 });

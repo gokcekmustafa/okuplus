@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Öğretmen yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
@@ -19,13 +20,6 @@ const emailSchema = z
   .toLowerCase()
   .email("Geçerli bir e-posta adresi olmalı")
   .max(254, "E-posta en fazla 254 karakter olmalı");
-
-const phoneSchema = z
-  .string()
-  .trim()
-  .max(30, "Telefon en fazla 30 karakter olmalı")
-  .nullable()
-  .optional();
 
 const birthYearSchema = z
   .number()
@@ -56,7 +50,8 @@ export const listTeachersQuerySchema = z.object({
 export const createTeacherSchema = z.object({
   displayName: displayNameSchema,
   email: emailSchema,
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   password: z
     .string()
@@ -71,7 +66,8 @@ export const createTeacherSchema = z.object({
 export const updateTeacherSchema = z.object({
   displayName: displayNameSchema.optional(),
   email: emailSchema.optional(),
-  phone: phoneSchema,
+  phone: turkishPhoneSchema,
+  nationalId: turkishNationalIdSchema,
   birthYear: birthYearSchema,
   status: userStatusSchema.optional(),
 });
@@ -108,6 +104,7 @@ export const listBranchesQuerySchema = z.object({
 export const listClassesQuerySchema = z.object({
   tenantId: z.string().trim().min(1, "Kurum gerekli"),
   academicYearId: z.string().trim().min(1).optional(),
+  branchId: z.string().trim().min(1).optional(),
 });
 
 export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;

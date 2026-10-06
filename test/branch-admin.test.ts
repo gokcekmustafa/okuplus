@@ -731,7 +731,7 @@ describe("branch admin", () => {
     expect(body.name).toBe("Yenilenmiş Şube");
     expect(body.code).toBe("TST-UPD");
     expect(body.address).toBe("Cadde 2, No: 2");
-    expect(body.phone).toBe("+905551110002");
+    expect(body.phone).toBe("0 (555) 111 00 02");
   });
 
   it("Adres ve telefon null ile temizlenebilir", async () => {

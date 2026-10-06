@@ -50,6 +50,40 @@ function setupThemeEvents() {
   });
 }
 
+function setupPersonDataEvents() {
+  const phoneIds = [
+    "signup-phone",
+    "account-profile-phone",
+    "tenant-form-admin-phone",
+    "user-form-phone",
+    "student-form-phone",
+    "teacher-form-phone",
+    "branch-form-phone",
+  ];
+  for (const id of phoneIds) {
+    const input = $(id);
+    if (!input) continue;
+    input.addEventListener("blur", () => {
+      const formatted = formatTurkishPhoneValue(input.value);
+      if (formatted) input.value = formatted;
+    });
+  }
+  const nationalIdIds = [
+    "signup-national-id",
+    "tenant-form-admin-national-id",
+    "user-form-national-id",
+    "student-form-national-id",
+    "teacher-form-national-id",
+  ];
+  for (const id of nationalIdIds) {
+    const input = $(id);
+    if (!input) continue;
+    input.addEventListener("input", () => {
+      input.value = normalizeNationalIdValue(input.value);
+    });
+  }
+}
+
 let inFlight = false;
 let insightsIdentity = "";
 let progressRequest = 0;
@@ -796,12 +830,18 @@ async function login(email, password) {
   return parseResponse(res);
 }
 
-async function signup(displayName, email, password) {
+async function signup(displayName, email, password, phone, nationalId) {
   const res = await fetch("/auth/signup", {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
-    body: JSON.stringify({ displayName, email, password }),
+    body: JSON.stringify({
+      displayName,
+      email,
+      password,
+      ...(phone ? { phone } : {}),
+      ...(nationalId ? { nationalId } : {}),
+    }),
   });
   return parseResponse(res);
 }
@@ -1151,6 +1191,75 @@ function organizationTenantOption(select) {
   select.innerHTML = `<option value="${escapeHtml(currentTenantId)}" data-type="ORGANIZATION">${escapeHtml(currentTenantName)}</option>`;
   select.value = currentTenantId;
   return true;
+}
+
+async function loadAccountProfile() {
+  const form = $("account-profile-form");
+  if (!form) return;
+  const tokens = getStoredTokens();
+  try {
+    const data = await parseResponse(
+      await fetch("/auth/profile", { headers: authHeaders(tokens.accessToken, tokens.tenantId) }),
+    );
+    $("account-profile-name").value = data.displayName ?? "";
+    $("account-profile-email").value = data.email ?? "";
+    $("account-profile-phone").value = data.phone ?? "";
+    $("account-profile-national-id").value = data.nationalId ?? "";
+    $("account-profile-birthyear").value = data.birthYear ?? "";
+    $("account-profile-error").classList.add("hidden");
+  } catch (error) {
+    $("account-profile-error").textContent = error.message || "Profil bilgileri yüklenemedi.";
+    $("account-profile-error").classList.remove("hidden");
+  }
+}
+
+async function submitAccountProfile(event) {
+  event.preventDefault();
+  const errorEl = $("account-profile-error");
+  const status = $("account-profile-status");
+  errorEl.classList.add("hidden");
+  status.textContent = "";
+  const payload = {
+    displayName: $("account-profile-name").value.trim(),
+    email: $("account-profile-email").value.trim(),
+    phone: $("account-profile-phone").value.trim() || null,
+    nationalId: $("account-profile-national-id").value.trim() || null,
+    birthYear: $("account-profile-birthyear").value
+      ? Number($("account-profile-birthyear").value)
+      : null,
+  };
+  const button = $("account-profile-submit");
+  button.disabled = true;
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/auth/profile", {
+        method: "PATCH",
+        headers: {
+          ...authHeaders(tokens.accessToken, tokens.tenantId),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }),
+    );
+    $("account-profile-name").value = data.displayName ?? "";
+    $("account-profile-email").value = data.email ?? "";
+    $("account-profile-phone").value = data.phone ?? "";
+    $("account-profile-national-id").value = data.nationalId ?? "";
+    $("account-profile-birthyear").value = data.birthYear ?? "";
+    $("user-name").textContent = data.displayName ?? "";
+    $("welcome-name").textContent = data.displayName ?? "";
+    status.textContent = "Profil bilgilerin kaydedildi.";
+  } catch (caughtError) {
+    errorEl.textContent = caughtError.message || "Profil bilgileri kaydedilemedi.";
+    errorEl.classList.remove("hidden");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setupAccountProfileEvents() {
+  $("account-profile-form")?.addEventListener("submit", submitAccountProfile);
 }
 
 function configureOrganizationScopeUi() {
@@ -3747,6 +3856,8 @@ function navigate(page) {
     void loadBillingSubscription();
   } else if (page === "billing-account") {
     void loadBillingAccount();
+  } else if (page === "settings") {
+    void loadAccountProfile();
   } else if (page === "tenants") {
     void loadTenants();
   } else if (page === "users") {
@@ -4003,6 +4114,36 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function normalizeTurkishPhoneValue(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.startsWith("0090") && digits.length === 14) return "0" + digits.slice(4);
+  if (digits.startsWith("90") && digits.length === 12) return "0" + digits.slice(2);
+  if (digits.length === 10 && digits.startsWith("5")) return "0" + digits;
+  if (digits.length === 11 && digits.startsWith("05")) return digits;
+  return "";
+}
+
+function formatTurkishPhoneValue(value) {
+  const digits = normalizeTurkishPhoneValue(value);
+  return digits
+    ? digits.slice(0, 1) +
+        " (" +
+        digits.slice(1, 4) +
+        ") " +
+        digits.slice(4, 7) +
+        " " +
+        digits.slice(7, 9) +
+        " " +
+        digits.slice(9, 11)
+    : "";
+}
+
+function normalizeNationalIdValue(value) {
+  return String(value ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 11);
+}
+
 function openTenantForm(mode, tenant = null) {
   tenantFormMode = mode;
   tenantEditingId = tenant?.id ?? null;
@@ -4014,6 +4155,8 @@ function openTenantForm(mode, tenant = null) {
   $("tenant-form-logo").value = tenant?.logoUrl ?? "";
   $("tenant-form-admin-name").value = "";
   $("tenant-form-admin-email").value = "";
+  $("tenant-form-admin-phone").value = "";
+  $("tenant-form-admin-national-id").value = "";
   $("tenant-form-admin-password").value = "";
   updateTenantAdminFields();
   $("tenant-form-error").classList.add("hidden");
@@ -4060,6 +4203,10 @@ async function submitTenantForm(event) {
       email: $("tenant-form-admin-email").value.trim(),
       password: $("tenant-form-admin-password").value,
     };
+    const adminPhone = $("tenant-form-admin-phone").value.trim();
+    const adminNationalId = $("tenant-form-admin-national-id").value.trim();
+    if (adminPhone) admin.phone = adminPhone;
+    if (adminNationalId) admin.nationalId = adminNationalId;
     if (!admin.displayName || !admin.email || admin.password.length < 8) {
       errorEl.textContent =
         "Kurum yöneticisi adı, e-postası ve en az 8 karakterli ilk şifre gereklidir.";
@@ -4295,6 +4442,8 @@ $("signup-form").addEventListener("submit", async (event) => {
   const displayName = $("signup-display-name").value.trim();
   const email = $("signup-email").value.trim();
   const password = $("signup-password").value;
+  const phone = $("signup-phone").value.trim();
+  const nationalId = $("signup-national-id").value.trim();
 
   if (!displayName || !email || password.length < 8) {
     $("signup-error").textContent = "Ad, geçerli e-posta ve en az 8 karakter şifre gereklidir.";
@@ -4305,7 +4454,7 @@ $("signup-form").addEventListener("submit", async (event) => {
   inFlight = true;
   setSignupLoading(true);
   try {
-    const session = await signup(displayName, email, password);
+    const session = await signup(displayName, email, password, phone, nationalId);
     setStoredSession(session);
     await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
@@ -4559,7 +4708,7 @@ function renderUserList() {
           </button>
           ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
         </td>
-        <td>${u.phone ? escapeHtml(u.phone) : "—"}</td>
+        <td>${u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"}</td>
         <td>${u.birthYear ?? "—"}</td>
         <td>${userStatusBadge(u.status)}</td>
         <td>${u.membershipCount}</td>
@@ -4589,7 +4738,15 @@ function membershipRoleOptions(tenantType) {
     .join("");
 }
 
-function openUserForm(mode, user = null) {
+async function openUserForm(mode, user = null) {
+  if (mode === "edit" && user?.id && user.nationalId === undefined) {
+    try {
+      user = await parseResponse(await userApi(`/${encodeURIComponent(user.id)}`));
+    } catch (err) {
+      showUserError(err.message || "Kullanıcı bilgileri yüklenemedi.");
+      return;
+    }
+  }
   userFormMode = mode;
   userEditingId = user?.id ?? null;
   $("user-form-title").textContent = mode === "create" ? "Yeni kullanıcı" : "Kullanıcıyı düzenle";
@@ -4597,6 +4754,7 @@ function openUserForm(mode, user = null) {
   $("user-form-name").value = user?.displayName ?? "";
   $("user-form-email").value = user?.email ?? "";
   $("user-form-phone").value = user?.phone ?? "";
+  $("user-form-national-id").value = user?.nationalId ?? "";
   $("user-form-birthyear").value = user?.birthYear ?? "";
   $("user-form-status").value = user?.status ?? "ACTIVE";
   $("user-form-password").value = "";
@@ -4659,8 +4817,10 @@ async function submitUserForm(event) {
     status: $("user-form-status").value,
   };
   const phone = $("user-form-phone").value.trim();
+  const nationalId = $("user-form-national-id").value.trim();
   const birthYear = $("user-form-birthyear").value.trim();
-  if (phone) payload.phone = phone;
+  payload.phone = userFormMode === "create" ? phone || undefined : phone || null;
+  payload.nationalId = userFormMode === "create" ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
   if (userFormMode === "create") payload.password = $("user-form-password").value;
 
@@ -4749,7 +4909,8 @@ function renderUserDetail(u) {
   const rows = [
     ["Kullanıcı kimliği", `<span class="mono">${escapeHtml(u.id)}</span>`],
     ["E-posta", u.email ? escapeHtml(u.email) : "—"],
-    ["Telefon", u.phone ? escapeHtml(u.phone) : "—"],
+    ["Telefon", u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"],
+    ["TC Kimlik No", u.nationalId ? escapeHtml(u.nationalId) : "—"],
     ["Doğum yılı", u.birthYear ?? "—"],
     ["Durum", userStatusBadge(u.status)],
     [
@@ -4964,7 +5125,7 @@ function setupUserEvents() {
       void openUserDetail(detailBtn.dataset.userDetailId);
     } else if (editBtn) {
       const user = userData.find((u) => u.id === editBtn.dataset.userEditId);
-      if (user) openUserForm("edit", user);
+      if (user) void openUserForm("edit", user);
     } else if (deleteBtn) {
       void deleteUser(deleteBtn.dataset.userDeleteId);
     }
@@ -5017,7 +5178,7 @@ function setupUserEvents() {
   $("user-detail-edit").addEventListener("click", () => {
     if (!userDetailCurrent) return;
     $("user-detail-modal").classList.add("hidden");
-    openUserForm("edit", userDetailCurrent);
+    void openUserForm("edit", userDetailCurrent);
   });
   $("user-detail-delete").addEventListener("click", () => {
     if (!userDetailCurrent) return;
@@ -5273,7 +5434,7 @@ async function loadStudentClasses(tenantId, academicYearId) {
   }
 }
 
-function openStudentForm(mode, student = null) {
+async function openStudentForm(mode, student = null) {
   studentFormMode = mode;
   studentEditingId = student?.id ?? null;
   $("student-form-title").textContent = mode === "create" ? "Yeni öğrenci" : "Öğrenciyi düzenle";
@@ -5281,6 +5442,7 @@ function openStudentForm(mode, student = null) {
   $("student-form-name").value = student?.user?.displayName ?? "";
   $("student-form-email").value = student?.user?.email ?? "";
   $("student-form-phone").value = student?.user?.phone ?? "";
+  $("student-form-national-id").value = student?.user?.nationalId ?? "";
   $("student-form-birthyear").value = student?.user?.birthYear ?? "";
   $("student-form-status").value = student?.user?.status ?? "ACTIVE";
   $("student-form-password").value = "";
@@ -5289,7 +5451,7 @@ function openStudentForm(mode, student = null) {
   $("student-form-password-field").classList.toggle("hidden", !isCreate);
   $("student-form-password").required = isCreate;
   $("student-form-tenant-field").classList.toggle("hidden", !isCreate);
-  $("student-form-enrollment").classList.toggle("hidden", !isCreate);
+  $("student-form-enrollment").classList.remove("hidden");
   $("student-form-started-field").classList.toggle("hidden", isCreate);
 
   if (isCreate) {
@@ -5303,10 +5465,23 @@ function openStudentForm(mode, student = null) {
       void populateStudentTenantSelect();
     }
   } else {
+    $("student-form-tenant").value = student?.tenant?.id ?? currentTenantId ?? "";
     $("student-form-current-level").value = student?.profile?.currentLevel?.id ?? "";
     $("student-form-target-level").value = student?.profile?.targetLevel?.id ?? "";
     const started = student?.profile?.startedAt;
     $("student-form-started").value = started ? new Date(started).toISOString().slice(0, 10) : "";
+    $("student-form-academic-year").innerHTML = '<option value="">Akademik yıl seçin…</option>';
+    $("student-form-class").innerHTML = '<option value="">Sınıfsız / kayıt yok</option>';
+    const activeEnrollment = (student?.enrollments ?? []).find((item) => item.status === "ACTIVE");
+    await loadStudentAcademicYears(student?.tenant?.id ?? currentTenantId);
+    if (activeEnrollment) {
+      $("student-form-academic-year").value = activeEnrollment.academicYearId ?? "";
+      await loadStudentClasses(
+        student?.tenant?.id ?? currentTenantId,
+        activeEnrollment.academicYearId ?? "",
+      );
+      $("student-form-class").value = activeEnrollment.classId ?? "";
+    }
   }
 
   void populateStudentLevelSelects();
@@ -5338,8 +5513,10 @@ async function submitStudentForm(event) {
     status: $("student-form-status").value,
   };
   const phone = $("student-form-phone").value.trim();
+  const nationalId = $("student-form-national-id").value.trim();
   const birthYear = $("student-form-birthyear").value.trim();
-  if (phone) payload.phone = phone;
+  payload.phone = isCreate ? phone || undefined : phone || null;
+  payload.nationalId = isCreate ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
 
   if (!payload.displayName) {
@@ -5374,6 +5551,8 @@ async function submitStudentForm(event) {
     if (targetLevelId) payload.targetLevelId = targetLevelId;
     const classId = $("student-form-class").value;
     if (classId) payload.classId = classId;
+    const academicYearId = $("student-form-academic-year").value;
+    if (academicYearId) payload.academicYearId = academicYearId;
   } else {
     const currentLevelId = $("student-form-current-level").value;
     const targetLevelId = $("student-form-target-level").value;
@@ -5394,6 +5573,40 @@ async function submitStudentForm(event) {
           body: JSON.stringify(payload),
         });
     await parseResponse(res);
+    if (!isCreate) {
+      const activeEnrollment = (studentDetailCurrent?.enrollments ?? []).find(
+        (item) => item.status === "ACTIVE",
+      );
+      const classId = $("student-form-class").value;
+      if (classId) {
+        const body = {
+          status: "ACTIVE",
+          classId,
+          academicYearId: $("student-form-academic-year").value,
+        };
+        const enrollmentRes = activeEnrollment
+          ? await fetch("/admin/enrollments/" + encodeURIComponent(activeEnrollment.id), {
+              method: "PATCH",
+              headers: authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
+              body: JSON.stringify(body),
+            })
+          : await studentApi("/" + studentEditingId + "/enrollments", {
+              method: "POST",
+              body: JSON.stringify({ classId }),
+            });
+        await parseResponse(enrollmentRes);
+      } else if (activeEnrollment) {
+        const enrollmentRes = await fetch(
+          "/admin/enrollments/" + encodeURIComponent(activeEnrollment.id),
+          {
+            method: "PATCH",
+            headers: authHeaders(getStoredTokens().accessToken, getStoredTokens().tenantId),
+            body: JSON.stringify({ status: "LEFT" }),
+          },
+        );
+        await parseResponse(enrollmentRes);
+      }
+    }
     closeStudentForm();
     studentPage = 1;
     await loadStudents();
@@ -5428,7 +5641,8 @@ function renderStudentDetail(d) {
   const infoRows = [
     ["Ad Soyad", escapeHtml(d.user.displayName)],
     ["E-posta", d.user.email ? escapeHtml(d.user.email) : "—"],
-    ["Telefon", d.user.phone ? escapeHtml(d.user.phone) : "—"],
+    ["Telefon", d.user.phone ? escapeHtml(formatTurkishPhoneValue(d.user.phone)) : "—"],
+    ["TC Kimlik No", d.user.nationalId ? escapeHtml(d.user.nationalId) : "—"],
     ["Doğum yılı", d.user.birthYear ?? "—"],
     ["Hesap durumu", userStatusBadge(d.user.status)],
     [
@@ -5919,6 +6133,7 @@ function openTeacherForm(mode, teacher = null) {
   $("teacher-form-name").value = teacher?.user?.displayName ?? "";
   $("teacher-form-email").value = teacher?.user?.email ?? "";
   $("teacher-form-phone").value = teacher?.user?.phone ?? "";
+  $("teacher-form-national-id").value = teacher?.user?.nationalId ?? "";
   $("teacher-form-birthyear").value = teacher?.user?.birthYear ?? "";
   $("teacher-form-status").value = teacher?.user?.status ?? "ACTIVE";
   $("teacher-form-password").value = "";
@@ -5966,8 +6181,10 @@ async function submitTeacherForm(event) {
     status: $("teacher-form-status").value,
   };
   const phone = $("teacher-form-phone").value.trim();
+  const nationalId = $("teacher-form-national-id").value.trim();
   const birthYear = $("teacher-form-birthyear").value.trim();
-  if (phone) payload.phone = phone;
+  payload.phone = isCreate ? phone || undefined : phone || null;
+  payload.nationalId = isCreate ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
 
   if (!payload.displayName) {
@@ -6054,7 +6271,8 @@ function renderTeacherDetail(d) {
   const infoRows = [
     ["Ad Soyad", escapeHtml(d.user.displayName)],
     ["E-posta", d.user.email ? escapeHtml(d.user.email) : "—"],
-    ["Telefon", d.user.phone ? escapeHtml(d.user.phone) : "—"],
+    ["Telefon", d.user.phone ? escapeHtml(formatTurkishPhoneValue(d.user.phone)) : "—"],
+    ["TC Kimlik No", d.user.nationalId ? escapeHtml(d.user.nationalId) : "—"],
     ["Doğum yılı", d.user.birthYear ?? "—"],
     ["Hesap durumu", userStatusBadge(d.user.status)],
     [
@@ -6187,6 +6405,10 @@ function renderTeacherDetail(d) {
       <h4>Sınıf Atamaları</h4>
       <div class="enrollment-add-row">
         <label class="field">
+          <span>Şube</span>
+          <select id="teacher-class-branch"><option value="">Tüm şubeler</option></select>
+        </label>
+        <label class="field">
           <span>Akademik yıl</span>
           <select id="teacher-class-year"><option value="">Yükleniyor…</option></select>
         </label>
@@ -6225,9 +6447,11 @@ function renderTeacherDetail(d) {
 
 async function populateTeacherDetailBranches(tenantId) {
   const select = $("tbranch-add-branch");
+  const classBranchSelect = $("teacher-class-branch");
   if (!select) return;
   if (!tenantId) {
     select.innerHTML = `<option value="">Kurum seçin…</option>`;
+    if (classBranchSelect) classBranchSelect.innerHTML = `<option value="">Şube seçin…</option>`;
     return;
   }
   try {
@@ -6239,9 +6463,16 @@ async function populateTeacherDetailBranches(tenantId) {
     select.innerHTML = options
       ? `<option value="">Şube seçin…</option>${options}`
       : `<option value="">Şube bulunamadı</option>`;
+    if (classBranchSelect) {
+      classBranchSelect.innerHTML = options
+        ? `<option value="">Tüm şubeler</option>${options}`
+        : `<option value="">Şube bulunamadı</option>`;
+    }
   } catch (_e) {
     void _e;
     select.innerHTML = `<option value="">Şubeler yüklenemedi</option>`;
+    if (classBranchSelect)
+      classBranchSelect.innerHTML = `<option value="">Şubeler yüklenemedi</option>`;
   }
 }
 
@@ -6258,12 +6489,10 @@ async function populateTeacherDetailYears(tenantId) {
     const res = await teacherOptionsApi(`/classes?tenantId=${encodeURIComponent(tenantId)}`);
     const body = await parseResponse(res);
     const years = [];
-    const map = new Map();
     for (const c of body) {
       if (!years.some((y) => y.id === c.academicYearId)) {
         years.push({ id: c.academicYearId, name: c.academicYear.name });
       }
-      map.set(c.id, c);
     }
     year.innerHTML = years.length
       ? `<option value="">Tüm akademik yıllar</option>${years
@@ -6273,7 +6502,7 @@ async function populateTeacherDetailYears(tenantId) {
     cls.innerHTML = `<option value="">Sınıf seçin…</option>${body
       .map(
         (c) =>
-          `<option value="${c.id}" data-year="${c.academicYearId}">${escapeHtml(c.name)}</option>`,
+          `<option value="${c.id}" data-year="${c.academicYearId}" data-branch="${c.branchId}">${escapeHtml(c.name)}</option>`,
       )
       .join("")}`;
   } catch (_e) {
@@ -6283,11 +6512,12 @@ async function populateTeacherDetailYears(tenantId) {
   }
 }
 
-async function populateTeacherDetailClasses(tenantId, academicYearId) {
+async function populateTeacherDetailClasses(tenantId, academicYearId, branchId) {
   const cls = $("teacher-class-select");
   if (!cls) return;
   const params = new URLSearchParams({ tenantId });
   if (academicYearId) params.set("academicYearId", academicYearId);
+  if (branchId) params.set("branchId", branchId);
   try {
     const res = await teacherOptionsApi(`/classes?${params.toString()}`);
     const body = await parseResponse(res);
@@ -6515,9 +6745,16 @@ function setupTeacherEvents() {
       const tenantId = event.target.value;
       void populateTeacherDetailBranches(tenantId);
       void populateTeacherDetailYears(tenantId);
-    } else if (event.target.id === "teacher-class-year") {
+    } else if (
+      event.target.id === "teacher-class-year" ||
+      event.target.id === "teacher-class-branch"
+    ) {
       const tenantId = $("teacher-detail-tenant").value;
-      void populateTeacherDetailClasses(tenantId, event.target.value);
+      void populateTeacherDetailClasses(
+        tenantId,
+        $("teacher-class-year").value,
+        $("teacher-class-branch").value,
+      );
     }
   });
 }
@@ -6833,7 +7070,7 @@ function renderBranchDetail(d) {
     ["Şube kodu", `<span class="mono">${escapeHtml(d.code)}</span>`],
     ["Kurum", `${escapeHtml(d.tenantName)} (${tenantTypeLabel(d.tenantType)})`],
     ["Adres", d.address ? escapeHtml(d.address) : "—"],
-    ["Telefon", d.phone ? escapeHtml(d.phone) : "—"],
+    ["Telefon", d.phone ? escapeHtml(formatTurkishPhoneValue(d.phone)) : "—"],
     ["Durum", branchStatusBadge(d.status)],
     ["Oluşturulma", d.createdAt ? new Date(d.createdAt).toLocaleDateString("tr-TR") : "—"],
   ];
@@ -7173,7 +7410,6 @@ async function submitAcademicYearForm(event) {
 
 function setupAcademicYearEvents() {
   $("academic-year-create-btn")?.addEventListener("click", () => openAcademicYearForm("create"));
-  $("academic-year-empty-create")?.addEventListener("click", () => openAcademicYearForm("create"));
   $("academic-year-form")?.addEventListener("submit", submitAcademicYearForm);
   $("academic-year-form-close")?.addEventListener("click", closeAcademicYearForm);
   $("academic-year-form-cancel")?.addEventListener("click", closeAcademicYearForm);
@@ -15687,6 +15923,8 @@ function setupAssignmentEvents() {
 }
 async function init() {
   setupThemeEvents();
+  setupPersonDataEvents();
+  setupAccountProfileEvents();
   restoreSession();
   setupModalAccessibility();
   setupTenantEvents();

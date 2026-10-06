@@ -29,6 +29,8 @@ export async function signupPersonalAccount(input: SignupInput): Promise<SignupR
           email: input.email,
           passwordHash,
           displayName: input.displayName,
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
           status: "ACTIVE",
         },
         select: { id: true },
@@ -39,6 +41,13 @@ export async function signupPersonalAccount(input: SignupInput): Promise<SignupR
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (
+        String(error.meta?.target ?? "")
+          .toLowerCase()
+          .includes("nationalid")
+      ) {
+        throw conflictError("Bu TC Kimlik No zaten kullanımda");
+      }
       throw conflictError("Bu e-posta adresi zaten kullanımda");
     }
     throw error;

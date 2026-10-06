@@ -23,6 +23,8 @@ import {
   setNoStore,
 } from "./cookies.js";
 import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
+import { accountProfileSchema } from "./schemas.js";
+import { getAccountProfile, updateAccountProfile } from "./profile-service.js";
 
 const loginSchema = {
   type: "object",
@@ -45,6 +47,8 @@ const signupBodySchema = {
     email: { type: "string", minLength: 3, maxLength: 254 },
     password: { type: "string", minLength: 8, maxLength: 128 },
     displayName: { type: "string", minLength: 1, maxLength: 120 },
+    phone: { type: "string", maxLength: 30 },
+    nationalId: { type: "string", minLength: 11, maxLength: 11 },
     deviceName: { type: "string", minLength: 1, maxLength: 120 },
     platform: { type: "string", enum: ["WEB", "IOS", "ANDROID", "UNKNOWN"] },
   },
@@ -301,6 +305,15 @@ export async function authRoutes(
       user: request.authUser,
       tenantContext: request.tenantContext,
     });
+  });
+
+  app.get("/auth/profile", { preHandler: [requireAuth(authProvider)] }, async (request) => {
+    return ok(await getAccountProfile(request.authUser!.id));
+  });
+
+  app.patch("/auth/profile", { preHandler: [requireAuth(authProvider)] }, async (request) => {
+    const input = accountProfileSchema.parse(request.body);
+    return ok(await updateAccountProfile(request.authUser!.id, input));
   });
 
   app.get("/auth/contexts", { preHandler: [requireAuth(authProvider)] }, async (request) => {

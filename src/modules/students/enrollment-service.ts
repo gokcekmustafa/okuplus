@@ -118,19 +118,34 @@ export async function updateEnrollment(
 ): Promise<EnrollmentRow> {
   const existing = await prisma.enrollment.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, studentId: true, academicYearId: true, status: true },
+    select: { id: true, tenantId: true, studentId: true, academicYearId: true, status: true },
   });
   if (!existing) {
     throw notFoundError("Sınıf kaydı bulunamadı");
   }
 
-  // ACTIVE'ye dönüşte aynı yıl için başka aktif kayıt varsa engelle.
-  if (input.status === "ACTIVE" && existing.status !== "ACTIVE") {
+  let academicYearId = existing.academicYearId;
+  let classId: string | undefined;
+  if (input.classId) {
+    const cls = await prisma.class.findFirst({
+      where: { id: input.classId, tenantId: existing.tenantId, deletedAt: null },
+      select: { id: true, academicYearId: true },
+    });
+    if (!cls) throw validationError("Seçilen sınıf bu kuruma ait değil veya bulunamadı");
+    if (input.academicYearId && input.academicYearId !== cls.academicYearId) {
+      throw validationError("Seçilen akademik yıl, sınıfın akademik yılıyla uyuşmuyor");
+    }
+    academicYearId = cls.academicYearId;
+    classId = cls.id;
+  }
+
+  // ACTIVE'ye dönüşte veya sınıf/yıl değişikliğinde aynı yıl için başka aktif kayıt varsa engelle.
+  if (input.status === "ACTIVE") {
     const clash = await prisma.enrollment.findFirst({
       where: {
         id: { not: id },
         studentId: existing.studentId,
-        academicYearId: existing.academicYearId,
+        academicYearId,
         status: "ACTIVE",
         deletedAt: null,
       },
@@ -143,6 +158,7 @@ export async function updateEnrollment(
 
   const data: Prisma.EnrollmentUpdateInput = {
     status: input.status,
+    ...(classId ? { classId, academicYearId } : {}),
     ...(input.status === "ACTIVE" ? { leftAt: null } : { leftAt: new Date() }),
   };
 
