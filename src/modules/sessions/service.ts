@@ -384,6 +384,7 @@ export async function listQuestionsForSession(
     prompt: string;
     type: string;
     options: Prisma.JsonValue;
+    allowMultiple: boolean;
     explanation: string | null;
     hint: string | null;
     blankIds: string[];
@@ -503,6 +504,7 @@ export async function listQuestionsForSession(
         prompt: question.prompt,
         type: question.type,
         options: question.options,
+        allowMultiple: question.allowMultiple,
         explanation: question.explanation,
         hint: question.hint,
         blankIds: [],
@@ -518,6 +520,7 @@ export async function listQuestionsForSession(
   );
   const questions = session.templateVersion.questions.map((q) => {
     const correctAnswer = q.questionVersion.correctAnswer as {
+      allowMultiple?: unknown;
       blanks?: Array<{ blankId?: string }>;
     };
     return {
@@ -528,6 +531,9 @@ export async function listQuestionsForSession(
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
       options: q.questionVersion.options,
+      allowMultiple:
+        q.questionVersion.question.type === "MULTIPLE_CHOICE" &&
+        correctAnswer?.allowMultiple === true,
       explanation: q.questionVersion.explanation,
       hint: q.questionVersion.hint,
       // FILL_BLANK için yalnızca alan kimlikleri gerekir; kabul edilen cevaplar

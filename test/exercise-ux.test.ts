@@ -3,6 +3,7 @@ import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 const exerciseCode = source.slice(
   source.indexOf("function exerciseApi("),
   source.indexOf("function setupExerciseEvents("),
@@ -17,8 +18,11 @@ function harness() {
       disabled: false,
       style: { display: "" },
       className: "",
-      classList: { add() {}, remove() {} },
+      classList: { add() {}, remove() {}, toggle() {} },
       querySelectorAll: () => [],
+      querySelector: () => null,
+      setAttribute() {},
+      removeAttribute() {},
       addEventListener() {},
     };
   }
@@ -60,6 +64,14 @@ describe("exercise UX state from production frontend", () => {
   it("loads the current daily child session even when the daily summary exists", () => {
     expect(source).toContain("if (id) {");
     expect(source).not.toContain("if (id && !dailyTrainingSummary) {");
+  });
+
+  it("keeps the production answer lock and pending feedback contracts", () => {
+    expect(source).toContain('setExerciseSubmitButtonState(true, "Cevap kontrol ediliyor…")');
+    expect(source).toContain('button.setAttribute("aria-busy", "true")');
+    expect(source).toContain("q.allowMultiple === true");
+    expect(styles).toContain('label.answer-card[aria-disabled="true"]:hover');
+    expect(styles).toContain('label.answer-card[aria-disabled="true"]:focus-visible');
   });
 
   it("shows only points linked to this actual attempt", () => {

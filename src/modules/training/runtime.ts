@@ -109,6 +109,7 @@ export type MainIdeaStudentQuestion = {
   prompt: string;
   type: typeof MAIN_IDEA_INTERACTION;
   options: Prisma.JsonValue;
+  allowMultiple: boolean;
   explanation: string | null;
   hint: string | null;
   difficulty: number | null;
@@ -458,6 +459,7 @@ function validateComprehensionRow(
       prompt: questionVersion.prompt,
       type: MAIN_IDEA_INTERACTION,
       options: questionVersion.options,
+      allowMultiple: false,
       explanation: questionVersion.explanation,
       hint: questionVersion.hint,
       difficulty: questionVersion.difficulty,
