@@ -3840,7 +3840,7 @@ async function loadFocusedLearningPathStep() {
     lessonData = data?.lesson ? [data.lesson] : [];
     selectedLessonId = data?.lesson?.id || null;
     renderFocusedLesson(data?.lesson || null, learningStep, activeLearningStepNavigation);
-    status.textContent = "Bu adımı tamamladığında sonraki durak açılacak.";
+    status.textContent = "";
   } catch (err) {
     status.textContent = "";
     if (error) {
