@@ -869,7 +869,7 @@ export async function startPersonalExercise(
   const learningStep = independentTraining
     ? { matched: false, stepId: null, unlocked: false }
     : await resolveLearningStepForTemplate(templateVersionId!, actor);
-  if (learningStep.matched && !learningStep.unlocked) {
+  if (learningStep.matched && !learningStep.unlocked && !replay) {
     throw validationError("Bu uygulama için önceki öğrenme adımları tamamlanmalı");
   }
   const result = await prisma.$transaction(async (tx) => {

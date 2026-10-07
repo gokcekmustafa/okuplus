@@ -60,6 +60,12 @@ describe("roadmap lesson flow contract", () => {
     expect(sessionService).toContain("!isLearningPathReplaySession(session.deviceInfo)");
   });
 
+  it("does not apply the first-time prerequisite lock to a completed replay", () => {
+    expect(studentLearningService).toContain(
+      "if (learningStep.matched && !learningStep.unlocked && !replay)",
+    );
+  });
+
   it("rejects navigation targets that are not the immediate server-authorized neighbor", () => {
     expect(learningPathService).toContain(
       "const target = [navigation.previousStep, navigation.nextStep]",

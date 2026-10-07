@@ -62,6 +62,10 @@ describe("student lesson UI", () => {
     expect(html).toContain("data-learning-step-complete");
   });
 
+  it("does not keep the prerequisite helper message in the focused lesson status", () => {
+    expect(source).not.toContain("Bu adımı tamamladığında sonraki durak açılacak.");
+  });
+
   it("shows only the direct next step on the first lesson and keeps it at the content bottom", () => {
     const h = harness();
     h.run(
