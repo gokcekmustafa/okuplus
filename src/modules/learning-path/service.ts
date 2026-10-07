@@ -581,6 +581,19 @@ export async function getLearningStepNavigation(
   };
 }
 
+export async function assertLearningStepAdjacent(
+  actor: LearningPathActor,
+  currentStepId: string,
+  targetStepId: string,
+) {
+  const navigation = await getLearningStepNavigation(actor, currentStepId);
+  const target = [navigation.previousStep, navigation.nextStep].find(
+    (step) => step?.id === targetStepId,
+  );
+  if (!target) throw forbiddenError("Bu öğrenme adımı mevcut durağın komşusu değil");
+  return target;
+}
+
 /**
  * Selects the immediately adjacent server-authorized station after the
  * addressed station. Completed stations remain valid replay targets, while a

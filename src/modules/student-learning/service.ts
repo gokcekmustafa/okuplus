@@ -20,7 +20,9 @@ import { parseLessonMetadata } from "../lessons/contract.js";
 import { buildAcademicProgram, type AcademicRuntimeSkill } from "./academic-program.js";
 import { getPersistentAcademicProgram, resolveLearningStepForTemplate } from "./persistent-path.js";
 import {
+  assertLearningStepAdjacent,
   assertLearningTemplateAccessible,
+  getLearningStepNavigation,
   getStudentLearningPath,
   getNextLearningStep,
   markLearningStepInProgressForTemplate,
@@ -773,6 +775,8 @@ export async function startPersonalExercise(
   input: {
     templateVersionId?: string;
     clientSessionId?: string;
+    navigationFromStepId?: string;
+    navigationTargetStepId?: string;
     enforceLearningPathOrder?: boolean;
     replay?: boolean;
     independentTraining?: boolean;
@@ -844,6 +848,19 @@ export async function startPersonalExercise(
         { userId: actor.userId, tenantId, platformRole: actor.platformRole },
         templateVersionId,
       );
+    }
+  }
+  if (input.navigationFromStepId || input.navigationTargetStepId) {
+    if (!input.navigationFromStepId || !input.navigationTargetStepId) {
+      throw validationError("Öğrenme yolu navigasyon hedefi eksik");
+    }
+    const adjacent = await assertLearningStepAdjacent(
+      { userId: actor.userId, tenantId, platformRole: actor.platformRole },
+      input.navigationFromStepId,
+      input.navigationTargetStepId,
+    );
+    if (adjacent.templateVersionId !== templateVersionId) {
+      throw forbiddenError("Öğrenme yolu navigasyon hedefi bu egzersizle eşleşmiyor");
     }
   }
   if (isTrainingConfigCandidate(selectedTemplateConfig)) {
@@ -949,6 +966,7 @@ export async function getStudentSession(
       templateVersionId: true,
       assignmentId: true,
       assessmentId: true,
+      learningStepId: true,
       deviceInfo: true,
       startedAt: true,
       completedAt: true,
@@ -1072,6 +1090,9 @@ export async function getStudentSession(
   if (resolvedTrainingConfig?.status === "READY") {
     await loadTrainingRuntimeGraph(session.templateVersionId, actor);
   }
+  const learningPathNavigation = session.learningStepId
+    ? await getLearningStepNavigation(actor, session.learningStepId)
+    : null;
   const questions = session.templateVersion.questions.map((entry) => {
     const questionVersion = entry.questionVersion;
     const correctAnswer = questionVersion.correctAnswer as {
@@ -1103,5 +1124,6 @@ export async function getStudentSession(
     ...session,
     templateVersion: { ...templateVersion, training: trainingConfig },
     questions,
+    learningPathNavigation,
   };
 }

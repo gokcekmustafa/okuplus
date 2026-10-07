@@ -2592,11 +2592,12 @@ function activeLearningPathNodeFromData(data) {
   );
 }
 
-async function startLearningPathNode(node, button) {
+async function startLearningPathNode(node, button, navigationFromStepId = null) {
   var tv = node?.templateVersionId;
   var type = node?.type;
   activeLearningStepNode = node;
   activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = navigationFromStepId;
   learningPathEntryMode = true;
   if (type === "TEACHING" || type === "SMALL_STUDY") {
     if (!node?.contentVersionId) {
@@ -2607,7 +2608,7 @@ async function startLearningPathNode(node, button) {
     return;
   }
   if (type === "ASSESSMENT" && node?.assessmentId) {
-    void window.startTodayAssessment(node.assessmentId);
+    await window.startTodayAssessment(node.assessmentId, navigationFromStepId, node.id);
     return;
   }
   if (!tv) {
@@ -2622,6 +2623,7 @@ async function startLearningPathNode(node, button) {
         templateVersionId: tv,
         clientSessionId: "path-" + node.id + "-" + Date.now(),
         replay: node.status === "completed",
+        ...(navigationFromStepId ? { navigationFromStepId, navigationTargetStepId: node.id } : {}),
       }),
     });
     var data = await parseResponse(response);
@@ -3088,11 +3090,18 @@ window.startTodayAssignment = async function (id) {
     if (!isPremiumLimitError(e)) alert(e.message);
   }
 };
-window.startTodayAssessment = async function (id) {
+window.startTodayAssessment = async function (
+  id,
+  navigationFromStepId = null,
+  navigationTargetStepId = null,
+) {
   try {
+    const body = navigationFromStepId
+      ? { navigationFromStepId, navigationTargetStepId: navigationTargetStepId || id }
+      : {};
     var r = await authenticatedFetch("/student/assessments/" + id + "/start", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(body),
     });
     var data = await parseResponse(r);
     exerciseRequestedSessionId = data.sessionId;
@@ -3775,13 +3784,21 @@ function renderLessonList(items) {
 
 function learningPathStepApi(stepId, suffix, options) {
   options = options || {};
+  const { navigationFromStepId, ...requestOptions } = options;
+  const query = navigationFromStepId
+    ? "?fromStepId=" + encodeURIComponent(navigationFromStepId)
+    : "";
   return authenticatedFetch(
-    "/student/learning-path/steps/" + encodeURIComponent(stepId) + "/lesson" + (suffix || ""),
-    Object.assign({}, options, {
+    "/student/learning-path/steps/" +
+      encodeURIComponent(stepId) +
+      "/lesson" +
+      (suffix || "") +
+      query,
+    Object.assign({}, requestOptions, {
       headers: Object.assign(
         {},
-        options.method && options.method !== "GET" ? csrfHeaders() : {},
-        options.headers || {},
+        requestOptions.method && requestOptions.method !== "GET" ? csrfHeaders() : {},
+        requestOptions.headers || {},
       ),
     }),
   );
@@ -3811,10 +3828,15 @@ async function loadFocusedLearningPathStep() {
       await startLearningPathNode(node, null);
       return;
     }
-    const data = await parseResponse(await learningPathStepApi(node.id, ""));
+    const data = await parseResponse(
+      await learningPathStepApi(node.id, "", {
+        navigationFromStepId: activeLearningStepNavigationFromStepId,
+      }),
+    );
     const learningStep = { ...node, ...(data?.learningStep || {}) };
     activeLearningStepNode = learningStep;
     activeLearningStepNavigation = normalizeLearningPathNavigation(data?.navigation, learningStep);
+    activeLearningStepNavigationFromStepId = null;
     lessonData = data?.lesson ? [data.lesson] : [];
     selectedLessonId = data?.lesson?.id || null;
     renderFocusedLesson(data?.lesson || null, learningStep, activeLearningStepNavigation);
@@ -3832,6 +3854,7 @@ async function loadFocusedLearningPathStep() {
 }
 
 async function navigateLearningPathAdjacent(direction) {
+  const currentStepId = activeLearningStepNode?.id || null;
   const target =
     direction === "previous"
       ? activeLearningStepNavigation?.previousStep
@@ -3844,7 +3867,7 @@ async function navigateLearningPathAdjacent(direction) {
   try {
     activeLearningStepNode = target;
     learningPathEntryMode = true;
-    await startLearningPathNode(target, null);
+    await startLearningPathNode(target, null, currentStepId);
   } catch (error) {
     setAsyncButtonState(button, false, "Yükleniyor…");
     const status = $("lesson-detail-status");
@@ -3872,7 +3895,7 @@ async function completeFocusedLearningStep() {
     }
     activeLearningStepNode = nextStep;
     learningPathEntryMode = true;
-    await startLearningPathNode(activeLearningStepNode, null);
+    await startLearningPathNode(activeLearningStepNode, null, node.id);
   } catch (err) {
     setAsyncButtonState(button, false, "Yükleniyor…");
     if (status) {
@@ -3914,6 +3937,7 @@ async function loadLessons() {
   learningPathEntryMode = false;
   activeLearningStepNode = null;
   activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = null;
   setLessonPageMode(false);
   status.textContent = "Derslerin yükleniyor…";
   error?.classList.add("hidden");
@@ -4002,6 +4026,7 @@ function setupLessonEvents() {
       learningPathEntryMode = false;
       activeLearningStepNode = null;
       activeLearningStepNavigation = null;
+      activeLearningStepNavigationFromStepId = null;
       navigate("dashboard");
     }
   });
@@ -4872,6 +4897,7 @@ function navigateFromMenu(page) {
   if (page === "lessons" && isStudentUser) {
     activeLearningStepNode = null;
     activeLearningStepNavigation = null;
+    activeLearningStepNavigationFromStepId = null;
     learningPathEntryMode = true;
   }
   navigate(page);
@@ -9033,6 +9059,7 @@ let lessonData = [];
 let selectedLessonId = null;
 let activeLearningStepNode = null;
 let activeLearningStepNavigation = null;
+let activeLearningStepNavigationFromStepId = null;
 let learningPathEntryMode = false;
 
 let skillPage = 1;
@@ -11641,6 +11668,57 @@ function restoreExerciseAttempts(session) {
     });
   }
 }
+
+function renderLearningPathExerciseNavigation() {
+  const nav = $("exercise-learning-path-navigation");
+  if (!nav) return;
+  const navigation =
+    typeof activeLearningStepNavigation !== "undefined" ? activeLearningStepNavigation : null;
+  const visible =
+    isPlatformUser === false &&
+    typeof learningPathEntryMode !== "undefined" &&
+    learningPathEntryMode &&
+    Boolean(exerciseSession?.learningStepId) &&
+    Boolean(navigation?.previousStep || navigation?.nextStep);
+  if (!visible) {
+    nav.innerHTML = "";
+    nav.classList.add("hidden");
+    return;
+  }
+  nav.classList.remove("hidden");
+  nav.innerHTML = `
+    ${navigation.previousStep ? '<button type="button" class="btn btn-secondary" data-learning-path-previous><span class="btn-label">Önceki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : ""}
+    ${navigation.nextStep ? '<button type="button" class="btn btn-primary" data-learning-path-next><span class="btn-label">Sonraki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : ""}`;
+}
+
+async function navigateLearningPathExerciseAdjacent(direction) {
+  if (exerciseBusy || !learningPathEntryMode) return;
+  const currentStepId = exerciseSession?.learningStepId || activeLearningStepNode?.id || null;
+  const target =
+    direction === "previous"
+      ? activeLearningStepNavigation?.previousStep
+      : activeLearningStepNavigation?.nextStep;
+  const button = $("exercise-learning-path-navigation")?.querySelector(
+    direction === "previous" ? "[data-learning-path-previous]" : "[data-learning-path-next]",
+  );
+  if (!currentStepId || !target || !button) return;
+  setAsyncButtonState(button, true, "Yükleniyor…");
+  activeLearningStepNode = target;
+  activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = currentStepId;
+  learningPathEntryMode = true;
+  exerciseMode = null;
+  activeTrainingActivityId = null;
+  rememberExerciseSession(null);
+  resetExerciseState();
+  try {
+    await startLearningPathNode(target, null, currentStepId);
+  } catch (error) {
+    setAsyncButtonState(button, false, "Yükleniyor…");
+    if (!isPremiumLimitError(error)) alert(error.message || "Sonraki adım açılamadı.");
+  }
+}
+
 async function loadExercisePage() {
   if (exerciseLoading || exerciseBusy) return;
   exerciseLoading = true;
@@ -11695,6 +11773,21 @@ async function loadExercisePage() {
         }
         if (exerciseSession?.id !== session.id) resetExerciseState();
         exerciseSession = session;
+        if (session.learningStepId && learningPathEntryMode) {
+          activeLearningStepNode =
+            activeLearningStepNode?.id === session.learningStepId
+              ? { ...activeLearningStepNode, id: session.learningStepId }
+              : {
+                  id: session.learningStepId,
+                  status:
+                    session.deviceInfo?.source === "LEARNING_PATH_REPLAY" ? "completed" : "active",
+                };
+          activeLearningStepNavigation = normalizeLearningPathNavigation(
+            session.learningPathNavigation,
+            activeLearningStepNode,
+          );
+          activeLearningStepNavigationFromStepId = null;
+        }
         if (session.deviceInfo?.source === "INDEPENDENT_TRAINING") {
           exerciseMode = "activity";
           activeTrainingActivityId = session.deviceInfo.activityId || activeTrainingActivityId;
@@ -11789,6 +11882,7 @@ function renderExerciseSession() {
     if (dailyTrainingSummary?.status === "COMPLETED") renderDailyTrainingResult();
     else $("exercise-result-card").style.display = "none";
     renderTrainingActivities();
+    renderLearningPathExerciseNavigation();
     return;
   }
   const method = $("exercise-method");
@@ -11845,6 +11939,7 @@ function renderExerciseSession() {
       }
     }
   }
+  renderLearningPathExerciseNavigation();
 }
 function isFastReadingExercise() {
   const family = exerciseSession?.templateVersion?.training?.family;
@@ -11902,6 +11997,12 @@ function renderExerciseResult() {
       typeof learningPathEntryMode !== "undefined" && learningPathEntryMode
         ? exerciseSession.nextLearningStep
         : null;
+    const hasBottomLearningPathNavigation =
+      typeof learningPathEntryMode !== "undefined" &&
+      learningPathEntryMode &&
+      Boolean(exerciseSession.learningStepId) &&
+      typeof activeLearningStepNavigation !== "undefined" &&
+      Boolean(activeLearningStepNavigation?.previousStep || activeLearningStepNavigation?.nextStep);
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
     const g = exerciseGamification;
     if (isIndependentActivity) {
@@ -11943,12 +12044,12 @@ function renderExerciseResult() {
         </dl>
         <p>Cevaplama ilerlemesi: ${s.attempted ?? 0} / ${s.totalQuestions ?? 0}</p>
         <div class="training-home-actions">
-          ${nextLearningStep ? '<button id="exercise-next-step" type="button" class="btn btn-primary"><span class="btn-label">Sonraki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : '<button id="exercise-return-path" type="button" class="btn btn-primary">Öğrenme Yoluna Dön</button>'}
+          ${hasBottomLearningPathNavigation ? '<p class="muted">Öğrenme yolu gezinmesi aşağıda.</p>' : nextLearningStep ? '<button id="exercise-next-step" type="button" class="btn btn-primary"><span class="btn-label">Sonraki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : '<button id="exercise-return-path" type="button" class="btn btn-primary">Öğrenme Yoluna Dön</button>'}
         </div>
       </div>`;
-    if (nextLearningStep) {
+    if (nextLearningStep && !hasBottomLearningPathNavigation) {
       $("exercise-next-step")?.addEventListener("click", () => void continueToNextLearningStep());
-    } else {
+    } else if (!hasBottomLearningPathNavigation) {
       $("exercise-return-path")?.addEventListener("click", returnToExercisePath);
     }
     return;
@@ -11965,15 +12066,17 @@ function renderExerciseResult() {
 async function continueToNextLearningStep() {
   if (exerciseBusy || !learningPathEntryMode) return;
   const next = exerciseSession?.nextLearningStep;
+  const currentStepId = exerciseSession?.learningStepId || activeLearningStepNode?.id || null;
   const button = $("exercise-next-step");
   if (!next || !button) return;
   setAsyncButtonState(button, true, "Yükleniyor…");
   activeLearningStepNode = next;
+  activeLearningStepNavigationFromStepId = currentStepId;
   learningPathEntryMode = true;
   rememberExerciseSession(null);
   resetExerciseState();
   try {
-    await startLearningPathNode(next, null);
+    await startLearningPathNode(next, null, currentStepId);
     if ($("exercise-next-step")) setAsyncButtonState(button, false, "Yükleniyor…");
   } catch (error) {
     setAsyncButtonState(button, false, "Yükleniyor…");
@@ -12713,6 +12816,21 @@ async function handleExerciseComplete() {
       $("exercise-completion-title")?.focus();
       return;
     }
+    if (student && learningPathEntryMode && exerciseSession.learningStepId) {
+      const completedStep = {
+        ...(activeLearningStepNode || {}),
+        id: exerciseSession.learningStepId,
+        status: "completed",
+      };
+      activeLearningStepNode = completedStep;
+      activeLearningStepNavigation = normalizeLearningPathNavigation(
+        {
+          previousStep: activeLearningStepNavigation?.previousStep || null,
+          nextStep: exerciseSession.nextLearningStep || null,
+        },
+        completedStep,
+      );
+    }
     renderExerciseSession();
     $("exercise-completion-title")?.focus();
   } catch {
@@ -12775,6 +12893,13 @@ function setupExerciseEvents() {
         renderExerciseQuestion();
       }
     });
+  $("exercise-learning-path-navigation")?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-learning-path-previous]")) {
+      void navigateLearningPathExerciseAdjacent("previous");
+    } else if (event.target.closest("[data-learning-path-next]")) {
+      void navigateLearningPathExerciseAdjacent("next");
+    }
+  });
 }
 
 function setupPremiumExperienceEvents() {

@@ -38,9 +38,12 @@ export async function lessonStudentRoutes(
   opts: { authProvider: AuthProvider },
 ): Promise<void> {
   const preHandler = [requireAuth(opts.authProvider)];
-  app.get("/student/learning-path/steps/:stepId/lesson", { preHandler }, async (request) =>
-    ok(await getStudentLearningStepLesson(stepId(request), actor(request))),
-  );
+  app.get("/student/learning-path/steps/:stepId/lesson", { preHandler }, async (request) => {
+    const query = request.query as { fromStepId?: string };
+    return ok(
+      await getStudentLearningStepLesson(stepId(request), actor(request), query.fromStepId),
+    );
+  });
   app.post(
     "/student/learning-path/steps/:stepId/lesson/complete",
     { preHandler },

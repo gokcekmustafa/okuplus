@@ -1,5 +1,6 @@
 export {
   assertLearningContentAccessible,
+  assertLearningStepAdjacent,
   assertLearningStepAccessible,
   assertLearningTemplateAccessible,
   completeLearningStep,

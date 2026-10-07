@@ -5,6 +5,7 @@ import {
   findCanonicalPlacementAssessment,
   selectCanonicalPlacementAssessment,
 } from "./canonical-selector.js";
+import { assertLearningStepAdjacent } from "../learning-path/service.js";
 import { resolveLearningStepForAssessment } from "../student-learning/persistent-path.js";
 import type {
   CreateAssessmentInput,
@@ -486,6 +487,7 @@ export async function getStudentAssessment(
 export async function startAssessmentSession(
   id: string,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
+  input: { navigationFromStepId?: string; navigationTargetStepId?: string } = {},
 ): Promise<{ sessionId: string; isNew: boolean }> {
   // Assessment getir
   const assessment = await prisma.assessment.findFirst({
@@ -524,6 +526,20 @@ export async function startAssessmentSession(
   });
   if (!templateVersion || templateVersion.status !== "PUBLISHED") {
     throw validationError("Şablon sürümü yayınlanmış değil");
+  }
+
+  if (input.navigationFromStepId || input.navigationTargetStepId) {
+    if (!input.navigationFromStepId || !input.navigationTargetStepId) {
+      throw validationError("Öğrenme yolu navigasyon hedefi eksik");
+    }
+    const adjacent = await assertLearningStepAdjacent(
+      { userId: actor.userId, tenantId: actor.tenantId, platformRole: actor.platformRole },
+      input.navigationFromStepId,
+      input.navigationTargetStepId,
+    );
+    if (adjacent.assessmentId !== id) {
+      throw forbiddenError("Öğrenme yolu navigasyon hedefi bu değerlendirmeyle eşleşmiyor");
+    }
   }
 
   // Mevcut IN_PROGRESS session var mı?

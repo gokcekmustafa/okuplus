@@ -159,6 +159,8 @@ export async function studentLearningRoutes(
       (req.body as {
         templateVersionId?: string;
         clientSessionId?: string;
+        navigationFromStepId?: string;
+        navigationTargetStepId?: string;
         replay?: boolean;
       }) || {};
     return ok(
