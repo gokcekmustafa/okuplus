@@ -320,7 +320,11 @@ describe.sequential("student learning", () => {
     try {
       await startPersonalExercise(
         { userId, tenantId: personalTenantId, platformRole: null },
-        { templateVersionId: TMPL_VID, clientSessionId: "learning-direct-diagnostic" },
+        {
+          templateVersionId: TMPL_VID,
+          clientSessionId: "learning-direct-diagnostic",
+          enforceLearningPathOrder: true,
+        },
       );
     } catch (error) {
       expect(error instanceof Error ? error.stack : String(error)).toBe("__no_error__");
