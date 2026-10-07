@@ -313,7 +313,7 @@ describe.sequential("student learning", () => {
       headers: { authorization: `Bearer ${accessToken}` },
       payload: { templateVersionId: TMPL_VID, clientSessionId: "learn-resume-" + Date.now() },
     });
-    expect(sess.statusCode).toBe(200);
+    expect(sess.statusCode, sess.body).toBe(200);
     activeSessionId = sess.json().data.sessionId;
     const today = await app.inject({
       method: "GET",

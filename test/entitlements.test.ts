@@ -292,7 +292,10 @@ describe.sequential("8H-1 entitlement architecture", () => {
         }),
       );
     }
-    expect(responses.slice(0, 3).map((response) => response.statusCode)).toEqual([200, 200, 200]);
+    expect(
+      responses.slice(0, 3).map((response) => response.statusCode),
+      responses.slice(0, 3).map((response) => response.body),
+    ).toEqual([200, 200, 200]);
     expect(responses[3].statusCode).toBe(403);
     expect(responses[3].json().error.message).toContain("Günlük ücretsiz alıştırma hakkın doldu");
 
