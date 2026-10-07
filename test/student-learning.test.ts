@@ -265,6 +265,15 @@ describe.sequential("student learning", () => {
       ],
     });
     app = await buildApp(loadEnv());
+    app.setErrorHandler((error, _request, reply) => {
+      return reply.status(500).send({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: error instanceof Error ? error.stack : String(error),
+        },
+      });
+    });
     await app.ready();
     const login = await app.inject({
       method: "POST",
