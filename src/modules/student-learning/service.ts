@@ -700,7 +700,7 @@ async function assertLearningPathTemplateAccessible(
     (item) => item.templateVersionId === templateVersionId,
   );
   if (!node) throw forbiddenError("Bu egzersiz öğrenme yolunda bulunmuyor");
-  if (node.status !== "locked") return node;
+  if (node.status !== "locked") return null;
 
   const resumable = await prisma.exerciseSession.findFirst({
     where: {
@@ -716,7 +716,7 @@ async function assertLearningPathTemplateAccessible(
     select: { id: true },
   });
   if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
-  return node;
+  return null;
 }
 
 async function assertLearningPathReplayAccessible(
@@ -735,7 +735,7 @@ async function assertLearningPathReplayAccessible(
   if (node.status !== "completed") {
     throw forbiddenError("Yalnızca tamamlanmış öğrenme adımları tekrar edilebilir");
   }
-  return node;
+  return persistedPath ? node : null;
 }
 
 export async function getHistory(

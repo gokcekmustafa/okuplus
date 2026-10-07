@@ -198,15 +198,6 @@ describe.sequential("8H-1 entitlement architecture", () => {
     await cleanup();
     await seed();
     app = await buildApp(loadEnv());
-    app.setErrorHandler((error, _request, reply) => {
-      return reply.status(500).send({
-        success: false,
-        error: {
-          code: "INTERNAL_ERROR",
-          message: error instanceof Error ? error.stack : String(error),
-        },
-      });
-    });
     await app.ready();
     const login = await app.inject({
       method: "POST",
@@ -301,10 +292,7 @@ describe.sequential("8H-1 entitlement architecture", () => {
         }),
       );
     }
-    expect(
-      responses.slice(0, 3).map((response) => response.statusCode),
-      responses.slice(0, 3).map((response) => response.body),
-    ).toEqual([200, 200, 200]);
+    expect(responses.slice(0, 3).map((response) => response.statusCode)).toEqual([200, 200, 200]);
     expect(responses[3].statusCode).toBe(403);
     expect(responses[3].json().error.message).toContain("Günlük ücretsiz alıştırma hakkın doldu");
 
