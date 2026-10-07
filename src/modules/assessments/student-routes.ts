@@ -63,7 +63,16 @@ export async function assessmentStudentRoutes(
         tenantId: request.tenantContext?.tenantId ?? null,
         platformRole: request.authUser!.platformRole ?? null,
       };
-      const result = await startAssessmentSession(readParamId(request, "Değerlendirme"), actor);
+      const body =
+        (request.body as {
+          navigationFromStepId?: string;
+          navigationTargetStepId?: string;
+        }) || {};
+      const result = await startAssessmentSession(
+        readParamId(request, "Değerlendirme"),
+        actor,
+        body,
+      );
       return ok(result);
     },
   );

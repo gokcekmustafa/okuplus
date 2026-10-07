@@ -3301,6 +3301,36 @@ body.modal-dragging {
 #exercise-result-body {
   display: block;
 }
+.learning-path-exercise-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, #dfe7f3);
+}
+
+.learning-path-exercise-navigation.hidden {
+  display: none;
+}
+
+.learning-path-exercise-navigation [data-learning-path-next] {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .learning-path-exercise-navigation {
+    gap: 10px;
+  }
+
+  .learning-path-exercise-navigation .btn {
+    min-width: 0;
+    max-width: 48%;
+  }
+}
+
 .exercise-result-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

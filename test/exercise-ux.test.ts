@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const exerciseCode = source.slice(
   source.indexOf("function exerciseApi("),
   source.indexOf("function setupExerciseEvents("),
@@ -173,6 +174,57 @@ describe("exercise UX state from production frontend", () => {
     expect(attempt.id).toBe("retry");
     expect(attempt.responseOrder).toBe(2);
     expect(attempt.isCorrect).toBe(true);
+  });
+
+  it("renders learning path exercise navigation at the bottom with direct neighbors only", () => {
+    const h = harness();
+    h.context.learningPathEntryMode = true;
+    h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.activeLearningStepNavigation = {
+      previousStep: { id: "step-1", status: "completed" },
+      nextStep: { id: "step-3", status: "active" },
+    };
+    h.run("renderLearningPathExerciseNavigation()");
+    const html = h.get("exercise-learning-path-navigation").innerHTML;
+    expect(html).toContain("data-learning-path-previous");
+    expect(html).toContain("data-learning-path-next");
+    expect(html.indexOf("data-learning-path-previous")).toBeLessThan(
+      html.indexOf("data-learning-path-next"),
+    );
+    expect(index.indexOf('id="exercise-result-card"')).toBeLessThan(
+      index.indexOf('id="exercise-learning-path-navigation"'),
+    );
+    expect(styles).toContain(".learning-path-exercise-navigation [data-learning-path-next]");
+  });
+
+  it("keeps Next hidden when the immediate learning path neighbor is locked", () => {
+    const h = harness();
+    h.context.learningPathEntryMode = true;
+    h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.activeLearningStepNavigation = {
+      previousStep: { id: "step-1", status: "completed" },
+      nextStep: null,
+    };
+    h.run("renderLearningPathExerciseNavigation()");
+    const html = h.get("exercise-learning-path-navigation").innerHTML;
+    expect(html).toContain("data-learning-path-previous");
+    expect(html).not.toContain("data-learning-path-next");
+  });
+
+  it("allows replay navigation with an unanswered exercise", () => {
+    const h = harness();
+    h.context.learningPathEntryMode = true;
+    h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.exerciseAttempts = new Map();
+    h.context.activeLearningStepNavigation = {
+      previousStep: { id: "step-1", status: "completed" },
+      nextStep: { id: "step-3", status: "active" },
+    };
+    h.run("restoreExerciseAttempts({ attempts: [] }); renderLearningPathExerciseNavigation()");
+    expect(h.context.exerciseAttempts.size).toBe(0);
+    expect(h.get("exercise-learning-path-navigation").innerHTML).toContain(
+      "data-learning-path-next",
+    );
   });
 
   it("ignores reentrant submit and complete calls while a request is pending", async () => {

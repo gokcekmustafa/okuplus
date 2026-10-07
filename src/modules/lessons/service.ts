@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor } from "../student-learning/policy.js";
 import {
+  assertLearningStepAdjacent,
   assertLearningStepAccessible,
   completeLearningStep,
   getLearningStepNavigation,
@@ -147,8 +148,15 @@ async function findLessonForContentVersion(contentVersionId: string, actor: Less
  * deliberately separate from the legacy lesson catalog: the roadmap is the
  * source of truth for which lesson the student may open next.
  */
-export async function getStudentLearningStepLesson(stepId: string, actor: LessonActor) {
+export async function getStudentLearningStepLesson(
+  stepId: string,
+  actor: LessonActor,
+  navigationFromStepId?: string,
+) {
   assertActor(actor);
+  if (navigationFromStepId) {
+    await assertLearningStepAdjacent(actor, navigationFromStepId, stepId);
+  }
   const node = await assertLearningStepAccessible(actor, stepId);
   if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
     throw validationError("Bu öğrenme adımı doğrudan ders ekranı kullanmıyor");
