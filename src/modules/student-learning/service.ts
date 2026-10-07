@@ -689,8 +689,7 @@ async function assertLearningPathTemplateAccessible(
 ) {
   const persistedPath = await getStudentLearningPath(actor);
   if (persistedPath) {
-    await assertLearningTemplateAccessible(actor, templateVersionId);
-    return;
+    return assertLearningTemplateAccessible(actor, templateVersionId);
   }
 
   // Backward-compatible fallback until a published curriculum exists. The
@@ -701,7 +700,7 @@ async function assertLearningPathTemplateAccessible(
     (item) => item.templateVersionId === templateVersionId,
   );
   if (!node) throw forbiddenError("Bu egzersiz öğrenme yolunda bulunmuyor");
-  if (node.status !== "locked") return;
+  if (node.status !== "locked") return node;
 
   const resumable = await prisma.exerciseSession.findFirst({
     where: {
@@ -717,6 +716,7 @@ async function assertLearningPathTemplateAccessible(
     select: { id: true },
   });
   if (!resumable) throw forbiddenError("Bu öğrenme adımı henüz açık değil");
+  return node;
 }
 
 async function assertLearningPathReplayAccessible(
@@ -735,6 +735,7 @@ async function assertLearningPathReplayAccessible(
   if (node.status !== "completed") {
     throw forbiddenError("Yalnızca tamamlanmış öğrenme adımları tekrar edilebilir");
   }
+  return node;
 }
 
 export async function getHistory(
@@ -802,6 +803,7 @@ export async function startPersonalExercise(
   }
   let templateVersionId = input.templateVersionId;
   let selectedTemplateConfig: unknown = null;
+  let authorizedLearningStep: { id: string } | null = null;
   if (!templateVersionId) {
     const versions = await prisma.exerciseTemplateVersion.findMany({
       where: {
@@ -839,12 +841,12 @@ export async function startPersonalExercise(
       throw forbiddenError("Şablon tenant uyuşmazlığı");
     selectedTemplateConfig = tv.config;
     if (replay) {
-      await assertLearningPathReplayAccessible(
+      authorizedLearningStep = await assertLearningPathReplayAccessible(
         { userId: actor.userId, tenantId, platformRole: actor.platformRole },
         templateVersionId,
       );
     } else if (input.enforceLearningPathOrder) {
-      await assertLearningPathTemplateAccessible(
+      authorizedLearningStep = await assertLearningPathTemplateAccessible(
         { userId: actor.userId, tenantId, platformRole: actor.platformRole },
         templateVersionId,
       );
@@ -868,7 +870,9 @@ export async function startPersonalExercise(
   }
   const learningStep = independentTraining
     ? { matched: false, stepId: null, unlocked: false }
-    : await resolveLearningStepForTemplate(templateVersionId!, actor);
+    : authorizedLearningStep
+      ? { matched: true, stepId: authorizedLearningStep.id, unlocked: true }
+      : await resolveLearningStepForTemplate(templateVersionId!, actor);
   if (learningStep.matched && !learningStep.unlocked && !replay) {
     throw validationError("Bu uygulama için önceki öğrenme adımları tamamlanmalı");
   }
