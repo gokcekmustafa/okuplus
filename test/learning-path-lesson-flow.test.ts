@@ -66,6 +66,20 @@ describe("roadmap lesson flow contract", () => {
     );
   });
 
+  it("reuses the server-authorized roadmap node when starting a path exercise", () => {
+    expect(studentLearningService).toContain(
+      "let authorizedLearningStep: { id: string } | null = null;",
+    );
+    expect(studentLearningService).toContain(
+      "authorizedLearningStep = await assertLearningPathTemplateAccessible",
+    );
+    expect(studentLearningService).toContain(": authorizedLearningStep");
+    expect(studentLearningService).toContain("stepId: authorizedLearningStep.id");
+    expect(studentLearningService).toContain(
+      "return assertLearningTemplateAccessible(actor, templateVersionId)",
+    );
+  });
+
   it("rejects navigation targets that are not the immediate server-authorized neighbor", () => {
     expect(learningPathService).toContain(
       "const target = [navigation.previousStep, navigation.nextStep]",
