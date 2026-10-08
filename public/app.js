@@ -5168,7 +5168,10 @@ function navigateFromMenu(page) {
     activeLearningStepNode = null;
     activeLearningStepNavigation = null;
     activeLearningStepNavigationFromStepId = null;
-    learningPathEntryMode = true;
+    // The sidebar opens the Learning Path course browser. The focused-step
+    // mode is reserved for entering a lesson from the homepage map or from a
+    // course step card.
+    learningPathEntryMode = false;
   }
   navigate(page);
 }
