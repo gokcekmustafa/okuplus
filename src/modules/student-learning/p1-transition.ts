@@ -4,6 +4,7 @@ import {
   assertTeacherClassAccess,
   type TeacherAssignmentActor,
 } from "../assignments/teacher-service.js";
+import { resolveLearningPathStepEvidence } from "../learning-path/service.js";
 import { readSkillResults } from "../measurements/service.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor, type StudentActor } from "./policy.js";
@@ -35,6 +36,7 @@ type P0Step = {
     | "MEASUREMENT"
     | "NEXT_LEARNING";
   position: number;
+  prerequisiteStepId: string | null;
   contentVersionId: string | null;
   exerciseTemplateVersionId: string | null;
   assessmentId: string | null;
@@ -87,6 +89,44 @@ function prerequisiteIds(value: Prisma.JsonValue): string[] {
     : [];
 }
 
+function p0PrerequisiteIds(steps: readonly P0Step[], index: number): string[] {
+  const step = steps[index];
+  if (!step) return [];
+  const ids = new Set<string>();
+  if (step.prerequisiteStepId) ids.add(step.prerequisiteStepId);
+  for (const id of prerequisiteIds(step.completionRule)) ids.add(id);
+  const previous = steps[index - 1];
+  if (previous) ids.add(previous.id);
+  return [...ids];
+}
+
+/**
+ * Resolves only the P0 completion that is valid for the same path and its
+ * linear prerequisite chain. A future raw completion cannot jump over an
+ * incomplete station; MEASUREMENT is derived only after its prerequisites.
+ */
+export function resolveP0LinearCompletion(
+  steps: readonly P0Step[],
+  evidenceCompletedIds: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const completed = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [index, step] of steps.entries()) {
+      if (completed.has(step.id)) continue;
+      const derivedMeasurement =
+        step.type === "MEASUREMENT" &&
+        p0PrerequisiteIds(steps, index).every((id) => completed.has(id));
+      if (!evidenceCompletedIds.has(step.id) && !derivedMeasurement) continue;
+      if (!p0PrerequisiteIds(steps, index).every((id) => completed.has(id))) continue;
+      completed.add(step.id);
+      changed = true;
+    }
+  }
+  return completed;
+}
+
 function minimumScore(rule: Prisma.JsonValue): number | null {
   if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
   const value = (rule as Record<string, unknown>).minimumScore;
@@ -128,6 +168,7 @@ async function loadP0State(
       levelId: true,
       units: {
         where: { status: "PUBLISHED" },
+        orderBy: { position: "asc" },
         select: {
           steps: {
             where: { status: "PUBLISHED", isActive: true },
@@ -136,6 +177,7 @@ async function loadP0State(
               id: true,
               type: true,
               position: true,
+              prerequisiteStepId: true,
               contentVersionId: true,
               exerciseTemplateVersionId: true,
               assessmentId: true,
@@ -212,42 +254,37 @@ async function loadP0State(
       : Promise.resolve([]),
   ]);
 
-  const completed = new Set(progress.map((item) => item.learningStepId));
-  const completedTemplates = new Set(sessions.map((session) => session.templateVersionId));
-  const completedContents = new Set(lessons.map((lesson) => lesson.contentVersionId));
+  const stepEvidence = resolveLearningPathStepEvidence(
+    steps.map((step) => ({
+      id: step.id,
+      exerciseTemplateVersionId: step.exerciseTemplateVersionId,
+      contentVersionId: step.contentVersionId,
+    })),
+    sessions,
+    new Set(lessons.map((lesson) => lesson.contentVersionId)),
+  );
+  const evidenceCompleted = new Set(progress.map((item) => item.learningStepId));
+  for (const [stepId, evidence] of stepEvidence) {
+    if (evidence.completed) evidenceCompleted.add(stepId);
+  }
   const latestResults = new Map<string, (typeof assessmentResults)[number]>();
   for (const result of assessmentResults) {
     if (!latestResults.has(result.assessmentId)) latestResults.set(result.assessmentId, result);
   }
 
   for (const step of steps) {
-    if (step.exerciseTemplateVersionId && completedTemplates.has(step.exerciseTemplateVersionId)) {
-      completed.add(step.id);
-      continue;
-    }
-    if (step.contentVersionId && completedContents.has(step.contentVersionId)) {
-      completed.add(step.id);
-      continue;
-    }
     if (step.assessmentId) {
       const result = latestResults.get(step.assessmentId);
       const threshold = minimumScore(step.completionRule);
       if (result && (threshold === null || (result.score !== null && result.score >= threshold))) {
-        completed.add(step.id);
+        evidenceCompleted.add(step.id);
       }
     }
   }
 
-  // The P0 measurement checkpoint is derived from its completed assessment;
-  // this mirrors the existing P0 completion contract without changing it.
-  for (const step of steps) {
-    if (step.type !== "MEASUREMENT") continue;
-    if (prerequisiteIds(step.completionRule).every((id) => completed.has(id))) {
-      completed.add(step.id);
-    }
-  }
+  const completed = resolveP0LinearCompletion(steps, evidenceCompleted);
 
-  const completedP0 = steps.every((step) => completed.has(step.id));
+  const completedP0 = steps.length > 0 && steps.every((step) => completed.has(step.id));
   const finalAssessmentStep = [...steps]
     .filter((step) => step.type === "ASSESSMENT" && step.assessmentId)
     .sort((a, b) => b.position - a.position)[0];
@@ -279,6 +316,14 @@ async function loadCandidates(
       AND: [
         { OR: [{ tenantId: null }, { tenantId: actor.tenantId }] },
         ...(levelId ? [{ OR: [{ levelId: null }, { levelId }] }] : []),
+        {
+          units: {
+            some: {
+              status: "PUBLISHED",
+              steps: { some: { status: "PUBLISHED", isActive: true } },
+            },
+          },
+        },
       ],
     },
     select: { id: true, code: true, version: true, levelId: true, status: true },
@@ -432,6 +477,12 @@ export async function overrideP1Route(
         code: { startsWith: P1_PATH_PREFIX },
         OR: [{ tenantId: null }, { tenantId }],
         ...(p0.levelId ? { AND: [{ OR: [{ levelId: null }, { levelId: p0.levelId }] }] } : {}),
+        units: {
+          some: {
+            status: "PUBLISHED",
+            steps: { some: { status: "PUBLISHED", isActive: true } },
+          },
+        },
       },
       select: { id: true, code: true },
     });

@@ -2650,6 +2650,8 @@ window.startTodayLearningStep = function () {
   void startLearningPathNode(
     {
       id: step.id,
+      learningPathId: step.learningPathId,
+      learningPathCode: step.learningPathCode,
       type: step.type,
       title: step.title,
       templateVersionId: step.templateVersionId,
@@ -4153,6 +4155,19 @@ async function completeLearningPathTerminalStep() {
       },
     );
     await parseResponse(response);
+    if (node.learningPathId && String(node.learningPathCode || "").startsWith("EDUCATION_V2_P0_")) {
+      try {
+        await parseResponse(
+          await authenticatedFetch("/student/learning-path/p1/reconcile", {
+            method: "POST",
+            body: JSON.stringify({ p0LearningPathId: node.learningPathId }),
+          }),
+        );
+      } catch {
+        // P0 completion is authoritative. A transient P1 recommendation
+        // failure must not roll back or hide the completed P0 terminal step.
+      }
+    }
     learningPathEntryMode = false;
     activeLearningStepNode = null;
     activeLearningStepNavigation = null;

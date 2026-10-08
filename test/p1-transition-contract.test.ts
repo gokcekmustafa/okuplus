@@ -39,6 +39,14 @@ describe("P1 transition foundation contracts", () => {
     expect(learningPath).toContain('routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] }');
   });
 
+  it("reconciles P1 only after the student completes a P0 terminal step", async () => {
+    const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+
+    expect(app).toContain('"/student/learning-path/p1/reconcile"');
+    expect(app).toContain('startsWith("EDUCATION_V2_P0_")');
+    expect(app).toContain("p0LearningPathId: node.learningPathId");
+  });
+
   it("reads P0 completion without writing P0 progress", async () => {
     const transition = await readFile(
       new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
