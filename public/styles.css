@@ -7167,12 +7167,13 @@ textarea:focus-visible {
   padding: 22px 20px 16px;
 }
 
-.student-shell .learning-path-sidebar-kicker {
-  margin: 0 0 10px;
-  color: #70d7ba;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.17em;
+.student-shell .learning-path-program-name {
+  margin: 0 0 12px;
+  color: #f7ffff;
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
 }
 
 .student-shell .learning-path-sidebar-title-row {
@@ -7187,33 +7188,6 @@ textarea:focus-visible {
   color: #f7ffff;
   font-size: 20px;
   letter-spacing: -0.035em;
-}
-
-.student-shell .learning-path-sidebar-count {
-  color: #9ab4bb;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.student-shell .learning-path-level-card {
-  display: grid;
-  gap: 4px;
-  margin-top: 18px;
-  padding: 12px 14px;
-  border: 1px solid rgba(146, 198, 203, 0.2);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.student-shell .learning-path-level-label {
-  color: #9ab4bb;
-  font-size: 11px;
-  font-weight: 750;
-}
-
-.student-shell .learning-path-level-card strong {
-  color: #fff;
-  font-size: 16px;
 }
 
 .student-shell .learning-path-module-list {
@@ -7576,20 +7550,12 @@ textarea:focus-visible {
   }
 
   .student-shell .learning-path-sidebar-intro {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 14px;
-    align-items: end;
+    display: block;
     padding: 16px;
   }
 
-  .student-shell .learning-path-sidebar-kicker {
-    grid-column: 1 / -1;
-    margin: 0;
-  }
-
-  .student-shell .learning-path-level-card {
-    margin: 0;
+  .student-shell .learning-path-program-name {
+    margin-bottom: 10px;
   }
 
   .student-shell .learning-path-module-list {
