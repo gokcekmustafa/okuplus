@@ -1,5 +1,5 @@
 import { Prisma, type Prisma as PrismaTypes } from "@prisma/client";
-import { forbiddenError } from "../../lib/errors.js";
+import { forbiddenError, validationError } from "../../lib/errors.js";
 import {
   ACADEMIC_P0_GUIDED_SKILL_ORDER,
   getAcademicP0GuidedSkillPrerequisite,
@@ -207,7 +207,10 @@ async function readPathState(
               studentId: actor.userId,
               templateVersionId: { in: templateVersionIds },
               context: "INDIVIDUAL",
+              sessionType: "PRACTICE",
               status: "COMPLETED",
+              assignmentId: null,
+              assessmentId: null,
             },
             _count: { _all: true },
           })
@@ -716,6 +719,23 @@ export async function completeLearningStep(actor: LearningPathActor, stepId: str
   const node = await assertLearningStepAccessible(actor, stepId);
   if (node.status === "completed") return;
   await updateProgress(actor, stepId, "COMPLETED");
+}
+
+/**
+ * The final roadmap station is an explicit terminal checkpoint, not a lesson
+ * or exercise. Keep its completion on the server so the last station can be
+ * opened, acknowledged, and leave the roadmap at a consistent 22/22 state.
+ */
+export async function completeTerminalLearningStep(actor: LearningPathActor, stepId: string) {
+  const node = await assertLearningStepAccessible(actor, stepId);
+  if (node.type !== "NEXT_LEARNING") {
+    throw validationError("Bu öğrenme adımı terminal bir durak değil");
+  }
+  await completeLearningStep(actor, stepId);
+  return {
+    learningStep: { id: node.id, title: node.label, status: "completed" as const },
+    nextStep: await getNextLearningStepAfter(actor, stepId),
+  };
 }
 
 export async function completeLearningStepForContentVersion(

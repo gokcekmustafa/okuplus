@@ -4611,6 +4611,60 @@ textarea:focus-visible {
   gap: 16px;
 }
 
+.learning-path-terminal {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  max-width: 620px;
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.learning-path-terminal-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7f8ef;
+  color: #149a68;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.learning-path-terminal h3,
+.learning-path-terminal p {
+  margin: 0;
+}
+
+.learning-path-terminal h3 {
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+}
+
+.learning-path-terminal > p:not(.insight-eyebrow) {
+  max-width: 54ch;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+@media (max-width: 640px) {
+  .learning-path-terminal {
+    padding: 24px 20px;
+  }
+
+  .learning-path-terminal .lesson-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .learning-path-terminal .lesson-actions .btn {
+    width: 100%;
+  }
+}
+
 .lesson-list {
   display: grid;
   gap: 8px;

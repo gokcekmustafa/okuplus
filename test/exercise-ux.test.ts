@@ -265,6 +265,20 @@ describe("exercise UX state from production frontend", () => {
     expect(h.context.learningPathEntryMode).toBe(false);
   });
 
+  it("opens the final Learning Path station as a terminal checkpoint", () => {
+    expect(source).toContain('if (type === "NEXT_LEARNING")');
+    expect(source).toContain("renderLearningPathTerminalStep(node)");
+    expect(source).toContain("data-learning-terminal-complete");
+    expect(source).toContain("/student/learning-path/steps/");
+  });
+
+  it("does not block a focused lesson on a supplementary path reload", () => {
+    const start = source.indexOf("async function loadFocusedLearningPathStep()");
+    const end = source.indexOf("async function completeLearningPathTerminalStep()", start);
+    const focusedLoader = source.slice(start, end);
+    expect(focusedLoader.match(/await insightApi\("learning-path"\)/g) ?? []).toHaveLength(1);
+  });
+
   it("ignores reentrant submit and complete calls while a request is pending", async () => {
     const h = harness();
     h.context.exerciseBusy = true;
