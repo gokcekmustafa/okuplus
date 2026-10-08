@@ -15,6 +15,14 @@ on:
           - none
           - education-v2-p0
         default: none
+      seed_p1_a:
+        description: "Explicitly select the Education V2 P1-A production curriculum seed"
+        required: true
+        type: choice
+        options:
+          - none
+          - education-v2-p1-a
+        default: none
       education_v2_level_code:
         description: "Existing production Level.code required only for Education V2 P0"
         required: false
@@ -26,6 +34,14 @@ on:
         type: string
       education_v2_production_approval:
         description: "Type I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE only for the approved production seed"
+        required: false
+        type: string
+      education_v2_p1_a_production_release_id:
+        description: "Approved immutable Education V2 P1-A production release identifier"
+        required: false
+        type: string
+      education_v2_p1_a_production_approval:
+        description: "Type I_HAVE_REVIEWED_EDUCATION_V2_P1_A_PRODUCTION_EDITORIAL_RELEASE only for the approved P1-A seed"
         required: false
         type: string
       production_backup_confirmation:
@@ -75,9 +91,12 @@ jobs:
           PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
           CONFIRM_MIGRATE: ${{ inputs.confirm_migrate }}
           SEED_P0: ${{ inputs.seed_p0 }}
+          SEED_P1_A: ${{ inputs.seed_p1_a }}
           EDUCATION_V2_LEVEL_CODE: ${{ inputs.education_v2_level_code }}
           EDUCATION_V2_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_production_release_id }}
           EDUCATION_V2_PRODUCTION_APPROVAL: ${{ inputs.education_v2_production_approval }}
+          EDUCATION_V2_P1_A_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_p1_a_production_release_id }}
+          EDUCATION_V2_P1_A_PRODUCTION_APPROVAL: ${{ inputs.education_v2_p1_a_production_approval }}
           PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
           PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
           PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
@@ -123,6 +142,10 @@ jobs:
             echo "FAIL: unsupported production seed selection"
             exit 1
           }
+          test "${SEED_P1_A}" = "none" || test "${SEED_P1_A}" = "education-v2-p1-a" || {
+            echo "FAIL: unsupported production seed selection"
+            exit 1
+          }
           if [ "${SEED_P0}" = "education-v2-p0" ]; then
             test -n "${EDUCATION_V2_LEVEL_CODE}" || { echo "FAIL: Education V2 Level.code is missing"; exit 1; }
             test -n "${EDUCATION_V2_PRODUCTION_RELEASE_ID}" || { echo "FAIL: Education V2 production release identifier is missing"; exit 1; }
@@ -132,6 +155,15 @@ jobs:
             test -n "${COMMON_ASSESSMENT_ID}" || { echo "FAIL: approved common assessment variable is missing"; exit 1; }
             test "${EDUCATION_V2_PRODUCTION_APPROVAL}" = "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE" || {
               echo "FAIL: explicit Education V2 production editorial approval is required"
+              exit 1
+            }
+          fi
+          if [ "${SEED_P1_A}" = "education-v2-p1-a" ]; then
+            test -n "${EDUCATION_V2_P1_A_PRODUCTION_RELEASE_ID}" || { echo "FAIL: P1-A production release identifier is missing"; exit 1; }
+            test -n "${PRODUCTION_DATABASE_NAME}" || { echo "FAIL: production database name variable is missing"; exit 1; }
+            test -n "${PRODUCTION_DATABASE_HOST}" || { echo "FAIL: production database host variable is missing"; exit 1; }
+            test "${EDUCATION_V2_P1_A_PRODUCTION_APPROVAL}" = "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_PRODUCTION_EDITORIAL_RELEASE" || {
+              echo "FAIL: explicit Education V2 P1-A production editorial approval is required"
               exit 1
             }
           fi
@@ -351,6 +383,40 @@ jobs:
           npx tsx scripts/provision-education-v2-p0-learning-path.ts --dry-run
           echo "EDUCATION_V2_P0_PRODUCTION_POSTCONDITIONS=PASS"
 
+      - name: Provision Education V2 P1-A production curriculum
+        id: education-v2-p1-a-seed
+        if: ${{ inputs.seed_p1_a == 'education-v2-p1-a' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P1_A_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P1_A_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_p1_a_production_release_id }}
+          EDUCATION_V2_P1_A_PRODUCTION_APPROVAL: ${{ inputs.education_v2_p1_a_production_approval }}
+          EDUCATION_V2_P1_A_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/seed-education-v2-p1-a.ts --dry-run
+          npx tsx scripts/seed-education-v2-p1-a.ts --apply
+
+      - name: Verify Education V2 P1-A production postconditions
+        id: education-v2-p1-a-verify
+        if: ${{ inputs.seed_p1_a == 'education-v2-p1-a' }}
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P1_A_ENVIRONMENT: PRODUCTION
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_NAME: ${{ vars.PRODUCTION_DATABASE_NAME }}
+          EDUCATION_V2_P1_A_PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
+          EDUCATION_V2_P1_A_PRODUCTION_RELEASE_ID: ${{ inputs.education_v2_p1_a_production_release_id }}
+          EDUCATION_V2_P1_A_PRODUCTION_APPROVAL: ${{ inputs.education_v2_p1_a_production_approval }}
+          EDUCATION_V2_P1_A_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/seed-education-v2-p1-a.ts --dry-run
+          echo "EDUCATION_V2_P1_A_PRODUCTION_POSTCONDITIONS=PASS"
+
       - name: Migration summary
         if: always()
         env:
@@ -358,10 +424,14 @@ jobs:
           P0_LESSON_OUTCOME: ${{ steps.education-v2-lesson-seed.outcome }}
           P0_PROVISION_OUTCOME: ${{ steps.education-v2-provision.outcome }}
           P0_VERIFY_OUTCOME: ${{ steps.education-v2-verify.outcome }}
+          P1_A_SEED_OUTCOME: ${{ steps.education-v2-p1-a-seed.outcome }}
+          P1_A_VERIFY_OUTCOME: ${{ steps.education-v2-p1-a-verify.outcome }}
         run: |
           echo "PRODUCTION_MIGRATION=PASS"
           echo "EDUCATION_V2_P0_CONTENT_SEED=${P0_CONTENT_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P0_LESSON_SEED=${P0_LESSON_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P0_PROVISION=${P0_PROVISION_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P0_VERIFY=${P0_VERIFY_OUTCOME:-NOT_RUN}"
+          echo "EDUCATION_V2_P1_A_SEED=${P1_A_SEED_OUTCOME:-NOT_RUN}"
+          echo "EDUCATION_V2_P1_A_VERIFY=${P1_A_VERIFY_OUTCOME:-NOT_RUN}"
           echo "PRODUCTION_SMOKE=NOT_RUN"
