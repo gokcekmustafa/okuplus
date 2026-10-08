@@ -19,6 +19,9 @@ export type PersistentLearningActor = {
 
 type StepRow = {
   id: string;
+  contentVersionId: string | null;
+  exerciseTemplateVersionId: string | null;
+  assessmentId: string | null;
   stableKey: string;
   title: string;
   type:
@@ -47,6 +50,12 @@ type PathRow = {
   id: string;
   area: "FAST_READING" | "READING_COMPREHENSION" | "COMMON";
   units: Array<{ steps: StepRow[] }>;
+};
+
+type CompletionEvidenceStep = Pick<StepRow, "id" | "type" | "completionRule"> & {
+  contentVersionId: string | null;
+  exerciseTemplateVersionId: string | null;
+  assessmentId: string | null;
 };
 
 function isMissingLearningPathTable(error: unknown): boolean {
@@ -173,6 +182,9 @@ export async function getPersistentAcademicProgram(
                 orderBy: { position: "asc" },
                 select: {
                   id: true,
+                  contentVersionId: true,
+                  exerciseTemplateVersionId: true,
+                  assessmentId: true,
                   stableKey: true,
                   title: true,
                   type: true,
@@ -200,7 +212,6 @@ export async function getPersistentAcademicProgram(
       })) as PathRow[];
 
       const pathIds = paths.map((path) => path.id);
-      const stepIds = paths.flatMap((path) => allSteps(path).map((step) => step.id));
       for (const pathId of pathIds) {
         await tx.studentLearningPath.upsert({
           where: {
@@ -214,19 +225,14 @@ export async function getPersistentAcademicProgram(
           create: { tenantId: actor.tenantId!, studentId: actor.userId, learningPathId: pathId },
         });
       }
-      const progress = await tx.studentLearningStepProgress.findMany({
-        where: {
-          tenantId: actor.tenantId!,
-          studentId: actor.userId,
-          learningStepId: { in: stepIds },
-        },
-        select: { learningStepId: true, status: true },
-      });
+      const completed = await completedStepIdsFromEvidence(
+        tx,
+        actor,
+        paths.flatMap((path) => allSteps(path)),
+      );
       return {
         paths,
-        state: new Set(
-          progress.filter((item) => item.status === "COMPLETED").map((item) => item.learningStepId),
-        ),
+        state: completed,
       };
     });
 
@@ -360,13 +366,136 @@ export async function getPersistentAcademicProgram(
   }
 }
 
-async function progressForActor(actor: PersistentLearningActor) {
-  return withTenantContext(actor, (tx) =>
-    tx.studentLearningStepProgress.findMany({
-      where: { tenantId: actor.tenantId!, studentId: actor.userId },
-      select: { learningStepId: true, status: true },
+function minimumScoreFromCompletionRule(rule: Prisma.JsonValue): number | null {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
+  const value = (rule as Record<string, unknown>).minimumScore;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+async function completedStepIdsFromEvidence(
+  db: PrismaNamespace.TransactionClient,
+  actor: PersistentLearningActor,
+  steps: CompletionEvidenceStep[],
+) {
+  if (!steps.length) return new Set<string>();
+  const stepIds = new Set(steps.map((step) => step.id));
+  const templateVersionIds = steps
+    .map((step) => step.exerciseTemplateVersionId)
+    .filter((id): id is string => Boolean(id));
+  const contentVersionIds = steps
+    .map((step) => step.contentVersionId)
+    .filter((id): id is string => Boolean(id));
+  const assessmentIds = steps
+    .map((step) => step.assessmentId)
+    .filter((id): id is string => Boolean(id));
+
+  const [progress, sessions, lessons, assessments] = await Promise.all([
+    db.studentLearningStepProgress.findMany({
+      where: {
+        tenantId: actor.tenantId!,
+        studentId: actor.userId,
+        learningStepId: { in: [...stepIds] },
+        status: "COMPLETED",
+      },
+      select: { learningStepId: true },
     }),
-  );
+    templateVersionIds.length
+      ? db.exerciseSession.findMany({
+          where: {
+            tenantId: actor.tenantId!,
+            studentId: actor.userId,
+            templateVersionId: { in: templateVersionIds },
+            status: "COMPLETED",
+            assignmentId: null,
+            assessmentId: null,
+            context: "INDIVIDUAL",
+            sessionType: "PRACTICE",
+            trainingSessionItem: { is: null },
+          },
+          select: { learningStepId: true, templateVersionId: true },
+        })
+      : Promise.resolve([]),
+    contentVersionIds.length
+      ? db.studentLessonProgress.findMany({
+          where: {
+            tenantId: actor.tenantId!,
+            studentId: actor.userId,
+            contentVersionId: { in: contentVersionIds },
+          },
+          select: { contentVersionId: true },
+        })
+      : Promise.resolve([]),
+    assessmentIds.length
+      ? db.assessmentResult.findMany({
+          where: {
+            tenantId: actor.tenantId!,
+            studentId: actor.userId,
+            assessmentId: { in: assessmentIds },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { assessmentId: true, score: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const completed = new Set(progress.map((item) => item.learningStepId));
+  const completedTemplates = new Set(sessions.map((session) => session.templateVersionId));
+  const completedContents = new Set(lessons.map((lesson) => lesson.contentVersionId));
+  const latestAssessmentScore = new Map<string, number | null>();
+  for (const result of assessments) {
+    if (!latestAssessmentScore.has(result.assessmentId)) {
+      latestAssessmentScore.set(result.assessmentId, result.score);
+    }
+  }
+
+  for (const step of steps) {
+    if (
+      (step.exerciseTemplateVersionId && completedTemplates.has(step.exerciseTemplateVersionId)) ||
+      (step.contentVersionId && completedContents.has(step.contentVersionId))
+    ) {
+      completed.add(step.id);
+      continue;
+    }
+    if (step.assessmentId && latestAssessmentScore.has(step.assessmentId)) {
+      const minimumScore = minimumScoreFromCompletionRule(step.completionRule);
+      const score = latestAssessmentScore.get(step.assessmentId) ?? null;
+      if (minimumScore === null || (score !== null && score >= minimumScore)) {
+        completed.add(step.id);
+      }
+    }
+  }
+
+  // A session started from the current Learning Path stores the exact step.
+  // Keep this explicit mapping even when a template version is shared by more
+  // than one historical step.
+  for (const session of sessions) {
+    if (session.learningStepId && stepIds.has(session.learningStepId)) {
+      completed.add(session.learningStepId);
+    }
+  }
+  return completed;
+}
+
+async function publishedCompletionEvidenceSteps(actor: PersistentLearningActor) {
+  return prisma.learningStep.findMany({
+    where: {
+      unit: {
+        path: {
+          status: "PUBLISHED",
+          deletedAt: null,
+          OR: [{ tenantId: null }, { tenantId: actor.tenantId! }],
+        },
+      },
+    },
+    select: {
+      id: true,
+      type: true,
+      completionRule: true,
+      contentVersionId: true,
+      exerciseTemplateVersionId: true,
+      assessmentId: true,
+    },
+  }) as Promise<CompletionEvidenceStep[]>;
 }
 
 export async function resolveLearningStepForTemplate(
@@ -377,18 +506,15 @@ export async function resolveLearningStepForTemplate(
     return { matched: false, stepId: null, unlocked: false };
   }
   try {
-    const steps = await prisma.learningStep.findMany({
-      where: {
-        exerciseTemplateVersionId: templateVersionId,
-        type: { in: ["PRACTICE", "REINFORCEMENT"] },
-        unit: { path: { status: "PUBLISHED" } },
-      },
-      select: { id: true, completionRule: true },
-    });
+    const allSteps = await publishedCompletionEvidenceSteps(actor);
+    const steps = allSteps.filter(
+      (step) =>
+        step.exerciseTemplateVersionId === templateVersionId &&
+        (step.type === "PRACTICE" || step.type === "REINFORCEMENT"),
+    );
     if (!steps.length) return { matched: false, stepId: null, unlocked: false };
-    const progress = await progressForActor(actor);
-    const completed = new Set(
-      progress.filter((item) => item.status === "COMPLETED").map((item) => item.learningStepId),
+    const completed = await withTenantContext(actor, (tx) =>
+      completedStepIdsFromEvidence(tx, actor, allSteps),
     );
     const candidate = steps.find((step) =>
       areLearningStepPrerequisitesComplete(step.completionRule, completed),
@@ -408,18 +534,15 @@ export async function resolveLearningStepForContent(
     return { matched: false, stepId: null, unlocked: false };
   }
   try {
-    const steps = await prisma.learningStep.findMany({
-      where: {
-        contentVersionId,
-        type: { in: ["TEACHING", "SMALL_STUDY"] },
-        unit: { path: { status: "PUBLISHED" } },
-      },
-      select: { id: true, completionRule: true },
-    });
+    const allSteps = await publishedCompletionEvidenceSteps(actor);
+    const steps = allSteps.filter(
+      (step) =>
+        step.contentVersionId === contentVersionId &&
+        (step.type === "TEACHING" || step.type === "SMALL_STUDY"),
+    );
     if (!steps.length) return { matched: false, stepId: null, unlocked: false };
-    const progress = await progressForActor(actor);
-    const completed = new Set(
-      progress.filter((item) => item.status === "COMPLETED").map((item) => item.learningStepId),
+    const completed = await withTenantContext(actor, (tx) =>
+      completedStepIdsFromEvidence(tx, actor, allSteps),
     );
     const candidate = steps.find((step) =>
       prerequisiteIds(step.completionRule).every((id) => completed.has(id)),
@@ -439,14 +562,13 @@ export async function resolveLearningStepForAssessment(
     return { matched: false, stepId: null, unlocked: false };
   }
   try {
-    const step = await prisma.learningStep.findFirst({
-      where: { assessmentId, type: "ASSESSMENT", unit: { path: { status: "PUBLISHED" } } },
-      select: { id: true, completionRule: true },
-    });
+    const allSteps = await publishedCompletionEvidenceSteps(actor);
+    const step = allSteps.find(
+      (candidate) => candidate.assessmentId === assessmentId && candidate.type === "ASSESSMENT",
+    );
     if (!step) return { matched: false, stepId: null, unlocked: false };
-    const progress = await progressForActor(actor);
-    const completed = new Set(
-      progress.filter((item) => item.status === "COMPLETED").map((item) => item.learningStepId),
+    const completed = await withTenantContext(actor, (tx) =>
+      completedStepIdsFromEvidence(tx, actor, allSteps),
     );
     return {
       matched: true,
@@ -484,19 +606,20 @@ export async function completeLearningStep(
       });
       if (progress?.status === "COMPLETED") return;
       const prerequisites = prerequisiteIds(step.completionRule);
-      const prerequisiteProgress = await tx.studentLearningStepProgress.findMany({
-        where: {
-          tenantId: actor.tenantId!,
-          studentId: actor.userId,
-          learningStepId: { in: prerequisites },
-        },
-        select: { learningStepId: true, status: true },
-      });
-      const completed = new Set(
-        prerequisiteProgress
-          .filter((item) => item.status === "COMPLETED")
-          .map((item) => item.learningStepId),
-      );
+      const prerequisiteSteps = prerequisites.length
+        ? await tx.learningStep.findMany({
+            where: { id: { in: prerequisites } },
+            select: {
+              id: true,
+              type: true,
+              completionRule: true,
+              contentVersionId: true,
+              exerciseTemplateVersionId: true,
+              assessmentId: true,
+            },
+          })
+        : [];
+      const completed = await completedStepIdsFromEvidence(tx, actor, prerequisiteSteps);
       if (!prerequisites.every((id) => completed.has(id))) {
         throw validationError("Bu öğrenme adımı için ön koşullar tamamlanmamış");
       }

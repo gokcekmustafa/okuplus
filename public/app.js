@@ -12098,6 +12098,10 @@ function returnToExercisePath() {
   if (exerciseBusy) return;
   const returningToActivities = exerciseMode === "activity";
   exerciseReviewMode = false;
+  learningPathEntryMode = false;
+  activeLearningStepNode = null;
+  activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = null;
   rememberExerciseSession(null);
   resetDailyTrainingState();
   resetExerciseState();
@@ -13127,6 +13131,13 @@ async function handleExerciseComplete() {
         },
         completedStep,
       );
+      // A roadmap exercise is a single guided action. Once the server has
+      // accepted its completion, return to the map so the newly unlocked
+      // station is visible immediately instead of leaving the student on a
+      // second training-style completion screen.
+      exerciseBusy = false;
+      returnToExercisePath();
+      return;
     }
     renderExerciseSession();
     $("exercise-completion-title")?.focus();
