@@ -9,7 +9,6 @@ import {
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
 import {
-  EDUCATION_V2_P1_A_LEVEL_CODE,
   EDUCATION_V2_P1_A_PATH_VERSION,
   EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PROGRAM_ID,
@@ -458,7 +457,7 @@ function flattenedSteps() {
   return EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps);
 }
 
-async function createLearningPath(tx: Prisma.TransactionClient, levelId: string): Promise<void> {
+async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
   const path = EDUCATION_V2_P1_A_PROGRAM.path;
   const pathId = p1AId("path", path.code);
   await tx.learningPath.create({
@@ -547,7 +546,7 @@ async function createLearningPath(tx: Prisma.TransactionClient, levelId: string)
           status: "PUBLISHED",
           isActive: true,
           prerequisiteStepId: previousStepId,
-          minimumLevelId: levelId,
+          minimumLevelId: null,
           contentVersionId,
           exerciseTemplateVersionId: templateVersionId,
           assessmentId,
@@ -619,12 +618,11 @@ async function main(): Promise<void> {
         fail("P1-A stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
       if (dryRun || state === "EXISTING") return { state, dbChanged: false };
       await createContentGraph(tx, plans);
-      const level = await tx.level.findUnique({
-        where: { code: EDUCATION_V2_P1_A_LEVEL_CODE },
-        select: { id: true },
-      });
-      if (!level) fail(`Level bulunamadı: ${EDUCATION_V2_P1_A_LEVEL_CODE}`);
-      await createLearningPath(tx, level.id);
+      // P0/P1 pilot paths are intentionally unscoped to a Level row. The
+      // G8_12 suffix is part of the canonical path code, not a production
+      // Level record, and production already uses the path's tenant-safe
+      // publication scope for candidate matching.
+      await createLearningPath(tx);
       return { state, dbChanged: true };
     });
     console.log(
