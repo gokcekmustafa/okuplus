@@ -159,6 +159,7 @@ export function resolveLearningPathNodeStatuses(
 }
 
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
+const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
 
 const PATH_SELECT = {
   id: true,
@@ -237,15 +238,7 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
   const pathsByArea = new Map<string, PublishedPath>();
   for (const row of rows) {
     const current = pathsByArea.get(row.area);
-    const isTenantSpecific = row.tenantId === actor.tenantId;
-    const currentIsTenantSpecific = current?.tenantId === actor.tenantId;
-    const isAssignedP1 = row.code.startsWith(P1_PATH_PREFIX);
-    const currentIsAssignedP1 = current?.code.startsWith(P1_PATH_PREFIX) ?? false;
-    if (
-      !current ||
-      (isAssignedP1 && !currentIsAssignedP1) ||
-      (isAssignedP1 === currentIsAssignedP1 && isTenantSpecific && !currentIsTenantSpecific)
-    ) {
+    if (shouldReplacePublishedPath(current, row, actor.tenantId)) {
       pathsByArea.set(row.area, row as PublishedPath);
     }
   }
@@ -259,6 +252,28 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
       (areaOrder.get(a.area) ?? Number.MAX_SAFE_INTEGER) -
         (areaOrder.get(b.area) ?? Number.MAX_SAFE_INTEGER) || a.area.localeCompare(b.area),
   );
+}
+
+export function shouldReplacePublishedPath(
+  current: { code: string; tenantId: string | null } | undefined,
+  candidate: { code: string; tenantId: string | null },
+  actorTenantId: string | null,
+): boolean {
+  if (!current) return true;
+
+  const candidateIsAssignedP1 = candidate.code.startsWith(P1_PATH_PREFIX);
+  const currentIsAssignedP1 = current.code.startsWith(P1_PATH_PREFIX);
+  if (candidateIsAssignedP1 !== currentIsAssignedP1) return candidateIsAssignedP1;
+
+  const candidateIsTenantSpecific = candidate.tenantId === actorTenantId;
+  const currentIsTenantSpecific = current.tenantId === actorTenantId;
+  if (candidateIsTenantSpecific !== currentIsTenantSpecific) {
+    return candidateIsTenantSpecific;
+  }
+
+  const candidateIsCanonicalP0 = candidate.code.startsWith(P0_PATH_PREFIX);
+  const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
+  return candidateIsCanonicalP0 && !currentIsCanonicalP0;
 }
 
 async function findPublishedPath(tx: PrismaTypes.TransactionClient, actor: LearningPathActor) {
