@@ -27,11 +27,12 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain('insightApi("learning-path")');
     expect(app).toContain('"/student/learning-path/steps/"');
     expect(app).toContain("loadFocusedLearningPathStep");
-    expect(app).toContain("Dersi tamamladım ve sonraki adıma geç");
+    expect(app).toContain("Dersi tamamla");
     expect(app).toContain("nextStep");
     expect(app).toContain("learningPathEntryMode");
     expect(app).toContain('var disabled = visualStatus === "locked" ? " disabled" : "";');
-    expect(app).toContain('if (visualStatus === "completed") return "Tekrar et";');
+    expect(app).not.toContain('if (visualStatus === "completed") return "Tekrar et";');
+    expect(app).toContain('class="learning-map-v6-completed-state"');
     expect(app).toContain('fetch("/account/entitlements"');
     expect(app).toContain("function renderTrainingHome(data)");
     expect(app).toContain("summary?.sessionCount");

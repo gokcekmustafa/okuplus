@@ -2744,7 +2744,6 @@ function learningPathMapKind(node) {
 
 function learningPathActionLabel(node, visualStatus) {
   if (visualStatus === "locked") return "Henüz açık değil";
-  if (visualStatus === "completed") return "Tekrar et";
   if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
   if (node?.type === "ASSESSMENT" || node?.type === "MEASUREMENT") return "Değerlendir";
   if (node?.type === "REINFORCEMENT") return "Pekiştir";
@@ -2803,8 +2802,12 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     return;
   }
 
-  var nodes = entries.map(function (entry) {
-    return entry.node;
+  var nodes = entries.map(function (entry, index) {
+    return {
+      ...entry.node,
+      learningPathPosition: index + 1,
+      learningPathTotal: entries.length,
+    };
   });
   var currentNode = nodes.find(function (node) {
     return node.status === "active";
@@ -2822,7 +2825,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
   var heading =
-    '<header class="learning-map-v6-header"><div><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
+    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">ÖĞRENME YOLU</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
     escapeHtml(levelLabel) +
     "</strong><small>Seviye</small></span><span><strong>🔥 " +
     escapeHtml(streak) +
@@ -2837,7 +2840,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span></div>';
   var nodeMarkup = entries
     .map(function (entry, index) {
-      var node = entry.node;
+      var node = nodes[index];
       var visualStatus = learningPathVisualStatus(node.status);
       var kind = learningPathMapKind(node);
       var label = node.label || node.code || "Öğrenme adımı";
@@ -2894,9 +2897,11 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         '</span><strong class="learning-map-v6-kind">' +
         escapeHtml(kind.label) +
         "</strong>" +
-        (isCurrent || visualStatus === "completed"
+        (isCurrent && visualStatus !== "completed"
           ? '<span class="learning-map-v6-action">' + escapeHtml(actionLabel) + " →</span>"
-          : "") +
+          : visualStatus === "completed"
+            ? '<span class="learning-map-v6-completed-state">✓ Tamamlandı</span>'
+            : "") +
         lockMarkup +
         "</span></button></article>"
       );
@@ -3650,6 +3655,22 @@ function lessonApi(path, options) {
   );
 }
 
+function learningPathProgressLabel(node) {
+  const position = Number(node?.learningPathPosition || 0);
+  const total = Number(node?.learningPathTotal || 0);
+  return position > 0 && total > 0 ? `${position} / ${total}` : null;
+}
+
+function learningPathTargetWithProgress(current, target, direction) {
+  const currentPosition = Number(current?.learningPathPosition || 0);
+  if (!target || currentPosition <= 0) return target;
+  return {
+    ...target,
+    learningPathPosition: currentPosition + (direction === "previous" ? -1 : 1),
+    learningPathTotal: current.learningPathTotal,
+  };
+}
+
 function renderLessonDetail(lesson) {
   const detail = $("lesson-detail");
   if (!detail) return;
@@ -3688,7 +3709,7 @@ function setLessonPageMode(focused) {
   if (heading) heading.textContent = focused ? "Öğrenme adımı" : "Dersler";
   if (description) {
     description.textContent = focused
-      ? "Haritadaki sıradaki durağını tamamla, sonraki adım otomatik olarak açılsın."
+      ? "Bu adımı tamamla; ardından sıradaki durağa geç."
       : "Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.";
   }
   if (listTitle) listTitle.textContent = "Sana uygun dersler";
@@ -3725,6 +3746,7 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
   if (!detail) return;
   const completed = Boolean(lesson?.completion?.completed);
   const stepTypeLabel = learningStep?.type === "SMALL_STUDY" ? "Küçük çalışma" : "Öğretim";
+  const progressLabel = learningPathProgressLabel(learningStep);
   const navigation = normalizeLearningPathNavigation(serverNavigation, learningStep);
   const navigationMarkup =
     navigation.previousStep || navigation.nextStep
@@ -3738,6 +3760,7 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
     <div class="learning-path-step-context">
       <span class="badge badge-info">${escapeHtml(stepTypeLabel)}</span>
       <span class="muted">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
+      ${progressLabel ? `<span class="learning-path-step-progress" aria-label="Öğrenme yolu ilerlemesi">Öğrenme Yolu · ${escapeHtml(progressLabel)}</span>` : ""}
     </div>
     <p class="insight-eyebrow">ŞİMDİKİ DURAĞIN</p>
     <h3>${escapeHtml(lesson.title)}</h3>
@@ -3752,8 +3775,7 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
     </div>
     <div class="lesson-actions">
       <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
-      ${completed && learningStep?.templateVersionId ? '<button type="button" class="btn btn-ghost" data-learning-step-replay>Dersi tekrar et</button>' : ""}
-      <button type="button" class="btn btn-primary" data-learning-step-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : "Dersi tamamladım ve sonraki adıma geç"}</button>
+      ${completed ? '<span class="lesson-completed-state" role="status">✓ Bu adım tamamlandı</span>' : '<button type="button" class="btn btn-primary" data-learning-step-complete>Dersi tamamla <span aria-hidden="true">→</span></button>'}
     </div>
     <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
     ${navigationMarkup}`
@@ -3816,12 +3838,29 @@ async function loadFocusedLearningPathStep() {
       const path = await insightApi("learning-path");
       activeLearningStepNode = activeLearningPathNodeFromData(path);
     }
-    const node = activeLearningStepNode;
+    let node = activeLearningStepNode;
     if (!node) {
       activeLearningStepNavigation = null;
       status.textContent = "Öğrenme yolundaki tüm durakları tamamladın.";
       renderFocusedLesson(null, null);
       return;
+    }
+    if (!learningPathProgressLabel(node)) {
+      try {
+        const path = await insightApi("learning-path");
+        const allNodes = learningPathNodesFromData(path);
+        const position = allNodes.findIndex((item) => item.id === node.id);
+        if (position >= 0) {
+          node = {
+            ...node,
+            learningPathPosition: position + 1,
+            learningPathTotal: allNodes.length,
+          };
+          activeLearningStepNode = node;
+        }
+      } catch {
+        // The position is supplementary UI; the lesson must still open.
+      }
     }
     if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
       status.textContent = "";
@@ -3865,9 +3904,14 @@ async function navigateLearningPathAdjacent(direction) {
   if (!target || !button) return;
   setAsyncButtonState(button, true, "Yükleniyor…");
   try {
-    activeLearningStepNode = target;
+    const targetWithProgress = learningPathTargetWithProgress(
+      activeLearningStepNode,
+      target,
+      direction,
+    );
+    activeLearningStepNode = targetWithProgress;
     learningPathEntryMode = true;
-    await startLearningPathNode(target, null, currentStepId);
+    await startLearningPathNode(targetWithProgress, null, currentStepId);
   } catch (error) {
     setAsyncButtonState(button, false, "Yükleniyor…");
     const status = $("lesson-detail-status");
@@ -3893,7 +3937,7 @@ async function completeFocusedLearningStep() {
       navigate("dashboard");
       return;
     }
-    activeLearningStepNode = nextStep;
+    activeLearningStepNode = learningPathTargetWithProgress(node, nextStep, "next");
     learningPathEntryMode = true;
     await startLearningPathNode(activeLearningStepNode, null, node.id);
   } catch (err) {
@@ -3901,32 +3945,6 @@ async function completeFocusedLearningStep() {
     if (status) {
       status.textContent = formatStudentError(err, "Ders tamamlanamadı. Tekrar deneyebilirsin.");
     }
-  }
-}
-
-async function replayLearningStep() {
-  const node = activeLearningStepNode;
-  const button = $("lesson-detail")?.querySelector("[data-learning-step-replay]");
-  const status = $("lesson-detail-status");
-  if (!node?.templateVersionId || !button) return;
-  setAsyncButtonState(button, true, "Tekrar başlatılıyor…");
-  if (status) status.textContent = "Ders tekrar açılıyor…";
-  try {
-    const data = await parseResponse(
-      await authenticatedFetch("/student/exercises/start", {
-        method: "POST",
-        body: JSON.stringify({
-          templateVersionId: node.templateVersionId,
-          clientSessionId: `learning-replay-${node.id}-${Date.now()}`,
-          replay: true,
-        }),
-      }),
-    );
-    exerciseRequestedSessionId = data.sessionId;
-    navigate("exercise");
-  } catch (err) {
-    setAsyncButtonState(button, false, "Tekrar başlatılıyor…");
-    if (status) status.textContent = formatStudentError(err, "Ders tekrar açılamadı.");
   }
 }
 
@@ -4017,7 +4035,6 @@ function setupLessonEvents() {
     if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
     if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
     if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
-    if (event.target.closest("[data-learning-step-replay]")) void replayLearningStep();
     if (event.target.closest("[data-learning-step-previous]"))
       void navigateLearningPathAdjacent("previous");
     if (event.target.closest("[data-learning-step-next]"))
@@ -11703,7 +11720,11 @@ async function navigateLearningPathExerciseAdjacent(direction) {
   );
   if (!currentStepId || !target || !button) return;
   setAsyncButtonState(button, true, "Yükleniyor…");
-  activeLearningStepNode = target;
+  activeLearningStepNode = learningPathTargetWithProgress(
+    activeLearningStepNode,
+    target,
+    direction,
+  );
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = currentStepId;
   learningPathEntryMode = true;
@@ -11712,7 +11733,7 @@ async function navigateLearningPathExerciseAdjacent(direction) {
   rememberExerciseSession(null);
   resetExerciseState();
   try {
-    await startLearningPathNode(target, null, currentStepId);
+    await startLearningPathNode(activeLearningStepNode, null, currentStepId);
   } catch (error) {
     setAsyncButtonState(button, false, "Yükleniyor…");
     if (!isPremiumLimitError(error)) alert(error.message || "Sonraki adım açılamadı.");
@@ -11869,6 +11890,16 @@ function renderExerciseSession() {
   if (sh) {
     var isStudent = isPlatformUser === false;
     sh.classList.toggle("hidden", !isStudent || (!exerciseSession && !dailyTrainingSummary));
+  }
+  const learningPathContext = $("exercise-learning-path-context");
+  const learningPathProgress = learningPathProgressLabel(activeLearningStepNode);
+  if (learningPathContext) {
+    const inLearningPath =
+      isPlatformUser === false && learningPathEntryMode && Boolean(exerciseSession?.learningStepId);
+    learningPathContext.classList.toggle("hidden", !inLearningPath);
+    learningPathContext.textContent = inLearningPath
+      ? `Öğrenme Yolu${learningPathProgress ? ` · ${learningPathProgress}` : ""}`
+      : "";
   }
   const info = $("exercise-session-info");
   const detail = $("exercise-session-detail");
@@ -12070,13 +12101,13 @@ async function continueToNextLearningStep() {
   const button = $("exercise-next-step");
   if (!next || !button) return;
   setAsyncButtonState(button, true, "Yükleniyor…");
-  activeLearningStepNode = next;
+  activeLearningStepNode = learningPathTargetWithProgress(activeLearningStepNode, next, "next");
   activeLearningStepNavigationFromStepId = currentStepId;
   learningPathEntryMode = true;
   rememberExerciseSession(null);
   resetExerciseState();
   try {
-    await startLearningPathNode(next, null, currentStepId);
+    await startLearningPathNode(activeLearningStepNode, null, currentStepId);
     if ($("exercise-next-step")) setAsyncButtonState(button, false, "Yükleniyor…");
   } catch (error) {
     setAsyncButtonState(button, false, "Yükleniyor…");
