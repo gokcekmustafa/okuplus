@@ -54,6 +54,110 @@ type StepProgressRow = {
   accuracy: number | null;
 };
 
+export type LearningPathEvidenceStep = {
+  id: string;
+  exerciseTemplateVersionId: string | null;
+  contentVersionId: string | null;
+};
+
+export type LearningPathSessionEvidence = {
+  learningStepId: string | null;
+  templateVersionId: string;
+};
+
+export type LearningPathStepEvidence = {
+  completed: boolean;
+  sessionCount: number;
+  contentCompleted: boolean;
+};
+
+/**
+ * Converts raw completion evidence into step-scoped evidence.
+ *
+ * A template session is trusted only when the session carries the exact
+ * learningStepId and still points at that step's template version. Content
+ * progress has no learningStepId in its legacy table, so it is trusted only
+ * when that content version is unique within the selected learning-path
+ * scope. Shared content is intentionally fail-closed.
+ */
+export function resolveLearningPathStepEvidence(
+  steps: readonly LearningPathEvidenceStep[],
+  sessions: readonly LearningPathSessionEvidence[],
+  completedContentVersionIds: ReadonlySet<string>,
+): ReadonlyMap<string, LearningPathStepEvidence> {
+  const stepById = new Map(steps.map((step) => [step.id, step] as const));
+  const contentUsage = new Map<string, number>();
+  for (const step of steps) {
+    if (step.contentVersionId) {
+      contentUsage.set(step.contentVersionId, (contentUsage.get(step.contentVersionId) ?? 0) + 1);
+    }
+  }
+
+  const sessionCounts = new Map<string, number>();
+  for (const session of sessions) {
+    if (!session.learningStepId) continue;
+    const step = stepById.get(session.learningStepId);
+    if (!step || step.exerciseTemplateVersionId !== session.templateVersionId) continue;
+    sessionCounts.set(session.learningStepId, (sessionCounts.get(session.learningStepId) ?? 0) + 1);
+  }
+
+  return new Map(
+    steps.map((step) => {
+      const contentCompleted =
+        Boolean(step.contentVersionId) &&
+        contentUsage.get(step.contentVersionId!) === 1 &&
+        completedContentVersionIds.has(step.contentVersionId!);
+      const sessionCount = sessionCounts.get(step.id) ?? 0;
+      return [
+        step.id,
+        {
+          completed: sessionCount > 0 || contentCompleted,
+          sessionCount: sessionCount || (contentCompleted ? 1 : 0),
+          contentCompleted,
+        },
+      ] as const;
+    }),
+  );
+}
+
+export type LearningPathStatusStep = {
+  id: string;
+  prerequisiteIds: readonly string[];
+  eligible: boolean;
+  completed: boolean;
+};
+
+/**
+ * Applies the linear Learning Path rule to already-scoped completion state.
+ * A completed flag cannot bypass unmet prerequisites; later stations remain
+ * locked until the chain reaches them.
+ */
+export function resolveLearningPathNodeStatuses(
+  steps: readonly LearningPathStatusStep[],
+  alreadyCompletedIds: ReadonlySet<string> = new Set(),
+): ReadonlyMap<string, "completed" | "active" | "locked"> {
+  const statuses = new Map<string, "completed" | "active" | "locked">();
+  const completedIds = new Set(alreadyCompletedIds);
+  let activeAssigned = false;
+
+  for (const step of steps) {
+    const prerequisiteCompleted = step.prerequisiteIds.every((id) => completedIds.has(id));
+    if (step.completed && prerequisiteCompleted) {
+      statuses.set(step.id, "completed");
+      completedIds.add(step.id);
+      continue;
+    }
+    if (!activeAssigned && prerequisiteCompleted && step.eligible) {
+      statuses.set(step.id, "active");
+      activeAssigned = true;
+      continue;
+    }
+    statuses.set(step.id, "locked");
+  }
+
+  return statuses;
+}
+
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
 
 const PATH_SELECT = {
@@ -190,6 +294,7 @@ async function readPathState(
   tx: PrismaTypes.TransactionClient,
   actor: LearningPathActor,
   selectedPath?: PublishedPath,
+  contentEvidenceStepIds?: ReadonlySet<string>,
 ): Promise<{
   path: PublishedPath;
   currentLevel: { id: string; code: string; name: string; displayOrder: number } | null;
@@ -200,10 +305,29 @@ async function readPathState(
   if (!path) return null;
 
   const pathSteps = flattenSteps(path);
-  const templateVersionIds = pathSteps
-    .map((step) => step.exerciseTemplateVersionId)
-    .filter((id): id is string => Boolean(id));
+  const pathStepIds = pathSteps.map((step) => step.id);
+  const stepById = new Map(pathSteps.map((step) => [step.id, step] as const));
+  const localContentUsage = new Map<string, number>();
+  for (const step of pathSteps) {
+    if (step.contentVersionId) {
+      localContentUsage.set(
+        step.contentVersionId,
+        (localContentUsage.get(step.contentVersionId) ?? 0) + 1,
+      );
+    }
+  }
+  const trustedContentStepIds =
+    contentEvidenceStepIds ??
+    new Set(
+      pathSteps
+        .filter(
+          (step) =>
+            Boolean(step.contentVersionId) && localContentUsage.get(step.contentVersionId!) === 1,
+        )
+        .map((step) => step.id),
+    );
   const contentVersionIds = pathSteps
+    .filter((step) => trustedContentStepIds.has(step.id))
     .map((step) => step.contentVersionId)
     .filter((id): id is string => Boolean(id));
   const assessmentIds = pathSteps
@@ -224,20 +348,20 @@ async function readPathState(
         },
         select: { learningStepId: true, status: true, completedAt: true },
       }),
-      templateVersionIds.length
-        ? tx.exerciseSession.groupBy({
-            by: ["templateVersionId"],
+      pathStepIds.length
+        ? tx.exerciseSession.findMany({
             where: {
               tenantId: actor.tenantId,
               studentId: actor.userId,
-              templateVersionId: { in: templateVersionIds },
+              learningStepId: { in: pathStepIds },
               context: "INDIVIDUAL",
               sessionType: "PRACTICE",
               status: "COMPLETED",
               assignmentId: null,
               assessmentId: null,
+              trainingSessionItem: { is: null },
             },
-            _count: { _all: true },
+            select: { learningStepId: true, templateVersionId: true },
           })
         : Promise.resolve([]),
       contentVersionIds.length
@@ -271,9 +395,6 @@ async function readPathState(
       })
     : null;
 
-  const completedByTemplate = new Map(
-    exerciseCounts.map((row) => [row.templateVersionId, row._count._all] as const),
-  );
   const completedByContent = new Map(
     lessonCounts.map((row) => [row.contentVersionId, row._count._all] as const),
   );
@@ -284,23 +405,31 @@ async function readPathState(
     }
   }
 
+  const stepEvidence = resolveLearningPathStepEvidence(
+    pathSteps.map((step) => ({
+      id: step.id,
+      exerciseTemplateVersionId: step.exerciseTemplateVersionId,
+      contentVersionId: trustedContentStepIds.has(step.id) ? step.contentVersionId : null,
+    })),
+    exerciseCounts,
+    new Set(completedByContent.keys()),
+  );
+
   const progress = new Map(
     progressRows.map((row) => {
-      const step = pathSteps.find((candidate) => candidate.id === row.learningStepId);
-      const sessionCount = step?.exerciseTemplateVersionId
-        ? (completedByTemplate.get(step.exerciseTemplateVersionId) ?? 0)
-        : step?.contentVersionId
-          ? (completedByContent.get(step.contentVersionId) ?? 0)
-          : step?.assessmentId
-            ? assessmentResultCompletesStep(step, latestAssessment)
-              ? 1
-              : 0
-            : 0;
+      const step = stepById.get(row.learningStepId);
+      const evidence = stepEvidence.get(row.learningStepId);
+      const assessmentCompleted = step?.assessmentId
+        ? assessmentResultCompletesStep(step, latestAssessment)
+        : false;
+      const sessionCount = evidence?.sessionCount ?? (assessmentCompleted ? 1 : 0);
       const accuracy = step?.assessmentId
         ? (latestAssessment.get(step.assessmentId) ?? null)
         : null;
       const effectiveStatus =
-        row.status === "COMPLETED" || sessionCount > 0 ? "COMPLETED" : row.status;
+        row.status === "COMPLETED" || evidence?.completed || assessmentCompleted
+          ? "COMPLETED"
+          : row.status;
       return [
         row.learningStepId,
         { ...row, status: effectiveStatus, sessionCount, accuracy },
@@ -310,19 +439,16 @@ async function readPathState(
 
   for (const step of pathSteps) {
     if (progress.has(step.id)) continue;
-    const sessionCount = step.exerciseTemplateVersionId
-      ? (completedByTemplate.get(step.exerciseTemplateVersionId) ?? 0)
-      : step.contentVersionId
-        ? (completedByContent.get(step.contentVersionId) ?? 0)
-        : step.assessmentId && assessmentResultCompletesStep(step, latestAssessment)
-          ? 1
-          : 0;
-    if (sessionCount > 0) {
+    const evidence = stepEvidence.get(step.id);
+    const assessmentCompleted = step.assessmentId
+      ? assessmentResultCompletesStep(step, latestAssessment)
+      : false;
+    if (evidence?.completed || assessmentCompleted) {
       progress.set(step.id, {
         learningStepId: step.id,
         status: "COMPLETED",
         completedAt: null,
-        sessionCount,
+        sessionCount: evidence?.sessionCount ?? (assessmentCompleted ? 1 : 0),
         accuracy: step.assessmentId ? (latestAssessment.get(step.assessmentId) ?? null) : null,
       });
     }
@@ -380,30 +506,63 @@ function prerequisiteIdsForStep(
   return [...ids];
 }
 
+type ReadPathState = {
+  path: PublishedPath;
+  currentLevel: { id: string; code: string; name: string; displayOrder: number } | null;
+  progress: Map<string, StepProgressRow>;
+};
+
+function learningPathScopeKey(code: string): string {
+  if (code.startsWith("EDUCATION_V2_P0_")) return "EDUCATION_V2_P0";
+  const p1Family = /^EDUCATION_V2_P1_[A-D](?:_|$)/.exec(code)?.[0];
+  if (p1Family) return p1Family.replace(/_$/, "");
+  return code;
+}
+
+function effectiveCompletedIdsForScope(
+  states: ReadonlyArray<ReadPathState>,
+  guidedStepsByStableKey: ReadonlyMap<string, PathStepRow>,
+): Set<string> {
+  const completedIds = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const state of states) {
+      const steps = flattenSteps(state.path);
+      for (const [index, step] of steps.entries()) {
+        if (completedIds.has(step.id)) continue;
+        if (state.progress.get(step.id)?.status !== "COMPLETED") continue;
+        const prerequisites = prerequisiteIdsForStep(steps, index, guidedStepsByStableKey);
+        if (!prerequisites.every((id) => completedIds.has(id))) continue;
+        completedIds.add(step.id);
+        changed = true;
+      }
+    }
+  }
+  return completedIds;
+}
+
 function toNodes(
   path: PublishedPath,
   currentLevel: { id: string; code: string; name: string; displayOrder: number } | null,
   progress: Map<string, StepProgressRow>,
-  globallyCompletedIds: Set<string>,
+  completedIds: ReadonlySet<string>,
   guidedStepsByStableKey: ReadonlyMap<string, PathStepRow>,
 ) {
   const steps = flattenSteps(path);
-  let activeAssigned = false;
+  const statuses = resolveLearningPathNodeStatuses(
+    steps.map((step, index) => ({
+      id: step.id,
+      prerequisiteIds: prerequisiteIdsForStep(steps, index, guidedStepsByStableKey),
+      eligible: levelEligible(step, currentLevel),
+      completed: completedIds.has(step.id),
+    })),
+    completedIds,
+  );
 
-  const nodes = steps.map((step, index) => {
+  const nodes = steps.map((step) => {
     const saved = progress.get(step.id);
-    let status: "completed" | "active" | "locked" = "locked";
-    if (saved?.status === "COMPLETED") {
-      status = "completed";
-    } else {
-      const prerequisiteIds = prerequisiteIdsForStep(steps, index, guidedStepsByStableKey);
-      const prerequisiteCompleted = prerequisiteIds.every((id) => globallyCompletedIds.has(id));
-      const eligible = levelEligible(step, currentLevel);
-      if (!activeAssigned && prerequisiteCompleted && eligible) {
-        status = "active";
-        activeAssigned = true;
-      }
-    }
+    const status = statuses.get(step.id) ?? "locked";
 
     return {
       id: step.id,
@@ -456,21 +615,62 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
     return await withTenantContext(actor, async (tx) => {
       const paths = await findPublishedPaths(tx, actor);
       if (!paths.length) return null;
+      const contentUsage = new Map<string, number>();
+      for (const path of paths) {
+        for (const step of flattenSteps(path)) {
+          if (step.contentVersionId) {
+            contentUsage.set(
+              step.contentVersionId,
+              (contentUsage.get(step.contentVersionId) ?? 0) + 1,
+            );
+          }
+        }
+      }
+      const contentEvidenceStepIds = new Set(
+        paths
+          .flatMap((path) => flattenSteps(path))
+          .filter(
+            (step) =>
+              Boolean(step.contentVersionId) && contentUsage.get(step.contentVersionId!) === 1,
+          )
+          .map((step) => step.id),
+      );
       const states = (
-        await Promise.all(paths.map((path) => readPathState(tx, actor, path)))
+        await Promise.all(
+          paths.map((path) => readPathState(tx, actor, path, contentEvidenceStepIds)),
+        )
       ).filter((state): state is NonNullable<typeof state> => Boolean(state));
       if (!states.length) return null;
-      const allProgress = new Map(states.flatMap((state) => [...state.progress.entries()]));
-      const globallyCompletedIds = new Set(
-        [...allProgress.values()]
-          .filter((stepProgress) => stepProgress.status === "COMPLETED")
-          .map((stepProgress) => stepProgress.learningStepId),
-      );
-      const guidedStepsByStableKey = new Map(
-        states.flatMap((state) =>
-          flattenSteps(state.path).map((step) => [step.stableKey, step] as const),
-        ),
-      );
+      const scopes = new Map<
+        string,
+        {
+          states: ReadPathState[];
+          progress: Map<string, StepProgressRow>;
+          guidedStepsByStableKey: Map<string, PathStepRow>;
+          completedIds: Set<string>;
+        }
+      >();
+      for (const state of states) {
+        const key = learningPathScopeKey(state.path.code);
+        const scope = scopes.get(key) ?? {
+          states: [],
+          progress: new Map<string, StepProgressRow>(),
+          guidedStepsByStableKey: new Map<string, PathStepRow>(),
+          completedIds: new Set<string>(),
+        };
+        scope.states.push(state);
+        for (const [stepId, progress] of state.progress) scope.progress.set(stepId, progress);
+        for (const step of flattenSteps(state.path)) {
+          scope.guidedStepsByStableKey.set(step.stableKey, step);
+        }
+        scopes.set(key, scope);
+      }
+      for (const scope of scopes.values()) {
+        scope.completedIds = effectiveCompletedIdsForScope(
+          scope.states,
+          scope.guidedStepsByStableKey,
+        );
+      }
       const projections = states.map((state) => ({
         path: {
           id: state.path.id,
@@ -488,9 +688,9 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
         ...toNodes(
           state.path,
           state.currentLevel,
-          allProgress,
-          globallyCompletedIds,
-          guidedStepsByStableKey,
+          scopes.get(learningPathScopeKey(state.path.code))!.progress,
+          scopes.get(learningPathScopeKey(state.path.code))!.completedIds,
+          scopes.get(learningPathScopeKey(state.path.code))!.guidedStepsByStableKey,
         ),
       }));
       const primary =
@@ -769,37 +969,52 @@ export async function completeLearningStepForContentVersion(
 ) {
   const path = await getStudentLearningPath(actor);
   if (!path) return;
-  const node = (path.paths ?? [path])
+  const matches = (path.paths ?? [path])
     .flatMap((projection) => projection.nodes)
-    .find((item) => item.contentVersionId === contentVersionId);
-  if (node) await completeLearningStep(actor, node.id);
+    .filter((item) => item.contentVersionId === contentVersionId);
+  if (matches.length === 1) await completeLearningStep(actor, matches[0]!.id);
 }
 
 export async function markLearningStepInProgressForTemplate(
   actor: LearningPathActor,
   templateVersionId: string,
+  learningStepId?: string | null,
 ) {
   const path = await getStudentLearningPath(actor);
   if (!path) return;
-  const node = (path.paths ?? [path])
+  const matches = (path.paths ?? [path])
     .flatMap((projection) => projection.nodes)
-    .find((item) => item.templateVersionId === templateVersionId);
+    .filter((item) => item.templateVersionId === templateVersionId);
+  const node = learningStepId
+    ? matches.find((item) => item.id === learningStepId)
+    : matches.length === 1
+      ? matches[0]
+      : null;
   if (node) await markLearningStepInProgress(actor, node.id);
 }
 
 export async function completeLearningStepForSession(
   actor: LearningPathActor,
-  session: { templateVersionId: string; assessmentId: string | null },
+  session: {
+    templateVersionId: string;
+    assessmentId: string | null;
+    learningStepId?: string | null;
+  },
 ) {
   const path = await getStudentLearningPath(actor);
   if (!path) return;
-  const node = (path.paths ?? [path])
+  const matches = (path.paths ?? [path])
     .flatMap((projection) => projection.nodes)
-    .find(
+    .filter(
       (item) =>
         (session.assessmentId && item.assessmentId === session.assessmentId) ||
         (!session.assessmentId && item.templateVersionId === session.templateVersionId),
     );
+  const node = session.learningStepId
+    ? matches.find((item) => item.id === session.learningStepId)
+    : matches.length === 1
+      ? matches[0]
+      : null;
   if (!node) return;
 
   const assessmentId = node.assessmentId;

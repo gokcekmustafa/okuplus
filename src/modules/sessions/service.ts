@@ -859,7 +859,11 @@ export async function completeExerciseSession(
     }
     await completeLearningStepForSession(
       { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
-      { templateVersionId: session.templateVersionId, assessmentId: session.assessmentId },
+      {
+        templateVersionId: session.templateVersionId,
+        assessmentId: session.assessmentId,
+        learningStepId: session.learningStepId,
+      },
     ).catch(() => {});
   }
 
