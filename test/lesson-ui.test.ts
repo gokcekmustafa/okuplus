@@ -53,11 +53,12 @@ describe("student lesson UI", () => {
   it("renders a roadmap lesson as one focused step without a lesson catalog", () => {
     const h = harness();
     h.run(
-      `renderFocusedLesson({title:'Hedefi belirle',objective:'Okumadan önce hedefini söyle',explanation:'Önce ne aradığını netleştir.',workedExample:'Başlığı ve soruyu birlikte incele.',guidedPractice:'Şimdi kendi hedefini yaz.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Hızlı Okuma'})`,
+      `renderFocusedLesson({title:'Hedefi belirle',objective:'Okumadan önce hedefini söyle',explanation:'Önce ne aradığını netleştir.',workedExample:'Başlığı ve soruyu birlikte incele.',guidedPractice:'Şimdi kendi hedefini yaz.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Hızlı Okuma',learningPathPosition:7,learningPathTotal:22})`,
     );
     const html = h.get("lesson-detail").innerHTML;
     expect(html).toContain("ŞİMDİKİ DURAĞIN");
-    expect(html).toContain("Dersi tamamladım ve sonraki adıma geç");
+    expect(html).toContain("Dersi tamamla");
+    expect(html).toContain("Öğrenme Yolu · 7 / 22");
     expect(html).not.toContain("Sana uygun dersler");
     expect(html).toContain("data-learning-step-complete");
   });
@@ -89,6 +90,17 @@ describe("student lesson UI", () => {
     expect(html).toContain("data-learning-step-next");
     expect(html).toContain("Önceki");
     expect(html).toContain("Sonraki");
+  });
+
+  it("does not show a second replay CTA for a completed lesson", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({id:'lesson-2',title:'Tamamlanan ders',objective:'İlerle',explanation:'Anlatım',workedExample:'Örnek',guidedPractice:'Uygula',completion:{completed:true}},{id:'step-2',type:'TEACHING',status:'completed',unitTitle:'Başlangıç',templateVersionId:'template-2',learningPathPosition:2,learningPathTotal:22},{previousStep:{id:'step-1',type:'TEACHING',status:'completed',title:'İlk ders'},nextStep:{id:'step-3',type:'TEACHING',status:'active',title:'Son ders'}})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).not.toContain("data-learning-step-replay");
+    expect(html).not.toContain("Dersi tekrar et");
+    expect(html).toContain("Bu adım tamamlandı");
   });
 
   it("does not expose a next button past a locked direct neighbor", () => {

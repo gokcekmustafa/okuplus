@@ -6542,3 +6542,283 @@ textarea:focus-visible {
 :root[data-theme="dark"] .student-shell .bottom-nav-item.active {
   background: var(--primary-soft);
 }
+
+/* Learning Path v6 mobile refinement: keep the route familiar while making
+   the learner's location and next action obvious at phone width. */
+.student-shell .learning-map-v6-completed-state {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  color: #17845d;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.student-shell .learning-path-step-context {
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.student-shell .learning-path-step-progress {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid #d9d2ff;
+  border-radius: 999px;
+  background: #f5f2ff;
+  color: #6148c9;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.student-shell .lesson-layout.is-learning-path #lesson-detail {
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid #dce5f4;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 34px rgba(35, 57, 104, 0.08);
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-detail > h3 {
+  margin: 4px 0 16px;
+  color: var(--student-ink);
+  font-size: clamp(1.45rem, 4vw, 2rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-detail > section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e8edf5;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-detail > section h4 {
+  margin: 0 0 8px;
+  color: var(--student-ink);
+  font-size: 15px;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-detail > section p {
+  margin: 0;
+  color: var(--student-ink);
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-objective {
+  margin: 0;
+  border: 1px solid #e2defd;
+  background: #f6f4ff;
+  color: #253d70;
+  line-height: 1.55;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-actions {
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-actions [data-learning-step-complete] {
+  min-height: 52px;
+  padding-inline: 20px;
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(112, 72, 232, 0.18);
+  font-weight: 800;
+}
+
+.student-shell .lesson-completed-state {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #eefaf4;
+  color: #17845d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.student-shell .lesson-navigation {
+  margin-top: 26px;
+  padding-top: 18px;
+}
+
+.student-shell .lesson-navigation .btn {
+  min-height: 48px;
+  min-width: 112px;
+}
+
+.student-shell .learning-path-exercise-context {
+  display: block;
+  width: fit-content;
+  margin: 0 0 8px 60px;
+  padding: 5px 10px;
+  border: 1px solid #d9d2ff;
+  border-radius: 999px;
+  background: #f5f2ff;
+  color: #6148c9;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.student-shell #page-exercise .answer-card {
+  min-height: 58px;
+  padding: 15px 16px;
+  line-height: 1.45;
+}
+
+@media (max-width: 700px) {
+  .student-shell #learning-path-card .learning-map-v6-header {
+    padding-bottom: 12px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-header h4 {
+    font-size: clamp(1.5rem, 7vw, 1.85rem);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-summary strong {
+    font-size: 12px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-route {
+    grid-auto-rows: 136px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-step,
+  .student-shell #learning-path-card .learning-map-v6-node {
+    min-height: 136px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-marker-wrap {
+    width: 66px;
+    height: 66px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-marker {
+    width: 54px;
+    height: 54px;
+    font-size: 21px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-kind {
+    font-size: clamp(13px, 3.6vw, 15px);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-area {
+    font-size: 10px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-completed-state {
+    font-size: 10px;
+  }
+
+  .student-shell .learning-path-step-progress {
+    margin-left: 0;
+  }
+
+  .student-shell .lesson-layout.is-learning-path #lesson-detail {
+    padding: 18px 16px 20px;
+    border-radius: 20px;
+  }
+
+  .student-shell .lesson-layout.is-learning-path .lesson-detail > section p {
+    font-size: 16px;
+  }
+
+  .student-shell .lesson-layout.is-learning-path .lesson-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-shell .lesson-layout.is-learning-path .lesson-actions [data-learning-step-complete],
+  .student-shell .lesson-layout.is-learning-path .lesson-actions [data-learning-step-back] {
+    width: 100%;
+  }
+
+  .student-shell .lesson-layout.is-learning-path .lesson-actions [data-learning-step-complete] {
+    order: 1;
+  }
+
+  .student-shell .lesson-layout.is-learning-path .lesson-actions [data-learning-step-back] {
+    order: 2;
+  }
+
+  .student-shell .lesson-completed-state {
+    justify-content: center;
+  }
+
+  .student-shell .lesson-navigation {
+    gap: 10px;
+  }
+
+  .student-shell .lesson-navigation .btn {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .student-shell .learning-path-exercise-context {
+    margin-left: 0;
+  }
+
+  .student-shell #page-exercise .answer-card {
+    min-height: 60px;
+    padding: 16px;
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-shell #learning-path-card .learning-map-v6-route {
+    grid-auto-rows: 132px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-step,
+  .student-shell #learning-path-card .learning-map-v6-node {
+    min-height: 132px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-node {
+    grid-template-columns: minmax(0, 1fr) 68px minmax(0, 1fr);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-copy {
+    max-width: 126px;
+  }
+}
+
+:root[data-theme="dark"] .student-shell .lesson-layout.is-learning-path #lesson-detail {
+  border-color: #344663;
+  background: #182235;
+}
+
+:root[data-theme="dark"] .student-shell .learning-path-step-progress,
+:root[data-theme="dark"] .student-shell .learning-path-exercise-context {
+  border-color: #5546a8;
+  background: #2a2850;
+  color: #c9c1ff;
+}
+
+:root[data-theme="dark"] .student-shell .lesson-layout.is-learning-path .lesson-detail > section {
+  border-top-color: #344663;
+}
+
+:root[data-theme="dark"] .student-shell .lesson-layout.is-learning-path .lesson-objective {
+  border-color: #554b7e;
+  background: #252442;
+  color: #dbe5f8;
+}
+
+:root[data-theme="dark"] .student-shell .lesson-completed-state {
+  background: #173a32;
+  color: #8be4bb;
+}
