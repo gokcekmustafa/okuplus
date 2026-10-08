@@ -2874,12 +2874,8 @@ function renderLearningPathCourseModule(module) {
 
 function renderLearningPathCourse(data) {
   const list = $("lesson-list");
-  const level = $("learning-path-course-level");
-  const count = $("learning-path-module-count");
   learningPathCourseModules = learningPathCourseModulesFromData(data);
   setLessonPageMode(false);
-  if (level) level.textContent = data?.currentLevel?.name || "Seviyen hazırlanıyor";
-  if (count) count.textContent = `${learningPathCourseModules.length} bölüm`;
   renderLearningPathCourseSummary(learningPathCourseModules);
   if (!list) return;
   if (!learningPathCourseModules.length) {
