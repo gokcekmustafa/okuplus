@@ -589,6 +589,8 @@ function toNodes(
 
     return {
       id: step.id,
+      learningPathId: path.id,
+      learningPathCode: path.code,
       type: step.type,
       source: step.source,
       code: step.stableKey,
@@ -750,6 +752,8 @@ export async function getNextLearningStep(actor: LearningPathActor) {
   return node
     ? {
         id: node.id,
+        learningPathId: node.learningPathId,
+        learningPathCode: node.learningPathCode,
         type: node.type,
         title: node.label,
         unitTitle: node.unit.title,

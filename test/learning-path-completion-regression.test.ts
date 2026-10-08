@@ -3,6 +3,7 @@ import {
   resolveLearningPathNodeStatuses,
   resolveLearningPathStepEvidence,
 } from "../src/modules/learning-path/service.js";
+import { resolveP0LinearCompletion } from "../src/modules/student-learning/p1-transition.js";
 
 describe("learning path completion regression", () => {
   it("binds a shared template session to its exact learning step", () => {
@@ -67,5 +68,68 @@ describe("learning path completion regression", () => {
 
     expect(pathA.get("path-a-step")).toBe("completed");
     expect(pathB.get("path-b-step")).toBe("active");
+  });
+
+  it("does not let a future P0 completion skip an incomplete predecessor", () => {
+    const completed = resolveP0LinearCompletion(
+      [
+        {
+          id: "step-a",
+          type: "TEACHING",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "step-b",
+          type: "PRACTICE",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "measurement",
+          type: "MEASUREMENT",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+      ],
+      new Set(["step-b"]),
+    );
+
+    expect([...completed]).toEqual([]);
+  });
+
+  it("derives only the same linear P0 chain and its measurement checkpoint", () => {
+    const completed = resolveP0LinearCompletion(
+      [
+        {
+          id: "step-a",
+          type: "TEACHING",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "step-b",
+          type: "PRACTICE",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "measurement",
+          type: "MEASUREMENT",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "terminal",
+          type: "NEXT_LEARNING",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+      ],
+      new Set(["step-a", "step-b"]),
+    );
+
+    expect([...completed]).toEqual(["step-a", "step-b", "measurement"]);
+    expect(completed.has("terminal")).toBe(false);
   });
 });
