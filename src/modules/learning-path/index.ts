@@ -4,6 +4,7 @@ export {
   assertLearningStepAccessible,
   assertLearningTemplateAccessible,
   completeLearningStep,
+  completeTerminalLearningStep,
   completeLearningStepForContentVersion,
   completeLearningStepForSession,
   getLearningStepNavigation,

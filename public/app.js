@@ -2613,6 +2613,13 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
     await window.startTodayAssessment(node.assessmentId, navigationFromStepId, node.id);
     return;
   }
+  if (type === "NEXT_LEARNING") {
+    // The final station is a terminal checkpoint rather than another lesson
+    // or exercise. Open it in the focused Learning Path view so the student
+    // receives a clear completion action instead of a silent no-op.
+    navigate("lessons");
+    return;
+  }
   if (!tv) {
     if (type === "SKILL") alert("Bu beceri için henüz içerik yok");
     return;
@@ -4014,6 +4021,24 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
     : '<p class="muted">Bu öğrenme adımı için yayınlanmış ders bulunamadı.</p>';
 }
 
+function renderLearningPathTerminalStep(node) {
+  const detail = $("lesson-detail");
+  if (!detail) return;
+  const position = learningPathProgressLabel(node);
+  detail.innerHTML = `
+    <div class="learning-path-terminal" role="status" aria-live="polite">
+      <span class="learning-path-terminal-icon" aria-hidden="true">✓</span>
+      <p class="insight-eyebrow">ÖĞRENME YOLU · SON DURAK</p>
+      <h3>Bu öğrenme döngüsünü tamamladın</h3>
+      <p>${position ? `${escapeHtml(position)} adımı tamamladın. ` : ""}Yeni bir öğrenme döngüsü açıldığında yoluna buradan devam edeceksin.</p>
+      <div class="lesson-actions">
+        <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
+        <button type="button" class="btn btn-primary" data-learning-terminal-complete>Öğrenme yolunu tamamla <span aria-hidden="true">→</span></button>
+      </div>
+      <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
+    </div>`;
+}
+
 function renderLessonList(items) {
   setLessonPageMode(false);
   const list = $("lesson-list");
@@ -4077,22 +4102,10 @@ async function loadFocusedLearningPathStep() {
       renderFocusedLesson(null, null);
       return;
     }
-    if (!learningPathProgressLabel(node)) {
-      try {
-        const path = await insightApi("learning-path");
-        const allNodes = learningPathNodesFromData(path);
-        const position = allNodes.findIndex((item) => item.id === node.id);
-        if (position >= 0) {
-          node = {
-            ...node,
-            learningPathPosition: position + 1,
-            learningPathTotal: allNodes.length,
-          };
-          activeLearningStepNode = node;
-        }
-      } catch {
-        // The position is supplementary UI; the lesson must still open.
-      }
+    if (node.type === "NEXT_LEARNING") {
+      renderLearningPathTerminalStep(node);
+      status.textContent = "";
+      return;
     }
     if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
       status.textContent = "";
@@ -4121,6 +4134,33 @@ async function loadFocusedLearningPathStep() {
       );
       error.classList.remove("hidden");
     }
+  }
+}
+
+async function completeLearningPathTerminalStep() {
+  const node = activeLearningStepNode;
+  const button = $("lesson-detail")?.querySelector("[data-learning-terminal-complete]");
+  const status = $("lesson-detail-status");
+  if (!node?.id || !button) return;
+  setAsyncButtonState(button, true, "Tamamlanıyor…");
+  if (status) status.textContent = "Son durak tamamlanıyor…";
+  try {
+    const response = await authenticatedFetch(
+      "/student/learning-path/steps/" + encodeURIComponent(node.id) + "/complete",
+      {
+        method: "POST",
+        body: "{}",
+      },
+    );
+    await parseResponse(response);
+    learningPathEntryMode = false;
+    activeLearningStepNode = null;
+    activeLearningStepNavigation = null;
+    activeLearningStepNavigationFromStepId = null;
+    navigate("dashboard");
+  } catch (error) {
+    setAsyncButtonState(button, false, "Tamamlanıyor…");
+    if (status) status.textContent = formatStudentError(error, "Son durak tamamlanamadı.");
   }
 }
 
@@ -4284,6 +4324,8 @@ function setupLessonEvents() {
     if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
     if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
     if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
+    if (event.target.closest("[data-learning-terminal-complete]"))
+      void completeLearningPathTerminalStep();
     if (event.target.closest("[data-learning-step-previous]"))
       void navigateLearningPathAdjacent("previous");
     if (event.target.closest("[data-learning-step-next]"))

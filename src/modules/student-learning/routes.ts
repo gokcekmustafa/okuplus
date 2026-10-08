@@ -12,6 +12,7 @@ import {
   startPersonalExercise,
 } from "./service.js";
 import { startStudentReview, getStudentReview } from "./review-service.js";
+import { completeTerminalLearningStep } from "../learning-path/index.js";
 
 function hashForDiagnostics(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -223,6 +224,23 @@ export async function studentLearningRoutes(
       throw error;
     }
   });
+  app.post(
+    "/student/learning-path/steps/:stepId/complete",
+    { preHandler: [requireAuth(authProvider)] },
+    async (req) => {
+      const { stepId } = req.params as { stepId: string };
+      return ok(
+        await completeTerminalLearningStep(
+          {
+            userId: req.authUser!.id,
+            tenantId: req.tenantContext?.tenantId ?? null,
+            platformRole: req.authUser!.platformRole ?? null,
+          },
+          stepId,
+        ),
+      );
+    },
+  );
   app.post(
     "/student/learning-path/client-diagnostic",
     { preHandler: [requireAuth(authProvider)] },
