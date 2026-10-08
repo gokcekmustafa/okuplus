@@ -467,7 +467,7 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
       code: path.code,
       title: path.title,
       area: path.area,
-      levelId,
+      levelId: null,
       version: EDUCATION_V2_P1_A_PATH_VERSION,
       status: "PUBLISHED",
     },
