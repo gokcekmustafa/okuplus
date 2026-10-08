@@ -32,6 +32,23 @@ describe("published learning-path selection", () => {
     ).toBe(false);
   });
 
+  it("keeps global canonical P0 ahead of a tenant-specific P0-shaped path", () => {
+    expect(
+      shouldReplacePublishedPath(
+        { code: "EDUCATION_V2_P0_FAST_READING_G8_12", tenantId: "tenant-1" },
+        { code: "EDUCATION_V2_P0_FAST_READING_G8_12_LEGACY", tenantId: null },
+        "tenant-1",
+      ),
+    ).toBe(true);
+    expect(
+      shouldReplacePublishedPath(
+        { code: "EDUCATION_V2_P0_FAST_READING_G8_12", tenantId: null },
+        { code: "EDUCATION_V2_P0_FAST_READING_G8_12_LEGACY", tenantId: "tenant-1" },
+        "tenant-1",
+      ),
+    ).toBe(false);
+  });
+
   it("does not replace canonical P0 with a legacy path", () => {
     expect(
       shouldReplacePublishedPath(
