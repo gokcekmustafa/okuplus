@@ -265,15 +265,17 @@ export function shouldReplacePublishedPath(
   const currentIsAssignedP1 = current.code.startsWith(P1_PATH_PREFIX);
   if (candidateIsAssignedP1 !== currentIsAssignedP1) return candidateIsAssignedP1;
 
+  const candidateIsCanonicalP0 = candidate.code.startsWith(P0_PATH_PREFIX);
+  const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
+  if (candidateIsCanonicalP0 !== currentIsCanonicalP0) return candidateIsCanonicalP0;
+
   const candidateIsTenantSpecific = candidate.tenantId === actorTenantId;
   const currentIsTenantSpecific = current.tenantId === actorTenantId;
   if (candidateIsTenantSpecific !== currentIsTenantSpecific) {
     return candidateIsTenantSpecific;
   }
 
-  const candidateIsCanonicalP0 = candidate.code.startsWith(P0_PATH_PREFIX);
-  const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
-  return candidateIsCanonicalP0 && !currentIsCanonicalP0;
+  return false;
 }
 
 async function findPublishedPath(tx: PrismaTypes.TransactionClient, actor: LearningPathActor) {
