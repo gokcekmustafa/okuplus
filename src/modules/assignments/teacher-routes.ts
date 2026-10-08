@@ -46,6 +46,8 @@ import {
   runTeacherAutomation,
   upsertTeacherAutomationSetting,
 } from "./recommendation-service.js";
+import { p1TeacherOverrideSchema } from "../student-learning/p1-schemas.js";
+import { overrideP1Route } from "../student-learning/p1-transition.js";
 
 function readParamId(request: FastifyRequest, label: string, key = "id"): string {
   const id = (request.params as Record<string, string | undefined>)[key];
@@ -197,6 +199,15 @@ export async function assignmentTeacherRoutes(
           readParamId(request, "Öğrenci", "studentId"),
         ),
       ),
+  );
+
+  app.post(
+    "/teacher/learning-path/p1/override",
+    { preHandler: requireTeacherAuth },
+    async (request) => {
+      const input = p1TeacherOverrideSchema.parse(request.body);
+      return ok(await overrideP1Route(actorFrom(request), input));
+    },
   );
 
   app.get("/teacher/templates", { preHandler: requireTeacherAuth }, async (request) => {
