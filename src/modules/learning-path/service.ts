@@ -269,6 +269,12 @@ export function shouldReplacePublishedPath(
   const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
   if (candidateIsCanonicalP0 !== currentIsCanonicalP0) return candidateIsCanonicalP0;
 
+  if (candidateIsCanonicalP0 && currentIsCanonicalP0) {
+    const candidateIsGlobal = candidate.tenantId === null;
+    const currentIsGlobal = current.tenantId === null;
+    if (candidateIsGlobal !== currentIsGlobal) return candidateIsGlobal;
+  }
+
   const candidateIsTenantSpecific = candidate.tenantId === actorTenantId;
   const currentIsTenantSpecific = current.tenantId === actorTenantId;
   if (candidateIsTenantSpecific !== currentIsTenantSpecific) {
