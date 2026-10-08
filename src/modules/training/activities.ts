@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { validationError, notFoundError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
 import { startPersonalExercise } from "../student-learning/service.js";
@@ -6,6 +7,7 @@ import {
   resolveTrainingRuntimeConfig,
   type TrainingActor,
 } from "./runtime.js";
+import { isIndependentTrainingSession } from "./session-origin.js";
 
 export const TRAINING_ACTIVITY_CATALOG = [
   {
@@ -121,13 +123,80 @@ async function availableTemplateIds(actor: ActivityActor) {
   return available;
 }
 
+function activityIdFromDeviceInfo(value: Prisma.JsonValue | null): string | null {
+  if (!isIndependentTrainingSession(value) || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const activityId = (value as { activityId?: unknown }).activityId;
+  return typeof activityId === "string" && findTrainingActivity(activityId) ? activityId : null;
+}
+
+function averageScoreFromSummary(value: Prisma.JsonValue | null): number | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const averageScore = (value as { averageScore?: unknown }).averageScore;
+  return typeof averageScore === "number" && Number.isFinite(averageScore) ? averageScore : null;
+}
+
+async function loadActivityProgress(actor: ActivityActor) {
+  const rows = await prisma.exerciseSession.findMany({
+    where: {
+      tenantId: actor.tenantId,
+      studentId: actor.userId,
+      context: "INDIVIDUAL",
+      sessionType: "PRACTICE",
+      assignmentId: null,
+      assessmentId: null,
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 200,
+    select: {
+      id: true,
+      status: true,
+      deviceInfo: true,
+      scoreSummary: true,
+      startedAt: true,
+      completedAt: true,
+      _count: { select: { attempts: true } },
+    },
+  });
+
+  const progress = new Map<
+    string,
+    {
+      sessionId: string;
+      status: "IN_PROGRESS" | "COMPLETED";
+      averageScore: number | null;
+      attemptCount: number;
+      lastActivityAt: string;
+      completedAt: string | null;
+    }
+  >();
+  for (const row of rows) {
+    const activityId = activityIdFromDeviceInfo(row.deviceInfo);
+    if (!activityId || progress.has(activityId)) continue;
+    if (row.status !== "IN_PROGRESS" && row.status !== "COMPLETED") continue;
+    progress.set(activityId, {
+      sessionId: row.id,
+      status: row.status,
+      averageScore: averageScoreFromSummary(row.scoreSummary),
+      attemptCount: row._count.attempts,
+      lastActivityAt: (row.completedAt ?? row.startedAt).toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+    });
+  }
+  return progress;
+}
+
 export function findTrainingActivity(activityId: string) {
   return TRAINING_ACTIVITY_CATALOG.find((activity) => activity.id === activityId);
 }
 
 export async function listTrainingActivities(actor: TrainingActor) {
   assertActivityStudent(actor);
-  const available = await availableTemplateIds(actor);
+  const [available, progress] = await Promise.all([
+    availableTemplateIds(actor),
+    loadActivityProgress(actor),
+  ]);
   return {
     activities: TRAINING_ACTIVITY_CATALOG.map((activity) => ({
       id: activity.id,
@@ -135,7 +204,9 @@ export async function listTrainingActivities(actor: TrainingActor) {
       description: activity.description,
       durationLabel: activity.durationLabel,
       estimatedDurationSeconds: activity.estimatedDurationSeconds,
+      competency: activity.competency,
       available: available.has(activity.id),
+      progress: progress.get(activity.id) ?? null,
     })),
   };
 }

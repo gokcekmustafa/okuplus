@@ -2742,6 +2742,12 @@ function learningPathMapKind(node) {
   return { className: "lesson", label: "Öğren", icon: "•" };
 }
 
+function learningPathExerciseContextLabel(node) {
+  const area = node?.unitTitle || learningPathAreaLabel(node?.area || "COMMON");
+  const kind = learningPathMapKind(node).label;
+  return `${area} · ${kind}`;
+}
+
 function learningPathActionLabel(node, visualStatus) {
   if (visualStatus === "locked") return "Henüz açık değil";
   if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
@@ -3202,20 +3208,47 @@ function renderTrainingActivities() {
     grid.innerHTML = '<p class="muted">Şu anda yayınlanmış aktivite bulunmuyor.</p>';
     return;
   }
+  const skillLabels = {
+    FAST_ATTENTION: "Dikkat",
+    FAST_RECOGNITION: "Hızlı tanıma",
+    FAST_CHUNKING: "Cümle gruplama",
+    RC_MAIN_IDEA: "Ana fikir",
+    RC_DETAIL: "Detay",
+    RC_INFERENCE: "Çıkarım",
+  };
   grid.innerHTML = trainingActivities
     .map((activity) => {
       const available = activity.available !== false;
+      const progress = activity.progress;
+      const completed = progress?.status === "COMPLETED";
+      const inProgress = progress?.status === "IN_PROGRESS";
+      const statusLabel = completed ? "✓ Tamamlandı" : inProgress ? "● Devam ediyor" : "Yeni";
+      const actionLabel = completed ? "Tekrar çalış →" : inProgress ? "Devam et →" : "Başla →";
+      const score =
+        typeof progress?.averageScore === "number"
+          ? `Sonuç: ${Math.round(progress.averageScore * 100)}%`
+          : "";
+      const attempts = Number(progress?.attemptCount) > 0 ? `${progress.attemptCount} cevap` : "";
+      const resultDetails = [score, attempts].filter(Boolean).join(" · ");
+      const resumeSessionId = inProgress ? progress.sessionId : "";
       return `<article class="training-activity-card">
-        <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+        <div class="training-activity-card-head">
+          <div>
+            <p class="training-activity-kicker">ANTRENMAN</p>
+            <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+          </div>
+          <span class="training-activity-status ${completed ? "is-completed" : inProgress ? "is-progress" : "is-new"}">${statusLabel}</span>
+        </div>
         <p>${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
-        <div class="training-activity-meta">${escapeHtml(activity.durationLabel || "Kısa çalışma")}</div>
-        <button type="button" class="btn btn-primary" data-training-activity-start="${escapeHtml(activity.id)}" ${available ? "" : "disabled"}>${available ? "Başla" : "Şu anda hazır değil"}</button>
+        <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabels[activity.competency] || "Okuma becerisi")}</strong></div>
+        <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
+        <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
       </article>`;
     })
     .join("");
 }
 
-async function startTrainingActivity(activityId) {
+async function startTrainingActivity(activityId, resumeSessionId = null) {
   const button = document.querySelector(
     `[data-training-activity-start="${CSS.escape(activityId)}"]`,
   );
@@ -3224,6 +3257,16 @@ async function startTrainingActivity(activityId) {
     button.textContent = "Hazırlanıyor…";
   }
   try {
+    if (resumeSessionId) {
+      exerciseMode = "activity";
+      activeTrainingActivityId = activityId;
+      exerciseReviewMode = false;
+      resetDailyTrainingState();
+      rememberExerciseSession(resumeSessionId);
+      exerciseRequestedSessionId = resumeSessionId;
+      navigate("exercise");
+      return;
+    }
     const data = await parseResponse(
       await authenticatedFetch(
         "/student/training/activities/" + encodeURIComponent(activityId) + "/start",
@@ -11887,6 +11930,18 @@ function renderDailyTrainingResult() {
 function renderExerciseSession() {
   // student header visibility
   var sh = $("student-exercise-header");
+  const inLearningPath =
+    isPlatformUser === false && learningPathEntryMode && Boolean(exerciseSession?.learningStepId);
+  const pageKicker = $("exercise-page-kicker");
+  const pageTitle = $("exercise-page-title");
+  const pageDescription = $("exercise-page-description");
+  if (pageKicker) pageKicker.textContent = inLearningPath ? "ÖĞRENME YOLU · UYGULAMA" : "ANTRENMAN";
+  if (pageTitle) pageTitle.textContent = inLearningPath ? "Uygulama" : "Antrenman";
+  if (pageDescription) {
+    pageDescription.textContent = inLearningPath
+      ? "Bu öğrenme adımında öğrendiğini uygula; sonra yoluna devam et."
+      : "İstediğin beceriyi kısa çalışmalarla geliştir.";
+  }
   if (sh) {
     var isStudent = isPlatformUser === false;
     sh.classList.toggle("hidden", !isStudent || (!exerciseSession && !dailyTrainingSummary));
@@ -11894,17 +11949,20 @@ function renderExerciseSession() {
   const learningPathContext = $("exercise-learning-path-context");
   const learningPathProgress = learningPathProgressLabel(activeLearningStepNode);
   if (learningPathContext) {
-    const inLearningPath =
-      isPlatformUser === false && learningPathEntryMode && Boolean(exerciseSession?.learningStepId);
     learningPathContext.classList.toggle("hidden", !inLearningPath);
-    learningPathContext.textContent = inLearningPath
-      ? `Öğrenme Yolu${learningPathProgress ? ` · ${learningPathProgress}` : ""}`
+    learningPathContext.innerHTML = inLearningPath
+      ? `<span class="learning-path-exercise-label">${escapeHtml(learningPathExerciseContextLabel(activeLearningStepNode))}</span>${learningPathProgress ? `<strong class="learning-path-exercise-progress">${escapeHtml(learningPathProgress)}</strong>` : ""}`
       : "";
   }
+  const method = $("exercise-method");
+  if (method)
+    method.setAttribute(
+      "aria-label",
+      inLearningPath ? "Öğrenme yolu uygulama akışı" : "Antrenman akışı",
+    );
   const info = $("exercise-session-info");
   const detail = $("exercise-session-detail");
   if (!exerciseSession) {
-    const method = $("exercise-method");
     if (method) method.style.display = "none";
     if (info) info.style.display = "none";
     renderStudentReading(null);
@@ -11916,7 +11974,6 @@ function renderExerciseSession() {
     renderLearningPathExerciseNavigation();
     return;
   }
-  const method = $("exercise-method");
   if (method) method.style.display = "flex";
   const activities = $("training-activities-list");
   if (activities) activities.style.display = "none";
@@ -12890,7 +12947,9 @@ function setupExerciseEvents() {
         ? event.target.closest("[data-training-activity-start]")
         : null;
     const activityId = target?.getAttribute("data-training-activity-start");
-    if (activityId && !target.hasAttribute("disabled")) void startTrainingActivity(activityId);
+    const resumeSessionId = target?.getAttribute("data-training-activity-session") || null;
+    if (activityId && !target.hasAttribute("disabled"))
+      void startTrainingActivity(activityId, resumeSessionId);
   });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());

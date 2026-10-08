@@ -13,6 +13,7 @@ const app = readFileSync("public/app.js", "utf8");
 const index = readFileSync("public/index.html", "utf8");
 const sessions = readFileSync("src/modules/sessions/service.ts", "utf8");
 const aggregation = readFileSync("src/modules/progress/aggregation.ts", "utf8");
+const activities = readFileSync("src/modules/training/activities.ts", "utf8");
 
 describe("independent training activities", () => {
   it("publishes the six student activities with stable, Turkish copy", () => {
@@ -49,8 +50,18 @@ describe("independent training activities", () => {
   it("renders the direct activity flow without loading Learning Path", () => {
     expect(index).toContain('id="training-activities-list"');
     expect(index).toContain('id="training-activities-grid"');
+    expect(index).toContain('id="exercise-page-kicker"');
+    expect(index).toContain('id="exercise-page-title"');
+    expect(index).toContain("Kısa çalışmalar · İstediğin zaman tekrar edebilirsin.");
     expect(app).toContain('authenticatedFetch("/student/training/activities"');
     expect(app).toContain("data-training-activity-start");
+    expect(app).toContain("data-training-activity-session");
+    expect(activities).toContain("loadActivityProgress");
+    expect(activities).toContain("isIndependentTrainingSession");
+    expect(activities).toContain("progress: progress.get(activity.id) ?? null");
+    expect(app).toContain("Beceri");
+    expect(app).toContain("Tekrar çalış →");
+    expect(app).toContain("Devam et →");
     expect(app).toContain("Antrenmanlara dön");
     expect(app).toContain("Tekrar oyna");
     const pageLoader = app.slice(
@@ -58,6 +69,15 @@ describe("independent training activities", () => {
       app.indexOf("function returnToExercisePath()"),
     );
     expect(pageLoader).not.toContain('fetch("/student/learning-path"');
+  });
+
+  it("keeps Learning Path practice context separate from independent Training", () => {
+    expect(index).toContain('id="exercise-learning-path-context"');
+    expect(app).toContain('"ÖĞRENME YOLU · UYGULAMA"');
+    expect(app).toContain("learningPathExerciseContextLabel");
+    expect(app).toContain("Öğrenme yolu uygulama akışı");
+    expect(app).toContain('"ANTRENMAN"');
+    expect(app).toContain("learningPathEntryMode && Boolean(exerciseSession?.learningStepId)");
   });
 
   it("marks independent sessions and blocks academic progress/path sync", () => {
