@@ -91,6 +91,8 @@ let gamificationRequest = 0;
 let historyRequest = 0;
 let todayLoading = false;
 let learningPathLoading = false;
+let learningPathCourseModules = [];
+let selectedLearningPathModuleKey = null;
 const insightRequests = new Map();
 let insightHistoryPage = 1;
 let insightAwards = [];
@@ -2748,6 +2750,170 @@ function learningPathExerciseContextLabel(node) {
   return `${area} · ${kind}`;
 }
 
+function learningPathCourseModulesFromData(data) {
+  const groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
+  const total = groups.reduce(
+    (count, group) => count + (Array.isArray(group?.nodes) ? group.nodes.length : 0),
+    0,
+  );
+  let position = 0;
+  return groups
+    .map((group, index) => {
+      const path = group?.path || group || {};
+      const nodes = (Array.isArray(group?.nodes) ? group.nodes : [])
+        .filter(Boolean)
+        .map((node) => ({
+          ...node,
+          learningPathPosition: ++position,
+          learningPathTotal: total,
+        }));
+      const key = String(path.id || path.code || path.area || `module-${index + 1}`);
+      const completed = nodes.filter((node) => node.status === "completed").length;
+      return {
+        key,
+        number: index + 1,
+        title: path.title || learningPathAreaLabel(path.area, "Öğrenme bölümü"),
+        area: path.area || "COMMON",
+        nodes,
+        completed,
+        total: nodes.length,
+        active: nodes.find((node) => node.status === "active") || null,
+      };
+    })
+    .filter((module) => module.nodes.length > 0);
+}
+
+function learningPathCourseStepType(node) {
+  if (node?.type === "TEACHING") return "Öğretim";
+  if (node?.type === "SMALL_STUDY") return "Küçük çalışma";
+  if (node?.type === "PRACTICE") return "Uygulama";
+  if (node?.type === "ASSESSMENT") return "Değerlendirme";
+  if (node?.type === "REINFORCEMENT") return "Pekiştirme";
+  if (node?.type === "MEASUREMENT") return "Başarı ölçümü";
+  return learningPathMapKind(node).label;
+}
+
+function learningPathCourseSkillLabel(node, module) {
+  const labels = {
+    FAST_ATTENTION: "Dikkat ve odak",
+    FAST_RECOGNITION: "Hızlı tanıma",
+    FAST_CHUNKING: "Anlam grupları",
+    RC_MAIN_IDEA: "Ana fikir",
+    RC_DETAIL: "Ayrıntıyı bulma",
+    RC_INFERENCE: "Çıkarım yapma",
+  };
+  const code = String(node?.code || "");
+  const skill = Object.keys(labels).find((key) => code === key || code.startsWith(key + "_"));
+  return labels[skill] || node?.unit?.title || learningPathAreaLabel(module?.area);
+}
+
+function learningPathCourseStatusLabel(status) {
+  if (status === "completed") return "Tamamlandı";
+  if (status === "active") return "Şimdi burada";
+  return "Kilitli";
+}
+
+function renderLearningPathCourseSummary(modules) {
+  const summary = $("learning-path-course-summary");
+  if (!summary) return;
+  const nodes = modules.flatMap((module) => module.nodes);
+  const completed = nodes.filter((node) => node.status === "completed").length;
+  const activeModule = modules.find((module) => module.active);
+  const percent = nodes.length ? Math.round((completed / nodes.length) * 100) : 0;
+  summary.innerHTML = `
+    <span class="learning-path-summary-count"><strong>${completed} / ${nodes.length}</strong><small>adım tamamlandı</small></span>
+    <span class="learning-path-summary-module"><small>Sıradaki bölüm</small><strong>${escapeHtml(activeModule?.title || "Tüm bölümler hazır")}</strong></span>
+    <span class="learning-path-summary-progress" aria-label="Öğrenme yolu ilerlemesi"><i style="width:${percent}%"></i></span>`;
+}
+
+function renderLearningPathCourseModule(module) {
+  const detail = $("lesson-detail");
+  if (!detail || !module) return;
+  const percent = module.total ? Math.round((module.completed / module.total) * 100) : 0;
+  const nodes = module.nodes
+    .map((node) => {
+      const visualStatus = learningPathVisualStatus(node.status);
+      const kind = learningPathCourseStepType(node);
+      const skill = learningPathCourseSkillLabel(node, module);
+      const position = String(node.learningPathPosition || 0).padStart(2, "0");
+      const locked = visualStatus === "locked";
+      const statusLabel = learningPathCourseStatusLabel(visualStatus);
+      const openHint =
+        visualStatus === "completed"
+          ? "Tamamlandı; tekrar incelemek için aç"
+          : visualStatus === "active"
+            ? "Şimdi başla"
+            : "Önceki adımları tamamla";
+      return `<button type="button" class="learning-path-step-card ${escapeHtml(visualStatus)}" data-learning-path-course-step data-node-id="${escapeHtml(node.id)}" aria-label="${escapeHtml(`${position}. adım: ${node.label || "Öğrenme adımı"}. ${statusLabel}. ${openHint}.`)}"${locked ? " disabled" : ""}>
+        <span class="learning-path-step-index" aria-hidden="true">${escapeHtml(position)}</span>
+        <span class="learning-path-step-card-body">
+          <span class="learning-path-step-card-meta"><span class="learning-path-step-type">${escapeHtml(kind)}</span><span class="learning-path-step-status">${visualStatus === "completed" ? "✓ " : ""}${escapeHtml(statusLabel)}</span></span>
+          <strong>${escapeHtml(node.label || "Öğrenme adımı")}</strong>
+          <small>${escapeHtml(module.title)} · ${escapeHtml(skill)}</small>
+        </span>
+        <span class="learning-path-step-card-action" aria-hidden="true">${visualStatus === "completed" ? "✓" : visualStatus === "locked" ? "🔒" : "→"}</span>
+      </button>`;
+    })
+    .join("");
+
+  detail.innerHTML = `
+    <div class="learning-path-module-hero">
+      <div>
+        <p class="insight-eyebrow">MODÜL ${module.number} · ${escapeHtml(learningPathAreaLabel(module.area))}</p>
+        <h3>${escapeHtml(module.title)}</h3>
+        <p>Bu bölümdeki dersleri sırayla tamamla. Tamamladığın bir adıma tekrar dokunarak yeniden inceleyebilirsin.</p>
+      </div>
+      <div class="learning-path-module-progress" aria-label="Bölüm ilerlemesi">
+        <strong>${module.completed} / ${module.total}</strong><span>adım</span>
+        <i><b style="width:${percent}%"></b></i>
+      </div>
+    </div>
+    <div class="learning-path-steps-heading"><div><p class="insight-eyebrow">DERSLER VE UYGULAMALAR</p><h4>Bu bölümün adımları</h4></div><span>${module.total} adım</span></div>
+    <div class="learning-path-step-list" role="list" aria-label="${escapeHtml(module.title)} adımları">${nodes}</div>`;
+}
+
+function renderLearningPathCourse(data) {
+  const list = $("lesson-list");
+  const level = $("learning-path-course-level");
+  const count = $("learning-path-module-count");
+  learningPathCourseModules = learningPathCourseModulesFromData(data);
+  setLessonPageMode(false);
+  if (level) level.textContent = data?.currentLevel?.name || "Seviyen hazırlanıyor";
+  if (count) count.textContent = `${learningPathCourseModules.length} bölüm`;
+  renderLearningPathCourseSummary(learningPathCourseModules);
+  if (!list) return;
+  if (!learningPathCourseModules.length) {
+    list.innerHTML =
+      '<p class="muted learning-path-course-empty">Yayınlanmış öğrenme bölümü bulunamadı.</p>';
+    renderLessonDetail(null);
+    return;
+  }
+  if (
+    !selectedLearningPathModuleKey ||
+    !learningPathCourseModules.some((module) => module.key === selectedLearningPathModuleKey)
+  ) {
+    selectedLearningPathModuleKey = (
+      learningPathCourseModules.find((module) => module.active) || learningPathCourseModules[0]
+    ).key;
+  }
+  list.innerHTML = learningPathCourseModules
+    .map((module) => {
+      const selected = module.key === selectedLearningPathModuleKey;
+      const percent = module.total ? Math.round((module.completed / module.total) * 100) : 0;
+      return `<button type="button" class="learning-path-module-item${selected ? " active" : ""}" data-learning-path-module="${escapeHtml(module.key)}" role="option" aria-selected="${selected}">
+        <span class="learning-path-module-item-top"><span>Modül ${module.number}</span><strong>${module.completed}/${module.total}</strong></span>
+        <span class="learning-path-module-item-title">${escapeHtml(module.title)}</span>
+        <span class="learning-path-module-item-progress"><i style="width:${percent}%"></i></span>
+        <small>${module.active ? "Sıradaki adım burada" : module.completed === module.total ? "Bölüm tamamlandı" : "Kilitli adımlar var"}</small>
+      </button>`;
+    })
+    .join("");
+  renderLearningPathCourseModule(
+    learningPathCourseModules.find((module) => module.key === selectedLearningPathModuleKey) ||
+      learningPathCourseModules[0],
+  );
+}
+
 function learningPathActionLabel(node, visualStatus) {
   if (visualStatus === "locked") return "Henüz açık değil";
   if (node?.type === "TEACHING" || node?.type === "SMALL_STUDY") return "Öğrenmeye başla";
@@ -2935,6 +3101,18 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       });
       if (node) void startLearningPathNode(node, el);
     });
+  }
+  if (currentNode) {
+    const activeButton = container.querySelector(
+      `.learning-map-v6-step.is-current .learning-map-v6-node`,
+    );
+    if (activeButton) {
+      requestAnimationFrame(() => {
+        const rect = activeButton.getBoundingClientRect();
+        const inViewport = rect.top >= 72 && rect.bottom <= window.innerHeight - 48;
+        if (!inViewport) activeButton.scrollIntoView({ block: "center", behavior: "auto" });
+      });
+    }
   }
 }
 
@@ -3216,6 +3394,14 @@ function renderTrainingActivities() {
     RC_DETAIL: "Detay",
     RC_INFERENCE: "Çıkarım",
   };
+  const skillIcons = {
+    FAST_ATTENTION: "◉",
+    FAST_RECOGNITION: "⚡",
+    FAST_CHUNKING: "▤",
+    RC_MAIN_IDEA: "✦",
+    RC_DETAIL: "⌕",
+    RC_INFERENCE: "↗",
+  };
   grid.innerHTML = trainingActivities
     .map((activity) => {
       const available = activity.available !== false;
@@ -3231,16 +3417,20 @@ function renderTrainingActivities() {
       const attempts = Number(progress?.attemptCount) > 0 ? `${progress.attemptCount} cevap` : "";
       const resultDetails = [score, attempts].filter(Boolean).join(" · ");
       const resumeSessionId = inProgress ? progress.sessionId : "";
+      const skillLabel = skillLabels[activity.competency] || "Okuma becerisi";
       return `<article class="training-activity-card">
         <div class="training-activity-card-head">
-          <div>
-            <p class="training-activity-kicker">ANTRENMAN</p>
-            <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+          <div class="training-activity-identity">
+            <span class="training-activity-icon" aria-hidden="true">${escapeHtml(skillIcons[activity.competency] || "✦")}</span>
+            <div>
+              <p class="training-activity-kicker">BAĞIMSIZ ANTRENMAN</p>
+              <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+            </div>
           </div>
           <span class="training-activity-status ${completed ? "is-completed" : inProgress ? "is-progress" : "is-new"}">${statusLabel}</span>
         </div>
         <p>${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
-        <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabels[activity.competency] || "Okuma becerisi")}</strong></div>
+        <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
         <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
         <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
       </article>`;
@@ -3746,16 +3936,19 @@ function setLessonPageMode(focused) {
   $("lesson-layout")?.classList.toggle("is-learning-path", focused);
   $("lesson-list-panel")?.classList.toggle("hidden", focused);
   $("lessons-refresh")?.classList.toggle("hidden", focused);
+  $("learning-path-course-summary")?.classList.toggle("hidden", focused);
   const heading = $("lessons-heading");
   const description = $("lessons-description");
+  const eyebrow = $("lessons-eyebrow");
   const listTitle = $("lesson-list-title");
-  if (heading) heading.textContent = focused ? "Öğrenme adımı" : "Dersler";
+  if (eyebrow) eyebrow.textContent = focused ? "ÖĞRENME ADIMI" : "ÖĞRENME YOLU";
+  if (heading) heading.textContent = focused ? "Öğrenme adımı" : "Öğrenme Yolu";
   if (description) {
     description.textContent = focused
       ? "Bu adımı tamamla; ardından sıradaki durağa geç."
-      : "Kısa anlatım ve örneklerle bugünkü çalışmana hazırlan.";
+      : "Bölümünü seç, adımlarını sırayla tamamla.";
   }
-  if (listTitle) listTitle.textContent = "Sana uygun dersler";
+  if (listTitle) listTitle.textContent = "Bölümler";
 }
 
 function learningPathAdjacentSteps(nodes, currentStepId) {
@@ -4000,18 +4193,19 @@ async function loadLessons() {
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = null;
   setLessonPageMode(false);
-  status.textContent = "Derslerin yükleniyor…";
+  status.textContent = "Öğrenme yolun yükleniyor…";
   error?.classList.add("hidden");
   try {
-    const data = await parseResponse(await lessonApi(""));
-    lessonData = Array.isArray(data?.items) ? data.items : [];
-    if (!lessonData.some((item) => item.id === selectedLessonId)) selectedLessonId = null;
-    renderLessonList(lessonData);
-    status.textContent = lessonData.length ? "Kısa bir adımla başlayabilirsin." : "";
+    const data = await insightApi("learning-path");
+    renderLearningPathCourse(data);
+    status.textContent = "";
   } catch (err) {
     status.textContent = "";
     if (error) {
-      error.textContent = formatStudentError(err, "Dersler yüklenemedi. Tekrar deneyebilirsin.");
+      error.textContent = formatStudentError(
+        err,
+        "Öğrenme yolu yüklenemedi. Tekrar deneyebilirsin.",
+      );
       error.classList.remove("hidden");
     }
   }
@@ -4069,10 +4263,26 @@ async function completeSelectedLesson() {
 function setupLessonEvents() {
   $("lessons-refresh")?.addEventListener("click", () => void loadLessons());
   $("lesson-list")?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-lesson-id]");
+    const button = event.target.closest("[data-learning-path-module]");
     if (!button) return;
-    selectedLessonId = button.dataset.lessonId;
-    renderLessonList(lessonData);
+    selectedLearningPathModuleKey = button.dataset.learningPathModule;
+    for (const item of $("lesson-list").querySelectorAll("[data-learning-path-module]")) {
+      const selected = item === button;
+      item.classList.toggle("active", selected);
+      item.setAttribute("aria-selected", String(selected));
+    }
+    renderLearningPathCourseModule(
+      learningPathCourseModules.find((module) => module.key === selectedLearningPathModuleKey),
+    );
+  });
+  $("lesson-detail")?.addEventListener("click", (event) => {
+    const stepButton = event.target.closest("[data-learning-path-course-step]");
+    if (stepButton && !stepButton.disabled) {
+      const node = learningPathCourseModules
+        .flatMap((module) => module.nodes)
+        .find((item) => item.id === stepButton.dataset.nodeId);
+      if (node) void startLearningPathNode(node, stepButton);
+    }
   });
   $("lesson-detail")?.addEventListener("click", (event) => {
     if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
