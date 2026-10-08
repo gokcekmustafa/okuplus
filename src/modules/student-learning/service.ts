@@ -946,7 +946,11 @@ export async function startPersonalExercise(
     return { sessionId: created.id, isNew: true };
   });
   if (result.isNew && !independentTraining && !replay) {
-    await markLearningStepInProgressForTemplate(actor, templateVersionId).catch(() => {});
+    await markLearningStepInProgressForTemplate(
+      actor,
+      templateVersionId,
+      learningStep.stepId,
+    ).catch(() => {});
   }
   return result;
 }

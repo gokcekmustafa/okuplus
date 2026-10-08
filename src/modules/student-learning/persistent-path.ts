@@ -379,9 +379,6 @@ async function completedStepIdsFromEvidence(
 ) {
   if (!steps.length) return new Set<string>();
   const stepIds = new Set(steps.map((step) => step.id));
-  const templateVersionIds = steps
-    .map((step) => step.exerciseTemplateVersionId)
-    .filter((id): id is string => Boolean(id));
   const contentVersionIds = steps
     .map((step) => step.contentVersionId)
     .filter((id): id is string => Boolean(id));
@@ -399,12 +396,12 @@ async function completedStepIdsFromEvidence(
       },
       select: { learningStepId: true },
     }),
-    templateVersionIds.length
+    stepIds.size
       ? db.exerciseSession.findMany({
           where: {
             tenantId: actor.tenantId!,
             studentId: actor.userId,
-            templateVersionId: { in: templateVersionIds },
+            learningStepId: { in: [...stepIds] },
             status: "COMPLETED",
             assignmentId: null,
             assessmentId: null,
@@ -439,8 +436,14 @@ async function completedStepIdsFromEvidence(
   ]);
 
   const completed = new Set(progress.map((item) => item.learningStepId));
-  const completedTemplates = new Set(sessions.map((session) => session.templateVersionId));
   const completedContents = new Set(lessons.map((lesson) => lesson.contentVersionId));
+  const stepById = new Map(steps.map((step) => [step.id, step] as const));
+  const contentUsage = new Map<string, number>();
+  for (const step of steps) {
+    if (step.contentVersionId) {
+      contentUsage.set(step.contentVersionId, (contentUsage.get(step.contentVersionId) ?? 0) + 1);
+    }
+  }
   const latestAssessmentScore = new Map<string, number | null>();
   for (const result of assessments) {
     if (!latestAssessmentScore.has(result.assessmentId)) {
@@ -450,8 +453,9 @@ async function completedStepIdsFromEvidence(
 
   for (const step of steps) {
     if (
-      (step.exerciseTemplateVersionId && completedTemplates.has(step.exerciseTemplateVersionId)) ||
-      (step.contentVersionId && completedContents.has(step.contentVersionId))
+      step.contentVersionId &&
+      contentUsage.get(step.contentVersionId) === 1 &&
+      completedContents.has(step.contentVersionId)
     ) {
       completed.add(step.id);
       continue;
@@ -469,8 +473,9 @@ async function completedStepIdsFromEvidence(
   // Keep this explicit mapping even when a template version is shared by more
   // than one historical step.
   for (const session of sessions) {
-    if (session.learningStepId && stepIds.has(session.learningStepId)) {
-      completed.add(session.learningStepId);
+    const step = session.learningStepId ? stepById.get(session.learningStepId) : undefined;
+    if (step && step.exerciseTemplateVersionId === session.templateVersionId) {
+      completed.add(step.id);
     }
   }
   return completed;
@@ -707,8 +712,8 @@ async function completeBoundStep(
 ): Promise<void> {
   if (!("learningStep" in prisma)) return;
   try {
-    const step = await prisma.learningStep.findFirst({ where, select: { id: true } });
-    if (step) await completeLearningStep(step.id, actor, evidence);
+    const steps = await prisma.learningStep.findMany({ where, select: { id: true } });
+    if (steps.length === 1) await completeLearningStep(steps[0]!.id, actor, evidence);
   } catch (error) {
     if (!isMissingLearningPathTable(error)) throw error;
   }
