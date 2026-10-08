@@ -227,6 +227,44 @@ describe("exercise UX state from production frontend", () => {
     );
   });
 
+  it("returns to the roadmap after completing a roadmap exercise", async () => {
+    const h = harness();
+    h.context.learningPathEntryMode = true;
+    h.context.exerciseSession = {
+      id: "session",
+      status: "IN_PROGRESS",
+      learningStepId: "step-20",
+    };
+    h.context.activeLearningStepNode = { id: "step-20", status: "active" };
+    h.context.activeLearningStepNavigation = null;
+    h.context.exerciseMode = null;
+    h.context.insightNewAwards = new Map();
+    h.context.insightsIdentity = "test";
+    h.context.normalizeLearningPathNavigation = (navigation: unknown) => navigation;
+    h.run(`
+      fetchStudentExercise = async () => ({
+        id: "session",
+        status: "COMPLETED",
+        learningStepId: "step-20",
+        nextLearningStep: { id: "step-21", status: "active" },
+      });
+      refreshExerciseGamification = async () => null;
+      showCelebration = () => {};
+      recordPilotTelemetry = () => {};
+      rememberExerciseSession = () => {};
+      resetDailyTrainingState = () => {};
+      resetExerciseState = () => {};
+      renderExerciseSession = () => {};
+      navigate = (page) => { lastNavigatedPage = page; };
+    `);
+    h.get("learning-path").scrollIntoView = () => {};
+
+    await h.run("handleExerciseComplete()");
+
+    expect(h.context.lastNavigatedPage).toBe("dashboard");
+    expect(h.context.learningPathEntryMode).toBe(false);
+  });
+
   it("ignores reentrant submit and complete calls while a request is pending", async () => {
     const h = harness();
     h.context.exerciseBusy = true;
