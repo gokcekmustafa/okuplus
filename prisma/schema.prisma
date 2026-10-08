@@ -248,6 +248,16 @@ enum LearningPathStatus {
   ARCHIVED
 }
 
+/// Nullable on purpose: legacy P0 enrollments do not receive a route
+/// lifecycle retroactively.
+enum StudentLearningPathRouteStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  REASSIGNED
+  REVIEW_REQUIRED
+}
+
 enum LearningStepType {
   TEACHING
   SMALL_STUDY
@@ -559,6 +569,7 @@ model User {
   billingWebhookEvents     BillingWebhookEvent[]
   authIdentities           AuthIdentity[]
   authSessions             AuthSession[]
+  learningPathRouteOverrides StudentLearningPath[] @relation("LearningPathRouteOverride")
 
   @@index([status])
 }
@@ -1654,7 +1665,8 @@ model AssessmentResult {
   metrics       Json?
   completedAt   DateTime   @default(now())
 
-  baselines StudentBaseline[]
+  baselines       StudentBaseline[]
+  routeSelections StudentLearningPath[] @relation("RouteSelectionMeasurement")
 
   @@index([studentId, tenantId, completedAt])
   @@index([assessmentId])
@@ -1712,8 +1724,9 @@ model LearningPath {
   updatedAt DateTime           @updatedAt
   deletedAt DateTime?
 
-  units LearningUnit[]
-  enrollments StudentLearningPath[]
+  units          LearningUnit[]
+  enrollments    StudentLearningPath[]
+  recommendedFor StudentLearningPath[] @relation("RecommendedLearningPath")
 
   @@index([tenantId, status])
   @@index([area, status])
@@ -1831,9 +1844,23 @@ model StudentLearningPath {
   startedAt      DateTime     @default(now())
   completedAt    DateTime?
   updatedAt      DateTime     @updatedAt
+  routeStatus            StudentLearningPathRouteStatus?
+  assignedAt             DateTime?
+  recommendedPathId      String?
+  recommendedPath        LearningPath?       @relation("RecommendedLearningPath", fields: [recommendedPathId], references: [id], onDelete: Restrict)
+  measurementResultId    String?
+  measurementResult      AssessmentResult?   @relation("RouteSelectionMeasurement", fields: [measurementResultId], references: [id], onDelete: Restrict)
+  selectionPolicyVersion String?
+  selectionReason        Json?
+  overrideByUserId       String?
+  overrideByUser         User?               @relation("LearningPathRouteOverride", fields: [overrideByUserId], references: [id], onDelete: SetNull)
+  overrideAt             DateTime?
+  overrideReason         String?
 
   @@unique([tenantId, studentId, learningPathId])
   @@index([studentId, tenantId, updatedAt])
+  @@index([tenantId, studentId, routeStatus])
+  @@index([recommendedPathId])
 }
 
 // ============ GAMIFICATION ============

@@ -54,6 +54,8 @@ type StepProgressRow = {
   accuracy: number | null;
 };
 
+const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
+
 const PATH_SELECT = {
   id: true,
   tenantId: true,
@@ -105,7 +107,24 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     where: {
       deletedAt: null,
       status: "PUBLISHED",
-      OR: [{ tenantId: null }, { tenantId: actor.tenantId ?? undefined }],
+      AND: [
+        { OR: [{ tenantId: null }, { tenantId: actor.tenantId ?? undefined }] },
+        {
+          OR: [
+            { NOT: { code: { startsWith: P1_PATH_PREFIX } } },
+            {
+              code: { startsWith: P1_PATH_PREFIX },
+              enrollments: {
+                some: {
+                  tenantId: actor.tenantId!,
+                  studentId: actor.userId,
+                  routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] },
+                },
+              },
+            },
+          ],
+        },
+      ],
     },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
     select: PATH_SELECT,
@@ -116,7 +135,13 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     const current = pathsByArea.get(row.area);
     const isTenantSpecific = row.tenantId === actor.tenantId;
     const currentIsTenantSpecific = current?.tenantId === actor.tenantId;
-    if (!current || (isTenantSpecific && !currentIsTenantSpecific)) {
+    const isAssignedP1 = row.code.startsWith(P1_PATH_PREFIX);
+    const currentIsAssignedP1 = current?.code.startsWith(P1_PATH_PREFIX) ?? false;
+    if (
+      !current ||
+      (isAssignedP1 && !currentIsAssignedP1) ||
+      (isAssignedP1 === currentIsAssignedP1 && isTenantSpecific && !currentIsTenantSpecific)
+    ) {
       pathsByArea.set(row.area, row as PublishedPath);
     }
   }
