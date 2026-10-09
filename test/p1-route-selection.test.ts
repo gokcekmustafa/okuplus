@@ -3,6 +3,9 @@ import {
   ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
   type AdaptiveRouteFamily,
 } from "../src/modules/measurements/adaptive-route-contract.js";
+import { ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION } from "../src/curriculum/adaptive-placement-item-mapping.js";
+import { scoreAdaptiveMeasurement } from "../src/modules/assessments/adaptive-measurement-scoring.js";
+import { P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION } from "../src/modules/assessments/adaptive-route-need-classifier.js";
 import {
   P1_ROUTE_SELECTION_POLICY_VERSION,
   selectP1Route,
@@ -50,7 +53,16 @@ function officialNeed(family: AdaptiveRouteFamily, complete = true) {
       contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
       source: "OFFICIAL_PLACEMENT",
       assessmentId: "assessment-1",
-      signals: { [family]: { needsRoute: true, evidence } },
+      itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+      routeNeedClassifierVersion: P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION,
+      signals: {
+        [family]: {
+          needsRoute: true,
+          decisionStatus: "DECIDED",
+          decisionReason: "EXPLICIT_SERVER_DECISION",
+          evidence,
+        },
+      },
     },
   };
 }
@@ -94,6 +106,7 @@ describe("P0 to P1 route selection", () => {
           contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-c",
+          itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
           routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
           signals: {
             C: {
@@ -122,6 +135,7 @@ describe("P0 to P1 route selection", () => {
           contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-c-review",
+          itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
           routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
           signals: {
             C: {
@@ -142,6 +156,56 @@ describe("P0 to P1 route selection", () => {
     expect(unresolved.status).toBe("REVIEW_REQUIRED");
     expect(unresolved.recommendedPathId).toBeNull();
     expect(unresolved.reasonCodes).toContain("MEASUREMENT_CONFLICT");
+  });
+
+  it("passes the real server scorer output into P1-C selection", () => {
+    const metadata = (skillCode: string, stableQuestionId: string) => ({
+      canonicalManifestId: "OKU-READING-PLACEMENT-V1",
+      itemBankManifestId: "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1",
+      itemBankManifestVersion: "1.0.1",
+      stableQuestionId,
+      skillCode,
+      evidence: { paragraph: 1, span: "Metindeki doğrulanabilir kanıt." },
+      sourceMetadata: {
+        sourceType: "ORIGINAL_EDITORIAL",
+        sourceId: "OKU-PLACEMENT-V1-EDITORIAL",
+      },
+    });
+    const scored = scoreAdaptiveMeasurement(
+      "assessment-c-production-contract",
+      [
+        {
+          questionVersionId: "inference",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_INFERENCE",
+          generationMetadata: metadata("RC_INFERENCE", "PLV1-Q009"),
+        },
+        {
+          questionVersionId: "evidence",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_DETAIL",
+          generationMetadata: metadata("RC_DETAIL", "PLV1-Q002"),
+        },
+        {
+          questionVersionId: "relation",
+          questionType: "MATCHING",
+          skillCode: "RC_MAIN_IDEA",
+          generationMetadata: metadata("RC_MAIN_IDEA", "PLV1-Q013"),
+        },
+      ],
+      [
+        { questionVersionId: "inference", rawScore: 0 },
+        { questionVersionId: "evidence", rawScore: 0 },
+        { questionVersionId: "relation", rawScore: 0 },
+      ],
+    );
+    expect(scored.status).toBe("READY");
+    const result = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({ adaptiveRouteMeasurement: scored.measurement }),
+      candidates,
+    });
+    expect(result).toMatchObject({ status: "READY", routeFamily: "C", recommendedPathId: "p1-c" });
   });
 
   it("fails closed for incomplete official evidence", () => {
@@ -191,6 +255,7 @@ describe("P0 to P1 route selection", () => {
           contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-1",
+          itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
           signals: {
             B: officialNeed("B").adaptiveRouteMeasurement.signals.B,
             D: officialNeed("D").adaptiveRouteMeasurement.signals.D,

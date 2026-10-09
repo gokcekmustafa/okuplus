@@ -258,7 +258,16 @@ export function scoreAdaptiveMeasurement(
     };
     signals[family] = signal;
     const familyComplete = ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions.every(
-      (dimension) => (evidence[dimension]?.scoredCount ?? 0) > 0,
+      (dimension) => {
+        const value = evidence[dimension];
+        return Boolean(
+          value &&
+          value.score !== null &&
+          Number.isFinite(value.score) &&
+          value.scoredCount > 0 &&
+          (value.eligibleCount === undefined || value.scoredCount === value.eligibleCount),
+        );
+      },
     );
     if (!familyComplete) dimensionsComplete = false;
   }

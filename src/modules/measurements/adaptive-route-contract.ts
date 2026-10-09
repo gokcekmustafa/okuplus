@@ -1,4 +1,5 @@
 import type { MeasurementSkillResult } from "./service.js";
+import { ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION } from "../../curriculum/adaptive-placement-item-mapping.js";
 
 /**
  * Versioned, server-produced evidence contract for adaptive P1 routing.
@@ -182,11 +183,19 @@ export function hasCompleteAdaptiveRouteEvidence(
   family: AdaptiveRouteFamily,
 ): boolean {
   const signal = measurement.signals[family];
-  if (!signal?.needsRoute || signal.decisionStatus === "REVIEW_REQUIRED") return false;
+  if (
+    !signal?.needsRoute ||
+    signal.decisionStatus !== "DECIDED" ||
+    measurement.itemMappingVersion !== ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION
+  ) {
+    return false;
+  }
   return ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions.every((dimension) => {
     const evidence = signal.evidence[dimension];
     return Boolean(
       evidence &&
+      evidence.score !== null &&
+      Number.isFinite(evidence.score) &&
       evidence.scoredCount > 0 &&
       (evidence.eligibleCount === undefined || evidence.scoredCount === evidence.eligibleCount),
     );
