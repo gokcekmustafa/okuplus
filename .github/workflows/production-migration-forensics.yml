@@ -272,6 +272,7 @@ jobs:
               neon: identityDiagnostics.neon,
             },
             migrationHistoryCount: report.migrationHistoryCount,
+            pendingMigrations: report.pendingMigrations,
             initMigrationChecksumAudit,
             migrationFileHistory: {
               path: fileHistory.path,
@@ -323,6 +324,7 @@ jobs:
             `**NEON_METADATA:** ${JSON.stringify(safe.targetIdentityDiagnostics.neon)}`,
             "",
             `**MIGRATION_HISTORY_COUNT:** ${safe.migrationHistoryCount}`,
+            `**PENDING_MIGRATIONS:** ${JSON.stringify(safe.pendingMigrations)}`,
             `**FAILED_MIGRATIONS:** ${JSON.stringify(safe.failedMigrations)}`,
             `**ROLLED_BACK_MIGRATIONS:** ${JSON.stringify(safe.rolledBackMigrations)}`,
             `**CHECKSUM_MISMATCH:** ${safe.checksumMismatch}`,

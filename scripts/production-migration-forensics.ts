@@ -368,7 +368,8 @@ async function main(): Promise<void> {
               'ExerciseTemplateVersion', 'TrainingSession', 'TrainingSessionItem',
               'User', 'Tenant', 'Membership', 'Content', 'ContentVersion', 'Question',
               'QuestionVersion', 'ExerciseTemplate', 'ExerciseSession', 'Attempt',
-              'StudentProfile', 'StudentProgress', 'Assessment', 'PointEvent', 'StudentStreak'
+              'StudentProfile', 'StudentProgress', 'Assessment', 'PointEvent', 'StudentStreak',
+              'Badge'
             )
           ORDER BY table_name, ordinal_position
         `,
@@ -376,7 +377,7 @@ async function main(): Promise<void> {
           SELECT tablename, indexname, indexdef
           FROM pg_indexes
           WHERE schemaname = 'public'
-            AND tablename IN ('ExerciseTemplateVersion', 'TrainingSession', 'TrainingSessionItem')
+            AND tablename IN ('ExerciseTemplateVersion', 'TrainingSession', 'TrainingSessionItem', 'Badge')
           ORDER BY tablename, indexname
         `,
         prisma.$queryRaw<ConstraintRow[]>`
@@ -398,7 +399,10 @@ async function main(): Promise<void> {
           SELECT t.typname AS type_name, e.enumlabel AS enum_value
           FROM pg_type AS t
           JOIN pg_enum AS e ON e.enumtypid = t.oid
-          WHERE t.typname IN ('TrainingSessionStatus', 'TrainingSessionItemStatus')
+          WHERE t.typname IN (
+            'TrainingSessionStatus', 'TrainingSessionItemStatus',
+            'AchievementCategory', 'AchievementKind', 'PointEventType'
+          )
           ORDER BY t.typname, e.enumsortorder
         `,
         prisma.$queryRaw<PolicyRow[]>`
@@ -433,6 +437,12 @@ async function main(): Promise<void> {
         `
       : [];
     const byName = new Map(migrations.map((row) => [row.migration_name, row]));
+    const appliedNames = new Set(
+      migrations
+        .filter((row) => row.finished_at && !row.rolled_back_at)
+        .map((row) => row.migration_name),
+    );
+    const pendingMigrations = [...checksums.keys()].filter((name) => !appliedNames.has(name));
     const initMigrationFileHistory = migrationFileHistory(
       resolve(dirname(fileURLToPath(import.meta.url)), ".."),
       "20260817000000_init",
@@ -755,6 +765,7 @@ async function main(): Promise<void> {
           targetIdentityDiagnostics: targetIdentity,
           migrationTableExists,
           migrationHistoryCount: migrations.length,
+          pendingMigrations,
           migrationHistory: migrations.map((row) => ({
             migrationName: row.migration_name,
             state: stateOf(row),
