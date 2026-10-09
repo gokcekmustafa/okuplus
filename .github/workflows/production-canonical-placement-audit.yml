@@ -1,0 +1,86 @@
+name: Manual production canonical placement read-only audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_audit:
+        description: "Type CANONICAL_PLACEMENT_READ_ONLY_AUDIT to allow the protected read-only audit"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-canonical-placement-audit
+  cancel-in-progress: false
+
+jobs:
+  production-canonical-placement-audit:
+    name: Audit production canonical placement graph
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_PROVIDER: ${{ vars.PRODUCTION_DB_APPROVED_PROVIDER }}
+      PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+      PRODUCTION_DB_APPROVED_PORT: ${{ vars.PRODUCTION_DB_APPROVED_PORT }}
+      PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
+      PRODUCTION_DB_APPROVED_USER: ${{ vars.PRODUCTION_DB_APPROVED_USER }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+    steps:
+      - name: Checkout master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify protected read-only audit gate
+        env:
+          CONFIRM_AUDIT: ${{ inputs.confirm_audit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "${APP_ENV}" = "production"
+          test "${NODE_ENV}" = "production"
+          test "${CONFIRM_AUDIT}" = "CANONICAL_PLACEMENT_READ_ONLY_AUDIT"
+          test -n "${PRODUCTION_DATABASE_URL}"
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
+
+      - name: Audit canonical placement without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          npx tsx scripts/audit-canonical-placement-production.ts > production-canonical-placement-audit.json
+          audit_exit_code=$?
+          set -e
+          cat production-canonical-placement-audit.json >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${audit_exit_code}" -ne 0 ]; then
+            echo "Canonical placement audit did not verify a compatible production graph; no production write was attempted."
+            exit "${audit_exit_code}"
+          fi
+
+      - name: Upload sanitized audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-canonical-placement-audit
+          path: production-canonical-placement-audit.json
+          if-no-files-found: error
