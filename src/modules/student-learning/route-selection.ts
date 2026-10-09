@@ -250,6 +250,9 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     }
     const activeFamily = activeFamilies[0];
     if (activeFamily && !hasCompleteAdaptiveRouteEvidence(adaptive.measurement, activeFamily)) {
+      const calibrationBlocked =
+        adaptive.measurement.calibrationStatus !== "CALIBRATED" ||
+        adaptive.measurement.productionAssignmentEnabled !== true;
       return selectionResult(
         "REVIEW_REQUIRED",
         null,
@@ -265,7 +268,9 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
         null,
         false,
         "HIGH",
-        `P1-${activeFamily} için gerekli resmi kanıtların tamamı yok`,
+        calibrationBlocked
+          ? `P1-${activeFamily} için assessment kalibrasyonu tamamlanmadı`
+          : `P1-${activeFamily} için gerekli resmi kanıtların tamamı yok`,
       );
     }
   }

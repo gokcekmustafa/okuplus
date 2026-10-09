@@ -15,6 +15,7 @@ import {
   type AdaptiveRouteMeasurement,
   type AdaptiveRouteSignal,
 } from "../measurements/adaptive-route-contract.js";
+import { PLACEMENT_SCORING_CONTRACT_V1 } from "./placement-scoring.js";
 
 const CANONICAL_PLACEMENT_MANIFEST_ID = "OKU-READING-PLACEMENT-V1";
 const CANONICAL_PLACEMENT_ITEM_BANK_ID = "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1";
@@ -54,7 +55,8 @@ export type AdaptiveMeasurementScoringReason =
   | "DUPLICATE_ATTEMPT"
   | "UNKNOWN_ATTEMPT_QUESTION"
   | "MISSING_ROUTE_DECISION"
-  | "INDETERMINATE_ROUTE_NEED";
+  | "INDETERMINATE_ROUTE_NEED"
+  | "CALIBRATION_REQUIRED";
 
 export type AdaptiveMeasurementScoringResult = {
   measurement: AdaptiveRouteMeasurement;
@@ -288,8 +290,17 @@ export function scoreAdaptiveMeasurement(
     assessmentId,
     itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
     routeNeedClassifierVersion: P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION,
+    calibrationStatus: PLACEMENT_SCORING_CONTRACT_V1.calibrationStatus,
+    productionAssignmentEnabled: PLACEMENT_SCORING_CONTRACT_V1.productionAssignmentEnabled,
     signals,
   };
+
+  if (
+    PLACEMENT_SCORING_CONTRACT_V1.calibrationStatus !== "CALIBRATED" ||
+    !PLACEMENT_SCORING_CONTRACT_V1.productionAssignmentEnabled
+  ) {
+    reasons.add("CALIBRATION_REQUIRED");
+  }
 
   return {
     measurement,

@@ -15,6 +15,8 @@ function metrics(family: "B" | "C" | "D", missing?: string) {
       source: "OFFICIAL_PLACEMENT",
       assessmentId: "placement-result-1",
       itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+      calibrationStatus: "CALIBRATED",
+      productionAssignmentEnabled: true,
       signals: {
         [family]: {
           needsRoute: true,
@@ -84,6 +86,20 @@ describe("adaptive route measurement contracts", () => {
         "C",
       ),
     ).toBe(false);
+  });
+
+  it("keeps complete evidence review-gated while the assessment is uncalibrated", () => {
+    const result = readAdaptiveRouteMeasurement({
+      adaptiveRouteMeasurement: {
+        ...metrics("C").adaptiveRouteMeasurement,
+        calibrationStatus: "NOT_CALIBRATED",
+        productionAssignmentEnabled: false,
+      },
+    });
+    expect(result.status).toBe("VALID");
+    if (result.status === "VALID") {
+      expect(hasCompleteAdaptiveRouteEvidence(result.measurement, "C")).toBe(false);
+    }
   });
 
   it("rejects unversioned or non-placement route data", () => {
