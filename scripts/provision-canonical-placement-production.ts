@@ -10,6 +10,11 @@ import {
   assertLiveCatalogTargetIdentity,
   parseCatalogTargetUrl,
 } from "../src/curriculum/catalog-target-verification.js";
+import {
+  canonicalPlacementProvisionWriteState,
+  classifyCanonicalPlacementProvisionError,
+  type CanonicalPlacementProvisionStage,
+} from "../src/curriculum/canonical-placement-provision-safety.js";
 
 type IdentityRow = {
   database: string;
@@ -19,11 +24,13 @@ type IdentityRow = {
 type JsonRecord = Record<string, unknown>;
 
 const CONFIRMATION = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1";
+const PLAN_CONFIRMATION = "PLAN_CANONICAL_PLACEMENT_GRAPH_V1";
 const BACKUP_CONFIRMATION = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK";
 const EXISTING_SNAPSHOT_CONFIRMATION = "I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE";
 
 type BackupConfirmationMode =
   "OPERATOR_VERIFIED" | "EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED";
+type ProvisionOperation = "PLAN_ONLY" | "CREATE";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -39,6 +46,7 @@ function assertProvisionGate(): {
   rawUrl: string;
   approvedFingerprint: string;
   backupConfirmationMode: BackupConfirmationMode;
+  operation: ProvisionOperation;
 } {
   if (process.env.APP_ENV !== "production" || process.env.NODE_ENV !== "production") {
     throw new Error("production application environment is required");
@@ -49,8 +57,13 @@ function assertProvisionGate(): {
   if (process.env.CANONICAL_PLACEMENT_PROVISION_ENV !== "PRODUCTION") {
     throw new Error("canonical placement production environment is required");
   }
-  if (process.env.CONFIRM_CANONICAL_PLACEMENT_PROVISION !== CONFIRMATION) {
-    throw new Error("explicit canonical placement provision confirmation is required");
+  const operation = process.env.CANONICAL_PLACEMENT_OPERATION;
+  if (operation !== "PLAN_ONLY" && operation !== "CREATE") {
+    throw new Error("canonical placement operation is invalid");
+  }
+  const expectedConfirmation = operation === "PLAN_ONLY" ? PLAN_CONFIRMATION : CONFIRMATION;
+  if (process.env.CONFIRM_CANONICAL_PLACEMENT_PROVISION !== expectedConfirmation) {
+    throw new Error("explicit canonical placement operation confirmation is required");
   }
   const backupConfirmation = process.env.PRODUCTION_BACKUP_CONFIRMATION;
   const backupConfirmationMode: BackupConfirmationMode =
@@ -67,7 +80,7 @@ function assertProvisionGate(): {
   if (!/^[a-f0-9]{64}$/u.test(approvedFingerprint.toLowerCase())) {
     throw new Error("approved production target fingerprint is invalid");
   }
-  return { rawUrl, approvedFingerprint, backupConfirmationMode };
+  return { rawUrl, approvedFingerprint, backupConfirmationMode, operation };
 }
 
 function assertCanonicalVisibilityFlags(config: unknown): void {
@@ -84,8 +97,8 @@ function assertCanonicalVisibilityFlags(config: unknown): void {
 }
 
 function sanitizedSummary(
-  status: "NOOP" | "CONFLICT" | "APPLIED" | "FAILED",
-  productionWrite: "NO" | "YES",
+  status: "PLAN_ONLY" | "NOOP" | "CONFLICT" | "APPLIED" | "FAILED",
+  productionWrite: "NO" | "YES" | "UNKNOWN",
   plan: ReturnType<typeof planCanonicalPlacementPromotion> | null,
   flags?: {
     canonicalActive: boolean;
@@ -93,6 +106,13 @@ function sanitizedSummary(
     productionAssignmentEnabled: boolean;
   },
   backupConfirmationMode?: BackupConfirmationMode,
+  details?: {
+    stage: CanonicalPlacementProvisionStage;
+    errorClass: "VALIDATION" | "PRISMA" | "UNKNOWN" | null;
+    errorCode: string | null;
+    beforePlanAction: "CREATE" | "NOOP" | "CONFLICT" | null;
+    afterPlanAction: "CREATE" | "NOOP" | "CONFLICT" | null;
+  },
 ) {
   return {
     status,
@@ -103,16 +123,30 @@ function sanitizedSummary(
     expectedCounts: plan?.expectedCounts ?? null,
     visibility: flags ?? null,
     backupConfirmationMode: backupConfirmationMode ?? null,
+    stage: details?.stage ?? null,
+    errorClass: details?.errorClass ?? null,
+    errorCode: details?.errorCode ?? null,
+    beforePlanAction: details?.beforePlanAction ?? null,
+    afterPlanAction: details?.afterPlanAction ?? null,
   };
 }
 
 async function main(): Promise<void> {
-  const { rawUrl, approvedFingerprint, backupConfirmationMode } = assertProvisionGate();
-  const target = parseCatalogTargetUrl(rawUrl, "PRODUCTION");
-  const prisma = new PrismaClient({ datasources: { db: { url: rawUrl } } });
+  let stage: CanonicalPlacementProvisionStage = "GATE";
+  let backupConfirmationMode: BackupConfirmationMode | undefined;
+  let operation: ProvisionOperation | undefined;
+  let beforePlan: ReturnType<typeof planCanonicalPlacementPromotion> | null = null;
+  let afterPlan: ReturnType<typeof planCanonicalPlacementPromotion> | null = null;
   let applied = false;
+  let prisma: PrismaClient | null = null;
 
   try {
+    const gate = assertProvisionGate();
+    backupConfirmationMode = gate.backupConfirmationMode;
+    operation = gate.operation;
+    stage = "TARGET_IDENTITY";
+    const target = parseCatalogTargetUrl(gate.rawUrl, "PRODUCTION");
+    prisma = new PrismaClient({ datasources: { db: { url: gate.rawUrl } } });
     const identityRows = await prisma.$queryRaw<IdentityRow[]>`
       SELECT current_database() AS database, current_user AS current_user
     `;
@@ -125,13 +159,41 @@ async function main(): Promise<void> {
     assertApprovedTargetFingerprint(
       target,
       { database: identity.database, db_user: identity.current_user },
-      approvedFingerprint,
+      gate.approvedFingerprint,
     );
 
+    stage = "GRAPH_BUILD";
     const graph = buildCanonicalPlacementAssessmentGraph();
     assertCanonicalVisibilityFlags(graph.assessment.config);
+    stage = "SNAPSHOT_READ_BEFORE";
     const beforeSnapshot = await readCanonicalPlacementSnapshot(prisma, graph);
-    const beforePlan = planCanonicalPlacementPromotion(graph, beforeSnapshot);
+    stage = "PLAN_BEFORE";
+    beforePlan = planCanonicalPlacementPromotion(graph, beforeSnapshot);
+
+    if (operation === "PLAN_ONLY") {
+      console.log(
+        JSON.stringify(
+          sanitizedSummary(
+            beforePlan.action === "CONFLICT" ? "CONFLICT" : "PLAN_ONLY",
+            "NO",
+            beforePlan,
+            undefined,
+            backupConfirmationMode,
+            {
+              stage: "PLAN_BEFORE",
+              errorClass: null,
+              errorCode: null,
+              beforePlanAction: beforePlan.action,
+              afterPlanAction: null,
+            },
+          ),
+          null,
+          2,
+        ),
+      );
+      if (beforePlan.action === "CONFLICT") process.exitCode = 2;
+      return;
+    }
 
     if (beforePlan.action === "NOOP") {
       if (!beforeSnapshot.assessment) throw new Error("NOOP graph is missing its assessment");
@@ -150,6 +212,13 @@ async function main(): Promise<void> {
               productionAssignmentEnabled: config.productionAssignmentEnabled === true,
             },
             backupConfirmationMode,
+            {
+              stage: "PLAN_BEFORE",
+              errorClass: null,
+              errorCode: null,
+              beforePlanAction: beforePlan.action,
+              afterPlanAction: null,
+            },
           ),
           null,
           2,
@@ -160,7 +229,13 @@ async function main(): Promise<void> {
     if (beforePlan.action !== "CREATE") {
       console.log(
         JSON.stringify(
-          sanitizedSummary("CONFLICT", "NO", beforePlan, undefined, backupConfirmationMode),
+          sanitizedSummary("CONFLICT", "NO", beforePlan, undefined, backupConfirmationMode, {
+            stage: "PLAN_BEFORE",
+            errorClass: null,
+            errorCode: null,
+            beforePlanAction: beforePlan.action,
+            afterPlanAction: null,
+          }),
           null,
           2,
         ),
@@ -169,11 +244,15 @@ async function main(): Promise<void> {
       return;
     }
 
+    stage = "APPLY";
     await applyCanonicalPlacementPromotion(prisma, graph);
     applied = true;
 
+    stage = "SNAPSHOT_READ_AFTER";
     const afterSnapshot = await readCanonicalPlacementSnapshot(prisma, graph);
-    const afterPlan = planCanonicalPlacementPromotion(graph, afterSnapshot);
+    stage = "PLAN_AFTER";
+    afterPlan = planCanonicalPlacementPromotion(graph, afterSnapshot);
+    stage = "POSTCONDITION";
     if (afterPlan.action !== "NOOP" || !afterSnapshot.assessment) {
       throw new Error("canonical placement postcondition is not an exact NOOP graph");
     }
@@ -193,27 +272,51 @@ async function main(): Promise<void> {
             productionAssignmentEnabled: config.productionAssignmentEnabled === true,
           },
           backupConfirmationMode,
+          {
+            stage: "POSTCONDITION",
+            errorClass: null,
+            errorCode: null,
+            beforePlanAction: beforePlan.action,
+            afterPlanAction: afterPlan.action,
+          },
         ),
         null,
         2,
       ),
     );
   } catch (error) {
+    const errorDetails = classifyCanonicalPlacementProvisionError(error, stage);
     console.log(
       JSON.stringify(
-        sanitizedSummary("FAILED", applied ? "YES" : "NO", null, undefined, backupConfirmationMode),
+        sanitizedSummary(
+          "FAILED",
+          canonicalPlacementProvisionWriteState(stage, applied),
+          afterPlan ?? beforePlan,
+          undefined,
+          backupConfirmationMode,
+          {
+            stage,
+            errorClass: errorDetails.errorClass,
+            errorCode: errorDetails.errorCode,
+            beforePlanAction: beforePlan?.action ?? null,
+            afterPlanAction: afterPlan?.action ?? null,
+          },
+        ),
         null,
         2,
       ),
     );
-    throw error instanceof Error
-      ? new Error("canonical placement production provision failed")
-      : error;
+    const safeError =
+      errorDetails.errorClass === "PRISMA" && errorDetails.errorCode
+        ? `canonical placement production provision failed at ${stage} (${errorDetails.errorCode})`
+        : `canonical placement production provision failed at ${stage}`;
+    throw new Error(safeError);
   } finally {
-    await prisma.$disconnect();
+    await prisma?.$disconnect();
   }
 }
 
-main().catch(() => {
+main().catch((error) => {
+  if (error instanceof Error) console.error(error.message);
   process.exitCode = 1;
 });
