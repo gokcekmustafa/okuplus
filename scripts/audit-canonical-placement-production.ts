@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import {
   buildCanonicalPlacementAssessmentGraph,
   planCanonicalPlacementPromotion,
@@ -21,6 +21,30 @@ type IdentityRow = {
 type JsonRecord = Record<string, unknown>;
 
 const QUESTION_TYPES = ["MULTIPLE_CHOICE", "TRUE_FALSE", "MATCHING", "FILL_BLANK"] as const;
+
+// Historical values copied from the 1.0.0 manifest in commit
+// 9a304ccc312deefb8c093581ef732bbf11f004fe. These are only used to scope
+// read-only legacy queries; they are not generated from the current manifest.
+const LEGACY_CANONICAL_PLACEMENT = Object.freeze({
+  sourceCommit: "9a304ccc312deefb8c093581ef732bbf11f004fe",
+  manifestId: "OKU-READING-PLACEMENT-V1",
+  manifestVersion: "1.0.0",
+  itemBankManifestId: "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1",
+  itemBankManifestVersion: "1.0.1",
+  assessmentId: "canonical-assessment-oku-reading-placement-v1",
+  templateId: "canonical-template-oku-reading-placement-v1",
+  templateVersionId: "canonical-template-version-oku-reading-placement-v1-v1",
+});
+
+type PlacementMarkerRow = {
+  id: string;
+  tenantId: string | null;
+  title: string;
+  type: string;
+  status: string;
+  deletedAt: Date | null;
+  config: unknown;
+};
 
 function required(name: string): string | null {
   const value = process.env[name]?.trim();
@@ -75,6 +99,209 @@ function configQuestionTypeDistribution(config: unknown): Record<string, number>
     distribution[key] = count;
   }
   return distribution;
+}
+
+function markerMetadata(config: unknown) {
+  const record = asRecord(config);
+  return {
+    canonicalManifestId: stringValue(record?.canonicalManifestId),
+    canonicalManifestVersion: stringValue(record?.canonicalManifestVersion),
+    itemBankManifestId: stringValue(record?.itemBankManifestId),
+    itemBankManifestVersion: stringValue(record?.itemBankManifestVersion),
+    stableAssessmentId: stringValue(record?.stableAssessmentId),
+    templateId: stringValue(record?.templateId),
+    templateVersionId: stringValue(record?.templateVersionId),
+    questionCount: typeof record?.questionCount === "number" ? record.questionCount : null,
+    questionTypeDistribution: configQuestionTypeDistribution(config),
+  };
+}
+
+function safeMarker(row: PlacementMarkerRow) {
+  return {
+    id: row.id,
+    tenantId: row.tenantId,
+    title: row.title,
+    type: row.type,
+    status: row.status,
+    deleted: row.deletedAt !== null,
+    metadata: markerMetadata(row.config),
+  };
+}
+
+async function readCanonicalMarkers(
+  client: PrismaClient,
+  table: "Assessment" | "ExerciseTemplate",
+  manifestId: string,
+): Promise<PlacementMarkerRow[]> {
+  return client.$queryRaw<PlacementMarkerRow[]>(Prisma.sql`
+    SELECT "id", "tenantId", "title", "type", "status", "deletedAt", "config"
+    FROM ${Prisma.raw(`"${table}"`)}
+    WHERE "config"->>'canonicalManifestId' = ${manifestId}
+    ORDER BY "id"
+  `);
+}
+
+function safeAssessmentRecord(
+  row: {
+    id: string;
+    tenantId: string | null;
+    title: string;
+    type: string;
+    status: string;
+    deletedAt: Date | null;
+    config: unknown;
+  } | null,
+) {
+  return row
+    ? {
+        id: row.id,
+        tenantId: row.tenantId,
+        title: row.title,
+        type: row.type,
+        status: row.status,
+        deleted: row.deletedAt !== null,
+        metadata: markerMetadata(row.config),
+      }
+    : null;
+}
+
+function safeTemplateRecord(
+  row: {
+    id: string;
+    tenantId: string | null;
+    title: string;
+    type: string;
+    status: string;
+    deletedAt: Date | null;
+    config: unknown;
+  } | null,
+) {
+  return row
+    ? {
+        id: row.id,
+        tenantId: row.tenantId,
+        title: row.title,
+        type: row.type,
+        status: row.status,
+        deleted: row.deletedAt !== null,
+        metadata: markerMetadata(row.config),
+      }
+    : null;
+}
+
+async function readTemplateGraph(client: PrismaClient, templateIds: readonly string[]) {
+  const ids = [...new Set(templateIds)];
+  if (ids.length === 0) return [];
+
+  const versions = await client.exerciseTemplateVersion.findMany({
+    where: { templateId: { in: ids } },
+    select: { id: true, templateId: true, version: true, status: true, publishedAt: true },
+    orderBy: [{ templateId: "asc" }, { version: "asc" }],
+  });
+  if (versions.length === 0) return [];
+
+  const versionIds = versions.map((version) => version.id);
+  const [contentLinks, questionLinks] = await Promise.all([
+    client.exerciseTemplateVersionContent.findMany({
+      where: { templateVersionId: { in: versionIds } },
+      select: { templateVersionId: true, contentVersionId: true, position: true },
+      orderBy: [{ templateVersionId: "asc" }, { position: "asc" }],
+    }),
+    client.exerciseTemplateVersionQuestion.findMany({
+      where: { templateVersionId: { in: versionIds } },
+      select: {
+        templateVersionId: true,
+        questionVersionId: true,
+        questionId: true,
+        position: true,
+      },
+      orderBy: [{ templateVersionId: "asc" }, { position: "asc" }],
+    }),
+  ]);
+  const contentVersionIds = [...new Set(contentLinks.map((link) => link.contentVersionId))];
+  const questionVersionIds = [...new Set(questionLinks.map((link) => link.questionVersionId))];
+  const questionIds = [
+    ...new Set(
+      questionLinks.map((link) => link.questionId).filter((id): id is string => id !== null),
+    ),
+  ];
+  const [contentVersions, questions, questionVersions] = await Promise.all([
+    contentVersionIds.length > 0
+      ? client.contentVersion.findMany({
+          where: { id: { in: contentVersionIds } },
+          select: { id: true, contentId: true, version: true, status: true, publishedAt: true },
+        })
+      : Promise.resolve([]),
+    questionIds.length > 0
+      ? client.question.findMany({
+          where: { id: { in: questionIds } },
+          select: {
+            id: true,
+            contentId: true,
+            position: true,
+            type: true,
+            status: true,
+            deletedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    questionVersionIds.length > 0
+      ? client.questionVersion.findMany({
+          where: { id: { in: questionVersionIds } },
+          select: { id: true, questionId: true, version: true, status: true, publishedAt: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const questionById = new Map(questions.map((question) => [question.id, question]));
+
+  return versions.map((version) => {
+    const versionContentLinks = contentLinks.filter(
+      (link) => link.templateVersionId === version.id,
+    );
+    const versionQuestionLinks = questionLinks.filter(
+      (link) => link.templateVersionId === version.id,
+    );
+    const versionQuestions = versionQuestionLinks
+      .map((link) => (link.questionId ? questionById.get(link.questionId) : undefined))
+      .filter((question): question is NonNullable<typeof question> => question !== undefined);
+    return {
+      id: version.id,
+      templateId: version.templateId,
+      version: version.version,
+      status: version.status,
+      published: version.publishedAt !== null,
+      contentLinks: versionContentLinks.length,
+      questionLinks: versionQuestionLinks.length,
+      questionVersionLinks: new Set(versionQuestionLinks.map((link) => link.questionVersionId))
+        .size,
+      publishedContentVersions: versionContentLinks.filter((link) =>
+        contentVersions.some(
+          (contentVersion) =>
+            contentVersion.id === link.contentVersionId &&
+            contentVersion.status === "PUBLISHED" &&
+            contentVersion.publishedAt !== null,
+        ),
+      ).length,
+      publishedQuestionVersions: versionQuestionLinks.filter((link) =>
+        questionVersions.some(
+          (questionVersion) =>
+            questionVersion.id === link.questionVersionId &&
+            questionVersion.status === "PUBLISHED" &&
+            questionVersion.publishedAt !== null,
+        ),
+      ).length,
+      questionTypeDistribution: questionTypeDistribution(versionQuestions),
+      questionIds: versionQuestions
+        .map((question) => ({
+          id: question.id,
+          type: question.type,
+          position: question.position,
+          status: question.status,
+          deleted: question.deletedAt !== null,
+        }))
+        .sort((left, right) => left.position - right.position || left.id.localeCompare(right.id)),
+    };
+  });
 }
 
 function safeQuestionIds(snapshot: CanonicalPlacementSnapshot): Array<{
@@ -256,8 +483,62 @@ async function main(): Promise<void> {
     const graph = buildCanonicalPlacementAssessmentGraph();
     const snapshot = await readCanonicalPlacementSnapshot(prisma, graph);
     const plan = planCanonicalPlacementPromotion(graph, snapshot);
-    const compatibility: CompatibilityStatus =
+    const currentCompatibility: CompatibilityStatus =
       plan.action === "NOOP" ? "MATCH" : plan.action === "CONFLICT" ? "CONFLICT" : "INCOMPLETE";
+    const [assessmentMarkers, templateMarkers, legacyAssessmentRecord, legacyTemplateRecord] =
+      await Promise.all([
+        readCanonicalMarkers(prisma, "Assessment", graph.manifest.manifestId),
+        readCanonicalMarkers(prisma, "ExerciseTemplate", graph.manifest.manifestId),
+        prisma.assessment.findUnique({
+          where: { id: LEGACY_CANONICAL_PLACEMENT.assessmentId },
+          select: {
+            id: true,
+            tenantId: true,
+            title: true,
+            type: true,
+            status: true,
+            deletedAt: true,
+            config: true,
+          },
+        }),
+        prisma.exerciseTemplate.findUnique({
+          where: { id: LEGACY_CANONICAL_PLACEMENT.templateId },
+          select: {
+            id: true,
+            tenantId: true,
+            title: true,
+            type: true,
+            status: true,
+            deletedAt: true,
+            config: true,
+          },
+        }),
+      ]);
+    const legacyAssessmentMarkers = assessmentMarkers.filter(
+      (marker) =>
+        markerMetadata(marker.config).canonicalManifestVersion ===
+        LEGACY_CANONICAL_PLACEMENT.manifestVersion,
+    );
+    const legacyTemplateMarkers = templateMarkers.filter(
+      (marker) =>
+        markerMetadata(marker.config).canonicalManifestVersion ===
+        LEGACY_CANONICAL_PLACEMENT.manifestVersion,
+    );
+    const legacyTemplateGraph = await readTemplateGraph(prisma, [
+      LEGACY_CANONICAL_PLACEMENT.templateId,
+      ...legacyTemplateMarkers.map((marker) => marker.id),
+      ...legacyTemplateMarkers
+        .map((marker) => markerMetadata(marker.config).templateId)
+        .filter((id): id is string => id !== null),
+    ]);
+    const legacyObserved =
+      legacyAssessmentMarkers.length > 0 ||
+      legacyTemplateMarkers.length > 0 ||
+      legacyAssessmentRecord !== null ||
+      legacyTemplateRecord !== null ||
+      legacyTemplateGraph.length > 0;
+    const compatibility: CompatibilityStatus =
+      currentCompatibility === "CONFLICT" || legacyObserved ? "CONFLICT" : currentCompatibility;
     const expectedSummary = {
       manifestId: graph.manifest.manifestId,
       manifestVersion: graph.manifest.manifestVersion,
@@ -266,6 +547,7 @@ async function main(): Promise<void> {
       questionCount: graph.questions.length,
       questionTypeDistribution: graph.manifest.questionPlan.questionTypeDistribution,
       expectedCounts: plan.expectedCounts,
+      historicalScope: LEGACY_CANONICAL_PLACEMENT,
     };
 
     console.log(
@@ -275,7 +557,32 @@ async function main(): Promise<void> {
           productionObservation: true,
           productionWrite: "NO",
           expected: expectedSummary,
-          observed: snapshotSummary(snapshot),
+          observed: {
+            ...snapshotSummary(snapshot),
+            canonicalMarkerVersions: {
+              assessment: [
+                ...new Set(
+                  assessmentMarkers
+                    .map((marker) => markerMetadata(marker.config).canonicalManifestVersion)
+                    .filter((version): version is string => version !== null),
+                ),
+              ],
+              template: [
+                ...new Set(
+                  templateMarkers
+                    .map((marker) => markerMetadata(marker.config).canonicalManifestVersion)
+                    .filter((version): version is string => version !== null),
+                ),
+              ],
+            },
+            legacy: {
+              assessmentMarkers: legacyAssessmentMarkers.map(safeMarker),
+              templateMarkers: legacyTemplateMarkers.map(safeMarker),
+              knownAssessmentRecord: safeAssessmentRecord(legacyAssessmentRecord),
+              knownTemplateRecord: safeTemplateRecord(legacyTemplateRecord),
+              templateGraph: legacyTemplateGraph,
+            },
+          },
           promotionPlan: {
             action: plan.action,
             idempotent: plan.idempotent,
