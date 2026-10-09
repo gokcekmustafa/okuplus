@@ -41,6 +41,9 @@ describe("protected canonical placement production provision", () => {
 
   it("reuses the canonical transaction and enforces CREATE then NOOP", () => {
     expect(script).toContain("buildCanonicalPlacementAssessmentGraph");
+    expect(script).toContain("readCanonicalPlacementSkillRefs");
+    expect(script).toContain('stage = "SKILL_RESOLUTION"');
+    expect(script).toContain("skillRefs");
     expect(script).toContain("readCanonicalPlacementSnapshot");
     expect(script).toContain("planCanonicalPlacementPromotion");
     expect(script).toContain("applyCanonicalPlacementPromotion");
@@ -54,6 +57,7 @@ describe("protected canonical placement production provision", () => {
     expect(script).toContain("SNAPSHOT_READ_BEFORE");
     expect(script).toContain("beforePlanAction");
     expect(script).toContain("errorCode");
+    expect(script).toContain("constraintField");
     expect(script).toContain("canonicalPlacementProvisionWriteState");
     expect(script).toContain("canonicalActive !== false");
     expect(script).toContain('calibrationStatus !== "NOT_CALIBRATED"');
