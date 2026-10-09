@@ -5,6 +5,7 @@ import {
   hasCompleteAdaptiveRouteEvidence,
   readAdaptiveRouteMeasurement,
 } from "../src/modules/measurements/adaptive-route-contract.js";
+import { ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION } from "../src/curriculum/adaptive-placement-item-mapping.js";
 
 function metrics(family: "B" | "C" | "D", missing?: string) {
   const dimensions = ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions;
@@ -13,9 +14,12 @@ function metrics(family: "B" | "C" | "D", missing?: string) {
       contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
       source: "OFFICIAL_PLACEMENT",
       assessmentId: "placement-result-1",
+      itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
       signals: {
         [family]: {
           needsRoute: true,
+          decisionStatus: "DECIDED",
+          decisionReason: "EXPLICIT_SERVER_DECISION",
           evidence: Object.fromEntries(
             dimensions.map((dimension) => [
               dimension,
@@ -43,6 +47,43 @@ describe("adaptive route measurement contracts", () => {
     if (result.status === "VALID") {
       expect(hasCompleteAdaptiveRouteEvidence(result.measurement, "B")).toBe(false);
     }
+  });
+
+  it("rejects route evidence without server decision, mapping version, or score", () => {
+    const base = metrics("C").adaptiveRouteMeasurement;
+    expect(
+      hasCompleteAdaptiveRouteEvidence(
+        {
+          ...base,
+          itemMappingVersion: undefined,
+          signals: {
+            C: {
+              ...base.signals.C,
+              decisionStatus: undefined,
+            },
+          },
+        },
+        "C",
+      ),
+    ).toBe(false);
+
+    expect(
+      hasCompleteAdaptiveRouteEvidence(
+        {
+          ...base,
+          signals: {
+            C: {
+              ...base.signals.C,
+              evidence: {
+                ...base.signals.C.evidence,
+                INFERENCE: { score: null, scoredCount: 4 },
+              },
+            },
+          },
+        },
+        "C",
+      ),
+    ).toBe(false);
   });
 
   it("rejects unversioned or non-placement route data", () => {
