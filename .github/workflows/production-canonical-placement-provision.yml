@@ -3,8 +3,16 @@ name: Manual production canonical placement graph provision
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: "Use PLAN_ONLY for a read-only graph plan; CREATE requires the separate explicit create confirmation"
+        required: true
+        default: PLAN_ONLY
+        type: choice
+        options:
+          - PLAN_ONLY
+          - CREATE
       confirm_provision:
-        description: "Type CREATE_CANONICAL_PLACEMENT_GRAPH_V1 to allow the narrow graph creation"
+        description: "Type PLAN_CANONICAL_PLACEMENT_GRAPH_V1 for PLAN_ONLY or CREATE_CANONICAL_PLACEMENT_GRAPH_V1 for CREATE"
         required: true
         type: string
       production_backup_confirmation:
@@ -21,7 +29,7 @@ concurrency:
 
 jobs:
   production-canonical-placement-provision:
-    name: Create canonical placement graph only
+    name: Plan or create canonical placement graph only
     runs-on: ubuntu-latest
     environment:
       name: production-migration
@@ -57,6 +65,7 @@ jobs:
 
       - name: Verify protected canonical placement provision gate
         env:
+          CANONICAL_PLACEMENT_OPERATION: ${{ inputs.operation }}
           CONFIRM_CANONICAL_PLACEMENT_PROVISION: ${{ inputs.confirm_provision }}
           PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
         shell: bash
@@ -68,7 +77,18 @@ jobs:
           test "${NODE_ENV}" = "production"
           test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
           test "${CANONICAL_PLACEMENT_PROVISION_ENV}" = "PRODUCTION"
-          test "${CONFIRM_CANONICAL_PLACEMENT_PROVISION}" = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1"
+          case "${CANONICAL_PLACEMENT_OPERATION}" in
+            PLAN_ONLY)
+              test "${CONFIRM_CANONICAL_PLACEMENT_PROVISION}" = "PLAN_CANONICAL_PLACEMENT_GRAPH_V1"
+              ;;
+            CREATE)
+              test "${CONFIRM_CANONICAL_PLACEMENT_PROVISION}" = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1"
+              ;;
+            *)
+              echo "FAIL: canonical placement operation is invalid"
+              exit 1
+              ;;
+          esac
           case "${PRODUCTION_BACKUP_CONFIRMATION}" in
             I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK)
               echo "PRODUCTION_BACKUP_CONFIRMATION_MODE=OPERATOR_VERIFIED" >> "${GITHUB_STEP_SUMMARY}"
@@ -89,7 +109,7 @@ jobs:
           test -n "${PRODUCTION_DB_APPROVED_DATABASE}"
           test -n "${PRODUCTION_DB_APPROVED_USER}"
 
-      - name: Revalidate production target immediately before graph apply
+      - name: Revalidate production target immediately before graph plan or apply
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
@@ -122,8 +142,9 @@ jobs:
             npx --no-install tsx scripts/verify-canonical-placement-migration-policy.ts
           echo "PRODUCTION_DB_IDENTITY=PASS"
 
-      - name: Create and verify canonical placement graph
+      - name: Read-only plan or create and verify canonical placement graph
         env:
+          CANONICAL_PLACEMENT_OPERATION: ${{ inputs.operation }}
           CONFIRM_CANONICAL_PLACEMENT_PROVISION: ${{ inputs.confirm_provision }}
           PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
         shell: bash

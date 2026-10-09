@@ -13,6 +13,9 @@ const script = readFileSync(
 describe("protected canonical placement production provision", () => {
   it("is a narrow master-only production workflow with backup and fingerprint gates", () => {
     expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("PLAN_ONLY");
+    expect(workflow).toContain("PLAN_CANONICAL_PLACEMENT_GRAPH_V1");
+    expect(workflow).toContain("CANONICAL_PLACEMENT_OPERATION");
     expect(workflow).toContain("name: production-migration");
     expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/master"');
     expect(workflow).toContain("CREATE_CANONICAL_PLACEMENT_GRAPH_V1");
@@ -47,6 +50,11 @@ describe("protected canonical placement production provision", () => {
     expect(script).toContain('"EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED"');
     expect(script).toContain('beforePlan.action !== "CREATE"');
     expect(script).toContain('afterPlan.action !== "NOOP"');
+    expect(script).toContain('operation === "PLAN_ONLY"');
+    expect(script).toContain("SNAPSHOT_READ_BEFORE");
+    expect(script).toContain("beforePlanAction");
+    expect(script).toContain("errorCode");
+    expect(script).toContain("canonicalPlacementProvisionWriteState");
     expect(script).toContain("canonicalActive !== false");
     expect(script).toContain('calibrationStatus !== "NOT_CALIBRATED"');
     expect(script).toContain("productionAssignmentEnabled !== false");
