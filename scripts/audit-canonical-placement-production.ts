@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import {
   buildCanonicalPlacementAssessmentGraph,
   planCanonicalPlacementPromotion,
+  readCanonicalPlacementSkillRefs,
   readCanonicalPlacementSnapshot,
   type CanonicalPlacementSnapshot,
 } from "../src/curriculum/canonical-placement-assessment-bootstrap.js";
@@ -480,7 +481,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    const graph = buildCanonicalPlacementAssessmentGraph();
+    const skillRefs = await readCanonicalPlacementSkillRefs(prisma);
+    const graph = buildCanonicalPlacementAssessmentGraph(undefined, skillRefs);
     const snapshot = await readCanonicalPlacementSnapshot(prisma, graph);
     const plan = planCanonicalPlacementPromotion(graph, snapshot);
     const currentCompatibility: CompatibilityStatus =
