@@ -72,13 +72,15 @@ describe("server adaptive measurement scorer", () => {
     expect(result.measurement.signals.D).toBeUndefined();
     expect(result.measurement.signals.C).toEqual({
       needsRoute: false,
+      decisionStatus: "REVIEW_REQUIRED",
+      decisionReason: "INCOMPLETE_EVIDENCE",
       evidence: {
-        INFERENCE: { score: 1, scoredCount: 1 },
-        EVIDENCE_FINDING: { score: 0.5, scoredCount: 1 },
+        INFERENCE: { score: 1, scoredCount: 1, eligibleCount: 1 },
+        EVIDENCE_FINDING: { score: 0.5, scoredCount: 1, eligibleCount: 1 },
       },
     });
     expect(result.reasons).toContain("INCOMPLETE_DIMENSION_EVIDENCE");
-    expect(result.reasons).toContain("MISSING_ROUTE_DECISION");
+    expect(result.reasons).toContain("INDETERMINATE_ROUTE_NEED");
   });
 
   it("emits evidence-relation only for an independently mapped relation item", () => {
@@ -112,9 +114,128 @@ describe("server adaptive measurement scorer", () => {
     );
 
     expect(result.measurement.signals.C?.evidence).toEqual({
-      INFERENCE: { score: 1, scoredCount: 1 },
-      EVIDENCE_FINDING: { score: 0.5, scoredCount: 1 },
-      EVIDENCE_RELATION: { score: 0.75, scoredCount: 1 },
+      INFERENCE: { score: 1, scoredCount: 1, eligibleCount: 1 },
+      EVIDENCE_FINDING: { score: 0.5, scoredCount: 1, eligibleCount: 1 },
+      EVIDENCE_RELATION: { score: 0.75, scoredCount: 1, eligibleCount: 1 },
+    });
+  });
+
+  it.each([
+    [0, true, "ALL_REQUIRED_DIMENSIONS_ZERO"],
+    [1, false, "ALL_REQUIRED_DIMENSIONS_ONE"],
+  ] as const)("classifies complete C evidence at the %s endpoint", (score, needsRoute, reason) => {
+    const result = scoreAdaptiveMeasurement(
+      `assessment-c-${score}`,
+      [
+        {
+          questionVersionId: "inference",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_INFERENCE",
+          generationMetadata: metadata("RC_INFERENCE", "INFER", undefined, "PLV1-Q009"),
+        },
+        {
+          questionVersionId: "detail",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_DETAIL",
+          generationMetadata: metadata("RC_DETAIL", "RECALL", undefined, "PLV1-Q002"),
+        },
+        {
+          questionVersionId: "relation",
+          questionType: "MATCHING",
+          skillCode: "RC_MAIN_IDEA",
+          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND", undefined, "PLV1-Q013"),
+        },
+      ],
+      [
+        { questionVersionId: "inference", rawScore: score },
+        { questionVersionId: "detail", rawScore: score },
+        { questionVersionId: "relation", rawScore: score },
+      ],
+    );
+
+    expect(result.status).toBe("READY");
+    expect(result.measurement.signals.C).toMatchObject({
+      needsRoute,
+      decisionStatus: "DECIDED",
+      decisionReason: reason,
+    });
+  });
+
+  it("keeps mixed or intermediate C evidence in review", () => {
+    const result = scoreAdaptiveMeasurement(
+      "assessment-c-review",
+      [
+        {
+          questionVersionId: "inference",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_INFERENCE",
+          generationMetadata: metadata("RC_INFERENCE", "INFER", undefined, "PLV1-Q009"),
+        },
+        {
+          questionVersionId: "detail",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_DETAIL",
+          generationMetadata: metadata("RC_DETAIL", "RECALL", undefined, "PLV1-Q002"),
+        },
+        {
+          questionVersionId: "relation",
+          questionType: "MATCHING",
+          skillCode: "RC_MAIN_IDEA",
+          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND", undefined, "PLV1-Q013"),
+        },
+      ],
+      [
+        { questionVersionId: "inference", rawScore: 0 },
+        { questionVersionId: "detail", rawScore: 1 },
+        { questionVersionId: "relation", rawScore: 0.5 },
+      ],
+    );
+
+    expect(result.status).toBe("REVIEW_REQUIRED");
+    expect(result.measurement.signals.C).toMatchObject({
+      needsRoute: false,
+      decisionStatus: "REVIEW_REQUIRED",
+      decisionReason: "INTERMEDIATE_DIMENSION_EVIDENCE",
+    });
+    expect(result.reasons).toContain("INDETERMINATE_ROUTE_NEED");
+  });
+
+  it("does not classify C when a mapped item is unanswered", () => {
+    const result = scoreAdaptiveMeasurement(
+      "assessment-c-unanswered",
+      [
+        {
+          questionVersionId: "inference",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_INFERENCE",
+          generationMetadata: metadata("RC_INFERENCE", "INFER", undefined, "PLV1-Q009"),
+        },
+        {
+          questionVersionId: "detail",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_DETAIL",
+          generationMetadata: metadata("RC_DETAIL", "RECALL", undefined, "PLV1-Q002"),
+        },
+        {
+          questionVersionId: "relation",
+          questionType: "MATCHING",
+          skillCode: "RC_MAIN_IDEA",
+          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND", undefined, "PLV1-Q013"),
+        },
+      ],
+      [
+        { questionVersionId: "inference", rawScore: 0 },
+        { questionVersionId: "detail", rawScore: 0 },
+      ],
+    );
+
+    expect(result.status).toBe("REVIEW_REQUIRED");
+    expect(result.measurement.signals.C).toMatchObject({
+      decisionStatus: "REVIEW_REQUIRED",
+      decisionReason: "INCOMPLETE_EVIDENCE",
+      evidence: {
+        EVIDENCE_RELATION: { score: null, scoredCount: 0, eligibleCount: 1 },
+      },
     });
   });
 
@@ -150,6 +271,7 @@ describe("server adaptive measurement scorer", () => {
         expect(result.measurement.signals[family]?.evidence[dimension]).toEqual({
           score: 0.75,
           scoredCount: 1,
+          eligibleCount: 1,
         });
       }
     }

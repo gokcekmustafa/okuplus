@@ -4,6 +4,10 @@ import {
   readAdaptivePlacementItemMapping,
 } from "../../curriculum/adaptive-placement-item-mapping.js";
 import {
+  P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION,
+  classifyCAdaptiveRouteNeed,
+} from "./adaptive-route-need-classifier.js";
+import {
   ADAPTIVE_ROUTE_CONTRACTS,
   ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
   type AdaptiveRouteEvidenceDimension,
@@ -49,7 +53,8 @@ export type AdaptiveMeasurementScoringReason =
   | "INCOMPLETE_DIMENSION_EVIDENCE"
   | "DUPLICATE_ATTEMPT"
   | "UNKNOWN_ATTEMPT_QUESTION"
-  | "MISSING_ROUTE_DECISION";
+  | "MISSING_ROUTE_DECISION"
+  | "INDETERMINATE_ROUTE_NEED";
 
 export type AdaptiveMeasurementScoringResult = {
   measurement: AdaptiveRouteMeasurement;
@@ -141,9 +146,9 @@ function emptySignal(needsRoute: boolean): AdaptiveRouteSignal {
 
 /**
  * Converts the immutable server-scored placement attempts into the versioned
- * adaptive evidence envelope. This function never calculates a route need
- * from a score. A route decision can only be supplied by a future official,
- * server-owned classifier; without it every signal remains review-gated.
+ * adaptive evidence envelope. C uses the conservative endpoint-only,
+ * server-owned classifier; B and D remain review-gated until their official
+ * evidence exists. No calibrated score band is inferred here.
  */
 export function scoreAdaptiveMeasurement(
   assessmentId: string,
@@ -169,7 +174,7 @@ export function scoreAdaptiveMeasurement(
 
   const totals = new Map<
     AdaptiveRouteEvidenceDimension,
-    { totalRawScore: number; scoredCount: number }
+    { totalRawScore: number; scoredCount: number; eligibleCount: number }
   >();
   let mappedDimensionCount = 0;
 
@@ -178,10 +183,16 @@ export function scoreAdaptiveMeasurement(
     const dimensions = trustedDimensions(question);
     mappedDimensionCount += dimensions.length;
     const attempt = attemptsByQuestion.get(question.questionVersionId);
-    if (dimensions.length === 0 || !attempt || attempt.rawScore === null) continue;
+    if (dimensions.length === 0) continue;
+    for (const dimension of dimensions) {
+      const total = totals.get(dimension) ?? { totalRawScore: 0, scoredCount: 0, eligibleCount: 0 };
+      total.eligibleCount += 1;
+      totals.set(dimension, total);
+    }
+    if (!attempt || attempt.rawScore === null) continue;
     assertRawScore(attempt.rawScore);
     for (const dimension of dimensions) {
-      const total = totals.get(dimension) ?? { totalRawScore: 0, scoredCount: 0 };
+      const total = totals.get(dimension)!;
       total.totalRawScore += attempt.rawScore;
       total.scoredCount += 1;
       totals.set(dimension, total);
@@ -189,7 +200,7 @@ export function scoreAdaptiveMeasurement(
   }
 
   const signals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>> = {};
-  let completeEvidence = true;
+  let dimensionsComplete = true;
 
   for (const family of ["B", "C", "D"] as const) {
     const evidence: AdaptiveRouteSignal["evidence"] = {};
@@ -201,30 +212,62 @@ export function scoreAdaptiveMeasurement(
       evidence[dimension] = {
         score: total.scoredCount > 0 ? total.totalRawScore / total.scoredCount : null,
         scoredCount: total.scoredCount,
+        eligibleCount: total.eligibleCount,
       };
     }
     if (!hasAnyFamilyEvidence) {
       if (routeDecisions[family] === true) {
-        signals[family] = emptySignal(true);
-        completeEvidence = false;
+        signals[family] = {
+          ...emptySignal(true),
+          decisionStatus: "DECIDED",
+          decisionReason: "EXPLICIT_SERVER_DECISION",
+        };
+        dimensionsComplete = false;
       }
       continue;
     }
 
-    const needsRoute = routeDecisions[family] === true;
-    const signal = { needsRoute, evidence };
+    const explicitDecision = routeDecisions[family];
+    let needsRoute = explicitDecision === true;
+    let decisionStatus: AdaptiveRouteSignal["decisionStatus"] =
+      explicitDecision === undefined ? undefined : "DECIDED";
+    let decisionReason: string | undefined =
+      explicitDecision === undefined ? undefined : "EXPLICIT_SERVER_DECISION";
+
+    if (explicitDecision === undefined) {
+      if (family === "C") {
+        const classification = classifyCAdaptiveRouteNeed(evidence);
+        needsRoute = classification.needsRoute;
+        decisionStatus = classification.status;
+        decisionReason = classification.reason;
+        if (classification.status === "REVIEW_REQUIRED") {
+          reasons.add("INDETERMINATE_ROUTE_NEED");
+        }
+      } else {
+        reasons.add("MISSING_ROUTE_DECISION");
+        decisionStatus = "REVIEW_REQUIRED";
+        decisionReason = "UNSUPPORTED_FAMILY";
+      }
+    }
+
+    const signal: AdaptiveRouteSignal = {
+      needsRoute,
+      evidence,
+      ...(decisionStatus !== undefined ? { decisionStatus } : {}),
+      ...(decisionReason !== undefined ? { decisionReason } : {}),
+    };
     signals[family] = signal;
     const familyComplete = ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions.every(
       (dimension) => (evidence[dimension]?.scoredCount ?? 0) > 0,
     );
-    if (!familyComplete || routeDecisions[family] === undefined) completeEvidence = false;
+    if (!familyComplete) dimensionsComplete = false;
   }
 
   if (mappedDimensionCount === 0) reasons.add("NO_TRUSTED_DIMENSION_MAPPING");
-  if (!completeEvidence) reasons.add("INCOMPLETE_DIMENSION_EVIDENCE");
+  if (!dimensionsComplete) reasons.add("INCOMPLETE_DIMENSION_EVIDENCE");
   if (
     Object.keys(signals).some(
-      (family) => routeDecisions[family as AdaptiveRouteFamily] === undefined,
+      (family) => family !== "C" && routeDecisions[family as AdaptiveRouteFamily] === undefined,
     )
   ) {
     reasons.add("MISSING_ROUTE_DECISION");
@@ -235,6 +278,7 @@ export function scoreAdaptiveMeasurement(
     source: "OFFICIAL_PLACEMENT",
     assessmentId,
     itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+    routeNeedClassifierVersion: P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION,
     signals,
   };
 

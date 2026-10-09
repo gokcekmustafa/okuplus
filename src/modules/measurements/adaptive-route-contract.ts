@@ -4,9 +4,9 @@ import type { MeasurementSkillResult } from "./service.js";
  * Versioned, server-produced evidence contract for adaptive P1 routing.
  *
  * The contract deliberately does not calculate a route from a single score.
- * A trusted assessment scorer must persist the complete evidence set and an
- * explicit need decision. Training telemetry, WPM and client-provided route
- * fields are not valid inputs to this contract.
+ * A trusted assessment scorer must persist the complete evidence set and a
+ * versioned server-owned need decision. Training telemetry, WPM and
+ * client-provided route fields are not valid inputs to this contract.
  */
 export const ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION = "P1_ADAPTIVE_MEASUREMENT_V1" as const;
 
@@ -26,11 +26,14 @@ export type AdaptiveRouteEvidenceDimension =
 export type AdaptiveRouteEvidenceValue = {
   score: number | null;
   scoredCount: number;
+  eligibleCount?: number;
 };
 
 export type AdaptiveRouteSignal = {
   needsRoute: boolean;
   evidence: Partial<Record<AdaptiveRouteEvidenceDimension, AdaptiveRouteEvidenceValue>>;
+  decisionStatus?: "DECIDED" | "REVIEW_REQUIRED";
+  decisionReason?: string;
 };
 
 export type AdaptiveRouteMeasurement = {
@@ -38,6 +41,7 @@ export type AdaptiveRouteMeasurement = {
   source: "OFFICIAL_PLACEMENT";
   assessmentId: string;
   itemMappingVersion?: string;
+  routeNeedClassifierVersion?: string;
   signals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>>;
 };
 
@@ -81,20 +85,40 @@ function validEvidenceValue(value: unknown): value is AdaptiveRouteEvidenceValue
         row.score <= 1)) &&
     typeof row.scoredCount === "number" &&
     Number.isInteger(row.scoredCount) &&
-    row.scoredCount >= 0,
+    row.scoredCount >= 0 &&
+    (row.eligibleCount === undefined ||
+      (typeof row.eligibleCount === "number" &&
+        Number.isInteger(row.eligibleCount) &&
+        row.eligibleCount >= row.scoredCount)),
   );
 }
 
 function parseSignal(value: unknown): AdaptiveRouteSignal | null {
   const row = objectValue(value);
   const evidence = objectValue(row?.evidence);
-  if (!row || typeof row.needsRoute !== "boolean" || !evidence) return null;
+  if (
+    !row ||
+    typeof row.needsRoute !== "boolean" ||
+    !evidence ||
+    (row.decisionStatus !== undefined &&
+      row.decisionStatus !== "DECIDED" &&
+      row.decisionStatus !== "REVIEW_REQUIRED") ||
+    (row.decisionReason !== undefined &&
+      (typeof row.decisionReason !== "string" || row.decisionReason.length === 0))
+  ) {
+    return null;
+  }
   const parsedEvidence: AdaptiveRouteSignal["evidence"] = {};
   for (const [dimension, item] of Object.entries(evidence)) {
     if (!validEvidenceValue(item)) return null;
     parsedEvidence[dimension as AdaptiveRouteEvidenceDimension] = item;
   }
-  return { needsRoute: row.needsRoute, evidence: parsedEvidence };
+  return {
+    needsRoute: row.needsRoute,
+    evidence: parsedEvidence,
+    ...(row.decisionStatus !== undefined ? { decisionStatus: row.decisionStatus } : {}),
+    ...(row.decisionReason !== undefined ? { decisionReason: row.decisionReason } : {}),
+  };
 }
 
 function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
@@ -112,6 +136,13 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
   if (root.itemMappingVersion !== undefined && typeof root.itemMappingVersion !== "string") {
     return null;
   }
+  if (
+    root.routeNeedClassifierVersion !== undefined &&
+    (typeof root.routeNeedClassifierVersion !== "string" ||
+      root.routeNeedClassifierVersion.length === 0)
+  ) {
+    return null;
+  }
   const parsedSignals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>> = {};
   for (const family of ["B", "C", "D"] as const) {
     if (signals[family] === undefined) continue;
@@ -125,6 +156,9 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
     assessmentId: root.assessmentId,
     ...(root.itemMappingVersion !== undefined
       ? { itemMappingVersion: root.itemMappingVersion }
+      : {}),
+    ...(root.routeNeedClassifierVersion !== undefined
+      ? { routeNeedClassifierVersion: root.routeNeedClassifierVersion }
       : {}),
     signals: parsedSignals,
   };
@@ -148,10 +182,14 @@ export function hasCompleteAdaptiveRouteEvidence(
   family: AdaptiveRouteFamily,
 ): boolean {
   const signal = measurement.signals[family];
-  if (!signal?.needsRoute) return false;
+  if (!signal?.needsRoute || signal.decisionStatus === "REVIEW_REQUIRED") return false;
   return ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions.every((dimension) => {
     const evidence = signal.evidence[dimension];
-    return Boolean(evidence && evidence.scoredCount > 0);
+    return Boolean(
+      evidence &&
+      evidence.scoredCount > 0 &&
+      (evidence.eligibleCount === undefined || evidence.scoredCount === evidence.eligibleCount),
+    );
   });
 }
 
