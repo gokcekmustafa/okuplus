@@ -15,6 +15,10 @@ import {
   type PlacementSessionQuestion,
 } from "../assessments/placement-scoring.js";
 import {
+  scoreAdaptiveMeasurement,
+  type AdaptiveMeasurementQuestion,
+} from "../assessments/adaptive-measurement-scoring.js";
+import {
   isTrainingConfigCandidate,
   isTrainingVersionConfig,
   loadTrainingRuntimeGraph,
@@ -585,7 +589,13 @@ export async function completeExerciseSession(
               questionVersionId: true,
               questionVersion: {
                 select: {
-                  question: { select: { type: true, skill: { select: { code: true } } } },
+                  question: {
+                    select: {
+                      type: true,
+                      skill: { select: { code: true } },
+                    },
+                  },
+                  generationMetadata: true,
                 },
               },
             },
@@ -697,6 +707,19 @@ export async function completeExerciseSession(
           PLACEMENT_SCORING_CONTRACT_V1,
         )
       : null;
+  const adaptiveMeasurement =
+    session.assessment?.type === "PLACEMENT" && session.assessmentId
+      ? scoreAdaptiveMeasurement(
+          session.assessmentId,
+          session.templateVersion.questions.map((question): AdaptiveMeasurementQuestion => ({
+            questionVersionId: question.questionVersionId,
+            questionType: question.questionVersion.question.type,
+            skillCode: question.questionVersion.question.skill?.code ?? null,
+            generationMetadata: question.questionVersion.generationMetadata,
+          })),
+          attempts,
+        )
+      : null;
 
   const scoreSummary = {
     totalQuestions,
@@ -722,6 +745,16 @@ export async function completeExerciseSession(
             reviewRequired: placementScoring.resolution.reviewRequired,
             resolutionReason: placementScoring.resolution.reason,
             invalidSkillQuestionCount: placementScoring.invalidSkillQuestionCount,
+          },
+        }
+      : {}),
+    ...(adaptiveMeasurement
+      ? {
+          adaptiveRouteMeasurement: adaptiveMeasurement.measurement,
+          adaptiveMeasurementScoring: {
+            status: adaptiveMeasurement.status,
+            reasons: adaptiveMeasurement.reasons,
+            mappedDimensionCount: adaptiveMeasurement.mappedDimensionCount,
           },
         }
       : {}),
