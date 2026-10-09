@@ -1,0 +1,121 @@
+name: Manual production canonical placement graph provision
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_provision:
+        description: "Type CREATE_CANONICAL_PLACEMENT_GRAPH_V1 to allow the narrow graph creation"
+        required: true
+        type: string
+      production_backup_confirmation:
+        description: "Type I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK after the real backup check"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-canonical-placement-provision
+  cancel-in-progress: false
+
+jobs:
+  production-canonical-placement-provision:
+    name: Create canonical placement graph only
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      CANONICAL_PLACEMENT_PROVISION_ENV: PRODUCTION
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_PROVIDER: ${{ vars.PRODUCTION_DB_APPROVED_PROVIDER }}
+      PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+      PRODUCTION_DB_APPROVED_PORT: ${{ vars.PRODUCTION_DB_APPROVED_PORT }}
+      PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
+      PRODUCTION_DB_APPROVED_USER: ${{ vars.PRODUCTION_DB_APPROVED_USER }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+    steps:
+      - name: Checkout master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify protected canonical placement provision gate
+        env:
+          CONFIRM_CANONICAL_PLACEMENT_PROVISION: ${{ inputs.confirm_provision }}
+          PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "${APP_ENV}" = "production"
+          test "${NODE_ENV}" = "production"
+          test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
+          test "${CANONICAL_PLACEMENT_PROVISION_ENV}" = "PRODUCTION"
+          test "${CONFIRM_CANONICAL_PLACEMENT_PROVISION}" = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1"
+          test "${PRODUCTION_BACKUP_CONFIRMATION}" = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK"
+          test -n "${PRODUCTION_DATABASE_URL}"
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
+          test -n "${PRODUCTION_DB_APPROVED_PROVIDER}"
+          test -n "${PRODUCTION_DB_APPROVED_HOST}"
+          test -n "${PRODUCTION_DB_APPROVED_PORT}"
+          test -n "${PRODUCTION_DB_APPROVED_DATABASE}"
+          test -n "${PRODUCTION_DB_APPROVED_USER}"
+
+      - name: Revalidate production target immediately before graph apply
+        env:
+          DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$(npx --no-install tsx scripts/db-fingerprint.ts)"
+          read -r status target_identity <<EOF
+          $(printf '%s' "${report}" | node --input-type=commonjs -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => { input += chunk; });
+            process.stdin.on("end", () => {
+              const value = JSON.parse(input);
+              process.stdout.write(`${value.status ?? ""} ${value.targetIdentityFingerprint ?? ""}`);
+            });
+          ')
+          EOF
+          test "${status}" = "PASS" || { echo "FAIL: production database is not migration-current"; exit 1; }
+          test "${target_identity}" = "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" || {
+            echo "FAIL: production target fingerprint changed"
+            exit 1
+          }
+          echo "PRODUCTION_DB_IDENTITY=PASS"
+
+      - name: Create and verify canonical placement graph
+        env:
+          CONFIRM_CANONICAL_PLACEMENT_PROVISION: ${{ inputs.confirm_provision }}
+          PRODUCTION_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install tsx scripts/provision-canonical-placement-production.ts \
+            > canonical-placement-provision-result.json
+          cat canonical-placement-provision-result.json >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload sanitized canonical placement result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-canonical-placement-provision
+          path: canonical-placement-provision-result.json
+          if-no-files-found: error
