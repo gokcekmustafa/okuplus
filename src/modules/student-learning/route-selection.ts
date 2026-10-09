@@ -93,6 +93,26 @@ export function readRouteSelectionProfile(metrics: unknown): RouteSelectionProfi
       : "VOCABULARY_CONTEXT_NEED";
 }
 
+function adaptiveReviewSignal(metrics: unknown): {
+  family: AdaptiveRouteFamily;
+  reasonCode: RouteReasonCode;
+} | null {
+  const adaptive = readAdaptiveRouteMeasurement(metrics);
+  if (adaptive.status !== "VALID") return null;
+  for (const family of ["B", "C", "D"] as const) {
+    const signal = adaptive.measurement.signals[family];
+    if (signal?.decisionStatus !== "REVIEW_REQUIRED") continue;
+    return {
+      family,
+      reasonCode:
+        signal.decisionReason === "MIXED_DIMENSION_EVIDENCE"
+          ? "MEASUREMENT_CONFLICT"
+          : "MEASUREMENT_INSUFFICIENT",
+    };
+  }
+  return null;
+}
+
 export function routeFamilyFromPathCode(code: string): P1RouteFamily | null {
   const family = /^EDUCATION_V2_P1_([ABCD])(?:_|$)/.exec(code)?.[1];
   return P1_ROUTE_FAMILIES.includes(family as P1RouteFamily) ? (family as P1RouteFamily) : null;
@@ -198,6 +218,20 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     );
   }
   if (adaptive.status === "VALID") {
+    const reviewSignal = adaptiveReviewSignal(measurement.metrics);
+    if (reviewSignal) {
+      return selectionResult(
+        "REVIEW_REQUIRED",
+        null,
+        reviewSignal.family,
+        [reviewSignal.reasonCode],
+        measurement,
+        null,
+        false,
+        "HIGH",
+        `P1-${reviewSignal.family} için server-side route ihtiyacı kesinleştirilemedi`,
+      );
+    }
     const activeFamilies = (
       Object.keys(adaptive.measurement.signals) as AdaptiveRouteFamily[]
     ).filter((family) => adaptive.measurement.signals[family]?.needsRoute === true);

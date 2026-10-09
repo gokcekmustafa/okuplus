@@ -86,6 +86,64 @@ describe("P0 to P1 route selection", () => {
     });
   });
 
+  it("uses the server classifier decision for C and never falls back on an unresolved signal", () => {
+    const decided = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({
+        adaptiveRouteMeasurement: {
+          contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+          source: "OFFICIAL_PLACEMENT",
+          assessmentId: "assessment-c",
+          routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
+          signals: {
+            C: {
+              needsRoute: true,
+              decisionStatus: "DECIDED",
+              decisionReason: "ALL_REQUIRED_DIMENSIONS_ZERO",
+              evidence: {
+                INFERENCE: { score: 0, scoredCount: 4 },
+                EVIDENCE_FINDING: { score: 0, scoredCount: 4 },
+                EVIDENCE_RELATION: { score: 0, scoredCount: 4 },
+              },
+            },
+          },
+        },
+      }),
+      candidates,
+    });
+    expect(decided.status).toBe("READY");
+    expect(decided.routeFamily).toBe("C");
+    expect(decided.recommendedPathId).toBe("p1-c");
+
+    const unresolved = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({
+        adaptiveRouteMeasurement: {
+          contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+          source: "OFFICIAL_PLACEMENT",
+          assessmentId: "assessment-c-review",
+          routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
+          signals: {
+            C: {
+              needsRoute: false,
+              decisionStatus: "REVIEW_REQUIRED",
+              decisionReason: "MIXED_DIMENSION_EVIDENCE",
+              evidence: {
+                INFERENCE: { score: 0, scoredCount: 4 },
+                EVIDENCE_FINDING: { score: 1, scoredCount: 4 },
+                EVIDENCE_RELATION: { score: 0, scoredCount: 4 },
+              },
+            },
+          },
+        },
+      }),
+      candidates,
+    });
+    expect(unresolved.status).toBe("REVIEW_REQUIRED");
+    expect(unresolved.recommendedPathId).toBeNull();
+    expect(unresolved.reasonCodes).toContain("MEASUREMENT_CONFLICT");
+  });
+
   it("fails closed for incomplete official evidence", () => {
     const result = selectP1Route({
       levelId: "level-1",
