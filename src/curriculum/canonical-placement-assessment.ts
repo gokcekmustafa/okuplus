@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST } from "./canonical-placement-item-bank.js";
+import {
+  CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST,
+  countPlacementQuestionTypes,
+  type PlacementQuestionTypeDistribution,
+} from "./canonical-placement-item-bank.js";
 import {
   PLACEMENT_SCORING_CONTRACT_V1,
   type PlacementScoringContract,
@@ -98,9 +102,10 @@ export const canonicalPlacementAssessmentManifestSchema = z
           .strict(),
         questionTypeDistribution: z
           .object({
-            MULTIPLE_CHOICE: z.literal(24),
-            TRUE_FALSE: z.literal(6),
-            MATCHING: z.literal(6),
+            MULTIPLE_CHOICE: z.number().int().nonnegative(),
+            TRUE_FALSE: z.number().int().nonnegative(),
+            MATCHING: z.number().int().nonnegative(),
+            FILL_BLANK: z.number().int().nonnegative(),
           })
           .strict(),
         questionOrder: z.array(z.string().regex(/^PLV1-Q\d{3}$/u)).length(36),
@@ -166,7 +171,9 @@ export const canonicalPlacementAssessmentManifestSchema = z
       questionCount: 12,
     }));
     const expectedDifficultyDistribution = { EASY: 12, MEDIUM: 12, HARD: 12 };
-    const expectedQuestionTypeDistribution = { MULTIPLE_CHOICE: 24, TRUE_FALSE: 6, MATCHING: 6 };
+    const expectedQuestionTypeDistribution = countPlacementQuestionTypes(
+      CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions,
+    );
 
     if (new Set(skillCodes).size !== skillCodes.length) {
       ctx.addIssue({
@@ -216,7 +223,7 @@ export const canonicalPlacementAssessmentManifestSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["questionPlan", "questionTypeDistribution"],
-        message: "canonical placement question type dağılımı 24/6/6 olmalı",
+        message: "questionType dağılımı item bankasındaki gerçek dağılımla eşleşmeli",
       });
     }
     if (
@@ -381,7 +388,9 @@ const CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST_DRAFT = {
       questionCount: 12,
     })),
     difficultyDistribution: { EASY: 12, MEDIUM: 12, HARD: 12 },
-    questionTypeDistribution: { MULTIPLE_CHOICE: 24, TRUE_FALSE: 6, MATCHING: 6 },
+    questionTypeDistribution: countPlacementQuestionTypes(
+      CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions,
+    ),
     questionOrder: CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.map(
       (question) => question.stableQuestionId,
     ),
@@ -446,6 +455,7 @@ export type CanonicalPlacementAssessmentConfig = {
   itemBankManifestId: string;
   itemBankManifestVersion: string;
   questionCount: number;
+  questionTypeDistribution: PlacementQuestionTypeDistribution;
   minScoredCount: number;
   scoringContractVersion: number;
   calibrationStatus: "NOT_CALIBRATED";
@@ -474,6 +484,7 @@ export function canonicalPlacementAssessmentConfig(
     itemBankManifestId: manifest.itemBank.manifestId,
     itemBankManifestVersion: manifest.itemBank.manifestVersion,
     questionCount: manifest.questionPlan.totalQuestionCount,
+    questionTypeDistribution: manifest.questionPlan.questionTypeDistribution,
     minScoredCount: manifest.questionPlan.minScoredCount,
     scoringContractVersion: manifest.scoringContractVersion,
     calibrationStatus: manifest.calibrationStatus,
@@ -524,6 +535,7 @@ function configMatches(actual: unknown, expected: CanonicalPlacementAssessmentCo
     "itemBankManifestId",
     "itemBankManifestVersion",
     "questionCount",
+    "questionTypeDistribution",
     "minScoredCount",
     "scoringContractVersion",
     "calibrationStatus",

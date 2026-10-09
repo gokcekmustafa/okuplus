@@ -34,6 +34,23 @@ const REVISED_QUESTION_IDS = new Set([
 export type PlacementDifficultyLabel = "EASY" | "MEDIUM" | "HARD";
 export type PlacementQuestionType = "MULTIPLE_CHOICE" | "TRUE_FALSE" | "MATCHING" | "FILL_BLANK";
 export type PlacementCognitiveDemand = "RECALL" | "UNDERSTAND" | "INFER";
+export type PlacementQuestionTypeDistribution = {
+  [questionType in PlacementQuestionType]: number;
+};
+
+export function countPlacementQuestionTypes(
+  questions: readonly { questionType: PlacementQuestionType }[],
+): PlacementQuestionTypeDistribution {
+  const distribution: PlacementQuestionTypeDistribution = {
+    MULTIPLE_CHOICE: 0,
+    TRUE_FALSE: 0,
+    MATCHING: 0,
+    FILL_BLANK: 0,
+  };
+
+  for (const question of questions) distribution[question.questionType] += 1;
+  return distribution;
+}
 
 const DIFFICULTY_SCORE: Record<PlacementDifficultyLabel, number> = {
   EASY: 0.25,
