@@ -39,6 +39,19 @@ describe("placement scoring contract v1", () => {
     }
   });
 
+  it("scores every canonical non-open-ended question type", () => {
+    const aggregate = aggregatePlacementScore([
+      { skillCode: "RC_MAIN_IDEA", questionType: "MULTIPLE_CHOICE", rawScore: 1 },
+      { skillCode: "RC_DETAIL", questionType: "TRUE_FALSE", rawScore: 1 },
+      { skillCode: "RC_INFERENCE", questionType: "MATCHING", rawScore: 1 },
+      { skillCode: "RC_MAIN_IDEA", questionType: "FILL_BLANK", rawScore: 1 },
+    ]);
+
+    expect(aggregate.eligibleQuestionCount).toBe(4);
+    expect(aggregate.scoredCount).toBe(4);
+    expect(aggregate.score).toBe(1);
+  });
+
   it("uses deterministic inclusive/exclusive band boundaries", () => {
     expect(resolvePlacementBand(0)?.levelCode).toBe("R1_FOUNDATION");
     expect(resolvePlacementBand(0.35)?.levelCode).toBe("R2_DEVELOPING");

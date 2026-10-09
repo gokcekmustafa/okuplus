@@ -25,7 +25,7 @@ Bir B/C/D route'u ancak bütün ilgili kapılar geçilirse `production-ready` ka
 ### Kimlik ve içerik
 
 - [ ] Item bank, passage, question, template ve answer key sürümleri immutable ve birlikte kaydedildi.
-- [ ] Assessment manifest ile item bank fiili dağılımı/türleri uyumlu; açık mismatch yok.
+- [x] Assessment manifest ile item bank fiili dağılımı/türleri uyumlu; dört tür açıkça doğrulanıyor.
 - [ ] Her required dimension için gerçek Türkçe item coverage var.
 - [ ] Her item'ın doğru cevap ve passage evidence'ı uzman tarafından onaylandı.
 - [ ] Çeldiriciler ve dil/yaş uygunluğu incelendi.
@@ -111,7 +111,7 @@ Bu belgeyle çözülemeyen ve üretimde uydurulmaması gereken bağımlılıklar
 3. B için kontrollü fluency/meaning preservation/transfer görevi ve scorer'ı;
 4. D için contextual meaning/lexical relation/domain context item seti ve scorer'ı;
 5. C için EVIDENCE_RELATION bağımsızlığını doğrulayacak görev ve calibration;
-6. item bankası ile assessment manifestindeki soru türü dağılımı mismatch'inin çözümü;
+6. soru türü contract düzeltmesi uygulandı; eski published metadata varsa protected version/provisioning kararı;
 7. bu kararların protected release kaydına bağlanması.
 
 **Sonuç:** Uzman ve veri kanıtı gelmeden B/C/D'yi seçilebilir göstermek, route need classifier'ı akademik olarak kalibre edilmiş gibi sunmak veya eşik uydurmak güvenli değildir. Mevcut production davranışı fail-closed kalmalıdır.

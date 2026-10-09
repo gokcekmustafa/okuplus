@@ -5,7 +5,10 @@ import {
   planCanonicalPlacementAssessment,
   validateCanonicalPlacementAssessmentManifest,
 } from "../src/curriculum/canonical-placement-assessment.js";
-import { CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_VERSION } from "../src/curriculum/canonical-placement-item-bank.js";
+import {
+  CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST,
+  CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_VERSION,
+} from "../src/curriculum/canonical-placement-item-bank.js";
 import {
   buildCanonicalPlacementAssessmentGraph,
   planCanonicalPlacementPromotion,
@@ -46,10 +49,20 @@ describe("canonical placement assessment manifest and plan", () => {
       "EXPLICIT_REVIEW_ONLY",
     );
     expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.questionTypeDistribution).toEqual({
-      MULTIPLE_CHOICE: 24,
-      TRUE_FALSE: 6,
-      MATCHING: 6,
+      MULTIPLE_CHOICE: 9,
+      TRUE_FALSE: 9,
+      MATCHING: 9,
+      FILL_BLANK: 9,
     });
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.questionPlan.questionTypeDistribution).toEqual(
+      CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.reduce<Record<string, number>>(
+        (counts, question) => {
+          counts[question.questionType] = (counts[question.questionType] ?? 0) + 1;
+          return counts;
+        },
+        {},
+      ),
+    );
   });
 
   it("plans CREATE for an empty target and NOOP for an exact rerun", () => {
@@ -73,6 +86,22 @@ describe("canonical placement assessment manifest and plan", () => {
     expect(plan.conflicts).toContain(
       "canonical placement Assessment config mismatch veya identity marker eksik",
     );
+  });
+
+  it("rejects the former three-type metadata without overwriting the existing graph", () => {
+    const existing = exactExisting();
+    existing.config.questionTypeDistribution = {
+      MULTIPLE_CHOICE: 24,
+      TRUE_FALSE: 6,
+      MATCHING: 6,
+      FILL_BLANK: 0,
+    };
+
+    const plan = planCanonicalPlacementAssessment(
+      CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST,
+      existing,
+    );
+    expect(plan).toMatchObject({ action: "CONFLICT", idempotent: false });
   });
 
   it("is pure and performs no persistence", () => {
@@ -203,10 +232,34 @@ describe("canonical placement assessment graph and promotion plan", () => {
         return counts;
       }, {}),
     ).toEqual({ RC_MAIN_IDEA: 12, RC_DETAIL: 12, RC_INFERENCE: 12 });
+    expect(
+      graph.questions.reduce<Record<string, number>>((counts, question) => {
+        counts[question.question.questionType] = (counts[question.question.questionType] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({ MULTIPLE_CHOICE: 9, TRUE_FALSE: 9, MATCHING: 9, FILL_BLANK: 9 });
+    expect(graph.questions.map((question) => question.stableQuestionId)).toEqual(
+      CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.map((question) => question.stableQuestionId),
+    );
+    expect(
+      graph.questions.every(
+        (question) =>
+          question.question.questionType ===
+          CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.find(
+            (candidate) => candidate.stableQuestionId === question.stableQuestionId,
+          )?.questionType,
+      ),
+    ).toBe(true);
     expect(graph.template.type).toBe("MIXED");
     expect(graph.templateVersion.status).toBe("PUBLISHED");
     expect(graph.template.config).toMatchObject({
       questionCount: 36,
+      questionTypeDistribution: {
+        MULTIPLE_CHOICE: 9,
+        TRUE_FALSE: 9,
+        MATCHING: 9,
+        FILL_BLANK: 9,
+      },
       scoring: { contractVersion: 1, minScoredCount: 24 },
       levelMappingPolicy: { resultLevelId: null, reviewRequired: true },
     });

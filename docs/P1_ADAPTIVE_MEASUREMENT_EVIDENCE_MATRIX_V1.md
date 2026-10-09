@@ -6,22 +6,22 @@
 
 ## 1. Kaynak ve değişmezler
 
-| Alan                     | Mevcut canonical değer                                                                                                                                                                                           |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Item bank                | `OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1` / `1.0.1`                                                                                                                                                                 |
-| Assessment               | `OKU-READING-PLACEMENT-V1` / `1.1.0`                                                                                                                                                                             |
-| Assessment yaşam döngüsü | `DESIGN_ONLY`                                                                                                                                                                                                    |
-| Measurement durumu       | `NOT_CALIBRATED`                                                                                                                                                                                                 |
-| Production assignment    | `false`                                                                                                                                                                                                          |
-| Passage / soru           | 12 / 36                                                                                                                                                                                                          |
-| Beceri dağılımı          | `RC_MAIN_IDEA` 12, `RC_DETAIL` 12, `RC_INFERENCE` 12                                                                                                                                                             |
-| Soru türleri             | Item bank fiili dağılımı: 9 `MULTIPLE_CHOICE`, 9 `TRUE_FALSE`, 9 `MATCHING`, 9 `FILL_BLANK`; assessment manifesti ayrıca 24/6/6 dağılımı beyan ediyor ve bu iki contract arasında açık bir doğrulama boşluğu var |
-| Scoring                  | sunucu tarafı, ham skor 0–1, exact answer contract, minimum 24 scored item                                                                                                                                       |
-| Mevcut mapping           | `P1_ADAPTIVE_ITEM_MAPPING_V1`; yalnızca C ailesine aday dimension etiketleri içeriyor                                                                                                                            |
+| Alan                     | Mevcut canonical değer                                                                                           |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Item bank                | `OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1` / `1.0.1`                                                                 |
+| Assessment               | `OKU-READING-PLACEMENT-V1` / `1.1.0`                                                                             |
+| Assessment yaşam döngüsü | `DESIGN_ONLY`                                                                                                    |
+| Measurement durumu       | `NOT_CALIBRATED`                                                                                                 |
+| Production assignment    | `false`                                                                                                          |
+| Passage / soru           | 12 / 36                                                                                                          |
+| Beceri dağılımı          | `RC_MAIN_IDEA` 12, `RC_DETAIL` 12, `RC_INFERENCE` 12                                                             |
+| Soru türleri             | Item bankası ve assessment manifesti birlikte: 9 `MULTIPLE_CHOICE`, 9 `TRUE_FALSE`, 9 `MATCHING`, 9 `FILL_BLANK` |
+| Scoring                  | sunucu tarafı, ham skor 0–1, exact answer contract, minimum 24 scored item                                       |
+| Mevcut mapping           | `P1_ADAPTIVE_ITEM_MAPPING_V1`; yalnızca C ailesine aday dimension etiketleri içeriyor                            |
 
 **Kaynak otoriteleri:** Soru metni, passage, answer key, evidence span ve soru metadata'sı için [`canonical-placement-item-bank.ts`](../src/curriculum/canonical-placement-item-bank.ts); item mapping için [`adaptive-placement-item-mapping.ts`](../src/curriculum/adaptive-placement-item-mapping.ts); puanlama için [`placement-scoring.ts`](../src/modules/assessments/placement-scoring.ts). Bu belgede aynı alanlar yeniden tanımlanmaz; drift oluşursa kod kaynağı geçerlidir.
 
-**Contract tutarsızlığı:** Item bank runtime manifesti 9/9/9/9 tür dağılımı üretirken placement assessment manifesti `MULTIPLE_CHOICE: 24`, `TRUE_FALSE: 6`, `MATCHING: 6` beyan ediyor ve `FILL_BLANK`'ı ayrı göstermiyor. Bu durum calibration/production assignment öncesi çözülmesi gereken bir veri-contract bulgusudur; bu paketin amacı bunu sessizce düzeltmek değildir.
+**Contract düzeltmesi:** Önceki `24/6/6` metadata hatası giderildi. Assessment manifesti artık dağılımı canonical item bankasından türetiyor ve `FILL_BLANK`'ı açıkça içeriyor. Published graph/version kayıtları overwrite edilmedi; eski metadata ile karşılaşan bootstrap planı `CONFLICT` döndürmeye devam ediyor.
 
 ## 2. İnceleme kararları
 
