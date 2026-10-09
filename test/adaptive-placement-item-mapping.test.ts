@@ -28,6 +28,15 @@ describe("versioned adaptive placement item mapping", () => {
     ).toBe(false);
   });
 
+  it("keeps the canonical bank explicitly uncalibrated for production routing", async () => {
+    const { CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST } =
+      await import("../src/curriculum/canonical-placement-assessment.js");
+    expect(CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.calibrationStatus).toBe("NOT_CALIBRATED");
+    expect(CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.productionAssignmentEnabled).toBe(false);
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.calibrationStatus).toBe("NOT_CALIBRATED");
+    expect(CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST.scoring.productionAssignmentEnabled).toBe(false);
+  });
+
   it("keeps evidence-relation mapping independent from inference mapping", () => {
     const inferenceOnly = readAdaptivePlacementItemMapping({
       itemBankManifestVersion: "1.0.1",

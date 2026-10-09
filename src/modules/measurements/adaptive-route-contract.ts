@@ -12,6 +12,7 @@ import { ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION } from "../../curriculum/adapti
 export const ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION = "P1_ADAPTIVE_MEASUREMENT_V1" as const;
 
 export type AdaptiveRouteFamily = "B" | "C" | "D";
+export type AdaptiveRouteCalibrationStatus = "NOT_CALIBRATED" | "CALIBRATED";
 export type AdaptiveRouteEvidenceDimension =
   | "FLUENCY"
   | "ACCURACY"
@@ -43,6 +44,8 @@ export type AdaptiveRouteMeasurement = {
   assessmentId: string;
   itemMappingVersion?: string;
   routeNeedClassifierVersion?: string;
+  calibrationStatus?: AdaptiveRouteCalibrationStatus;
+  productionAssignmentEnabled?: boolean;
   signals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>>;
 };
 
@@ -144,6 +147,19 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
   ) {
     return null;
   }
+  if (
+    root.calibrationStatus !== undefined &&
+    root.calibrationStatus !== "NOT_CALIBRATED" &&
+    root.calibrationStatus !== "CALIBRATED"
+  ) {
+    return null;
+  }
+  if (
+    root.productionAssignmentEnabled !== undefined &&
+    typeof root.productionAssignmentEnabled !== "boolean"
+  ) {
+    return null;
+  }
   const parsedSignals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>> = {};
   for (const family of ["B", "C", "D"] as const) {
     if (signals[family] === undefined) continue;
@@ -160,6 +176,10 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
       : {}),
     ...(root.routeNeedClassifierVersion !== undefined
       ? { routeNeedClassifierVersion: root.routeNeedClassifierVersion }
+      : {}),
+    ...(root.calibrationStatus !== undefined ? { calibrationStatus: root.calibrationStatus } : {}),
+    ...(root.productionAssignmentEnabled !== undefined
+      ? { productionAssignmentEnabled: root.productionAssignmentEnabled }
       : {}),
     signals: parsedSignals,
   };
@@ -186,7 +206,9 @@ export function hasCompleteAdaptiveRouteEvidence(
   if (
     !signal?.needsRoute ||
     signal.decisionStatus !== "DECIDED" ||
-    measurement.itemMappingVersion !== ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION
+    measurement.itemMappingVersion !== ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION ||
+    measurement.calibrationStatus !== "CALIBRATED" ||
+    measurement.productionAssignmentEnabled !== true
   ) {
     return false;
   }

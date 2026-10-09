@@ -153,7 +153,9 @@ describe("server adaptive measurement scorer", () => {
       ],
     );
 
-    expect(result.status).toBe("READY");
+    expect(result.status).toBe("REVIEW_REQUIRED");
+    expect(result.reasons).toContain("CALIBRATION_REQUIRED");
+    expect(result.measurement.calibrationStatus).toBe("NOT_CALIBRATED");
     expect(result.measurement.signals.C).toMatchObject({
       needsRoute,
       decisionStatus: "DECIDED",
@@ -263,8 +265,8 @@ describe("server adaptive measurement scorer", () => {
       { B: true, C: true, D: true },
     );
 
-    expect(result.status).toBe("READY");
-    expect(result.reasons).toEqual([]);
+    expect(result.status).toBe("REVIEW_REQUIRED");
+    expect(result.reasons).toContain("CALIBRATION_REQUIRED");
     for (const family of ["B", "C", "D"] as const) {
       expect(result.measurement.signals[family]?.needsRoute).toBe(true);
       for (const dimension of ADAPTIVE_ROUTE_CONTRACTS[family].requiredDimensions) {

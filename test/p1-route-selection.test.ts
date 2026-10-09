@@ -55,6 +55,8 @@ function officialNeed(family: AdaptiveRouteFamily, complete = true) {
       assessmentId: "assessment-1",
       itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
       routeNeedClassifierVersion: P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_VERSION,
+      calibrationStatus: "CALIBRATED",
+      productionAssignmentEnabled: true,
       signals: {
         [family]: {
           needsRoute: true,
@@ -107,6 +109,8 @@ describe("P0 to P1 route selection", () => {
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-c",
           itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+          calibrationStatus: "CALIBRATED",
+          productionAssignmentEnabled: true,
           routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
           signals: {
             C: {
@@ -136,6 +140,8 @@ describe("P0 to P1 route selection", () => {
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-c-review",
           itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+          calibrationStatus: "CALIBRATED",
+          productionAssignmentEnabled: true,
           routeNeedClassifierVersion: "P1_ADAPTIVE_ROUTE_NEED_CLASSIFIER_V1",
           signals: {
             C: {
@@ -199,13 +205,33 @@ describe("P0 to P1 route selection", () => {
         { questionVersionId: "relation", rawScore: 0 },
       ],
     );
-    expect(scored.status).toBe("READY");
-    const result = selectP1Route({
+    expect(scored.status).toBe("REVIEW_REQUIRED");
+    expect(scored.measurement.signals.C?.decisionStatus).toBe("DECIDED");
+    const uncalibrated = selectP1Route({
       levelId: "level-1",
       measurement: measurement({ adaptiveRouteMeasurement: scored.measurement }),
       candidates,
     });
-    expect(result).toMatchObject({ status: "READY", routeFamily: "C", recommendedPathId: "p1-c" });
+    expect(uncalibrated.status).toBe("REVIEW_REQUIRED");
+    expect(uncalibrated.recommendedPathId).toBeNull();
+    expect(uncalibrated.reason).toContain("kalibrasyonu tamamlanmadı");
+
+    const calibrated = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({
+        adaptiveRouteMeasurement: {
+          ...scored.measurement,
+          calibrationStatus: "CALIBRATED",
+          productionAssignmentEnabled: true,
+        },
+      }),
+      candidates,
+    });
+    expect(calibrated).toMatchObject({
+      status: "READY",
+      routeFamily: "C",
+      recommendedPathId: "p1-c",
+    });
   });
 
   it("fails closed for incomplete official evidence", () => {
@@ -256,6 +282,8 @@ describe("P0 to P1 route selection", () => {
           source: "OFFICIAL_PLACEMENT",
           assessmentId: "assessment-1",
           itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+          calibrationStatus: "CALIBRATED",
+          productionAssignmentEnabled: true,
           signals: {
             B: officialNeed("B").adaptiveRouteMeasurement.signals.B,
             D: officialNeed("D").adaptiveRouteMeasurement.signals.D,
