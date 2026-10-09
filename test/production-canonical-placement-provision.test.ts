@@ -17,6 +17,14 @@ describe("protected canonical placement production provision", () => {
     expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/master"');
     expect(workflow).toContain("CREATE_CANONICAL_PLACEMENT_GRAPH_V1");
     expect(workflow).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(workflow).toContain("I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE");
+    expect(workflow).toContain(
+      "the existing snapshot is not current and restore has not been tested",
+    );
+    expect(workflow).toContain("PRODUCTION_BACKUP_CONFIRMATION_MODE=OPERATOR_VERIFIED");
+    expect(workflow).toContain(
+      "PRODUCTION_BACKUP_CONFIRMATION_MODE=EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED",
+    );
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
     expect(workflow).toContain("scripts/db-fingerprint.ts");
     expect(workflow).toContain("scripts/provision-canonical-placement-production.ts");
@@ -29,6 +37,10 @@ describe("protected canonical placement production provision", () => {
     expect(script).toContain("readCanonicalPlacementSnapshot");
     expect(script).toContain("planCanonicalPlacementPromotion");
     expect(script).toContain("applyCanonicalPlacementPromotion");
+    expect(script).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(script).toContain("I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE");
+    expect(script).toContain('"OPERATOR_VERIFIED"');
+    expect(script).toContain('"EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED"');
     expect(script).toContain('beforePlan.action !== "CREATE"');
     expect(script).toContain('afterPlan.action !== "NOOP"');
     expect(script).toContain("canonicalActive !== false");

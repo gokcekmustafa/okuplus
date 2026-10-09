@@ -20,6 +20,10 @@ type JsonRecord = Record<string, unknown>;
 
 const CONFIRMATION = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1";
 const BACKUP_CONFIRMATION = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK";
+const EXISTING_SNAPSHOT_CONFIRMATION = "I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE";
+
+type BackupConfirmationMode =
+  "OPERATOR_VERIFIED" | "EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -31,7 +35,11 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function assertProvisionGate(): { rawUrl: string; approvedFingerprint: string } {
+function assertProvisionGate(): {
+  rawUrl: string;
+  approvedFingerprint: string;
+  backupConfirmationMode: BackupConfirmationMode;
+} {
   if (process.env.APP_ENV !== "production" || process.env.NODE_ENV !== "production") {
     throw new Error("production application environment is required");
   }
@@ -44,16 +52,22 @@ function assertProvisionGate(): { rawUrl: string; approvedFingerprint: string } 
   if (process.env.CONFIRM_CANONICAL_PLACEMENT_PROVISION !== CONFIRMATION) {
     throw new Error("explicit canonical placement provision confirmation is required");
   }
-  if (process.env.PRODUCTION_BACKUP_CONFIRMATION !== BACKUP_CONFIRMATION) {
-    throw new Error("production backup and rollback confirmation is required");
-  }
+  const backupConfirmation = process.env.PRODUCTION_BACKUP_CONFIRMATION;
+  const backupConfirmationMode: BackupConfirmationMode =
+    backupConfirmation === BACKUP_CONFIRMATION
+      ? "OPERATOR_VERIFIED"
+      : backupConfirmation === EXISTING_SNAPSHOT_CONFIRMATION
+        ? "EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED"
+        : (() => {
+            throw new Error("production backup and rollback confirmation is required");
+          })();
 
   const rawUrl = required("PRODUCTION_DATABASE_URL");
   const approvedFingerprint = required("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
   if (!/^[a-f0-9]{64}$/u.test(approvedFingerprint.toLowerCase())) {
     throw new Error("approved production target fingerprint is invalid");
   }
-  return { rawUrl, approvedFingerprint };
+  return { rawUrl, approvedFingerprint, backupConfirmationMode };
 }
 
 function assertCanonicalVisibilityFlags(config: unknown): void {
@@ -78,6 +92,7 @@ function sanitizedSummary(
     calibrationStatus: unknown;
     productionAssignmentEnabled: boolean;
   },
+  backupConfirmationMode?: BackupConfirmationMode,
 ) {
   return {
     status,
@@ -87,11 +102,12 @@ function sanitizedSummary(
     idempotent: plan?.idempotent ?? false,
     expectedCounts: plan?.expectedCounts ?? null,
     visibility: flags ?? null,
+    backupConfirmationMode: backupConfirmationMode ?? null,
   };
 }
 
 async function main(): Promise<void> {
-  const { rawUrl, approvedFingerprint } = assertProvisionGate();
+  const { rawUrl, approvedFingerprint, backupConfirmationMode } = assertProvisionGate();
   const target = parseCatalogTargetUrl(rawUrl, "PRODUCTION");
   const prisma = new PrismaClient({ datasources: { db: { url: rawUrl } } });
   let applied = false;
@@ -124,11 +140,17 @@ async function main(): Promise<void> {
       if (!isRecord(config)) throw new Error("canonical placement config is invalid");
       console.log(
         JSON.stringify(
-          sanitizedSummary("NOOP", "NO", beforePlan, {
-            canonicalActive: config.canonicalActive === true,
-            calibrationStatus: config.calibrationStatus,
-            productionAssignmentEnabled: config.productionAssignmentEnabled === true,
-          }),
+          sanitizedSummary(
+            "NOOP",
+            "NO",
+            beforePlan,
+            {
+              canonicalActive: config.canonicalActive === true,
+              calibrationStatus: config.calibrationStatus,
+              productionAssignmentEnabled: config.productionAssignmentEnabled === true,
+            },
+            backupConfirmationMode,
+          ),
           null,
           2,
         ),
@@ -136,7 +158,13 @@ async function main(): Promise<void> {
       return;
     }
     if (beforePlan.action !== "CREATE") {
-      console.log(JSON.stringify(sanitizedSummary("CONFLICT", "NO", beforePlan), null, 2));
+      console.log(
+        JSON.stringify(
+          sanitizedSummary("CONFLICT", "NO", beforePlan, undefined, backupConfirmationMode),
+          null,
+          2,
+        ),
+      );
       process.exitCode = 2;
       return;
     }
@@ -155,17 +183,29 @@ async function main(): Promise<void> {
 
     console.log(
       JSON.stringify(
-        sanitizedSummary("APPLIED", "YES", afterPlan, {
-          canonicalActive: config.canonicalActive === true,
-          calibrationStatus: config.calibrationStatus,
-          productionAssignmentEnabled: config.productionAssignmentEnabled === true,
-        }),
+        sanitizedSummary(
+          "APPLIED",
+          "YES",
+          afterPlan,
+          {
+            canonicalActive: config.canonicalActive === true,
+            calibrationStatus: config.calibrationStatus,
+            productionAssignmentEnabled: config.productionAssignmentEnabled === true,
+          },
+          backupConfirmationMode,
+        ),
         null,
         2,
       ),
     );
   } catch (error) {
-    console.log(JSON.stringify(sanitizedSummary("FAILED", applied ? "YES" : "NO", null), null, 2));
+    console.log(
+      JSON.stringify(
+        sanitizedSummary("FAILED", applied ? "YES" : "NO", null, undefined, backupConfirmationMode),
+        null,
+        2,
+      ),
+    );
     throw error instanceof Error
       ? new Error("canonical placement production provision failed")
       : error;

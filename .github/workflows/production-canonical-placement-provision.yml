@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       production_backup_confirmation:
-        description: "Type I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK after the real backup check"
+        description: "Type I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK, or I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE (the existing snapshot is not current and restore has not been tested)"
         required: true
         type: string
 
@@ -68,7 +68,18 @@ jobs:
           test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
           test "${CANONICAL_PLACEMENT_PROVISION_ENV}" = "PRODUCTION"
           test "${CONFIRM_CANONICAL_PLACEMENT_PROVISION}" = "CREATE_CANONICAL_PLACEMENT_GRAPH_V1"
-          test "${PRODUCTION_BACKUP_CONFIRMATION}" = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK"
+          case "${PRODUCTION_BACKUP_CONFIRMATION}" in
+            I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK)
+              echo "PRODUCTION_BACKUP_CONFIRMATION_MODE=OPERATOR_VERIFIED" >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            I_ACCEPT_EXISTING_SNAPSHOT_WITH_UNTESTED_RESTORE)
+              echo "PRODUCTION_BACKUP_CONFIRMATION_MODE=EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED" >> "${GITHUB_STEP_SUMMARY}"
+              ;;
+            *)
+              echo "FAIL: approved backup/rollback confirmation is required"
+              exit 1
+              ;;
+          esac
           test -n "${PRODUCTION_DATABASE_URL}"
           [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
           test -n "${PRODUCTION_DB_APPROVED_PROVIDER}"
