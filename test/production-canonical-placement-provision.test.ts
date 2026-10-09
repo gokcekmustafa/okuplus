@@ -26,7 +26,11 @@ describe("protected canonical placement production provision", () => {
       "PRODUCTION_BACKUP_CONFIRMATION_MODE=EXISTING_SNAPSHOT_UNTESTED_RESTORE_RISK_ACCEPTED",
     );
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
+    expect(workflow).toContain("PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS");
     expect(workflow).toContain("scripts/db-fingerprint.ts");
+    expect(workflow).toContain("scripts/production-migration-forensics.ts");
+    expect(workflow).toContain("scripts/verify-canonical-placement-migration-policy.ts");
+    expect(workflow).toContain("GENERAL_MIGRATION_FINGERPRINT=REVIEW_REQUIRED");
     expect(workflow).toContain("scripts/provision-canonical-placement-production.ts");
     expect(workflow).not.toContain("prisma migrate deploy");
     expect(workflow).not.toContain("seed-");

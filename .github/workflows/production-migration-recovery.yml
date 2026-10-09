@@ -29,6 +29,7 @@ jobs:
       PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
       CONFIRM_RECOVERY: ${{ inputs.confirm_recovery }}
       TARGET_MIGRATION: 20260907170000_add_gp_achievement_metadata
 
@@ -75,10 +76,18 @@ jobs:
           const target = "20260907170000_add_gp_achievement_metadata";
           const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
           const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
+          const history = Array.isArray(report.migrations?.history) ? report.migrations.history : [];
           const targetFailures = failed.filter((entry) => entry?.name === target);
           const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
           const targetFingerprint = report.targetIdentityFingerprint;
-          const targetAlreadyApplied = !pending.includes(target) && targetFailures.every((entry) => entry?.rolledBack);
+          const targetApplied = history.some(
+            (entry) => entry?.name === target && entry?.state === "APPLIED",
+          );
+          const targetAlreadyApplied =
+            targetApplied &&
+            !pending.includes(target) &&
+            targetFailures.length === 1 &&
+            targetFailures.every((entry) => entry?.rolledBack);
 
           if (report.target?.environment !== "PRODUCTION") {
             throw new Error("production target environment verification failed");
@@ -178,9 +187,17 @@ jobs:
           const target = "20260907170000_add_gp_achievement_metadata";
           const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
           const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
+          const history = Array.isArray(report.migrations?.history) ? report.migrations.history : [];
           const targetFailures = failed.filter((entry) => entry?.name === target);
           const unexpectedFailures = failed.filter((entry) => entry?.name !== target);
-          const targetAlreadyApplied = !pending.includes(target) && targetFailures.every((entry) => entry?.rolledBack);
+          const targetApplied = history.some(
+            (entry) => entry?.name === target && entry?.state === "APPLIED",
+          );
+          const targetAlreadyApplied =
+            targetApplied &&
+            !pending.includes(target) &&
+            targetFailures.length === 1 &&
+            targetFailures.every((entry) => entry?.rolledBack);
 
           if (unexpectedFailures.length !== 0) throw new Error("unexpected production migration failure state");
           if (targetAlreadyApplied) {
@@ -204,26 +221,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          fingerprint_file="$RUNNER_TEMP/production-recovery-after.json"
-          npx tsx scripts/db-fingerprint.ts >"$fingerprint_file"
-
-          FINGERPRINT_FILE="$fingerprint_file" node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs";
-
-          const report = JSON.parse(readFileSync(process.env.FINGERPRINT_FILE, "utf8"));
-          const target = "20260907170000_add_gp_achievement_metadata";
-          const failed = Array.isArray(report.migrations?.failed) ? report.migrations.failed : [];
-          const pending = Array.isArray(report.migrations?.pending) ? report.migrations.pending : [];
-          const unresolvedFailed = failed.filter((entry) => !entry?.rolledBack);
-          if (report.target?.environment !== "PRODUCTION") throw new Error("post-recovery environment mismatch");
-          if (report.targetIdentityFingerprint !== process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT) {
-            throw new Error("post-recovery fingerprint mismatch");
-          }
-          if (unresolvedFailed.length !== 0) throw new Error("unresolved production migrations remain");
-          if (pending[0] !== "20260908110000_add_content_question_lifecycle" && pending[0] !== "20260914100000_add_learning_experience_foundation" && pending[0] !== "20260922120000_add_guest_diagnostic_models") {
-            throw new Error("unexpected next production migration state");
-          }
-          console.log(`PRODUCTION_RECOVERY=PASS; pending=${pending.length}`);
-          NODE
-
+          report_file="$RUNNER_TEMP/production-recovery-after.json"
+          npx tsx scripts/production-migration-forensics.ts >"$report_file"
+          MIGRATION_FORENSICS_REPORT_FILE="$report_file" \
+            npx tsx scripts/verify-canonical-placement-migration-policy.ts
           echo "PRODUCTION_MIGRATION_RECOVERY=PASS"

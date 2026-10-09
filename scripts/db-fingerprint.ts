@@ -24,6 +24,12 @@ type MigrationRow = {
   rolled_back_at: Date | null;
 };
 
+function migrationState(row: MigrationRow): "APPLIED" | "ROLLED_BACK" | "FAILED_OR_INCOMPLETE" {
+  if (row.rolled_back_at) return "ROLLED_BACK";
+  if (!row.finished_at) return "FAILED_OR_INCOMPLETE";
+  return "APPLIED";
+}
+
 type ColumnRow = {
   table_schema: string;
   table_name: string;
@@ -140,6 +146,13 @@ async function main(): Promise<void> {
     const failed = migrationRows.filter((row) => !row.finished_at || row.rolled_back_at);
     const appliedNames = new Set(applied.map((row) => row.migration_name));
     const pending = repository.migrationNames.filter((name) => !appliedNames.has(name));
+    const migrationHistory = migrationRows.map((row) => ({
+      name: row.migration_name,
+      state: migrationState(row),
+      appliedStepsCount: row.applied_steps_count,
+      finishedAt: row.finished_at?.toISOString() ?? null,
+      rolledBackAt: row.rolled_back_at?.toISOString() ?? null,
+    }));
     const lastApplied = applied.at(-1)?.migration_name ?? null;
     const liveSchemaHash = sha256(stableJson(columnRows));
     const fingerprintInput = {
@@ -195,6 +208,7 @@ async function main(): Promise<void> {
             repositoryCount: repository.migrationNames.length,
             appliedCount: applied.length,
             pending,
+            history: migrationHistory,
             failed: failed.map((row) => ({
               name: row.migration_name,
               appliedStepsCount: row.applied_steps_count,

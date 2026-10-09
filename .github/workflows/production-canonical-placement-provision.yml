@@ -37,6 +37,7 @@ jobs:
       PRODUCTION_DB_APPROVED_PORT: ${{ vars.PRODUCTION_DB_APPROVED_PORT }}
       PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
       PRODUCTION_DB_APPROVED_USER: ${{ vars.PRODUCTION_DB_APPROVED_USER }}
+      PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
       PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
 
     steps:
@@ -91,12 +92,13 @@ jobs:
       - name: Revalidate production target immediately before graph apply
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
         shell: bash
         run: |
           set -euo pipefail
-          report="$(npx --no-install tsx scripts/db-fingerprint.ts)"
+          fingerprint_report="$(npx --no-install tsx scripts/db-fingerprint.ts)"
           read -r status target_identity <<EOF
-          $(printf '%s' "${report}" | node --input-type=commonjs -e '
+          $(printf '%s' "${fingerprint_report}" | node --input-type=commonjs -e '
             let input = "";
             process.stdin.on("data", (chunk) => { input += chunk; });
             process.stdin.on("end", () => {
@@ -105,11 +107,19 @@ jobs:
             });
           ')
           EOF
-          test "${status}" = "PASS" || { echo "FAIL: production database is not migration-current"; exit 1; }
+          if [ "${status}" = "PASS" ]; then
+            echo "GENERAL_MIGRATION_FINGERPRINT=PASS"
+          else
+            echo "GENERAL_MIGRATION_FINGERPRINT=REVIEW_REQUIRED; evaluating explicit canonical placement history policy"
+          fi
           test "${target_identity}" = "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" || {
             echo "FAIL: production target fingerprint changed"
             exit 1
           }
+          migration_report_file="$RUNNER_TEMP/production-placement-migration-policy.json"
+          npx --no-install tsx scripts/production-migration-forensics.ts >"${migration_report_file}"
+          MIGRATION_FORENSICS_REPORT_FILE="${migration_report_file}" \
+            npx --no-install tsx scripts/verify-canonical-placement-migration-policy.ts
           echo "PRODUCTION_DB_IDENTITY=PASS"
 
       - name: Create and verify canonical placement graph
