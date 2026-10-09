@@ -2,6 +2,9 @@ import { PrismaClient } from "@prisma/client";
 import {
   applyCanonicalPlacementPromotion,
   buildCanonicalPlacementAssessmentGraph,
+  CanonicalPlacementSkillCatalogError,
+  readCanonicalPlacementSkillRefs,
+  type CanonicalPlacementSkillRef,
   planCanonicalPlacementPromotion,
   readCanonicalPlacementSnapshot,
 } from "../src/curriculum/canonical-placement-assessment-bootstrap.js";
@@ -104,15 +107,20 @@ function sanitizedSummary(
     canonicalActive: boolean;
     calibrationStatus: unknown;
     productionAssignmentEnabled: boolean;
+    reviewRequired: boolean;
+    resultLevelId: null;
   },
   backupConfirmationMode?: BackupConfirmationMode,
   details?: {
     stage: CanonicalPlacementProvisionStage;
     errorClass: "VALIDATION" | "PRISMA" | "UNKNOWN" | null;
     errorCode: string | null;
+    constraintField: string | null;
     beforePlanAction: "CREATE" | "NOOP" | "CONFLICT" | null;
     afterPlanAction: "CREATE" | "NOOP" | "CONFLICT" | null;
+    missingSkillCodes: string[];
   },
+  skillRefs?: CanonicalPlacementSkillRef[],
 ) {
   return {
     status,
@@ -126,8 +134,11 @@ function sanitizedSummary(
     stage: details?.stage ?? null,
     errorClass: details?.errorClass ?? null,
     errorCode: details?.errorCode ?? null,
+    constraintField: details?.constraintField ?? null,
     beforePlanAction: details?.beforePlanAction ?? null,
     afterPlanAction: details?.afterPlanAction ?? null,
+    missingSkillCodes: details?.missingSkillCodes ?? [],
+    skillRefs: skillRefs ?? null,
   };
 }
 
@@ -137,6 +148,8 @@ async function main(): Promise<void> {
   let operation: ProvisionOperation | undefined;
   let beforePlan: ReturnType<typeof planCanonicalPlacementPromotion> | null = null;
   let afterPlan: ReturnType<typeof planCanonicalPlacementPromotion> | null = null;
+  let graph: ReturnType<typeof buildCanonicalPlacementAssessmentGraph> | null = null;
+  let skillRefs: CanonicalPlacementSkillRef[] = [];
   let applied = false;
   let prisma: PrismaClient | null = null;
 
@@ -162,8 +175,10 @@ async function main(): Promise<void> {
       gate.approvedFingerprint,
     );
 
+    stage = "SKILL_RESOLUTION";
+    skillRefs = await readCanonicalPlacementSkillRefs(prisma);
     stage = "GRAPH_BUILD";
-    const graph = buildCanonicalPlacementAssessmentGraph();
+    graph = buildCanonicalPlacementAssessmentGraph(undefined, skillRefs);
     assertCanonicalVisibilityFlags(graph.assessment.config);
     stage = "SNAPSHOT_READ_BEFORE";
     const beforeSnapshot = await readCanonicalPlacementSnapshot(prisma, graph);
@@ -183,9 +198,12 @@ async function main(): Promise<void> {
               stage: "PLAN_BEFORE",
               errorClass: null,
               errorCode: null,
+              constraintField: null,
               beforePlanAction: beforePlan.action,
               afterPlanAction: null,
+              missingSkillCodes: [],
             },
+            skillRefs,
           ),
           null,
           2,
@@ -210,15 +228,20 @@ async function main(): Promise<void> {
               canonicalActive: config.canonicalActive === true,
               calibrationStatus: config.calibrationStatus,
               productionAssignmentEnabled: config.productionAssignmentEnabled === true,
+              reviewRequired: config.reviewRequired === true,
+              resultLevelId: config.resultLevelId,
             },
             backupConfirmationMode,
             {
               stage: "PLAN_BEFORE",
               errorClass: null,
               errorCode: null,
+              constraintField: null,
               beforePlanAction: beforePlan.action,
               afterPlanAction: null,
+              missingSkillCodes: [],
             },
+            skillRefs,
           ),
           null,
           2,
@@ -229,13 +252,23 @@ async function main(): Promise<void> {
     if (beforePlan.action !== "CREATE") {
       console.log(
         JSON.stringify(
-          sanitizedSummary("CONFLICT", "NO", beforePlan, undefined, backupConfirmationMode, {
-            stage: "PLAN_BEFORE",
-            errorClass: null,
-            errorCode: null,
-            beforePlanAction: beforePlan.action,
-            afterPlanAction: null,
-          }),
+          sanitizedSummary(
+            "CONFLICT",
+            "NO",
+            beforePlan,
+            undefined,
+            backupConfirmationMode,
+            {
+              stage: "PLAN_BEFORE",
+              errorClass: null,
+              errorCode: null,
+              constraintField: null,
+              beforePlanAction: beforePlan.action,
+              afterPlanAction: null,
+              missingSkillCodes: [],
+            },
+            skillRefs,
+          ),
           null,
           2,
         ),
@@ -270,15 +303,20 @@ async function main(): Promise<void> {
             canonicalActive: config.canonicalActive === true,
             calibrationStatus: config.calibrationStatus,
             productionAssignmentEnabled: config.productionAssignmentEnabled === true,
+            reviewRequired: config.reviewRequired === true,
+            resultLevelId: config.resultLevelId,
           },
           backupConfirmationMode,
           {
             stage: "POSTCONDITION",
             errorClass: null,
             errorCode: null,
+            constraintField: null,
             beforePlanAction: beforePlan.action,
             afterPlanAction: afterPlan.action,
+            missingSkillCodes: [],
           },
+          skillRefs,
         ),
         null,
         2,
@@ -286,6 +324,8 @@ async function main(): Promise<void> {
     );
   } catch (error) {
     const errorDetails = classifyCanonicalPlacementProvisionError(error, stage);
+    const missingSkillCodes =
+      error instanceof CanonicalPlacementSkillCatalogError ? error.missingCodes : [];
     console.log(
       JSON.stringify(
         sanitizedSummary(
@@ -298,9 +338,12 @@ async function main(): Promise<void> {
             stage,
             errorClass: errorDetails.errorClass,
             errorCode: errorDetails.errorCode,
+            constraintField: errorDetails.constraintField,
             beforePlanAction: beforePlan?.action ?? null,
             afterPlanAction: afterPlan?.action ?? null,
+            missingSkillCodes,
           },
+          skillRefs,
         ),
         null,
         2,

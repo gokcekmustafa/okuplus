@@ -10,8 +10,10 @@ import {
   CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_VERSION,
 } from "../src/curriculum/canonical-placement-item-bank.js";
 import {
+  CanonicalPlacementSkillCatalogError,
   buildCanonicalPlacementAssessmentGraph,
   planCanonicalPlacementPromotion,
+  readCanonicalPlacementSkillRefs,
   type CanonicalPlacementSnapshot,
 } from "../src/curriculum/canonical-placement-assessment-bootstrap.js";
 
@@ -205,6 +207,43 @@ function exactPromotionSnapshot(): CanonicalPlacementSnapshot {
 }
 
 describe("canonical placement assessment graph and promotion plan", () => {
+  it("uses database Skill ids when resolving canonical skill codes", async () => {
+    const rows = [
+      { id: "skill-main-uuid", code: "RC_MAIN_IDEA", name: "Ana fikir" },
+      { id: "skill-detail-uuid", code: "RC_DETAIL", name: "Detay" },
+      { id: "skill-inference-uuid", code: "RC_INFERENCE", name: "Çıkarım" },
+    ];
+    const client = {
+      skill: { findMany: async () => rows },
+    } as never;
+    const skillRefs = await readCanonicalPlacementSkillRefs(client);
+    const graph = buildCanonicalPlacementAssessmentGraph(undefined, skillRefs);
+
+    expect(graph.skills).toEqual(rows);
+    expect(new Set(graph.contentSkills.map((entry) => entry.skillId))).toEqual(
+      new Set(rows.map((row) => row.id)),
+    );
+    expect(
+      graph.questions.every((question) =>
+        rows.some((row) => row.code === question.skillCode && row.id !== question.skillCode),
+      ),
+    ).toBe(true);
+  });
+
+  it("fails closed when a canonical Skill code is missing", async () => {
+    const client = {
+      skill: {
+        findMany: async () => [{ id: "skill-main-uuid", code: "RC_MAIN_IDEA", name: "Ana fikir" }],
+      },
+    } as never;
+
+    await expect(readCanonicalPlacementSkillRefs(client)).rejects.toMatchObject({
+      name: "CanonicalPlacementSkillCatalogError",
+      safeCode: "CANONICAL_SKILL_CATALOG_MISSING",
+      missingCodes: ["RC_DETAIL", "RC_INFERENCE"],
+    } satisfies Partial<CanonicalPlacementSkillCatalogError>);
+  });
+
   it("builds the complete published-target graph without assigning a result level", () => {
     const graph = buildCanonicalPlacementAssessmentGraph();
     expect(graph.assessment.status).toBe("PUBLISHED");

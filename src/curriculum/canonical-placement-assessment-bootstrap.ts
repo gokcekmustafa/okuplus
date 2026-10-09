@@ -23,6 +23,35 @@ export type CanonicalPlacementSkillRef = {
   name: string;
 };
 
+export class CanonicalPlacementSkillCatalogError extends Error {
+  readonly safeCode = "CANONICAL_SKILL_CATALOG_MISSING";
+  readonly missingCodes: ProficiencySkillCode[];
+
+  constructor(missingCodes: ProficiencySkillCode[]) {
+    super(`canonical placement Skill kataloğunda eksik kodlar: ${missingCodes.join(", ")}`);
+    this.name = "CanonicalPlacementSkillCatalogError";
+    this.missingCodes = missingCodes;
+  }
+}
+
+export async function readCanonicalPlacementSkillRefs(
+  client: PrismaClient | Prisma.TransactionClient,
+): Promise<CanonicalPlacementSkillRef[]> {
+  const rows = await client.skill.findMany({
+    where: { code: { in: [...PROFICIENCY_SKILL_CODES] } },
+    select: { id: true, code: true, name: true },
+  });
+  const byCode = new Map(rows.map((row) => [row.code, row]));
+  const missingCodes = PROFICIENCY_SKILL_CODES.filter((code) => !byCode.has(code));
+  if (missingCodes.length > 0) {
+    throw new CanonicalPlacementSkillCatalogError(missingCodes);
+  }
+  return PROFICIENCY_SKILL_CODES.map((code) => {
+    const row = byCode.get(code)!;
+    return { id: row.id, code, name: row.name };
+  });
+}
+
 export type CanonicalPlacementContentPlan = {
   itemBankContentId: string;
   contentId: string;
