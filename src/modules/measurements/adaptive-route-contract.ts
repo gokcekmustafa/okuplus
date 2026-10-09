@@ -37,6 +37,7 @@ export type AdaptiveRouteMeasurement = {
   contractVersion: typeof ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION;
   source: "OFFICIAL_PLACEMENT";
   assessmentId: string;
+  itemMappingVersion?: string;
   signals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>>;
 };
 
@@ -108,6 +109,9 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
   }
   const signals = objectValue(root.signals);
   if (!signals) return null;
+  if (root.itemMappingVersion !== undefined && typeof root.itemMappingVersion !== "string") {
+    return null;
+  }
   const parsedSignals: Partial<Record<AdaptiveRouteFamily, AdaptiveRouteSignal>> = {};
   for (const family of ["B", "C", "D"] as const) {
     if (signals[family] === undefined) continue;
@@ -119,6 +123,9 @@ function parseMeasurement(value: unknown): AdaptiveRouteMeasurement | null {
     contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
     source: "OFFICIAL_PLACEMENT",
     assessmentId: root.assessmentId,
+    ...(root.itemMappingVersion !== undefined
+      ? { itemMappingVersion: root.itemMappingVersion }
+      : {}),
     signals: parsedSignals,
   };
 }

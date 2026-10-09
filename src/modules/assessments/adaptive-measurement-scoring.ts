@@ -1,5 +1,9 @@
 import type { QuestionType } from "@prisma/client";
 import {
+  ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+  readAdaptivePlacementItemMapping,
+} from "../../curriculum/adaptive-placement-item-mapping.js";
+import {
   ADAPTIVE_ROUTE_CONTRACTS,
   ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
   type AdaptiveRouteEvidenceDimension,
@@ -84,9 +88,9 @@ function explicitDimensions(metadata: JsonObject): AdaptiveRouteEvidenceDimensio
 /**
  * Returns only mappings owned by the canonical, server-provisioned placement
  * item bank. Arbitrary question metadata is never enough to create adaptive
- * evidence. The current canonical bank explicitly supports only the two C
- * dimensions below; B, D and C/EVIDENCE_RELATION remain review-gated until
- * the editorial item bank carries those dimensions explicitly.
+ * evidence. The current canonical bank explicitly supports three C dimensions
+ * on reviewed items; B and D remain review-gated until their item mappings
+ * and server scoring signals exist.
  */
 function trustedDimensions(
   question: AdaptiveMeasurementQuestion,
@@ -110,17 +114,19 @@ function trustedDimensions(
     return [];
   }
 
-  const explicit = explicitDimensions(metadata);
-  if (explicit.length > 0) return explicit;
+  const currentEditorialMapping = readAdaptivePlacementItemMapping(metadata);
+  if (currentEditorialMapping) return currentEditorialMapping.dimensions;
 
-  const cognitiveDemand = metadata.cognitiveDemand;
-  if (question.skillCode === "RC_INFERENCE" && cognitiveDemand === "INFER") {
-    return ["INFERENCE"];
-  }
-  if (question.skillCode === "RC_DETAIL") {
-    return ["EVIDENCE_FINDING"];
-  }
-  return [];
+  // The current immutable bank is closed-world: an unknown stable question id
+  // must not become trusted merely because its stored metadata names this
+  // mapping version. Future bank versions may opt into the existing explicit
+  // server-owned mapping extension point.
+  if (metadata.itemBankManifestVersion === "1.0.1") return [];
+
+  const explicit = explicitDimensions(metadata);
+  return metadata.adaptiveMeasurementMappingVersion === ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION
+    ? explicit
+    : [];
 }
 
 function assertRawScore(rawScore: number): void {
@@ -228,6 +234,7 @@ export function scoreAdaptiveMeasurement(
     contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
     source: "OFFICIAL_PLACEMENT",
     assessmentId,
+    itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
     signals,
   };
 

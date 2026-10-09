@@ -4,15 +4,20 @@ import {
   type AdaptiveRouteEvidenceDimension,
 } from "../src/modules/measurements/adaptive-route-contract.js";
 import { scoreAdaptiveMeasurement } from "../src/modules/assessments/adaptive-measurement-scoring.js";
+import { ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION } from "../src/curriculum/adaptive-placement-item-mapping.js";
 
 function metadata(
   skillCode: string,
   cognitiveDemand: "RECALL" | "UNDERSTAND" | "INFER",
   adaptiveEvidenceDimensions?: readonly AdaptiveRouteEvidenceDimension[],
+  stableQuestionId = "PLV1-Q001",
+  itemBankManifestVersion = "1.0.1",
 ) {
   return {
     canonicalManifestId: "OKU-READING-PLACEMENT-V1",
     itemBankManifestId: "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1",
+    itemBankManifestVersion,
+    stableQuestionId,
     skillCode,
     cognitiveDemand,
     evidence: { paragraph: 1, span: "Metindeki doğrulanabilir kanıt." },
@@ -20,7 +25,12 @@ function metadata(
       sourceType: "ORIGINAL_EDITORIAL",
       sourceId: "OKU-PLACEMENT-V1-EDITORIAL",
     },
-    ...(adaptiveEvidenceDimensions ? { adaptiveEvidenceDimensions } : {}),
+    ...(adaptiveEvidenceDimensions
+      ? {
+          adaptiveEvidenceDimensions,
+          adaptiveMeasurementMappingVersion: "P1_ADAPTIVE_ITEM_MAPPING_V1",
+        }
+      : {}),
   };
 }
 
@@ -33,19 +43,19 @@ describe("server adaptive measurement scorer", () => {
           questionVersionId: "inference-1",
           questionType: "MULTIPLE_CHOICE",
           skillCode: "RC_INFERENCE",
-          generationMetadata: metadata("RC_INFERENCE", "INFER"),
+          generationMetadata: metadata("RC_INFERENCE", "INFER", undefined, "PLV1-Q003"),
         },
         {
           questionVersionId: "detail-1",
           questionType: "MULTIPLE_CHOICE",
           skillCode: "RC_DETAIL",
-          generationMetadata: metadata("RC_DETAIL", "RECALL"),
+          generationMetadata: metadata("RC_DETAIL", "RECALL", undefined, "PLV1-Q002"),
         },
         {
           questionVersionId: "main-idea-1",
           questionType: "MULTIPLE_CHOICE",
           skillCode: "RC_MAIN_IDEA",
-          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND"),
+          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND", undefined, "PLV1-Q001"),
         },
       ],
       [
@@ -57,6 +67,7 @@ describe("server adaptive measurement scorer", () => {
 
     expect(result.status).toBe("REVIEW_REQUIRED");
     expect(result.measurement.assessmentId).toBe("assessment-1");
+    expect(result.measurement.itemMappingVersion).toBe(ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION);
     expect(result.measurement.signals.B).toBeUndefined();
     expect(result.measurement.signals.D).toBeUndefined();
     expect(result.measurement.signals.C).toEqual({
@@ -70,6 +81,43 @@ describe("server adaptive measurement scorer", () => {
     expect(result.reasons).toContain("MISSING_ROUTE_DECISION");
   });
 
+  it("emits evidence-relation only for an independently mapped relation item", () => {
+    const result = scoreAdaptiveMeasurement(
+      "assessment-relation",
+      [
+        {
+          questionVersionId: "inference",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_INFERENCE",
+          generationMetadata: metadata("RC_INFERENCE", "INFER", undefined, "PLV1-Q009"),
+        },
+        {
+          questionVersionId: "detail",
+          questionType: "MULTIPLE_CHOICE",
+          skillCode: "RC_DETAIL",
+          generationMetadata: metadata("RC_DETAIL", "RECALL", undefined, "PLV1-Q002"),
+        },
+        {
+          questionVersionId: "relation",
+          questionType: "MATCHING",
+          skillCode: "RC_MAIN_IDEA",
+          generationMetadata: metadata("RC_MAIN_IDEA", "UNDERSTAND", undefined, "PLV1-Q013"),
+        },
+      ],
+      [
+        { questionVersionId: "inference", rawScore: 1 },
+        { questionVersionId: "detail", rawScore: 0.5 },
+        { questionVersionId: "relation", rawScore: 0.75 },
+      ],
+    );
+
+    expect(result.measurement.signals.C?.evidence).toEqual({
+      INFERENCE: { score: 1, scoredCount: 1 },
+      EVIDENCE_FINDING: { score: 0.5, scoredCount: 1 },
+      EVIDENCE_RELATION: { score: 0.75, scoredCount: 1 },
+    });
+  });
+
   it("can emit a complete route envelope only from explicit server-owned dimension mappings", () => {
     const questions = (
       Object.entries(ADAPTIVE_ROUTE_CONTRACTS) as Array<
@@ -80,7 +128,7 @@ describe("server adaptive measurement scorer", () => {
         questionVersionId: dimension,
         questionType: "MULTIPLE_CHOICE" as const,
         skillCode: "RC_DETAIL",
-        generationMetadata: metadata("RC_DETAIL", "UNDERSTAND", [dimension]),
+        generationMetadata: metadata("RC_DETAIL", "UNDERSTAND", [dimension], "FUTURE-Q", "2.0.0"),
       })),
     );
 
