@@ -1,4 +1,10 @@
 import type { MeasurementSkillResult } from "../measurements/service.js";
+import {
+  hasCompleteAdaptiveRouteEvidence,
+  hasReadingComprehensionEvidence,
+  readAdaptiveRouteMeasurement,
+  type AdaptiveRouteFamily,
+} from "../measurements/adaptive-route-contract.js";
 
 /** The policy contract is separate from the curriculum version. */
 export const P1_ROUTE_SELECTION_POLICY_VERSION = "P1_ROUTE_SELECTION_V1" as const;
@@ -25,6 +31,7 @@ export type RouteSelectionCandidate = {
   version: number;
   levelId: string | null;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  curriculumReady?: boolean;
 };
 
 export type RouteSelectionMeasurement = {
@@ -59,46 +66,31 @@ export type SelectP1RouteInput = {
 
 const REQUIRED_RC_SKILLS = ["RC_MAIN_IDEA", "RC_DETAIL", "RC_INFERENCE"] as const;
 
-type RouteSelectionProfile =
+export type RouteSelectionProfile =
   | "FLUENCY_ACCURACY_NEED"
   | "INFERENCE_EVIDENCE_NEED"
   | "VOCABULARY_CONTEXT_NEED"
   | "BALANCED_PROFILE"
   | "MEASUREMENT_CONFLICT";
 
-type JsonObject = Record<string, unknown>;
-
-function objectValue(value: unknown): JsonObject | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonObject) : null;
-}
-
-function profileFromValue(value: unknown): RouteSelectionProfile | null {
-  if (value === "FLUENCY_ACCURACY_NEED") return value;
-  if (value === "INFERENCE_EVIDENCE_NEED") return value;
-  if (value === "VOCABULARY_CONTEXT_NEED") return value;
-  if (value === "BALANCED_PROFILE") return value;
-  if (value === "MEASUREMENT_CONFLICT") return value;
-  return null;
-}
-
 /**
- * Reads only an explicit, versionable academic measurement contract.
- * Training data, WPM values and arbitrary client fields are ignored.
+ * Reads only the server-produced, versioned adaptive measurement contract.
+ * Legacy routeSelectionProfile/signals fields are intentionally ignored.
  */
 export function readRouteSelectionProfile(metrics: unknown): RouteSelectionProfile | null {
-  const root = objectValue(metrics);
-  const nested = objectValue(root?.routeSelection);
-  const explicitProfile = profileFromValue(root?.routeSelectionProfile ?? nested?.profile);
-  if (explicitProfile) return explicitProfile;
-
-  const signals = objectValue(root?.routeSelectionSignals ?? nested?.signals);
-  if (!signals) return null;
-  const activeReasons: string[] = [];
-  if (signals.fluencyAccuracyNeed === true) activeReasons.push("FLUENCY_ACCURACY_NEED");
-  if (signals.inferenceEvidenceNeed === true) activeReasons.push("INFERENCE_EVIDENCE_NEED");
-  if (signals.vocabularyContextNeed === true) activeReasons.push("VOCABULARY_CONTEXT_NEED");
-  if (activeReasons.length > 1) return "MEASUREMENT_CONFLICT";
-  return profileFromValue(activeReasons[0]) ?? "BALANCED_PROFILE";
+  const adaptive = readAdaptiveRouteMeasurement(metrics);
+  if (adaptive.status !== "VALID") return null;
+  const activeFamilies = (
+    Object.keys(adaptive.measurement.signals) as AdaptiveRouteFamily[]
+  ).filter((family) => adaptive.measurement.signals[family]?.needsRoute === true);
+  if (activeFamilies.length > 1) return "MEASUREMENT_CONFLICT";
+  const family = activeFamilies[0];
+  if (!family || !hasCompleteAdaptiveRouteEvidence(adaptive.measurement, family)) return null;
+  return family === "B"
+    ? "FLUENCY_ACCURACY_NEED"
+    : family === "C"
+      ? "INFERENCE_EVIDENCE_NEED"
+      : "VOCABULARY_CONTEXT_NEED";
 }
 
 export function routeFamilyFromPathCode(code: string): P1RouteFamily | null {
@@ -139,14 +131,6 @@ function selectionResult(
   };
 }
 
-function hasRequiredReadingComprehensionEvidence(measurement: RouteSelectionMeasurement): boolean {
-  const byCode = new Map(measurement.skillResults.map((item) => [item.skillCode, item]));
-  return REQUIRED_RC_SKILLS.every((skillCode) => {
-    const item = byCode.get(skillCode);
-    return Boolean(item && item.scoredCount > 0 && item.score !== null);
-  });
-}
-
 function findCandidate(
   candidates: readonly RouteSelectionCandidate[],
   family: P1RouteFamily,
@@ -156,6 +140,7 @@ function findCandidate(
     candidates.find(
       (candidate) =>
         candidate.status === "PUBLISHED" &&
+        candidate.curriculumReady !== false &&
         routeFamilyFromPathCode(candidate.code) === family &&
         (candidate.levelId === null || candidate.levelId === levelId),
     ) ?? null
@@ -164,8 +149,9 @@ function findCandidate(
 
 /**
  * Pure P0 -> P1 route decision. It does not read or mutate the database.
- * P1-B and P1-D are fail-closed until their official measurement contracts
- * exist. P1-C requires actual RC evidence and an explicit inference profile.
+ * B/C/D are fail-closed until the complete, versioned official contract is
+ * persisted by the assessment pipeline. In particular, legacy client-shaped
+ * profile fields cannot activate a route.
  */
 export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
   const { measurement, candidates, levelId } = input;
@@ -183,7 +169,7 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     );
   }
 
-  if (!hasRequiredReadingComprehensionEvidence(measurement)) {
+  if (!hasReadingComprehensionEvidence(measurement.skillResults)) {
     return selectionResult(
       "REVIEW_REQUIRED",
       null,
@@ -195,6 +181,59 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
       "HIGH",
       "Okuduğunu anlama için gerekli ölçüm sinyalleri eksik",
     );
+  }
+
+  const adaptive = readAdaptiveRouteMeasurement(measurement.metrics);
+  if (adaptive.status === "INVALID") {
+    return selectionResult(
+      "REVIEW_REQUIRED",
+      null,
+      null,
+      ["MEASUREMENT_INSUFFICIENT"],
+      measurement,
+      null,
+      false,
+      "HIGH",
+      "Uyarlanabilir ölçüm sözleşmesi geçersiz",
+    );
+  }
+  if (adaptive.status === "VALID") {
+    const activeFamilies = (
+      Object.keys(adaptive.measurement.signals) as AdaptiveRouteFamily[]
+    ).filter((family) => adaptive.measurement.signals[family]?.needsRoute === true);
+    if (activeFamilies.length > 1) {
+      return selectionResult(
+        "REVIEW_REQUIRED",
+        null,
+        null,
+        ["MEASUREMENT_CONFLICT"],
+        measurement,
+        "MEASUREMENT_CONFLICT",
+        false,
+        "HIGH",
+        "Ölçüm sinyalleri birden fazla P1 ihtiyacını gösteriyor",
+      );
+    }
+    const activeFamily = activeFamilies[0];
+    if (activeFamily && !hasCompleteAdaptiveRouteEvidence(adaptive.measurement, activeFamily)) {
+      return selectionResult(
+        "REVIEW_REQUIRED",
+        null,
+        activeFamily,
+        [
+          activeFamily === "B"
+            ? "FLUENCY_ACCURACY_NEED"
+            : activeFamily === "C"
+              ? "INFERENCE_EVIDENCE_NEED"
+              : "VOCABULARY_CONTEXT_NEED",
+        ],
+        measurement,
+        null,
+        false,
+        "HIGH",
+        `P1-${activeFamily} için gerekli resmi kanıtların tamamı yok`,
+      );
+    }
   }
 
   const profile = readRouteSelectionProfile(measurement.metrics);
@@ -212,37 +251,22 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     );
   }
 
-  if (profile === "FLUENCY_ACCURACY_NEED") {
-    return selectionResult(
-      "REVIEW_REQUIRED",
-      null,
-      "B",
-      ["FLUENCY_ACCURACY_NEED"],
-      measurement,
-      profile,
-      false,
-      "HIGH",
-      "P1-B için resmi akıcılık ölçüm sözleşmesi henüz yok",
-    );
-  }
-
-  if (profile === "VOCABULARY_CONTEXT_NEED") {
-    return selectionResult(
-      "REVIEW_REQUIRED",
-      null,
-      "D",
-      ["VOCABULARY_CONTEXT_NEED"],
-      measurement,
-      profile,
-      false,
-      "HIGH",
-      "P1-D için resmi kelime/kontekst ölçüm sözleşmesi henüz yok",
-    );
-  }
-
-  const family: P1RouteFamily = profile === "INFERENCE_EVIDENCE_NEED" ? "C" : "A";
+  const family: P1RouteFamily =
+    profile === "FLUENCY_ACCURACY_NEED"
+      ? "B"
+      : profile === "INFERENCE_EVIDENCE_NEED"
+        ? "C"
+        : profile === "VOCABULARY_CONTEXT_NEED"
+          ? "D"
+          : "A";
   const reasonCode: RouteReasonCode =
-    family === "C" ? "INFERENCE_EVIDENCE_NEED" : "BALANCED_PROFILE";
+    family === "B"
+      ? "FLUENCY_ACCURACY_NEED"
+      : family === "C"
+        ? "INFERENCE_EVIDENCE_NEED"
+        : family === "D"
+          ? "VOCABULARY_CONTEXT_NEED"
+          : "BALANCED_PROFILE";
   const candidate = findCandidate(candidates, family, levelId);
   if (!candidate) {
     return selectionResult(

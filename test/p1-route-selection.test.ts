@@ -1,39 +1,57 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+  type AdaptiveRouteFamily,
+} from "../src/modules/measurements/adaptive-route-contract.js";
+import {
   P1_ROUTE_SELECTION_POLICY_VERSION,
   selectP1Route,
   type RouteSelectionCandidate,
   type RouteSelectionMeasurement,
 } from "../src/modules/student-learning/route-selection.js";
 
-const candidates: RouteSelectionCandidate[] = [
-  {
-    id: "p1-a",
-    code: "EDUCATION_V2_P1_A_READING",
-    version: 1,
-    levelId: "level-1",
-    status: "PUBLISHED",
-  },
-  {
-    id: "p1-c",
-    code: "EDUCATION_V2_P1_C_READING",
-    version: 1,
-    levelId: "level-1",
-    status: "PUBLISHED",
-  },
-];
+const candidates: RouteSelectionCandidate[] = (["A", "B", "C", "D"] as const).map((family) => ({
+  id: `p1-${family.toLowerCase()}`,
+  code: `EDUCATION_V2_P1_${family}_READING`,
+  version: 1,
+  levelId: "level-1",
+  status: "PUBLISHED",
+  curriculumReady: true,
+}));
 
-function measurement(profile?: string): RouteSelectionMeasurement {
+function measurement(metrics: unknown = {}): RouteSelectionMeasurement {
   return {
     id: "measurement-1",
     isFinalP0Measurement: true,
-    metrics: profile ? { routeSelectionProfile: profile } : {},
+    metrics,
     skillResults: ["RC_MAIN_IDEA", "RC_DETAIL", "RC_INFERENCE"].map((skillCode) => ({
       skillCode,
       label: skillCode,
       score: 0.75,
       scoredCount: 4,
     })),
+  };
+}
+
+function officialNeed(family: AdaptiveRouteFamily, complete = true) {
+  const dimensions: Record<AdaptiveRouteFamily, string[]> = {
+    B: ["FLUENCY", "ACCURACY", "MEANING_PRESERVATION", "TRANSFER"],
+    C: ["INFERENCE", "EVIDENCE_FINDING", "EVIDENCE_RELATION"],
+    D: ["CONTEXTUAL_MEANING", "LEXICAL_RELATION", "DOMAIN_CONTEXT"],
+  };
+  const evidence = Object.fromEntries(
+    dimensions[family].map((dimension, index) => [
+      dimension,
+      { score: 0.6 + index / 20, scoredCount: complete || index === 0 ? 4 : 0 },
+    ]),
+  );
+  return {
+    adaptiveRouteMeasurement: {
+      contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+      source: "OFFICIAL_PLACEMENT",
+      assessmentId: "assessment-1",
+      signals: { [family]: { needsRoute: true, evidence } },
+    },
   };
 }
 
@@ -50,28 +68,44 @@ describe("P0 to P1 route selection", () => {
     });
   });
 
-  it("selects P1-C only with explicit inference evidence", () => {
+  it.each([
+    ["B", "FLUENCY_ACCURACY_NEED"],
+    ["C", "INFERENCE_EVIDENCE_NEED"],
+    ["D", "VOCABULARY_CONTEXT_NEED"],
+  ] as const)("selects P1-%s only with the complete official contract", (family, reasonCode) => {
     const result = selectP1Route({
       levelId: "level-1",
-      measurement: measurement("INFERENCE_EVIDENCE_NEED"),
+      measurement: measurement(officialNeed(family)),
       candidates,
     });
-
-    expect(result.status).toBe("READY");
-    expect(result.routeFamily).toBe("C");
-    expect(result.recommendedPathId).toBe("p1-c");
+    expect(result).toMatchObject({
+      status: "READY",
+      recommendedPathId: `p1-${family.toLowerCase()}`,
+      routeFamily: family,
+      reasonCodes: [reasonCode],
+    });
   });
 
-  it("fails closed for unsupported B/D route contracts", () => {
-    for (const profile of ["FLUENCY_ACCURACY_NEED", "VOCABULARY_CONTEXT_NEED"]) {
-      const result = selectP1Route({
-        levelId: "level-1",
-        measurement: measurement(profile),
-        candidates,
-      });
-      expect(result.status).toBe("REVIEW_REQUIRED");
-      expect(result.recommendedPathId).toBeNull();
-    }
+  it("fails closed for incomplete official evidence", () => {
+    const result = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement(officialNeed("C", false)),
+      candidates,
+    });
+    expect(result.status).toBe("REVIEW_REQUIRED");
+    expect(result.routeFamily).toBe("C");
+    expect(result.recommendedPathId).toBeNull();
+    expect(result.reasonCodes).toContain("INFERENCE_EVIDENCE_NEED");
+  });
+
+  it("ignores legacy client-shaped profile fields", () => {
+    const result = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({ routeSelectionProfile: "INFERENCE_EVIDENCE_NEED" }),
+      candidates,
+    });
+    expect(result.status).toBe("READY");
+    expect(result.routeFamily).toBe("A");
   });
 
   it("requires a final measurement and all three reading-comprehension signals", () => {
@@ -82,55 +116,51 @@ describe("P0 to P1 route selection", () => {
     });
     const incomplete = selectP1Route({
       levelId: "level-1",
-      measurement: {
-        ...measurement(),
-        skillResults: measurement().skillResults.slice(0, 2),
-      },
+      measurement: { ...measurement(), skillResults: measurement().skillResults.slice(0, 2) },
       candidates,
     });
-
     expect(notFinal.reasonCodes).toContain("MEASUREMENT_INSUFFICIENT");
     expect(incomplete.reasonCodes).toContain("MEASUREMENT_INSUFFICIENT");
     expect(notFinal.status).toBe("REVIEW_REQUIRED");
     expect(incomplete.status).toBe("REVIEW_REQUIRED");
   });
 
-  it("does not choose a route when measurement signals conflict or content is absent", () => {
+  it("does not choose a route when official signals conflict or content is absent", () => {
     const conflict = selectP1Route({
       levelId: "level-1",
-      measurement: {
-        ...measurement(),
-        metrics: {
-          routeSelectionSignals: {
-            inferenceEvidenceNeed: true,
-            vocabularyContextNeed: true,
+      measurement: measurement({
+        adaptiveRouteMeasurement: {
+          contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+          source: "OFFICIAL_PLACEMENT",
+          assessmentId: "assessment-1",
+          signals: {
+            B: officialNeed("B").adaptiveRouteMeasurement.signals.B,
+            D: officialNeed("D").adaptiveRouteMeasurement.signals.D,
           },
         },
-      },
+      }),
       candidates,
     });
     const noCandidate = selectP1Route({
       levelId: "level-1",
-      measurement: measurement("INFERENCE_EVIDENCE_NEED"),
+      measurement: measurement(officialNeed("C")),
       candidates: [],
     });
-
     expect(conflict.reasonCodes).toContain("MEASUREMENT_CONFLICT");
     expect(noCandidate.reasonCodes).toContain("INFERENCE_EVIDENCE_NEED");
     expect(conflict.status).toBe("REVIEW_REQUIRED");
     expect(noCandidate.status).toBe("REVIEW_REQUIRED");
   });
 
-  it("does not use a draft or wrong-level P1 candidate", () => {
+  it("does not use an unready or wrong-level P1 candidate", () => {
     const result = selectP1Route({
       levelId: "level-1",
       measurement: measurement(),
       candidates: [
-        { ...candidates[0]!, id: "draft", status: "DRAFT" },
+        { ...candidates[0]!, id: "unready", curriculumReady: false },
         { ...candidates[0]!, id: "wrong-level", levelId: "level-2" },
       ],
     });
-
     expect(result.status).toBe("REVIEW_REQUIRED");
     expect(result.recommendedPathId).toBeNull();
   });

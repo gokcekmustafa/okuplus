@@ -308,7 +308,7 @@ async function loadCandidates(
   actor: { tenantId: string },
   levelId: string | null,
 ): Promise<RouteSelectionCandidate[]> {
-  return tx.learningPath.findMany({
+  const paths = await tx.learningPath.findMany({
     where: {
       status: "PUBLISHED",
       deletedAt: null,
@@ -316,17 +316,55 @@ async function loadCandidates(
       AND: [
         { OR: [{ tenantId: null }, { tenantId: actor.tenantId }] },
         ...(levelId ? [{ OR: [{ levelId: null }, { levelId }] }] : []),
-        {
-          units: {
-            some: {
-              status: "PUBLISHED",
-              steps: { some: { status: "PUBLISHED", isActive: true } },
+      ],
+    },
+    select: {
+      id: true,
+      code: true,
+      version: true,
+      levelId: true,
+      status: true,
+      units: {
+        where: { status: "PUBLISHED" },
+        select: {
+          steps: {
+            where: { status: "PUBLISHED", isActive: true },
+            select: {
+              type: true,
+              contentVersion: { select: { status: true } },
+              exerciseTemplateVersion: { select: { status: true } },
+              assessment: { select: { status: true } },
             },
           },
         },
-      ],
+      },
     },
-    select: { id: true, code: true, version: true, levelId: true, status: true },
+  });
+  return paths.flatMap((path) => {
+    const steps = path.units.flatMap((unit) => unit.steps);
+    const curriculumReady =
+      path.units.length > 0 &&
+      path.units.every((unit) => unit.steps.length > 0) &&
+      steps.every((step) => {
+        if (step.type === "TEACHING") return step.contentVersion?.status === "PUBLISHED";
+        if (step.type === "ASSESSMENT") return step.assessment?.status === "PUBLISHED";
+        return (
+          step.contentVersion?.status === "PUBLISHED" &&
+          step.exerciseTemplateVersion?.status === "PUBLISHED"
+        );
+      });
+    return curriculumReady
+      ? [
+          {
+            id: path.id,
+            code: path.code,
+            version: path.version,
+            levelId: path.levelId,
+            status: path.status,
+            curriculumReady: true,
+          },
+        ]
+      : [];
   });
 }
 
