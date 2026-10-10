@@ -6529,6 +6529,22 @@ textarea:focus-visible {
   margin: 10px 0 20px;
 }
 
+.student-shell .training-activities-status {
+  min-height: 24px;
+  margin: 16px 0 0;
+  color: var(--student-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.student-shell .training-activities-status.is-error {
+  color: var(--danger, #b42318);
+}
+
+.student-shell .training-activities-status .btn {
+  margin-left: 6px;
+}
+
 .student-shell .training-activities-intro h3 {
   margin: 0 0 6px;
   color: var(--student-ink);
@@ -7012,6 +7028,11 @@ textarea:focus-visible {
   font-weight: 800;
 }
 
+.student-shell .training-activity-card .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .student-shell .learning-map-v6-step.completed .learning-map-v6-node {
   cursor: pointer;
 }
@@ -7063,6 +7084,11 @@ textarea:focus-visible {
   .student-shell .training-activity-status {
     max-width: none;
     align-self: flex-start;
+  }
+
+  .student-shell .training-activities-status .btn {
+    display: block;
+    margin: 10px 0 0;
   }
 
   .student-shell .learning-path-exercise-context {

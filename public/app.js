@@ -3356,6 +3356,9 @@ async function fetchDailyTraining(id) {
 async function loadTrainingActivities() {
   if (trainingActivityLoading) return;
   trainingActivityLoading = true;
+  trainingActivitiesState = "loading";
+  trainingActivitiesStateMessage = "Kısa antrenmanlar yükleniyor…";
+  renderTrainingActivities();
   const status = $("exercise-load-status");
   if (status) status.textContent = "Aktiviteler hazırlanıyor…";
   try {
@@ -3365,17 +3368,19 @@ async function loadTrainingActivities() {
       }),
     );
     trainingActivities = Array.isArray(data?.activities) ? data.activities : [];
+    trainingActivitiesState = "ready";
+    trainingActivitiesStateMessage = "";
     renderTrainingActivities();
     if (status) status.textContent = "";
   } catch (error) {
     trainingActivities = [];
+    trainingActivitiesState = "error";
+    trainingActivitiesStateMessage = formatStudentError(
+      error,
+      "Antrenman aktiviteleri yüklenemedi. Bağlantını kontrol edip tekrar dene.",
+    );
     renderTrainingActivities();
-    if (status) {
-      status.textContent = formatStudentError(
-        error,
-        "Antrenman aktiviteleri yüklenemedi. Bağlantını kontrol edip tekrar dene.",
-      );
-    }
+    if (status) status.textContent = trainingActivitiesStateMessage;
     throw error;
   } finally {
     trainingActivityLoading = false;
@@ -3385,14 +3390,29 @@ async function loadTrainingActivities() {
 function renderTrainingActivities() {
   const list = $("training-activities-list");
   const grid = $("training-activities-grid");
+  const state = $("training-activities-status");
   if (!list || !grid) return;
   const showList = isPlatformUser === false && !exerciseSession && !dailyTrainingSummary;
   list.style.display = showList ? "block" : "none";
+  list.setAttribute("aria-busy", trainingActivitiesState === "loading" ? "true" : "false");
   if (!showList) return;
-  if (!trainingActivities.length) {
-    grid.innerHTML = '<p class="muted">Şu anda yayınlanmış aktivite bulunmuyor.</p>';
+  if (state) {
+    state.className = `training-activities-status is-${trainingActivitiesState}`;
+    state.textContent = trainingActivitiesStateMessage;
+  }
+  if (trainingActivitiesState === "loading" || trainingActivitiesState === "error") {
+    grid.innerHTML = "";
     return;
   }
+  if (!trainingActivities.length) {
+    if (state) {
+      state.innerHTML =
+        'Şu anda yayınlanmış kısa antrenman bulunmuyor. <button type="button" class="btn btn-ghost btn-sm" data-training-empty-learning-path>Öğrenme Yoluna dön</button>';
+    }
+    grid.innerHTML = "";
+    return;
+  }
+  if (state) state.textContent = "İstediğin beceriyi seçerek başlayabilirsin.";
   const skillLabels = {
     FAST_ATTENTION: "Dikkat",
     FAST_RECOGNITION: "Hızlı tanıma",
@@ -3425,21 +3445,23 @@ function renderTrainingActivities() {
       const resultDetails = [score, attempts].filter(Boolean).join(" · ");
       const resumeSessionId = inProgress ? progress.sessionId : "";
       const skillLabel = skillLabels[activity.competency] || "Okuma becerisi";
-      return `<article class="training-activity-card">
+      const activityTitleId = `training-activity-title-${activity.id}`;
+      const activityDescriptionId = `training-activity-description-${activity.id}`;
+      return `<article class="training-activity-card" aria-labelledby="${escapeHtml(activityTitleId)}" aria-describedby="${escapeHtml(activityDescriptionId)}">
         <div class="training-activity-card-head">
           <div class="training-activity-identity">
             <span class="training-activity-icon" aria-hidden="true">${escapeHtml(skillIcons[activity.competency] || "✦")}</span>
             <div>
               <p class="training-activity-kicker">BAĞIMSIZ ANTRENMAN</p>
-              <h4>${escapeHtml(activity.title || "Antrenman")}</h4>
+              <h4 id="${escapeHtml(activityTitleId)}">${escapeHtml(activity.title || "Antrenman")}</h4>
             </div>
           </div>
           <span class="training-activity-status ${completed ? "is-completed" : inProgress ? "is-progress" : "is-new"}">${statusLabel}</span>
         </div>
-        <p>${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
+        <p id="${escapeHtml(activityDescriptionId)}">${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
         <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
         <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
-        <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
+        <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" data-training-action-label="${escapeHtml(actionLabel)}" aria-describedby="${escapeHtml(activityDescriptionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
       </article>`;
     })
     .join("");
@@ -3483,12 +3505,19 @@ async function startTrainingActivity(activityId, resumeSessionId = null) {
   } catch (error) {
     if (button) {
       button.disabled = false;
-      button.textContent = "Başla";
+      button.textContent = button.dataset.trainingActionLabel || "Başla →";
     }
     const status = $("exercise-load-status");
     if (status)
       status.textContent = formatStudentError(error, "Aktivite başlatılamadı. Tekrar dene.");
   }
+}
+
+function returnToLearningPathFromTrainingEmpty() {
+  navigate("dashboard");
+  window.setTimeout(() => {
+    $("learning-path")?.scrollIntoView({ block: "start" });
+  }, 0);
 }
 
 function nextDailyTrainingItem(session) {
@@ -9504,6 +9533,8 @@ let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
 let trainingActivities = [];
 let trainingActivityLoading = false;
+let trainingActivitiesState = "idle";
+let trainingActivitiesStateMessage = "";
 let activeTrainingActivityId = null;
 let exerciseMode = null;
 let lessonData = [];
@@ -12181,7 +12212,9 @@ async function loadExercisePage() {
   const isStudent = isPlatformUser === false;
   $("exercise-admin-card").classList.toggle("hidden", isStudent);
   $("exercise-load-status").textContent = "Alıştırma yükleniyor…";
-  $("exercise-retry-load").classList.add("hidden");
+  const retryButton = $("exercise-retry-load");
+  retryButton.classList.add("hidden");
+  retryButton.textContent = "Tekrar dene";
   try {
     if (isStudent) {
       const scope = getStoredTokens().tenantId;
@@ -12264,10 +12297,15 @@ async function loadExercisePage() {
     if (exerciseSession) $("exercise-load-status").textContent = "";
     renderTrainingActivities();
   } catch (error) {
-    $("exercise-load-status").textContent = dailyTrainingSessionId
-      ? formatDailyTrainingError(error)
-      : "Alıştırma yüklenemedi. Bağlantını kontrol edip tekrar dene.";
-    $("exercise-retry-load").classList.remove("hidden");
+    const activityListError =
+      !dailyTrainingSessionId && !exerciseSession && trainingActivitiesState === "error";
+    $("exercise-load-status").textContent = activityListError
+      ? trainingActivitiesStateMessage
+      : dailyTrainingSessionId
+        ? formatDailyTrainingError(error)
+        : "Alıştırma yüklenemedi. Bağlantını kontrol edip tekrar dene.";
+    retryButton.textContent = activityListError ? "Aktiviteleri yeniden yükle" : "Tekrar dene";
+    retryButton.classList.remove("hidden");
   } finally {
     exerciseLoading = false;
     if (exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
@@ -13356,6 +13394,13 @@ function setupExerciseEvents() {
     const resumeSessionId = target?.getAttribute("data-training-activity-session") || null;
     if (activityId && !target.hasAttribute("disabled"))
       void startTrainingActivity(activityId, resumeSessionId);
+  });
+  $("training-activities-status")?.addEventListener("click", (event) => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-training-empty-learning-path]")
+        : null;
+    if (target) returnToLearningPathFromTrainingEmpty();
   });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
