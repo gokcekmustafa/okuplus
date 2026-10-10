@@ -36,6 +36,15 @@ describe("academic reading P0 catalogue", () => {
     ).toBe(true);
   });
 
+  it("keeps the canonical P0 station count at 22 including the terminal stages", () => {
+    const guidedSteps = ACADEMIC_P0_LESSONS.reduce(
+      (count, lesson) => count + lesson.stages.length,
+      0,
+    );
+    expect(guidedSteps + ACADEMIC_P0_COMMON_FLOW.stages.length).toBe(22);
+    expect(ACADEMIC_P0_COMMON_FLOW.stages.at(-1)).toBe("NEXT_LEARNING");
+  });
+
   it("does not invent speed norms or a universal pass threshold", () => {
     const text = JSON.stringify(ACADEMIC_P0_LESSONS);
     expect(text).not.toMatch(/\b\d+(?:\.\d+)?\s*(?:WPM|kelime\/dakika)\b/i);
@@ -145,6 +154,10 @@ describe("education V2 P0 forward migration contract", () => {
     expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_URL");
     expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST");
     expect(provisioning).toContain("assertApprovedTargetFingerprint");
+    expect(provisioning).toContain('mode: "MANIFEST_ONLY_DRY_RUN"');
+    expect(provisioning).toContain('databaseAction: "NOT_RUN"');
+    expect(provisioning).toContain('publicationState: "NOT_VERIFIED"');
+    expect(provisioning).toContain("lessonStepCount");
     expect(provisioning).toContain("where: { code_version:");
     expect(provisioning).toContain("where: { pathId_code:");
     expect(provisioning).toContain("where: { unitId_stableKey:");

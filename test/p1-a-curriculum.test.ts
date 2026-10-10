@@ -64,4 +64,22 @@ describe("Education V2 P1-A curriculum contract", () => {
       }
     }
   });
+
+  it("rejects drift between assessment question keys and its template exercise", () => {
+    const program = structuredClone(EDUCATION_V2_P1_A_PROGRAM);
+    program.assessments[0]!.questionKeys[0] = "question-from-another-exercise";
+
+    expect(validateP1AProgram(program)).toContain(
+      "Assessment soru/template eşleşmesi uyuşmuyor: p1a-assessment",
+    );
+  });
+
+  it("rejects a broken linear prerequisite chain", () => {
+    const program = structuredClone(EDUCATION_V2_P1_A_PROGRAM);
+    program.path.units[1]!.steps[0]!.prerequisiteStepKeys = ["unknown-step"];
+
+    expect(validateP1AProgram(program)).toContain(
+      "P1-A linear prerequisite zinciri geçersiz: relations-teaching",
+    );
+  });
 });

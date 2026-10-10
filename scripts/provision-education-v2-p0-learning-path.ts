@@ -51,6 +51,13 @@ type ProvisionStep = {
 };
 
 type TargetEnvironment = "STAGING" | "PRODUCTION";
+type ProvisionTarget = {
+  url: string | null;
+  levelCode: string;
+  approvedFingerprint: string;
+  apply: boolean;
+  environment: TargetEnvironment;
+};
 
 function fail(message: string): never {
   throw new Error(`Eğitim V2 P0 provisioning reddedildi: ${message}`);
@@ -68,36 +75,39 @@ function objectValue(value: Prisma.JsonValue): Record<string, unknown> | null {
     : null;
 }
 
-function assertTarget(): {
-  url: string;
-  levelCode: string;
-  approvedFingerprint: string;
-  apply: boolean;
-  environment: TargetEnvironment;
-} {
+function assertTarget(): ProvisionTarget | null {
   const environment = requiredEnv("EDUCATION_V2_P0_ENVIRONMENT").toUpperCase();
   if (environment !== "STAGING" && environment !== "PRODUCTION") {
     fail("provisioning yalnızca STAGING veya açıkça korunan PRODUCTION ortamında çalıştırılabilir");
   }
-  const url = requiredEnv(
+  const apply = process.argv.includes("--apply");
+  const dryRun = !apply && process.argv.includes("--dry-run");
+  if (!apply && !dryRun) fail("tam olarak --dry-run veya --apply seçilmeli");
+  const levelCode = requiredEnv("EDUCATION_V2_P0_LEVEL_CODE");
+  const databaseEnv =
     environment === "PRODUCTION"
       ? "EDUCATION_V2_P0_PRODUCTION_DATABASE_URL"
-      : "EDUCATION_V2_P0_DATABASE_URL",
-  );
-  const levelCode = requiredEnv("EDUCATION_V2_P0_LEVEL_CODE");
+      : "EDUCATION_V2_P0_DATABASE_URL";
+  const url = process.env[databaseEnv]?.trim() || null;
+  if (dryRun && !url && environment === "STAGING") {
+    return {
+      url: null,
+      levelCode,
+      approvedFingerprint: "NOT_CONNECTED",
+      apply: false,
+      environment,
+    };
+  }
+  if (!url) fail(`${databaseEnv} gerekli`);
   const approvedFingerprint = requiredEnv("EDUCATION_V2_P0_APPROVED_TARGET_FINGERPRINT");
   const confirmation =
     process.env[
       environment === "PRODUCTION" ? PRODUCTION_APPROVAL : "I_HAVE_REVIEWED_EDUCATION_V2_P0"
     ]?.trim();
-  const apply = process.argv.includes("--apply");
   const expectedConfirmation =
     environment === "PRODUCTION" ? PRODUCTION_CONFIRMATION : STAGING_CONFIRMATION;
   if (apply && confirmation !== expectedConfirmation) {
     fail(`--apply için yayın onayı=${expectedConfirmation} gerekli`);
-  }
-  if (!apply && !process.argv.includes("--dry-run")) {
-    fail("tam olarak --dry-run veya --apply seçilmeli");
   }
   if (environment === "PRODUCTION") {
     const target = parseCatalogTargetUrl(url, "PRODUCTION");
@@ -527,6 +537,33 @@ async function ensureStep(
 
 async function main(): Promise<void> {
   const target = assertTarget();
+  if (!target || !target.url) {
+    const lessonStepCount = ACADEMIC_P0_LESSONS.reduce(
+      (total, lesson) => total + lesson.stages.length,
+      0,
+    );
+    console.log(
+      JSON.stringify(
+        {
+          status: "PASS",
+          mode: "MANIFEST_ONLY_DRY_RUN",
+          environment: target?.environment ?? "STAGING",
+          levelCode: target?.levelCode ?? "NOT_CONFIGURED",
+          pathCount: 3,
+          lessonStepCount,
+          terminalStepCount: 4,
+          stepCount: lessonStepCount + 4,
+          databaseAction: "NOT_RUN",
+          publicationState: "NOT_VERIFIED",
+          ready: false,
+          dbChanged: false,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   const prisma = new PrismaClient({
     datasources: { db: { url: target.url } },
     transactionOptions: { maxWait: 20_000, timeout: 120_000 },
