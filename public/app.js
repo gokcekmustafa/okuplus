@@ -4174,7 +4174,7 @@ function isUsableLearningPathNode(node) {
     return Boolean(node.templateVersionId);
   }
   if (node.type === "ASSESSMENT") return Boolean(node.assessmentId);
-  return node.type === "NEXT_LEARNING";
+  return node.type !== "NEXT_LEARNING";
 }
 
 async function openAssignedP1FirstStep() {

@@ -56,6 +56,7 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain('result?.outcome === "ASSIGNED"');
     expect(app).toContain('result?.outcome === "ALREADY_ASSIGNED"');
     expect(app).toContain('String(node.learningPathCode || "").startsWith("EDUCATION_V2_P1_")');
+    expect(app).toContain('return node.type !== "NEXT_LEARNING"');
     expect(app).toContain('const path = await insightApi("learning-path")');
     expect(app).toContain("activeLearningPathNodeFromData(path)");
     expect(app).toContain("learningPathEntryMode = true");
