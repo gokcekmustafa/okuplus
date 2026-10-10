@@ -6,28 +6,132 @@ export const ANALYSIS_GROUPS = [
   "STUDENTS_NEEDING_READING_DEVELOPMENT",
 ] as const;
 
-const TASK_IDS = [
-  "V2C-INF-01",
-  "V2C-INF-02",
-  "V2C-INF-03",
-  "V2C-INF-04",
-  "V2C-EVF-01",
-  "V2C-EVF-02",
-  "V2C-EVF-03",
-  "V2C-EVF-04",
-  "V2C-REL-01",
-  "V2C-REL-02",
-  "V2C-REL-03",
-  "V2C-REL-04",
-] as const;
-
-const RELATION_TYPES = [
+export const P1C_V2_RELATION_TYPES = [
   "DIRECT_SUPPORT",
   "LIMITED_SUPPORT",
   "COMPARISON",
   "CAUSAL_SUPPORT",
   "NOT_SUPPORTED_OR_CONTRADICTS",
 ] as const;
+
+type P1C_V2_TaskDimension = "INFERENCE" | "EVIDENCE_FINDING" | "EVIDENCE_RELATION";
+
+export const P1C_V2_TASK_CONTRACT = [
+  {
+    taskDesignId: "V2C-INF-01",
+    dimension: "INFERENCE",
+    passageDesignRef: "P1C-V2-TXT-01@1.0",
+    responseFields: ["answer.optionId"],
+    allowedEvidenceCandidateIds: [],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-INF-02",
+    dimension: "INFERENCE",
+    passageDesignRef: "P1C-V2-TXT-02@1.0",
+    responseFields: ["answer.optionId"],
+    allowedEvidenceCandidateIds: [],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-INF-03",
+    dimension: "INFERENCE",
+    passageDesignRef: "P1C-V2-TXT-03@1.0",
+    responseFields: ["answer.optionId"],
+    allowedEvidenceCandidateIds: [],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-INF-04",
+    dimension: "INFERENCE",
+    passageDesignRef: "P1C-V2-TXT-04@1.0",
+    responseFields: ["answer.optionId"],
+    allowedEvidenceCandidateIds: [],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-EVF-01",
+    dimension: "EVIDENCE_FINDING",
+    passageDesignRef: "P1C-V2-TXT-05@1.0",
+    responseFields: ["evidenceCandidateId"],
+    allowedEvidenceCandidateIds: ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-EVF-02",
+    dimension: "EVIDENCE_FINDING",
+    passageDesignRef: "P1C-V2-TXT-06@1.0",
+    responseFields: ["evidenceCandidateId"],
+    allowedEvidenceCandidateIds: ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-EVF-03",
+    dimension: "EVIDENCE_FINDING",
+    passageDesignRef: "P1C-V2-TXT-07@1.0",
+    responseFields: ["evidenceCandidateId"],
+    allowedEvidenceCandidateIds: ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-EVF-04",
+    dimension: "EVIDENCE_FINDING",
+    passageDesignRef: "P1C-V2-TXT-08@1.0",
+    responseFields: ["evidenceCandidateId"],
+    allowedEvidenceCandidateIds: ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+    allowedRelationTypes: [],
+    targetRelationTypes: [],
+  },
+  {
+    taskDesignId: "V2C-REL-01",
+    dimension: "EVIDENCE_RELATION",
+    passageDesignRef: "P1C-V2-TXT-09@1.0",
+    responseFields: ["evidenceCandidateId", "relationType"],
+    allowedEvidenceCandidateIds: ["CAND-01", "CAND-02", "CAND-03"],
+    allowedRelationTypes: P1C_V2_RELATION_TYPES,
+    targetRelationTypes: ["LIMITED_SUPPORT"],
+  },
+  {
+    taskDesignId: "V2C-REL-02",
+    dimension: "EVIDENCE_RELATION",
+    passageDesignRef: "P1C-V2-TXT-10@1.0",
+    responseFields: ["evidenceCandidateId", "relationType"],
+    allowedEvidenceCandidateIds: ["CAND-01", "CAND-02", "CAND-03"],
+    allowedRelationTypes: P1C_V2_RELATION_TYPES,
+    targetRelationTypes: ["LIMITED_SUPPORT"],
+  },
+  {
+    taskDesignId: "V2C-REL-03",
+    dimension: "EVIDENCE_RELATION",
+    passageDesignRef: "P1C-V2-TXT-11@1.0",
+    responseFields: ["evidenceCandidateId", "relationType"],
+    allowedEvidenceCandidateIds: ["CAND-01", "CAND-02", "CAND-03"],
+    allowedRelationTypes: P1C_V2_RELATION_TYPES,
+    targetRelationTypes: ["LIMITED_SUPPORT"],
+  },
+  {
+    taskDesignId: "V2C-REL-04",
+    dimension: "EVIDENCE_RELATION",
+    passageDesignRef: "P1C-V2-TXT-12@1.0",
+    responseFields: ["evidenceCandidateId", "relationType"],
+    allowedEvidenceCandidateIds: ["CAND-01", "CAND-02", "CAND-03", "CAND-04"],
+    allowedRelationTypes: P1C_V2_RELATION_TYPES,
+    targetRelationTypes: ["LIMITED_SUPPORT"],
+  },
+] as const;
+
+type TaskId = (typeof P1C_V2_TASK_CONTRACT)[number]["taskDesignId"];
+type RelationType = (typeof P1C_V2_RELATION_TYPES)[number];
+
+const TASK_IDS = P1C_V2_TASK_CONTRACT.map((task) => task.taskDesignId) as TaskId[];
+const TASK_CONTRACT_BY_ID = new Map(P1C_V2_TASK_CONTRACT.map((task) => [task.taskDesignId, task]));
 
 const COMPLETENESS_VALUES = ["COMPLETE", "BLANK", "PARTIAL", "INVALID", "REVIEW_REQUIRED"] as const;
 const VERSION_STATUSES = ["NOT_CREATED", "AVAILABLE"] as const;
@@ -42,31 +146,16 @@ const CANONICAL_DESIGN_CONTRACT = {
   pilotProtocolVersion: "P1_ADAPTIVE_PILOT_CALIBRATION_PROTOCOL_V1",
 } as const;
 
-const CANONICAL_DESIGN_PASSAGE_REFS = {
-  "V2C-INF-01": "P1C-V2-TXT-01@1.0",
-  "V2C-INF-02": "P1C-V2-TXT-02@1.0",
-  "V2C-INF-03": "P1C-V2-TXT-03@1.0",
-  "V2C-INF-04": "P1C-V2-TXT-04@1.0",
-  "V2C-EVF-01": "P1C-V2-TXT-05@1.0",
-  "V2C-EVF-02": "P1C-V2-TXT-06@1.0",
-  "V2C-EVF-03": "P1C-V2-TXT-07@1.0",
-  "V2C-EVF-04": "P1C-V2-TXT-08@1.0",
-  "V2C-REL-01": "P1C-V2-TXT-09@1.0",
-  "V2C-REL-02": "P1C-V2-TXT-10@1.0",
-  "V2C-REL-03": "P1C-V2-TXT-11@1.0",
-  "V2C-REL-04": "P1C-V2-TXT-12@1.0",
-} as const;
+const CANONICAL_DESIGN_PASSAGE_REFS = Object.fromEntries(
+  P1C_V2_TASK_CONTRACT.map((task) => [task.taskDesignId, task.passageDesignRef]),
+) as Record<TaskId, string>;
 
-const EVIDENCE_CANDIDATES = {
-  "V2C-EVF-01": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
-  "V2C-EVF-02": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
-  "V2C-EVF-03": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
-  "V2C-EVF-04": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
-  "V2C-REL-01": ["CAND-01", "CAND-02", "CAND-03"],
-  "V2C-REL-02": ["CAND-01", "CAND-02", "CAND-03"],
-  "V2C-REL-03": ["CAND-01", "CAND-02", "CAND-03"],
-  "V2C-REL-04": ["CAND-01", "CAND-02", "CAND-03", "CAND-04"],
-} as const;
+const EVIDENCE_CANDIDATES = Object.fromEntries(
+  P1C_V2_TASK_CONTRACT.filter((task) => task.allowedEvidenceCandidateIds.length > 0).map((task) => [
+    task.taskDesignId,
+    task.allowedEvidenceCandidateIds,
+  ]),
+) as Partial<Record<TaskId, readonly string[]>>;
 
 const GRADE_BAND_PATTERN = /^G(?:[1-9]|1[0-2])$/u;
 
@@ -91,8 +180,6 @@ const FORBIDDEN_KEYS = new Set([
 
 type JsonObject = Record<string, unknown>;
 type AnalysisGroup = (typeof ANALYSIS_GROUPS)[number];
-type TaskId = (typeof TASK_IDS)[number];
-type RelationType = (typeof RELATION_TYPES)[number];
 type Completeness = (typeof COMPLETENESS_VALUES)[number];
 type VersionStatus = (typeof VERSION_STATUSES)[number];
 type PilotProtocolStatus = (typeof PILOT_PROTOCOL_STATUSES)[number];
@@ -257,6 +344,12 @@ function isAllowedEvidenceCandidate(taskDesignId: string, value: unknown): value
   const candidates: readonly string[] | undefined =
     EVIDENCE_CANDIDATES[taskDesignId as keyof typeof EVIDENCE_CANDIDATES];
   return candidates !== undefined && candidates.includes(value);
+}
+
+function isAllowedRelationType(taskDesignId: string, value: unknown): value is RelationType {
+  if (!nonEmptyString(value)) return false;
+  const task = TASK_CONTRACT_BY_ID.get(taskDesignId as TaskId);
+  return task?.allowedRelationTypes.some((relationType) => relationType === value) ?? false;
 }
 
 function parseManifest(value: unknown): {
@@ -465,13 +558,8 @@ function parseManifest(value: unknown): {
   return { manifest: value as unknown as OfflinePilotManifest, issues };
 }
 
-function taskDimension(
-  taskId: string,
-): "INFERENCE" | "EVIDENCE_FINDING" | "EVIDENCE_RELATION" | null {
-  if (taskId.startsWith("V2C-INF-")) return "INFERENCE";
-  if (taskId.startsWith("V2C-EVF-")) return "EVIDENCE_FINDING";
-  if (taskId.startsWith("V2C-REL-")) return "EVIDENCE_RELATION";
-  return null;
+function taskDimension(taskId: string): P1C_V2_TaskDimension | null {
+  return TASK_CONTRACT_BY_ID.get(taskId as TaskId)?.dimension ?? null;
 }
 
 function primitiveScore(value: unknown): value is string | number | boolean {
@@ -529,11 +617,9 @@ function parseResponse(
     isAllowedEvidenceCandidate(String(taskDesignId ?? ""), value.evidenceCandidateId)
       ? value.evidenceCandidateId
       : undefined;
-  const relationType =
-    nonEmptyString(value.relationType) &&
-    RELATION_TYPES.includes(value.relationType as RelationType)
-      ? value.relationType
-      : undefined;
+  const relationType = isAllowedRelationType(String(taskDesignId ?? ""), value.relationType)
+    ? value.relationType
+    : undefined;
   if (!nonEmptyString(value.pilotParticipantId))
     recordIssue(issues, "PARTICIPANT_ID_INVALID", recordIndex, "pilotParticipantId");
   if (!nonEmptyString(value.analysisGroup) || !analysisGroupIsValid) {
@@ -920,7 +1006,7 @@ function analyzeDataset(dataset: ParsedDataset): OfflinePilotAnalysisReport {
           record.taskDesignId,
           record.evidenceCandidateId,
         );
-      if (record.relationType && RELATION_TYPES.includes(record.relationType as RelationType))
+      if (isAllowedRelationType(record.taskDesignId, record.relationType))
         increment(
           report.distributions.evidenceRelationTypeCounts,
           record.taskDesignId,

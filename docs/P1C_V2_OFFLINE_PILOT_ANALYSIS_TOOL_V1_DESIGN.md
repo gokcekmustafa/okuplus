@@ -35,6 +35,8 @@ Araç iki biçimi destekler. Dosyalar anonim/sentetik çalışma verisi olmalı;
 
 Kök nesne `manifest` ve `records` alanlarını taşır:
 
+<!-- P1C-V2-OFFLINE-MANIFEST-V1:START -->
+
 ```json
 {
   "manifest": {
@@ -115,6 +117,8 @@ Kök nesne `manifest` ve `records` alanlarını taşır:
   "records": []
 }
 ```
+
+<!-- P1C-V2-OFFLINE-MANIFEST-V1:END -->
 
 `sourceCommit` bir tahmin değil, verinin gerçekten üretildiği aday havuzu
 kaynak commit'idir. Hedef yaş/sınıf henüz belirlenmediyse `targetGradeStatus`

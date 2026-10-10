@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeOfflinePilotFile,
   analyzeOfflinePilotText,
+  P1C_V2_TASK_CONTRACT,
   type OfflinePilotManifest,
   type OfflinePilotResponse,
 } from "../scripts/p1c-v2-offline-pilot-analysis";
@@ -17,6 +18,14 @@ const analyzerScriptPath = fileURLToPath(
   new URL("../scripts/p1c-v2-offline-pilot-analysis.ts", import.meta.url),
 );
 const tsxCliPath = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
+const itemPoolDocument = readFileSync(
+  new URL("../docs/P1C_EVIDENCE_RELATION_ITEM_POOL_V2_DESIGN.md", import.meta.url),
+  "utf8",
+);
+const offlineToolDocument = readFileSync(
+  new URL("../docs/P1C_V2_OFFLINE_PILOT_ANALYSIS_TOOL_V1_DESIGN.md", import.meta.url),
+  "utf8",
+);
 
 const manifest: OfflinePilotManifest = {
   datasetVersion: "P1C-V2-PILOT-DATASET-V1",
@@ -120,6 +129,41 @@ function jsonl(records: OfflinePilotResponse[]): string {
   ].join("\n");
 }
 
+function readMarkedJsonBlock(markdown: string, marker: string): unknown {
+  const startMarker = `<!-- ${marker}:START -->`;
+  const endMarker = `<!-- ${marker}:END -->`;
+  const markerStart = markdown.indexOf(startMarker);
+  const fenceStart = markdown.indexOf("```json", markerStart);
+  const jsonStart = markdown.indexOf("\n", fenceStart) + 1;
+  const fenceEnd = markdown.indexOf("\n```", jsonStart);
+  const markerEnd = markdown.indexOf(endMarker, fenceEnd);
+
+  if (markerStart < 0 || fenceStart < 0 || jsonStart <= 0 || fenceEnd < 0 || markerEnd < fenceEnd) {
+    throw new Error(`Missing structured contract block: ${marker}`);
+  }
+
+  return JSON.parse(markdown.slice(jsonStart, fenceEnd));
+}
+
+function runtimeTaskContract() {
+  return P1C_V2_TASK_CONTRACT.map((task) => ({
+    taskDesignId: task.taskDesignId,
+    dimension: task.dimension,
+    passageDesignRef: task.passageDesignRef,
+    responseFields: [...task.responseFields],
+    allowedEvidenceCandidateIds: [...task.allowedEvidenceCandidateIds],
+    allowedRelationTypes: [...task.allowedRelationTypes],
+    targetRelationTypes: [...task.targetRelationTypes],
+  }));
+}
+
+function assertTaskContractMatchesRuntime(documentContract: unknown): void {
+  expect(documentContract).toEqual({
+    contractVersion: "P1C-V2-TASK-CONTRACT-V1",
+    tasks: runtimeTaskContract(),
+  });
+}
+
 async function runCli(args: string[]): Promise<{
   status: number;
   stdout: string;
@@ -141,6 +185,66 @@ async function runCli(args: string[]): Promise<{
 }
 
 describe("P1-C V2 offline pilot analysis", () => {
+  it("keeps the analyzer contract synchronized with structured design documents", () => {
+    const itemPoolContract = readMarkedJsonBlock(itemPoolDocument, "P1C-V2-TASK-CONTRACT-V1");
+    assertTaskContractMatchesRuntime(itemPoolContract);
+
+    const offlineEnvelope = readMarkedJsonBlock(
+      offlineToolDocument,
+      "P1C-V2-OFFLINE-MANIFEST-V1",
+    ) as {
+      manifest: {
+        taskDesignIds: string[];
+        passageDesignRefs: Record<string, string>;
+        mappingVersion: string;
+        rubricVersion: string;
+      };
+    };
+    const offlineManifest = offlineEnvelope.manifest;
+    const tasks = runtimeTaskContract();
+    expect(offlineManifest.taskDesignIds).toEqual(tasks.map((task) => task.taskDesignId));
+    expect(offlineManifest.passageDesignRefs).toEqual(
+      Object.fromEntries(tasks.map((task) => [task.taskDesignId, task.passageDesignRef])),
+    );
+    expect(offlineManifest.mappingVersion).toBe("P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN");
+    expect(offlineManifest.rubricVersion).toBe("P1C_EVIDENCE_RELATION_RUBRIC_V1_DESIGN");
+
+    const changedPassage = JSON.parse(JSON.stringify(itemPoolContract)) as {
+      contractVersion: string;
+      tasks: Array<Record<string, unknown>>;
+    };
+    changedPassage.tasks[0].passageDesignRef = "P1C-V2-TXT-99@1.0";
+    expect(() => assertTaskContractMatchesRuntime(changedPassage)).toThrow();
+
+    const changedCandidates = JSON.parse(JSON.stringify(itemPoolContract)) as {
+      contractVersion: string;
+      tasks: Array<Record<string, unknown>>;
+    };
+    changedCandidates.tasks[4].allowedEvidenceCandidateIds = [
+      "SPAN-01",
+      "SPAN-02",
+      "SPAN-03",
+      "SPAN-04",
+      "SPAN-99",
+    ];
+    expect(() => assertTaskContractMatchesRuntime(changedCandidates)).toThrow();
+
+    const wrongCandidateBinding = JSON.parse(JSON.stringify(itemPoolContract)) as {
+      contractVersion: string;
+      tasks: Array<Record<string, unknown>>;
+    };
+    wrongCandidateBinding.tasks[8].allowedEvidenceCandidateIds = ["SPAN-01"];
+    expect(() => assertTaskContractMatchesRuntime(wrongCandidateBinding)).toThrow();
+
+    const changedResponseContract = JSON.parse(JSON.stringify(itemPoolContract)) as {
+      contractVersion: string;
+      tasks: Array<Record<string, unknown>>;
+    };
+    changedResponseContract.tasks[8].responseFields = ["evidenceCandidateId"];
+    changedResponseContract.tasks[8].allowedRelationTypes = ["LIMITED_SUPPORT"];
+    expect(() => assertTaskContractMatchesRuntime(changedResponseContract)).toThrow();
+  });
+
   it("reads valid local JSON and keeps evidence/relation distributions separate", () => {
     const report = analyzeOfflinePilotText(
       json([
