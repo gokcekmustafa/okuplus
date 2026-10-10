@@ -44,5 +44,10 @@ describe("production Education V2 P0 read-only audit", () => {
     expect(script).toContain("COMMON_ASSESSMENT");
     expect(script).toContain("missingExpectedStableKeys");
     expect(script).toContain("invalidPublishedLinks");
+    expect(script).toContain("activePublishedStepCount === expectedKeys.size");
+    expect(script).toContain("p0Graph");
+    expect(script).toContain("p0LevelScope");
+    expect(script).toContain("levelScopeMismatches");
+    expect(script).not.toContain("level: { code: LEVEL_CODE }");
   });
 });

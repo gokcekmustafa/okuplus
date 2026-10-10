@@ -18,15 +18,17 @@ belgede veya loglarda yer almaz.
   forensics kapısının gerektirdiği şekilde korunmalı.
 - `education_v2_production_release_id`, editoryal olarak onaylanmış immutable
   release kimliği olmalı; bir URL, parola veya bağlantı dizesi olmamalı.
-- Production Level.code, workflow input'u ile mevcut production kaydı olarak
-  ayrıca doğrulanmalı. Seed bu kaydı oluşturmaz.
+- Bu release için production `Level.code=G9_12` mevcut production kaydı olarak
+  ayrıca doğrulanmalı. `EDUCATION_V2_P0_*_G8_12` değerleri canonical teknik
+  path suffix'idir; `Level.code` değildir. Seed bu Level kaydını oluşturmaz.
 
 ## Uygulama sırası
 
 1. Workflow'u `master` üzerinden `confirm_migrate=MIGRATE` ile başlat.
 2. Aynı çalıştırmada `production_backup_confirmation=I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK` ver; bu değer backup/rollback planının dışarıda kontrol edildiğini ifade eder.
-3. Yalnızca P0 yayınlanacaksa `seed_p0=education-v2-p0` seç; migration-only
-   çalıştırmalarında `seed_p0=none` kullan.
+3. `education_v2_level_code=G9_12` ver. Yalnızca P0 yayınlanacaksa
+   `seed_p0=education-v2-p0` seç; migration-only çalıştırmalarında
+   `seed_p0=none` kullan.
 4. Workflow önce production fingerprint, kimlik, migration history ve Prisma
    schema kapılarını geçer.
 5. Prisma migration deploy tamamlandıktan sonra P0 content graph, akademik

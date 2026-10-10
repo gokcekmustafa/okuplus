@@ -4274,6 +4274,8 @@ function p1TransitionReviewMessage(result) {
   switch (result?.readiness?.status) {
     case "P0_GRAPH_NOT_READY":
       return "Öğrenme yolunun 22 istasyonluk içeriği şu anda doğrulanamadı. İlerlemelerin korunuyor; daha sonra tekrar deneyebilirsin.";
+    case "P0_LEVEL_SCOPE_NOT_READY":
+      return "Öğrenme yolunun seviye kapsamı doğrulanamadı. İlerlemelerin korunuyor; yeni yol açılmadan önce kayıtlar güvenle yeniden kontrol edilecek.";
     case "P0_NOT_COMPLETED":
       return "Öğrenme yolundaki 22 istasyon henüz tamamlanmadı. Eksik adımları tamamladığında yeni öğrenme yolu yeniden kontrol edilecek.";
     case "FINAL_MEASUREMENT_MISSING":

@@ -170,6 +170,8 @@ describe("protected production migration forensics", () => {
     expect(migrationWorkflow).toContain("production_backup_confirmation:");
     expect(migrationWorkflow).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
     expect(migrationWorkflow).toContain("education-v2-p0");
+    expect(migrationWorkflow).toContain("default: G9_12");
+    expect(migrationWorkflow).toContain("canonical path suffix is G8_12");
     expect(migrationWorkflow).toContain(
       "I_HAVE_REVIEWED_EDUCATION_V2_P0_PRODUCTION_EDITORIAL_RELEASE",
     );
@@ -197,5 +199,8 @@ describe("protected production migration forensics", () => {
     expect(p0Seed).toContain('mode !== "CREATE" && mode !== "NOOP"');
     expect(p0LessonSeed).toContain("PRODUCTION_DATABASE_NAME");
     expect(p0Provisioner).toContain("PRODUCTION_DATABASE_HOST");
+    expect(p0Seed).toContain("EDUCATION_V2_P0_PATH_SCOPE_CODE");
+    expect(p0LessonSeed).toContain("EDUCATION_V2_P0_PATH_SCOPE_CODE");
+    expect(p0Provisioner).toContain("EDUCATION_V2_P0_PATH_SCOPE_CODE");
   });
 });

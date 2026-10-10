@@ -4,6 +4,7 @@ import {
   ACADEMIC_P0_COMMON_FLOW,
   ACADEMIC_P0_LESSONS,
 } from "../../curriculum/academic-reading-p0.js";
+import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
 import {
   assertTeacherClassAccess,
   type TeacherAssignmentActor,
@@ -50,6 +51,15 @@ type P0Step = {
   contentVersionId: string | null;
   exerciseTemplateVersionId: string | null;
   assessmentId: string | null;
+  contentVersion: {
+    status: string;
+    content: { status: string; deletedAt: Date | null };
+  } | null;
+  exerciseTemplateVersion: {
+    status: string;
+    template: { status: string; deletedAt: Date | null };
+  } | null;
+  assessment: { status: string; deletedAt: Date | null } | null;
   completionRule: Prisma.JsonValue;
 };
 
@@ -57,12 +67,14 @@ type P0State = {
   pathId: string;
   levelId: string | null;
   canonicalGraphReady: boolean;
+  levelScopeReady: boolean;
   completed: boolean;
   measurement: RouteSelectionMeasurement | null;
 };
 
 export type P1TransitionReadinessStatus =
   | "P0_GRAPH_NOT_READY"
+  | "P0_LEVEL_SCOPE_NOT_READY"
   | "P0_NOT_COMPLETED"
   | "FINAL_MEASUREMENT_MISSING"
   | "MEASUREMENT_REVIEW_REQUIRED"
@@ -73,6 +85,7 @@ export type P1TransitionReadinessStatus =
 export type P1TransitionReadiness = {
   status: P1TransitionReadinessStatus;
   p0GraphReady: boolean | null;
+  p0LevelScopeReady: boolean | null;
   p0Completed: boolean | null;
   finalMeasurementAvailable: boolean | null;
   candidateAvailable: boolean | null;
@@ -129,6 +142,33 @@ function p0PrerequisiteIds(steps: readonly P0Step[], index: number): string[] {
     ids.add(previous.id);
   }
   return [...ids];
+}
+
+function hasP0StepArtifact(step: P0Step): boolean {
+  if (step.type === "TEACHING" || step.type === "SMALL_STUDY") {
+    return (
+      Boolean(step.contentVersionId) &&
+      step.contentVersion?.status === "PUBLISHED" &&
+      step.contentVersion.content.status === "PUBLISHED" &&
+      step.contentVersion.content.deletedAt === null
+    );
+  }
+  if (step.type === "PRACTICE" || step.type === "REINFORCEMENT") {
+    return (
+      Boolean(step.exerciseTemplateVersionId) &&
+      step.exerciseTemplateVersion?.status === "PUBLISHED" &&
+      step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
+      step.exerciseTemplateVersion.template.deletedAt === null
+    );
+  }
+  if (step.type === "ASSESSMENT") {
+    return (
+      Boolean(step.assessmentId) &&
+      step.assessment?.status === "PUBLISHED" &&
+      step.assessment.deletedAt === null
+    );
+  }
+  return true;
 }
 
 /**
@@ -223,6 +263,7 @@ function reviewResult(
     readiness: {
       status,
       p0GraphReady: p0.canonicalGraphReady,
+      p0LevelScopeReady: p0.levelScopeReady,
       p0Completed: p0.completed,
       finalMeasurementAvailable: Boolean(p0.measurement),
       candidateAvailable,
@@ -250,17 +291,15 @@ async function loadP0State(
       levelId: true,
       code: true,
       area: true,
-      level: { select: { code: true } },
     },
   });
   if (!anchorPath) return null;
 
-  const levelCode =
-    anchorPath.level?.code ??
-    anchorPath.code.replace(/^EDUCATION_V2_P0_(?:FAST_READING|READING_COMPREHENSION|COMMON)_/, "");
-  const canonicalCodes = levelCode
-    ? P0_PATH_AREAS.map((area) => `EDUCATION_V2_P0_${area}_${levelCode}`)
-    : [];
+  const pathScopeCode =
+    anchorPath.code.match(
+      /^EDUCATION_V2_P0_(?:FAST_READING|READING_COMPREHENSION|COMMON)_(.+)$/u,
+    )?.[1] ?? EDUCATION_V2_P0_PATH_SCOPE_CODE;
+  const canonicalCodes = P0_PATH_AREAS.map((area) => `EDUCATION_V2_P0_${area}_${pathScopeCode}`);
   const paths = await tx.learningPath.findMany({
     where: {
       status: "PUBLISHED",
@@ -270,13 +309,14 @@ async function loadP0State(
         : { code: { startsWith: P0_PATH_PREFIX } }),
       OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
       version: P0_CANONICAL_PATH_VERSION,
-      level: { code: levelCode },
     },
     orderBy: [{ area: "asc" }, { version: "desc" }, { updatedAt: "desc" }],
     select: {
       id: true,
       tenantId: true,
+      levelId: true,
       area: true,
+      level: { select: { code: true } },
       units: {
         where: { status: "PUBLISHED" },
         orderBy: { position: "asc" },
@@ -292,6 +332,16 @@ async function loadP0State(
               contentVersionId: true,
               exerciseTemplateVersionId: true,
               assessmentId: true,
+              contentVersion: {
+                select: { status: true, content: { select: { status: true, deletedAt: true } } },
+              },
+              exerciseTemplateVersion: {
+                select: {
+                  status: true,
+                  template: { select: { status: true, deletedAt: true } },
+                },
+              },
+              assessment: { select: { status: true, deletedAt: true } },
               completionRule: true,
             },
           },
@@ -318,12 +368,19 @@ async function loadP0State(
     ),
   );
   const completeCanonicalGraph =
-    selectedPaths.length === P0_PATH_AREAS.length && steps.length === P0_CANONICAL_STEP_COUNT;
+    selectedPaths.length === P0_PATH_AREAS.length &&
+    steps.length === P0_CANONICAL_STEP_COUNT &&
+    steps.every(hasP0StepArtifact);
+  const levelScopeReady =
+    selectedPaths.length === P0_PATH_AREAS.length &&
+    anchorPath.levelId !== null &&
+    selectedPaths.every((path) => path.levelId === anchorPath.levelId);
   if (!steps.length)
     return {
       pathId: anchorPath.id,
       levelId: anchorPath.levelId,
       canonicalGraphReady: false,
+      levelScopeReady: false,
       completed: false,
       measurement: null,
     };
@@ -333,6 +390,7 @@ async function loadP0State(
       pathId: anchorPath.id,
       levelId: anchorPath.levelId,
       canonicalGraphReady: false,
+      levelScopeReady,
       completed: false,
       measurement: null,
     };
@@ -448,6 +506,7 @@ async function loadP0State(
     pathId: anchorPath.id,
     levelId: anchorPath.levelId,
     canonicalGraphReady: true,
+    levelScopeReady,
     completed: completedP0,
     measurement,
   };
@@ -533,6 +592,14 @@ async function reconcileInTransaction(
       null,
     );
   }
+  if (!p0.levelScopeReady) {
+    return reviewResult(
+      p0,
+      selectP1Route({ levelId: p0.levelId, measurement: null, candidates: [] }),
+      "P0_LEVEL_SCOPE_NOT_READY",
+      null,
+    );
+  }
   if (!p0.completed) {
     return reviewResult(
       p0,
@@ -588,6 +655,7 @@ async function reconcileInTransaction(
       readiness: {
         status: "ALREADY_ASSIGNED",
         p0GraphReady: p0.canonicalGraphReady,
+        p0LevelScopeReady: p0.levelScopeReady,
         p0Completed: p0.completed,
         finalMeasurementAvailable: true,
         candidateAvailable: true,
@@ -647,6 +715,7 @@ async function reconcileInTransaction(
     readiness: {
       status: "ASSIGNED",
       p0GraphReady: p0.canonicalGraphReady,
+      p0LevelScopeReady: p0.levelScopeReady,
       p0Completed: p0.completed,
       finalMeasurementAvailable: true,
       candidateAvailable: true,
@@ -682,6 +751,7 @@ export async function reconcileP0ToP1(
         readiness: {
           status: "ALREADY_ASSIGNED",
           p0GraphReady: null,
+          p0LevelScopeReady: null,
           p0Completed: null,
           finalMeasurementAvailable: null,
           candidateAvailable: null,
@@ -706,7 +776,9 @@ export async function overrideP1Route(
   return withTenantContext(actor, async (tx) => {
     await assertTeacherClassAccess(actor, input.classId, input.studentId, tx);
     const p0 = await loadP0State(tx, { userId: input.studentId, tenantId }, input.p0LearningPathId);
-    if (!p0?.completed) throw validationError("P0 öğrenme yolu henüz tamamlanmadı");
+    if (!p0?.canonicalGraphReady || !p0.levelScopeReady || !p0.completed) {
+      throw validationError("P0 öğrenme yolu grafiği veya seviye kapsamı henüz hazır değil");
+    }
 
     const target = await tx.learningPath.findFirst({
       where: {
