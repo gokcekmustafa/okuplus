@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Capacitor 6 plugins are still distributed through CocoaPods by default. The
-// mobile shell uses SPM, so keep the secure-storage Swift sources in the app
+// mobile shell uses SPM, so keep the secure-storage Swift adapter in the app
 // package while retaining the same KeychainSwift-backed implementation.
 let package = Package(
     name: "CapApp-SPM",
@@ -25,8 +25,7 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "KeychainSwift", package: "keychain-swift")
             ],
-            path: "../../../node_modules/@aparajita/capacitor-secure-storage/ios/Plugin",
-            sources: ["Plugin.swift", "KeychainError.swift"]),
+            path: "Sources/AparajitaCapacitorSecureStorage"),
         .target(
             name: "CapApp-SPM",
             dependencies: [
