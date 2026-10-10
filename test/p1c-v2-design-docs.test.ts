@@ -13,6 +13,13 @@ const pilot = readFileSync(
   new URL("../docs/P1C_EVIDENCE_RELATION_PILOT_V2_DESIGN.md", import.meta.url),
   "utf8",
 );
+const handoff = readFileSync(
+  new URL("../docs/P1C_V2_EXTERNAL_EXPERT_HANDOFF_V1_DESIGN.md", import.meta.url),
+  "utf8",
+);
+
+const sourceCommit = "573d22aa03ae5957588dbf0581f96695f70a88c5";
+const sourcePath = "docs/P1C_EVIDENCE_RELATION_ITEM_POOL_V2_DESIGN.md";
 
 describe("P1-C V2 design-only documentation", () => {
   const itemBlocks = [
@@ -20,6 +27,61 @@ describe("P1-C V2 design-only documentation", () => {
       /^### (V2C-(?:INF|EVF|REL)-\d{2})[\s\S]*?(?=^### V2C-|^## END)/gmu,
     ),
   ];
+
+  it("contains a commit-pinned external expert handoff for all 12 candidate tasks", () => {
+    expect(handoff).toContain(sourceCommit);
+    expect(handoff).toContain("P1C_V2_EXTERNAL_EXPERT_HANDOFF_V1_DESIGN");
+
+    const sourceUrl = `https://github.com/gokcekmustafa/okuplus/blob/${sourceCommit}/${sourcePath}`;
+    expect(handoff).toContain(sourceUrl);
+
+    const taskIds = [
+      "V2C-INF-01",
+      "V2C-INF-02",
+      "V2C-INF-03",
+      "V2C-INF-04",
+      "V2C-EVF-01",
+      "V2C-EVF-02",
+      "V2C-EVF-03",
+      "V2C-EVF-04",
+      "V2C-REL-01",
+      "V2C-REL-02",
+      "V2C-REL-03",
+      "V2C-REL-04",
+    ];
+
+    for (const taskId of taskIds) {
+      expect(handoff, `${taskId} handoff coverage`).toContain(`[${taskId}`);
+      expect(handoff, `${taskId} pinned source`).toMatch(
+        new RegExp(
+          `\\[${taskId}[^\\n]*\\]\\(${sourceUrl.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\)`,
+          "u",
+        ),
+      );
+    }
+  });
+
+  it("keeps product-owner fields blank and separates the three decision gates", () => {
+    expect(handoff).toContain("Hedef yaş / sınıf aralığı");
+    expect(handoff).toContain("Türkçe okuma profili");
+    expect(handoff).toContain("**DOLDURULMADI**");
+    expect(handoff).toContain("Kapı 1 — Uzman incelemesi");
+    expect(handoff).toContain("Kapı 2 — Pilot hazırlığı ve pilot");
+    expect(handoff).toContain("Kapı 3 — Kalibrasyon ve release");
+    expect(handoff).toContain("Uzman onayı, pilot tamamlanma kararı");
+    expect(handoff).toContain("yalnızca doküman bütünlüğünü");
+  });
+
+  it("covers separate dimensions and the four limited-support relation items", () => {
+    for (const dimension of ["INFERENCE", "EVIDENCE_FINDING", "EVIDENCE_RELATION"]) {
+      expect(handoff, `${dimension} handoff guidance`).toContain(`\`${dimension}\``);
+    }
+
+    for (const taskId of ["V2C-REL-01", "V2C-REL-02", "V2C-REL-03", "V2C-REL-04"]) {
+      expect(handoff, `${taskId} limited support review`).toContain(taskId);
+      expect(handoff, `${taskId} limited support target`).toContain("`LIMITED_SUPPORT`");
+    }
+  });
 
   it("contains four distinct candidate tasks for each C dimension", () => {
     const ids = itemBlocks.map((match) => match[1]);
