@@ -60,6 +60,22 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).not.toContain("tx.studentLearningStepProgress.delete");
   });
 
+  it("reads the complete 22-step P0 family from all three canonical path areas", async () => {
+    const transition = await readFile(
+      new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(transition).toContain(
+      'const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const',
+    );
+    expect(transition).toContain("ACADEMIC_P0_LESSONS.length * 3");
+    expect(transition).toContain("tx.learningPath.findMany");
+    expect(transition).toContain("selectedPaths.length === P0_PATH_AREAS.length");
+    expect(transition).toContain("steps.length === P0_CANONICAL_STEP_COUNT");
+    expect(transition).toContain("step.pathId === previous.pathId");
+  });
+
   it("pins candidate versions and rejects candidates outside the published level scope", async () => {
     const transition = await readFile(
       new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),

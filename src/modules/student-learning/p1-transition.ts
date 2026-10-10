@@ -1,6 +1,10 @@
 import { Prisma, type PlatformRole } from "@prisma/client";
 import { notFoundError, validationError } from "../../lib/errors.js";
 import {
+  ACADEMIC_P0_COMMON_FLOW,
+  ACADEMIC_P0_LESSONS,
+} from "../../curriculum/academic-reading-p0.js";
+import {
   assertTeacherClassAccess,
   type TeacherAssignmentActor,
 } from "../assignments/teacher-service.js";
@@ -19,6 +23,9 @@ import {
 
 const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
+const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
+const P0_CANONICAL_STEP_COUNT =
+  ACADEMIC_P0_LESSONS.length * 3 + ACADEMIC_P0_COMMON_FLOW.stages.length;
 
 type P1StudentActor = StudentActor & {
   tenantId: string;
@@ -27,6 +34,7 @@ type P1StudentActor = StudentActor & {
 
 type P0Step = {
   id: string;
+  pathId?: string;
   type:
     | "TEACHING"
     | "SMALL_STUDY"
@@ -96,7 +104,9 @@ function p0PrerequisiteIds(steps: readonly P0Step[], index: number): string[] {
   if (step.prerequisiteStepId) ids.add(step.prerequisiteStepId);
   for (const id of prerequisiteIds(step.completionRule)) ids.add(id);
   const previous = steps[index - 1];
-  if (previous) ids.add(previous.id);
+  if (previous && (!step.pathId || !previous.pathId || step.pathId === previous.pathId)) {
+    ids.add(previous.id);
+  }
   return [...ids];
 }
 
@@ -154,7 +164,7 @@ async function loadP0State(
   actor: { userId: string; tenantId: string },
   p0LearningPathId: string,
 ): Promise<P0State | null> {
-  const path = await tx.learningPath.findFirst({
+  const anchorPath = await tx.learningPath.findFirst({
     where: {
       id: p0LearningPathId,
       status: "PUBLISHED",
@@ -165,7 +175,36 @@ async function loadP0State(
     },
     select: {
       id: true,
+      tenantId: true,
       levelId: true,
+      code: true,
+      area: true,
+      level: { select: { code: true } },
+    },
+  });
+  if (!anchorPath) return null;
+
+  const levelCode =
+    anchorPath.level?.code ??
+    anchorPath.code.replace(/^EDUCATION_V2_P0_(?:FAST_READING|READING_COMPREHENSION|COMMON)_/, "");
+  const canonicalCodes = levelCode
+    ? P0_PATH_AREAS.map((area) => `EDUCATION_V2_P0_${area}_${levelCode}`)
+    : [];
+  const paths = await tx.learningPath.findMany({
+    where: {
+      status: "PUBLISHED",
+      deletedAt: null,
+      ...(canonicalCodes.length
+        ? { code: { in: canonicalCodes } }
+        : { code: { startsWith: P0_PATH_PREFIX } }),
+      OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+      ...(anchorPath.levelId ? { levelId: anchorPath.levelId } : { levelId: null }),
+    },
+    orderBy: [{ area: "asc" }, { version: "desc" }, { updatedAt: "desc" }],
+    select: {
+      id: true,
+      tenantId: true,
+      area: true,
       units: {
         where: { status: "PUBLISHED" },
         orderBy: { position: "asc" },
@@ -188,11 +227,42 @@ async function loadP0State(
       },
     },
   });
-  if (!path) return null;
 
-  const steps = path.units.flatMap((unit) => unit.steps) as P0Step[];
+  const selectedPaths = P0_PATH_AREAS.map((area) => {
+    const candidates = paths.filter((path) => path.area === area);
+    if (area === anchorPath.area) {
+      return candidates.find((path) => path.id === anchorPath.id) ?? null;
+    }
+    return (
+      candidates.find((path) => path.tenantId === anchorPath.tenantId) ??
+      candidates.find((path) => path.tenantId === null) ??
+      candidates[0] ??
+      null
+    );
+  }).filter((path): path is (typeof paths)[number] => Boolean(path));
+  const steps = selectedPaths.flatMap((path) =>
+    path.units.flatMap((unit) =>
+      unit.steps.map((step) => ({ ...step, pathId: path.id }) as P0Step),
+    ),
+  );
+  const completeCanonicalGraph =
+    selectedPaths.length === P0_PATH_AREAS.length && steps.length === P0_CANONICAL_STEP_COUNT;
   if (!steps.length)
-    return { pathId: path.id, levelId: path.levelId, completed: false, measurement: null };
+    return {
+      pathId: anchorPath.id,
+      levelId: anchorPath.levelId,
+      completed: false,
+      measurement: null,
+    };
+
+  if (!completeCanonicalGraph) {
+    return {
+      pathId: anchorPath.id,
+      levelId: anchorPath.levelId,
+      completed: false,
+      measurement: null,
+    };
+  }
 
   const stepIds = steps.map((step) => step.id);
   const templateIds = steps
@@ -300,7 +370,12 @@ async function loadP0State(
       }
     : null;
 
-  return { pathId: path.id, levelId: path.levelId, completed: completedP0, measurement };
+  return {
+    pathId: anchorPath.id,
+    levelId: anchorPath.levelId,
+    completed: completedP0,
+    measurement,
+  };
 }
 
 async function loadCandidates(
