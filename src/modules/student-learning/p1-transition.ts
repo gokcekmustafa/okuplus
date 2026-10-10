@@ -15,6 +15,7 @@ import { assertStudentActor, type StudentActor } from "./policy.js";
 import {
   P1_ROUTE_SELECTION_POLICY_VERSION,
   isP1PathCode,
+  routeFamilyFromPathCode,
   selectP1Route,
   type RouteSelectionCandidate,
   type RouteSelectionMeasurement,
@@ -54,8 +55,26 @@ type P0Step = {
 type P0State = {
   pathId: string;
   levelId: string | null;
+  canonicalGraphReady: boolean;
   completed: boolean;
   measurement: RouteSelectionMeasurement | null;
+};
+
+export type P1TransitionReadinessStatus =
+  | "P0_GRAPH_NOT_READY"
+  | "P0_NOT_COMPLETED"
+  | "FINAL_MEASUREMENT_MISSING"
+  | "MEASUREMENT_REVIEW_REQUIRED"
+  | "P1_CURRICULUM_UNAVAILABLE"
+  | "ASSIGNED"
+  | "ALREADY_ASSIGNED";
+
+export type P1TransitionReadiness = {
+  status: P1TransitionReadinessStatus;
+  p0GraphReady: boolean | null;
+  p0Completed: boolean | null;
+  finalMeasurementAvailable: boolean | null;
+  candidateAvailable: boolean | null;
 };
 
 export type P1TransitionInput = {
@@ -66,6 +85,7 @@ export type P1TransitionResult = {
   outcome: "ASSIGNED" | "ALREADY_ASSIGNED" | "REVIEW_REQUIRED";
   enrollmentId: string | null;
   selection: RouteSelectionResult;
+  readiness: P1TransitionReadiness;
 };
 
 export type P1TeacherOverrideInput = P1TransitionInput & {
@@ -157,6 +177,56 @@ function selectionMetadata(selection: RouteSelectionResult): Prisma.InputJsonVal
 
 function isP2002(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+function routeCandidateAvailable(
+  candidates: readonly RouteSelectionCandidate[],
+  family: RouteSelectionResult["routeFamily"],
+): boolean | null {
+  if (!family) return null;
+  return candidates.some(
+    (candidate) =>
+      candidate.status === "PUBLISHED" &&
+      candidate.curriculumReady !== false &&
+      routeFamilyFromPathCode(candidate.code) === family,
+  );
+}
+
+function reviewReadinessStatus(
+  selection: RouteSelectionResult,
+  candidates: readonly RouteSelectionCandidate[],
+): P1TransitionReadinessStatus {
+  const candidateAvailable = routeCandidateAvailable(candidates, selection.routeFamily);
+  const isBalancedProfile =
+    selection.routeFamily === "A" && selection.supportingSignals.routeSelectionProfile === null;
+  if (
+    selection.routeFamily &&
+    (isBalancedProfile || selection.supportingSignals.routeSelectionProfile !== null) &&
+    candidateAvailable === false
+  ) {
+    return "P1_CURRICULUM_UNAVAILABLE";
+  }
+  return "MEASUREMENT_REVIEW_REQUIRED";
+}
+
+function reviewResult(
+  p0: P0State,
+  selection: RouteSelectionResult,
+  status: P1TransitionReadinessStatus,
+  candidateAvailable: boolean | null,
+): P1TransitionResult {
+  return {
+    outcome: "REVIEW_REQUIRED",
+    enrollmentId: null,
+    selection,
+    readiness: {
+      status,
+      p0GraphReady: p0.canonicalGraphReady,
+      p0Completed: p0.completed,
+      finalMeasurementAvailable: Boolean(p0.measurement),
+      candidateAvailable,
+    },
+  };
 }
 
 async function loadP0State(
@@ -251,6 +321,7 @@ async function loadP0State(
     return {
       pathId: anchorPath.id,
       levelId: anchorPath.levelId,
+      canonicalGraphReady: false,
       completed: false,
       measurement: null,
     };
@@ -259,6 +330,7 @@ async function loadP0State(
     return {
       pathId: anchorPath.id,
       levelId: anchorPath.levelId,
+      canonicalGraphReady: false,
       completed: false,
       measurement: null,
     };
@@ -373,6 +445,7 @@ async function loadP0State(
   return {
     pathId: anchorPath.id,
     levelId: anchorPath.levelId,
+    canonicalGraphReady: true,
     completed: completedP0,
     measurement,
   };
@@ -450,12 +523,29 @@ async function reconcileInTransaction(
 ): Promise<P1TransitionResult> {
   const p0 = await loadP0State(tx, actor, input.p0LearningPathId);
   if (!p0) throw notFoundError("P0 öğrenme yolu bulunamadı");
-  if (!p0.completed || !p0.measurement) {
-    return {
-      outcome: "REVIEW_REQUIRED",
-      enrollmentId: null,
-      selection: selectP1Route({ levelId: p0.levelId, measurement: null, candidates: [] }),
-    };
+  if (!p0.canonicalGraphReady) {
+    return reviewResult(
+      p0,
+      selectP1Route({ levelId: p0.levelId, measurement: null, candidates: [] }),
+      "P0_GRAPH_NOT_READY",
+      null,
+    );
+  }
+  if (!p0.completed) {
+    return reviewResult(
+      p0,
+      selectP1Route({ levelId: p0.levelId, measurement: null, candidates: [] }),
+      "P0_NOT_COMPLETED",
+      null,
+    );
+  }
+  if (!p0.measurement) {
+    return reviewResult(
+      p0,
+      selectP1Route({ levelId: p0.levelId, measurement: null, candidates: [] }),
+      "FINAL_MEASUREMENT_MISSING",
+      null,
+    );
   }
 
   const candidates = await loadCandidates(tx, actor, p0.levelId);
@@ -465,7 +555,12 @@ async function reconcileInTransaction(
     candidates,
   });
   if (selection.status !== "READY" || !selection.recommendedPathId || !p0.measurement.id) {
-    return { outcome: "REVIEW_REQUIRED", enrollmentId: null, selection };
+    return reviewResult(
+      p0,
+      selection,
+      reviewReadinessStatus(selection, candidates),
+      routeCandidateAvailable(candidates, selection.routeFamily),
+    );
   }
 
   const existing = await tx.studentLearningPath.findUnique({
@@ -484,7 +579,18 @@ async function reconcileInTransaction(
     existing.measurementResultId === p0.measurement.id &&
     existing.recommendedPathId === selection.recommendedPathId
   ) {
-    return { outcome: "ALREADY_ASSIGNED", enrollmentId: existing.id, selection };
+    return {
+      outcome: "ALREADY_ASSIGNED",
+      enrollmentId: existing.id,
+      selection,
+      readiness: {
+        status: "ALREADY_ASSIGNED",
+        p0GraphReady: p0.canonicalGraphReady,
+        p0Completed: p0.completed,
+        finalMeasurementAvailable: true,
+        candidateAvailable: true,
+      },
+    };
   }
 
   await tx.studentLearningPath.updateMany({
@@ -532,7 +638,18 @@ async function reconcileInTransaction(
     select: { id: true },
   });
 
-  return { outcome: "ASSIGNED", enrollmentId: enrollment.id, selection };
+  return {
+    outcome: "ASSIGNED",
+    enrollmentId: enrollment.id,
+    selection,
+    readiness: {
+      status: "ASSIGNED",
+      p0GraphReady: p0.canonicalGraphReady,
+      p0Completed: p0.completed,
+      finalMeasurementAvailable: true,
+      candidateAvailable: true,
+    },
+  };
 }
 
 /** Explicit transition entry point; it is not called from generic P0 completion. */
@@ -560,6 +677,13 @@ export async function reconcileP0ToP1(
         outcome: "ALREADY_ASSIGNED",
         enrollmentId: active.id,
         selection: selectP1Route({ levelId: null, measurement: null, candidates: [] }),
+        readiness: {
+          status: "ALREADY_ASSIGNED",
+          p0GraphReady: null,
+          p0Completed: null,
+          finalMeasurementAvailable: null,
+          candidateAvailable: null,
+        },
       };
     });
   }
