@@ -1,9 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-const packagePath = fileURLToPath(
-  new URL('../ios/App/CapApp-SPM/Package.swift', import.meta.url),
-);
+const packagePath = fileURLToPath(new URL("../ios/App/CapApp-SPM/Package.swift", import.meta.url));
 
 readFileSync(packagePath);
 
@@ -50,5 +48,5 @@ let package = Package(
     ]
 )
 `,
-  'utf8',
+  "utf8",
 );
