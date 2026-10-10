@@ -1162,9 +1162,14 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
   const contentKeys = new Set(program.content.map((item) => item.key));
   const exercises = new Map(program.exercises.map((item) => [item.key, item]));
   const steps = program.path.units.flatMap((unit) => unit.steps);
+  const contentUsage = new Map<string, number>();
+  const exerciseUsage = new Map<string, number>();
+  const recordUsage = (usage: Map<string, number>, key: string | undefined) => {
+    if (key) usage.set(key, (usage.get(key) ?? 0) + 1);
+  };
   if (program.path.units.length !== 1) errors.push("tek pedagojik unit gerekli");
   if (steps.length !== 5) errors.push("beş adımlı minimum route akışı gerekli");
-  for (const step of steps) {
+  for (const [index, step] of steps.entries()) {
     if (step.type === "TEACHING" && !step.contentKey)
       errors.push(`teach içeriği eksik: ${step.key}`);
     if (
@@ -1180,7 +1185,30 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
       errors.push(`bilinmeyen content: ${step.contentKey}`);
     if (step.exerciseKey && !exercises.has(step.exerciseKey))
       errors.push(`bilinmeyen exercise: ${step.exerciseKey}`);
+    if (step.type === "TEACHING" && (step.exerciseKey || step.assessmentKey))
+      errors.push(`teach adımı exercise/assessment taşıyamaz: ${step.key}`);
+    if (step.type === "ASSESSMENT" && (step.contentKey || step.exerciseKey))
+      errors.push(`assessment adımı doğrudan content/exercise taşıyamaz: ${step.key}`);
+    recordUsage(contentUsage, step.contentKey);
+    recordUsage(exerciseUsage, step.exerciseKey);
+    recordUsage(
+      exerciseUsage,
+      step.assessmentKey
+        ? program.assessments.find((assessment) => assessment.key === step.assessmentKey)
+            ?.templateExerciseKey
+        : undefined,
+    );
+    const expectedPrevious = steps[index - 1]?.key;
+    const prerequisites = step.prerequisiteStepKeys ?? [];
+    if (index === 0 && prerequisites.length > 0)
+      errors.push(`İlk route adımı prerequisite taşıyamaz: ${step.key}`);
+    if (index > 0 && (prerequisites.length !== 1 || prerequisites[0] !== expectedPrevious)) {
+      errors.push(`Linear prerequisite zinciri geçersiz: ${step.key}`);
+    }
   }
+  const stepExerciseKeys = new Set(
+    steps.map((step) => step.exerciseKey).filter((key): key is string => Boolean(key)),
+  );
   for (const exercise of program.exercises) {
     if (!contentKeys.has(exercise.contentKey))
       errors.push(`exercise content eksik: ${exercise.key}`);
@@ -1188,6 +1216,14 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
       errors.push(`exercise soru sayısı yetersiz: ${exercise.key}`);
     if (exercise.contract.competency !== exercise.skillCode)
       errors.push(`skill eşleşmiyor: ${exercise.key}`);
+    const questionKeys = exercise.questions.map((question) => question.key);
+    if (new Set(questionKeys).size !== questionKeys.length)
+      errors.push(`exercise soru anahtarı tekrarlı: ${exercise.key}`);
+    if (!stepExerciseKeys.has(exercise.key)) recordUsage(contentUsage, exercise.contentKey);
+    const boundStep = steps.find((step) => step.exerciseKey === exercise.key);
+    if (boundStep && boundStep.contentKey !== exercise.contentKey) {
+      errors.push(`exercise/content eşleşmesi uyuşmuyor: ${exercise.key}`);
+    }
   }
   if (program.assessments.length !== 1) errors.push("tek assessment gerekli");
   for (const assessment of program.assessments) {
@@ -1195,6 +1231,29 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
     if (!exercise) errors.push(`assessment template eksik: ${assessment.key}`);
     if (assessment.questionKeys.length !== assessment.config.questionCount)
       errors.push(`assessment soru sayısı uyuşmuyor: ${assessment.key}`);
+    if (exercise) {
+      const exerciseQuestionKeys = exercise.questions.map((question) => question.key);
+      if (
+        assessment.questionKeys.length !== exerciseQuestionKeys.length ||
+        assessment.questionKeys.some((key, index) => key !== exerciseQuestionKeys[index])
+      ) {
+        errors.push(`assessment soru/template eşleşmesi uyuşmuyor: ${assessment.key}`);
+      }
+    }
+    if (
+      assessment.config.minimumAnsweredCount > assessment.config.questionCount ||
+      assessment.config.minimumScorableCount > assessment.config.questionCount
+    ) {
+      errors.push(`assessment answered/scorable sınırı geçersiz: ${assessment.key}`);
+    }
+  }
+  for (const content of program.content) {
+    if ((contentUsage.get(content.key) ?? 0) !== 1)
+      errors.push(`content kullanım sayısı geçersiz: ${content.key}`);
+  }
+  for (const exercise of program.exercises) {
+    if ((exerciseUsage.get(exercise.key) ?? 0) !== 1)
+      errors.push(`exercise kullanım sayısı geçersiz: ${exercise.key}`);
   }
   return errors;
 }

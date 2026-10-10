@@ -589,7 +589,15 @@ async function main(): Promise<void> {
   if (!target) {
     console.log(
       JSON.stringify(
-        { status: "PASS", mode: "MANIFEST_ONLY_DRY_RUN", ...summary(null, null), dbChanged: false },
+        {
+          status: "PASS",
+          mode: "MANIFEST_ONLY_DRY_RUN",
+          ...summary(null, null),
+          databaseAction: "NOT_RUN",
+          publicationState: "NOT_VERIFIED",
+          ready: false,
+          dbChanged: false,
+        },
         null,
         2,
       ),

@@ -42,4 +42,22 @@ describe("P1-B/C/D curriculum manifests", () => {
       expect(steps.at(-1)?.assessmentKey).toBeTruthy();
     }
   });
+
+  it("rejects drift between assessment question keys and its template exercise", () => {
+    const program = structuredClone(EDUCATION_V2_P1_BCD_PROGRAMS[0]!);
+    program.assessments[0]!.questionKeys[0] = "question-from-another-exercise";
+
+    expect(validateP1BCDProgram(program)).toContain(
+      `assessment soru/template eşleşmesi uyuşmuyor: ${program.assessments[0]!.key}`,
+    );
+  });
+
+  it("rejects a broken route prerequisite", () => {
+    const program = structuredClone(EDUCATION_V2_P1_BCD_PROGRAMS[0]!);
+    program.path.units[0]!.steps[1]!.prerequisiteStepKeys = ["unknown-step"];
+
+    expect(validateP1BCDProgram(program)).toContain(
+      `Linear prerequisite zinciri geçersiz: ${program.path.units[0]!.steps[1]!.key}`,
+    );
+  });
 });
