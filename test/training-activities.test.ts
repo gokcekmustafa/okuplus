@@ -50,9 +50,12 @@ describe("independent training activities", () => {
   it("renders the direct activity flow without loading Learning Path", () => {
     expect(index).toContain('id="training-activities-list"');
     expect(index).toContain('id="training-activities-grid"');
+    expect(index).toContain('id="training-activities-status"');
     expect(index).toContain('id="exercise-page-kicker"');
     expect(index).toContain('id="exercise-page-title"');
-    expect(index).toContain("Kısa çalışmalar · İstediğin zaman tekrar edebilirsin.");
+    expect(index).toContain("Bir beceri seç, kısa bir çalışma yap ve istersen tekrar et.");
+    expect(index).toContain("Buradaki sonuçlar resmi ölçüm veya seviye");
+    expect(index).toContain("belirleme için kullanılmaz.");
     expect(app).toContain('authenticatedFetch("/student/training/activities"');
     expect(app).toContain("data-training-activity-start");
     expect(app).toContain("data-training-activity-session");
@@ -64,6 +67,11 @@ describe("independent training activities", () => {
     expect(app).toContain("Devam et →");
     expect(app).toContain("Antrenmanlara dön");
     expect(app).toContain("Tekrar oyna");
+    expect(app).toContain('trainingActivitiesState = "loading"');
+    expect(app).toContain('trainingActivitiesState === "error"');
+    expect(app).toContain("Aktiviteleri yeniden yükle");
+    expect(app).toContain("data-training-empty-learning-path");
+    expect(app).toContain("data-training-action-label");
     const pageLoader = app.slice(
       app.indexOf("async function loadExercisePage()"),
       app.indexOf("function returnToExercisePath()"),
