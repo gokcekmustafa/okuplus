@@ -113,6 +113,9 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("tx.learningPath.findMany");
     expect(transition).toContain("selectedPaths.length === P0_PATH_AREAS.length");
     expect(transition).toContain("steps.length === P0_CANONICAL_STEP_COUNT");
+    expect(transition).toContain("const P0_CANONICAL_PATH_VERSION = 1");
+    expect(transition).toContain("version: P0_CANONICAL_PATH_VERSION");
+    expect(transition).toContain("level: { code: levelCode }");
     expect(transition).toContain("step.pathId === previous.pathId");
   });
 

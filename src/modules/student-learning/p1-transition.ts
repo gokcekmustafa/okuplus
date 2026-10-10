@@ -23,6 +23,7 @@ import {
 } from "./route-selection.js";
 
 const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
+const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
 const P0_CANONICAL_STEP_COUNT =
@@ -268,7 +269,8 @@ async function loadP0State(
         ? { code: { in: canonicalCodes } }
         : { code: { startsWith: P0_PATH_PREFIX } }),
       OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
-      ...(anchorPath.levelId ? { levelId: anchorPath.levelId } : { levelId: null }),
+      version: P0_CANONICAL_PATH_VERSION,
+      level: { code: levelCode },
     },
     orderBy: [{ area: "asc" }, { version: "desc" }, { updatedAt: "desc" }],
     select: {
