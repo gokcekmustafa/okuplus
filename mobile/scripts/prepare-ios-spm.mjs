@@ -1,4 +1,15 @@
-// swift-tools-version: 5.9
+import { readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const packagePath = fileURLToPath(
+  new URL('../ios/App/CapApp-SPM/Package.swift', import.meta.url),
+);
+
+readFileSync(packagePath);
+
+writeFileSync(
+  packagePath,
+  `// swift-tools-version: 5.9
 import PackageDescription
 
 // Capacitor 6 plugins are still distributed through CocoaPods by default. The
@@ -39,3 +50,6 @@ let package = Package(
         )
     ]
 )
+`,
+  'utf8',
+);
