@@ -21,6 +21,164 @@ Bu belge doğrulanmış bir ölçme aracı, kalibre edilmiş soru bankası veya 
 
 Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki dimension'a kopyalanmaz. `questionVersionId`, passage version, answer key, span kimlikleri ve mapping version ileride ayrı immutable kayıtlar olarak oluşturulmalıdır; bu belgede yalnız tasarım kimlikleri vardır.
 
+### 1.0 Makine-okunur görev sözleşmesi
+
+Offline pilot analiz aracı bu sözleşmeyi görev kimlikleri, passage eşlemeleri,
+yanıt alanları ve kanıt adayları için doğrular. Bu blok, aşağıdaki aday görev
+metinlerinin yapısal özeti olarak tutulur; metinsel açıklama ile bu özet
+ayrışırsa doküman bütünlük testi başarısız olmalıdır. `allowedRelationTypes`,
+öğrencinin seçebileceği relation seçeneklerini; `targetRelationTypes` ise bu
+tasarımda uzman incelemesine sunulan beklenen relation hedefini gösterir.
+
+<!-- P1C-V2-TASK-CONTRACT-V1:START -->
+
+```json
+{
+  "contractVersion": "P1C-V2-TASK-CONTRACT-V1",
+  "tasks": [
+    {
+      "taskDesignId": "V2C-INF-01",
+      "dimension": "INFERENCE",
+      "passageDesignRef": "P1C-V2-TXT-01@1.0",
+      "responseFields": ["answer.optionId"],
+      "allowedEvidenceCandidateIds": [],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-INF-02",
+      "dimension": "INFERENCE",
+      "passageDesignRef": "P1C-V2-TXT-02@1.0",
+      "responseFields": ["answer.optionId"],
+      "allowedEvidenceCandidateIds": [],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-INF-03",
+      "dimension": "INFERENCE",
+      "passageDesignRef": "P1C-V2-TXT-03@1.0",
+      "responseFields": ["answer.optionId"],
+      "allowedEvidenceCandidateIds": [],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-INF-04",
+      "dimension": "INFERENCE",
+      "passageDesignRef": "P1C-V2-TXT-04@1.0",
+      "responseFields": ["answer.optionId"],
+      "allowedEvidenceCandidateIds": [],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-EVF-01",
+      "dimension": "EVIDENCE_FINDING",
+      "passageDesignRef": "P1C-V2-TXT-05@1.0",
+      "responseFields": ["evidenceCandidateId"],
+      "allowedEvidenceCandidateIds": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-EVF-02",
+      "dimension": "EVIDENCE_FINDING",
+      "passageDesignRef": "P1C-V2-TXT-06@1.0",
+      "responseFields": ["evidenceCandidateId"],
+      "allowedEvidenceCandidateIds": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-EVF-03",
+      "dimension": "EVIDENCE_FINDING",
+      "passageDesignRef": "P1C-V2-TXT-07@1.0",
+      "responseFields": ["evidenceCandidateId"],
+      "allowedEvidenceCandidateIds": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-EVF-04",
+      "dimension": "EVIDENCE_FINDING",
+      "passageDesignRef": "P1C-V2-TXT-08@1.0",
+      "responseFields": ["evidenceCandidateId"],
+      "allowedEvidenceCandidateIds": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+      "allowedRelationTypes": [],
+      "targetRelationTypes": []
+    },
+    {
+      "taskDesignId": "V2C-REL-01",
+      "dimension": "EVIDENCE_RELATION",
+      "passageDesignRef": "P1C-V2-TXT-09@1.0",
+      "responseFields": ["evidenceCandidateId", "relationType"],
+      "allowedEvidenceCandidateIds": ["CAND-01", "CAND-02", "CAND-03"],
+      "allowedRelationTypes": [
+        "DIRECT_SUPPORT",
+        "LIMITED_SUPPORT",
+        "COMPARISON",
+        "CAUSAL_SUPPORT",
+        "NOT_SUPPORTED_OR_CONTRADICTS"
+      ],
+      "targetRelationTypes": ["LIMITED_SUPPORT"]
+    },
+    {
+      "taskDesignId": "V2C-REL-02",
+      "dimension": "EVIDENCE_RELATION",
+      "passageDesignRef": "P1C-V2-TXT-10@1.0",
+      "responseFields": ["evidenceCandidateId", "relationType"],
+      "allowedEvidenceCandidateIds": ["CAND-01", "CAND-02", "CAND-03"],
+      "allowedRelationTypes": [
+        "DIRECT_SUPPORT",
+        "LIMITED_SUPPORT",
+        "COMPARISON",
+        "CAUSAL_SUPPORT",
+        "NOT_SUPPORTED_OR_CONTRADICTS"
+      ],
+      "targetRelationTypes": ["LIMITED_SUPPORT"]
+    },
+    {
+      "taskDesignId": "V2C-REL-03",
+      "dimension": "EVIDENCE_RELATION",
+      "passageDesignRef": "P1C-V2-TXT-11@1.0",
+      "responseFields": ["evidenceCandidateId", "relationType"],
+      "allowedEvidenceCandidateIds": ["CAND-01", "CAND-02", "CAND-03"],
+      "allowedRelationTypes": [
+        "DIRECT_SUPPORT",
+        "LIMITED_SUPPORT",
+        "COMPARISON",
+        "CAUSAL_SUPPORT",
+        "NOT_SUPPORTED_OR_CONTRADICTS"
+      ],
+      "targetRelationTypes": ["LIMITED_SUPPORT"]
+    },
+    {
+      "taskDesignId": "V2C-REL-04",
+      "dimension": "EVIDENCE_RELATION",
+      "passageDesignRef": "P1C-V2-TXT-12@1.0",
+      "responseFields": ["evidenceCandidateId", "relationType"],
+      "allowedEvidenceCandidateIds": ["CAND-01", "CAND-02", "CAND-03", "CAND-04"],
+      "allowedRelationTypes": [
+        "DIRECT_SUPPORT",
+        "LIMITED_SUPPORT",
+        "COMPARISON",
+        "CAUSAL_SUPPORT",
+        "NOT_SUPPORTED_OR_CONTRADICTS"
+      ],
+      "targetRelationTypes": ["LIMITED_SUPPORT"]
+    }
+  ]
+}
+```
+
+<!-- P1C-V2-TASK-CONTRACT-V1:END -->
+
+`INFERENCE` yanıtının offline veri alanı `answer.optionId`,
+`EVIDENCE_FINDING` yanıtının alanı ise `evidenceCandidateId`'dir; bu alanda
+`SPAN-*` kimliği taşınır. `evidenceSpanId` ifadesi yalnızca kavramsal span
+anlamını belirtir ve offline giriş alanı değildir.
+
 ### Görevler arası bağımsızlık kuralları
 
 - `INFERENCE` görevinde doğru evidence span'i cevap seçenekleri arasında verilmez.
@@ -66,7 +224,7 @@ Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`
 - **Metin:** “Apartmanın balkonundaki üç saksı bir hafta boyunca aynı miktarda sulandı. Güneş alan saksıdaki toprak ertesi gün kururken gölgede kalan saksıdaki toprak daha uzun süre nemli kaldı. Rüzgâr alan köşedeki saksıda ise yüzey hızlı kurudu, fakat toprağın altı nemini korudu.”
 - **Birincil boyut:** `INFERENCE`
 - **Tasarım/sürüm referansı:** `V2C-INF-01`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
-- **Yönerge/yanıt biçimi:** “Bu gözlemlerden hangisi metinle en iyi desteklenir?” Dört seçenekli tek seçim; response `selectedOptionId`.
+- **Yönerge/yanıt biçimi:** “Bu gözlemlerden hangisi metinle en iyi desteklenir?” Dört seçenekli tek seçim; offline response `answer.optionId`.
 - **Seçenekler:**
   - `V2C-INF-01-OPT-A`: Güneş ve rüzgâr alan yerlerde yüzey daha hızlı kuruyabilir; bu, toprağın tamamının kuruduğunu tek başına göstermez.
   - `V2C-INF-01-OPT-B`: Gölgedeki saksı, diğer saksılardan daha az sulandığı için daha uzun süre nemli kalmıştır.
@@ -87,7 +245,7 @@ Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`
 - **Metin:** “Kütüphane sorumlusu, sessiz çalışma saatlerinde masaların bir bölümünü pencereye yakın, bir bölümünü kapıya yakın düzenledi. Öğrenciler pencere kenarındaki masalarda daha uzun süre çalıştı; kapı yanındaki masalarda ise giriş çıkışlar sıklaştıkça notlarına daha sık ara verdiler. Sorumlu, ertesi hafta masaların yerini değiştirmeyi değil, giriş akışını düzenlemeyi önerdi.”
 - **Birincil boyut:** `INFERENCE`
 - **Tasarım/sürüm referansı:** `V2C-INF-02`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
-- **Yönerge/yanıt biçimi:** “Metne göre sorumlunun önerisi hangi gözleme dayanıyor olabilir?” Dört seçenekli tek seçim.
+- **Yönerge/yanıt biçimi:** “Metne göre sorumlunun önerisi hangi gözleme dayanıyor olabilir?” Dört seçenekli tek seçim; offline response `answer.optionId`.
 - **Seçenekler:**
   - `V2C-INF-02-OPT-A`: Pencere kenarındaki masalar bütün öğrenciler için en iyi çalışma yeridir.
   - `V2C-INF-02-OPT-B`: Giriş çıkışları düzenlemek, kapı yanındaki masalarda notlara verilen araları azaltabilir.
@@ -108,7 +266,7 @@ Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`
 - **Metin:** “Mahalledeki kompost kutusuna sebze kabukları, kuru yapraklar ve bazen karton parçaları eklendi. Kutu yalnızca kabuklarla doldurulduğunda içi ıslandı ve koku oluştu. Kuru yaprak eklendiği haftalarda karışım daha gevşek kaldı. Gönüllüler, her eklemede malzemeleri karıştırıp kuru yaprak oranını gözlemlemeye karar verdi.”
 - **Birincil boyut:** `INFERENCE`
 - **Tasarım/sürüm referansı:** `V2C-INF-03`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
-- **Yönerge/yanıt biçimi:** “Gönüllülerin karıştırma ve kuru yaprakları izleme kararı en çok hangi sonuca dayanır?” Dört seçenekli tek seçim.
+- **Yönerge/yanıt biçimi:** “Gönüllülerin karıştırma ve kuru yaprakları izleme kararı en çok hangi sonuca dayanır?” Dört seçenekli tek seçim; offline response `answer.optionId`.
 - **Seçenekler:**
   - `V2C-INF-03-OPT-A`: Koku oluşmasının tek nedeni karton parçalarının kompost kutusuna eklenmesidir.
   - `V2C-INF-03-OPT-B`: Kuru yaprak eklemek karışımı her durumda tamamen kurutur.
@@ -129,7 +287,7 @@ Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`
 - **Metin:** “Belediye, akşam saatlerinde bisiklet yolunun üç bölümünde gözlem yaptı. Aydınlatması güçlü bölümde yayalar bisikletlileri daha erken fark etti. Ağaçların gölge yaptığı bölümde fark etme mesafesi kısaldı. Yağışlı akşamlarda tüm bölümlerde gözlem sayısı azaldı; ekip bu günleri ayrı değerlendirmeyi planladı.”
 - **Birincil boyut:** `INFERENCE`
 - **Tasarım/sürüm referansı:** `V2C-INF-04`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
-- **Yönerge/yanıt biçimi:** “Bu gözlemler hangi sonucu en dikkatli biçimde destekler?” Dört seçenekli tek seçim.
+- **Yönerge/yanıt biçimi:** “Bu gözlemler hangi sonucu en dikkatli biçimde destekler?” Dört seçenekli tek seçim; offline response `answer.optionId`.
 - **Seçenekler:**
   - `V2C-INF-04-OPT-A`: Güçlü aydınlatma, bisiklet yolundaki bütün kazaları önler.
   - `V2C-INF-04-OPT-B`: Yağışlı akşamlarda bisiklet yolu kullanıma kapatılmıştır.
@@ -155,7 +313,7 @@ Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`
 - **Birincil boyut:** `EVIDENCE_FINDING`
 - **Tasarım/sürüm referansı:** `V2C-EVF-01`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Kuzey kenarındaki banklar öğleden sonra gölgede kalmıştır.”
-- **Yönerge/yanıt biçimi:** “Claim'i doğrudan destekleyen span'i seç.” Tek seçim; response `evidenceSpanId`.
+- **Yönerge/yanıt biçimi:** “Claim'i doğrudan destekleyen span'i seç.” Tek seçim; offline response `evidenceCandidateId` (`SPAN-*`).
 - **Beklenen yanıt/gerekçe:** `SPAN-01`; gölgenin oluştuğunu doğrudan söyler.
 - **Makul yanlışlar/hata türleri:** `SPAN-02` sonucu ima eder ama gölgeyi söylemez; `SPAN-03` farklı zaman dilimidir; `SPAN-04` konuya ilgilidir fakat claim'i desteklemez.
 - **Puanlama:** Canonical span exact-match 1/0; `SPAN-02` kısmi sayılmaz. Boş/çoklu seçim `REVIEW_REQUIRED`.
