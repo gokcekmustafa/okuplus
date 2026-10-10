@@ -93,6 +93,7 @@ let todayLoading = false;
 let learningPathLoading = false;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
+let pendingP1Reconcile = null;
 const insightRequests = new Map();
 let insightHistoryPage = 1;
 let insightAwards = [];
@@ -3127,6 +3128,7 @@ async function loadLearningPath() {
   var retryEl = $("learning-path-retry");
   if (!container) return;
   learningPathLoading = true;
+  clearLearningPathTransitionStatus();
   const scope = insightScope();
   var learningPathPhase = "request";
   container.setAttribute("aria-busy", "true");
@@ -4139,6 +4141,116 @@ async function loadFocusedLearningPathStep() {
   }
 }
 
+function setLearningPathTransitionStatus(message, { retry = false, error = false } = {}) {
+  const status = $("learning-path-transition-status");
+  const retryButton = $("learning-path-transition-retry");
+  if (status) {
+    status.textContent = message || "";
+    status.classList.toggle("hidden", !message);
+    status.classList.toggle("error", error);
+  }
+  retryButton?.classList.toggle("hidden", !retry);
+}
+
+function clearLearningPathTransitionStatus() {
+  setLearningPathTransitionStatus("");
+}
+
+async function reconcileP0ToP1(p0LearningPathId) {
+  return parseResponse(
+    await authenticatedFetch("/student/learning-path/p1/reconcile", {
+      method: "POST",
+      body: JSON.stringify({ p0LearningPathId }),
+    }),
+  );
+}
+
+function isUsableLearningPathNode(node) {
+  if (!node?.id || node.status !== "active") return false;
+  if (node.type === "TEACHING" || node.type === "SMALL_STUDY") {
+    return Boolean(node.contentVersionId);
+  }
+  if (node.type === "PRACTICE" || node.type === "REINFORCEMENT") {
+    return Boolean(node.templateVersionId);
+  }
+  if (node.type === "ASSESSMENT") return Boolean(node.assessmentId);
+  return node.type !== "NEXT_LEARNING";
+}
+
+async function openAssignedP1FirstStep() {
+  const path = await freshLearningPathForTransition();
+  const node = activeLearningPathNodeFromData(path);
+  if (!node || !String(node.learningPathCode || "").startsWith("EDUCATION_V2_P1_")) {
+    throw new Error("Yeni öğrenme yolunun ilk istasyonu henüz hazır değil.");
+  }
+  if (!isUsableLearningPathNode(node)) {
+    throw new Error("Yeni öğrenme yolunun ilk istasyonu henüz kullanıma hazır değil.");
+  }
+  activeLearningStepNode = node;
+  learningPathEntryMode = true;
+  await startLearningPathNode(node, null);
+}
+
+async function finishP1Reconcile(p0LearningPathId, result) {
+  const assigned = result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED";
+  if (assigned) {
+    pendingP1Reconcile = null;
+    try {
+      await openAssignedP1FirstStep();
+      clearLearningPathTransitionStatus();
+      return;
+    } catch {
+      // The assignment is durable; keep the retry idempotent if the fresh
+      // path read or first-station opening is temporarily unavailable.
+      pendingP1Reconcile = { p0LearningPathId };
+    }
+  } else if (result?.outcome === "REVIEW_REQUIRED") {
+    pendingP1Reconcile = null;
+  }
+
+  resetInsights();
+  learningPathEntryMode = false;
+  activeLearningStepNode = null;
+  activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = null;
+  navigate("dashboard");
+  if (result?.outcome === "REVIEW_REQUIRED") {
+    setLearningPathTransitionStatus(
+      "P0 tamamlandı. Ölçüm veya uygun içerik kontrolleri tamamlanmadan yeni öğrenme yolu açılamıyor.",
+    );
+  } else if (pendingP1Reconcile) {
+    setLearningPathTransitionStatus(
+      "P0 tamamlandı. Yeni öğrenme yolun hazırlanıyor; bağlantı düzelince tekrar kontrol edebilirsin.",
+      { retry: true, error: true },
+    );
+  } else {
+    setLearningPathTransitionStatus(
+      "P0 tamamlandı. Yeni öğrenme yolunun ilk istasyonu henüz kullanıma hazır değil.",
+      { error: true },
+    );
+  }
+}
+
+async function retryPendingP1Reconcile() {
+  const pending = pendingP1Reconcile;
+  const button = $("learning-path-transition-retry");
+  if (!pending || !button) return;
+  setAsyncButtonState(button, true, "Kontrol ediliyor…");
+  setLearningPathTransitionStatus("Yeni öğrenme yolun kontrol ediliyor…");
+  try {
+    const result = await reconcileP0ToP1(pending.p0LearningPathId);
+    await finishP1Reconcile(pending.p0LearningPathId, result);
+  } catch {
+    resetInsights();
+    setLearningPathTransitionStatus(
+      "Yeni öğrenme yolu şu anda kontrol edilemedi. İlerlemelerin kaybolmadı; tekrar deneyebilirsin.",
+      { retry: true, error: true },
+    );
+  } finally {
+    setAsyncButtonState(button, false, "Kontrol ediliyor…");
+  }
+}
+
 async function completeLearningPathTerminalStep() {
   const node = activeLearningStepNode;
   const button = $("lesson-detail")?.querySelector("[data-learning-terminal-complete]");
@@ -4155,28 +4267,41 @@ async function completeLearningPathTerminalStep() {
       },
     );
     await parseResponse(response);
+    let reconcileResult = null;
     if (node.learningPathId && String(node.learningPathCode || "").startsWith("EDUCATION_V2_P0_")) {
       try {
-        await parseResponse(
-          await authenticatedFetch("/student/learning-path/p1/reconcile", {
-            method: "POST",
-            body: JSON.stringify({ p0LearningPathId: node.learningPathId }),
-          }),
-        );
+        reconcileResult = await reconcileP0ToP1(node.learningPathId);
       } catch {
         // P0 completion is authoritative. A transient P1 recommendation
         // failure must not roll back or hide the completed P0 terminal step.
+        pendingP1Reconcile = { p0LearningPathId: node.learningPathId };
       }
+    }
+    if (reconcileResult) {
+      await finishP1Reconcile(node.learningPathId, reconcileResult);
+      return;
     }
     learningPathEntryMode = false;
     activeLearningStepNode = null;
     activeLearningStepNavigation = null;
     activeLearningStepNavigationFromStepId = null;
+    resetInsights();
     navigate("dashboard");
+    if (pendingP1Reconcile) {
+      setLearningPathTransitionStatus(
+        "P0 tamamlandı. Yeni öğrenme yolu hazırlanırken bağlantı sorunu oluştu; tekrar deneyebilirsin.",
+        { retry: true, error: true },
+      );
+    }
   } catch (error) {
     setAsyncButtonState(button, false, "Tamamlanıyor…");
     if (status) status.textContent = formatStudentError(error, "Son durak tamamlanamadı.");
   }
+}
+
+async function freshLearningPathForTransition() {
+  resetInsights();
+  return insightApi("learning-path");
 }
 
 async function navigateLearningPathAdjacent(direction) {
@@ -13218,6 +13343,10 @@ function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
+  $("learning-path-transition-retry")?.addEventListener(
+    "click",
+    () => void retryPendingP1Reconcile(),
+  );
   $("training-activities-grid")?.addEventListener("click", (event) => {
     const target =
       event.target instanceof Element

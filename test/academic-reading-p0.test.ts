@@ -36,6 +36,15 @@ describe("academic reading P0 catalogue", () => {
     ).toBe(true);
   });
 
+  it("keeps the canonical P0 station count at 22 including the terminal stages", () => {
+    const guidedSteps = ACADEMIC_P0_LESSONS.reduce(
+      (count, lesson) => count + lesson.stages.length,
+      0,
+    );
+    expect(guidedSteps + ACADEMIC_P0_COMMON_FLOW.stages.length).toBe(22);
+    expect(ACADEMIC_P0_COMMON_FLOW.stages.at(-1)).toBe("NEXT_LEARNING");
+  });
+
   it("does not invent speed norms or a universal pass threshold", () => {
     const text = JSON.stringify(ACADEMIC_P0_LESSONS);
     expect(text).not.toMatch(/\b\d+(?:\.\d+)?\s*(?:WPM|kelime\/dakika)\b/i);
