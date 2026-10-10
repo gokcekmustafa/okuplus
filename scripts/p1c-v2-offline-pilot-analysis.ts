@@ -57,6 +57,19 @@ const CANONICAL_DESIGN_PASSAGE_REFS = {
   "V2C-REL-04": "P1C-V2-TXT-12@1.0",
 } as const;
 
+const EVIDENCE_CANDIDATES = {
+  "V2C-EVF-01": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+  "V2C-EVF-02": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+  "V2C-EVF-03": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+  "V2C-EVF-04": ["SPAN-01", "SPAN-02", "SPAN-03", "SPAN-04"],
+  "V2C-REL-01": ["CAND-01", "CAND-02", "CAND-03"],
+  "V2C-REL-02": ["CAND-01", "CAND-02", "CAND-03"],
+  "V2C-REL-03": ["CAND-01", "CAND-02", "CAND-03"],
+  "V2C-REL-04": ["CAND-01", "CAND-02", "CAND-03", "CAND-04"],
+} as const;
+
+const GRADE_BAND_PATTERN = /^G(?:[1-9]|1[0-2])$/u;
+
 const FORBIDDEN_KEYS = new Set([
   "address",
   "contact",
@@ -233,6 +246,17 @@ function isDesignIdentifier(value: string): boolean {
 
 function isDesignPassageReference(value: string): boolean {
   return /^P1C-V2-TXT-\d{2}@\d+\.\d+$/u.test(value);
+}
+
+function isAllowedGradeBand(value: unknown): value is string {
+  return typeof value === "string" && GRADE_BAND_PATTERN.test(value);
+}
+
+function isAllowedEvidenceCandidate(taskDesignId: string, value: unknown): value is string {
+  if (!nonEmptyString(value)) return false;
+  const candidates: readonly string[] | undefined =
+    EVIDENCE_CANDIDATES[taskDesignId as keyof typeof EVIDENCE_CANDIDATES];
+  return candidates !== undefined && candidates.includes(value);
 }
 
 function parseManifest(value: unknown): {
@@ -490,17 +514,37 @@ function parseResponse(
 
   const taskDesignId = value.taskDesignId;
   const dimension = typeof taskDesignId === "string" ? taskDimension(taskDesignId) : null;
+  const taskIsValid = typeof taskDesignId === "string" && TASK_IDS.includes(taskDesignId as TaskId);
+  const analysisGroupIsValid = ANALYSIS_GROUPS.includes(value.analysisGroup as AnalysisGroup);
+  const answerCompletenessIsValid = COMPLETENESS_VALUES.includes(
+    value.answerCompleteness as Completeness,
+  );
+  const normalizedAnalysisGroup = analysisGroupIsValid ? String(value.analysisGroup) : "";
+  const normalizedTaskDesignId = taskIsValid ? String(taskDesignId) : "";
+  const normalizedCompleteness = answerCompletenessIsValid
+    ? (value.answerCompleteness as Completeness)
+    : "INVALID";
+  const evidenceCandidateId =
+    (dimension === "EVIDENCE_FINDING" || dimension === "EVIDENCE_RELATION") &&
+    isAllowedEvidenceCandidate(String(taskDesignId ?? ""), value.evidenceCandidateId)
+      ? value.evidenceCandidateId
+      : undefined;
+  const relationType =
+    nonEmptyString(value.relationType) &&
+    RELATION_TYPES.includes(value.relationType as RelationType)
+      ? value.relationType
+      : undefined;
   if (!nonEmptyString(value.pilotParticipantId))
     recordIssue(issues, "PARTICIPANT_ID_INVALID", recordIndex, "pilotParticipantId");
-  if (
-    !nonEmptyString(value.analysisGroup) ||
-    !ANALYSIS_GROUPS.includes(value.analysisGroup as AnalysisGroup)
-  ) {
+  if (!nonEmptyString(value.analysisGroup) || !analysisGroupIsValid) {
     recordIssue(issues, "ANALYSIS_GROUP_INVALID", recordIndex, "analysisGroup");
   }
-  if (!stringOrNull(value.gradeBand))
+  if (
+    !stringOrNull(value.gradeBand) ||
+    (typeof value.gradeBand === "string" && !isAllowedGradeBand(value.gradeBand))
+  )
     recordIssue(issues, "GRADE_BAND_INVALID", recordIndex, "gradeBand");
-  if (!nonEmptyString(taskDesignId) || !TASK_IDS.includes(taskDesignId as TaskId)) {
+  if (!taskIsValid) {
     recordIssue(issues, "TASK_UNKNOWN", recordIndex, "taskDesignId");
   }
   if (!nonEmptyString(value.passageVersionId))
@@ -514,11 +558,11 @@ function parseResponse(
   ) {
     recordIssue(issues, "TASK_ORDER_INVALID", recordIndex, "taskOrder");
   }
-  if (!COMPLETENESS_VALUES.includes(value.answerCompleteness as Completeness)) {
+  if (!answerCompletenessIsValid) {
     recordIssue(issues, "ANSWER_COMPLETENESS_INVALID", recordIndex, "answerCompleteness");
   }
 
-  const completeness = value.answerCompleteness as Completeness;
+  const completeness = normalizedCompleteness;
   if (dimension === "INFERENCE" && value.answer !== undefined) {
     if (!isObject(value.answer) || !nonEmptyString(value.answer.optionId)) {
       recordIssue(issues, "INFERENCE_ANSWER_INVALID", recordIndex, "answer");
@@ -544,7 +588,10 @@ function parseResponse(
       recordIssue(issues, "EVIDENCE_FINDING_ANSWER_FIELD", recordIndex, "answer");
     if (value.relationType !== undefined)
       recordIssue(issues, "EVIDENCE_FINDING_RELATION_FIELD", recordIndex, "relationType");
-    if (completeness === "COMPLETE" && !nonEmptyString(value.evidenceCandidateId)) {
+    if (value.evidenceCandidateId !== undefined && evidenceCandidateId === undefined) {
+      recordIssue(issues, "EVIDENCE_CANDIDATE_INVALID", recordIndex, "evidenceCandidateId");
+    }
+    if (completeness === "COMPLETE" && evidenceCandidateId === undefined) {
       recordIssue(
         issues,
         "EVIDENCE_FINDING_CANDIDATE_REQUIRED",
@@ -557,7 +604,10 @@ function parseResponse(
   if (dimension === "EVIDENCE_RELATION") {
     if (value.answer !== undefined)
       recordIssue(issues, "EVIDENCE_RELATION_ANSWER_FIELD", recordIndex, "answer");
-    if (completeness === "COMPLETE" && !nonEmptyString(value.evidenceCandidateId)) {
+    if (value.evidenceCandidateId !== undefined && evidenceCandidateId === undefined) {
+      recordIssue(issues, "EVIDENCE_CANDIDATE_INVALID", recordIndex, "evidenceCandidateId");
+    }
+    if (completeness === "COMPLETE" && evidenceCandidateId === undefined) {
       recordIssue(
         issues,
         "EVIDENCE_RELATION_CANDIDATE_REQUIRED",
@@ -565,10 +615,10 @@ function parseResponse(
         "evidenceCandidateId",
       );
     }
-    if (
-      completeness === "COMPLETE" &&
-      !RELATION_TYPES.includes(value.relationType as RelationType)
-    ) {
+    if (nonEmptyString(value.relationType) && relationType === undefined) {
+      recordIssue(issues, "EVIDENCE_RELATION_TYPE_INVALID", recordIndex, "relationType");
+    }
+    if (completeness === "COMPLETE" && relationType === undefined) {
       recordIssue(issues, "EVIDENCE_RELATION_TYPE_REQUIRED", recordIndex, "relationType");
     }
   }
@@ -576,18 +626,20 @@ function parseResponse(
   const raterScores = parseRaterScores(value.raterScores, issues, recordIndex);
   return {
     pilotParticipantId: String(value.pilotParticipantId ?? ""),
-    analysisGroup: String(value.analysisGroup ?? ""),
-    ...(stringOrNull(value.gradeBand) ? { gradeBand: value.gradeBand } : {}),
-    taskDesignId: String(taskDesignId ?? ""),
+    analysisGroup: normalizedAnalysisGroup,
+    ...(isAllowedGradeBand(value.gradeBand)
+      ? { gradeBand: value.gradeBand }
+      : value.gradeBand === null
+        ? { gradeBand: null }
+        : {}),
+    taskDesignId: normalizedTaskDesignId,
     passageVersionId: String(value.passageVersionId ?? ""),
     questionVersionId: String(value.questionVersionId ?? ""),
     taskOrder: typeof value.taskOrder === "number" ? value.taskOrder : 0,
     answerCompleteness: completeness,
     ...(isObject(value.answer) ? { answer: value.answer } : {}),
-    ...(nonEmptyString(value.evidenceCandidateId)
-      ? { evidenceCandidateId: value.evidenceCandidateId }
-      : {}),
-    ...(nonEmptyString(value.relationType) ? { relationType: value.relationType } : {}),
+    ...(evidenceCandidateId ? { evidenceCandidateId } : {}),
+    ...(relationType ? { relationType } : {}),
     ...(raterScores ? { raterScores } : {}),
     ...(isObject(value.adjudication) ? { adjudication: value.adjudication } : {}),
   };
@@ -808,24 +860,35 @@ function analyzeDataset(dataset: ParsedDataset): OfflinePilotAnalysisReport {
   for (const record of dataset.records) {
     participants.add(record.pilotParticipantId);
     report.summary.responseCount += 1;
-    report.summary.groupCounts[record.analysisGroup] =
-      (report.summary.groupCounts[record.analysisGroup] ?? 0) + 1;
-    report.summary.taskCounts[record.taskDesignId] =
-      (report.summary.taskCounts[record.taskDesignId] ?? 0) + 1;
-    report.summary.completenessCounts[record.answerCompleteness] =
-      (report.summary.completenessCounts[record.answerCompleteness] ?? 0) + 1;
-    increment(report.distributions.taskAndGroupCounts, record.taskDesignId, record.analysisGroup);
+    const groupIsValid = ANALYSIS_GROUPS.includes(record.analysisGroup as AnalysisGroup);
+    const taskIsValid = TASK_IDS.includes(record.taskDesignId as TaskId);
+    const completenessIsValid = COMPLETENESS_VALUES.includes(
+      record.answerCompleteness as Completeness,
+    );
+    if (groupIsValid) {
+      report.summary.groupCounts[record.analysisGroup] =
+        (report.summary.groupCounts[record.analysisGroup] ?? 0) + 1;
+    }
+    if (taskIsValid) {
+      report.summary.taskCounts[record.taskDesignId] =
+        (report.summary.taskCounts[record.taskDesignId] ?? 0) + 1;
+    }
+    if (completenessIsValid) {
+      report.summary.completenessCounts[record.answerCompleteness] =
+        (report.summary.completenessCounts[record.answerCompleteness] ?? 0) + 1;
+    }
+    if (taskIsValid && groupIsValid) {
+      increment(report.distributions.taskAndGroupCounts, record.taskDesignId, record.analysisGroup);
+    }
 
-    const group = ANALYSIS_GROUPS.includes(record.analysisGroup as AnalysisGroup)
-      ? record.analysisGroup
-      : "MISSING";
-    const grade = nonEmptyString(record.gradeBand) ? record.gradeBand : "MISSING";
+    const group = groupIsValid ? record.analysisGroup : "MISSING";
+    const grade = isAllowedGradeBand(record.gradeBand) ? record.gradeBand : "MISSING";
     if (group === "MISSING") report.strata.missingGroupCount += 1;
     if (grade === "MISSING") report.strata.missingGradeCount += 1;
     if (grade !== "MISSING") presentGrades.add(grade);
     increment(report.strata.groupGradeCounts, group, grade);
 
-    const dimension = taskDimension(record.taskDesignId);
+    const dimension = taskIsValid ? taskDimension(record.taskDesignId) : null;
     if (
       record.answerCompleteness === "COMPLETE" &&
       dimension === "INFERENCE" &&
@@ -842,7 +905,7 @@ function analyzeDataset(dataset: ParsedDataset): OfflinePilotAnalysisReport {
     if (
       record.answerCompleteness === "COMPLETE" &&
       dimension === "EVIDENCE_FINDING" &&
-      record.evidenceCandidateId
+      isAllowedEvidenceCandidate(record.taskDesignId, record.evidenceCandidateId)
     ) {
       increment(
         report.distributions.evidenceFindingCandidateCounts,
@@ -851,7 +914,7 @@ function analyzeDataset(dataset: ParsedDataset): OfflinePilotAnalysisReport {
       );
     }
     if (record.answerCompleteness === "COMPLETE" && dimension === "EVIDENCE_RELATION") {
-      if (record.evidenceCandidateId)
+      if (isAllowedEvidenceCandidate(record.taskDesignId, record.evidenceCandidateId))
         increment(
           report.distributions.evidenceRelationCandidateCounts,
           record.taskDesignId,

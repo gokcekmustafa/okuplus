@@ -126,7 +126,7 @@ describe("P1-C V2 offline pilot analysis", () => {
           taskDesignId: "V2C-REL-01",
           passageVersionId: "synthetic-pv-rel-01",
           questionVersionId: "synthetic-qv-rel-01",
-          evidenceCandidateId: "REL-01-CAND-A",
+          evidenceCandidateId: "CAND-01",
           relationType: "LIMITED_SUPPORT",
           answer: undefined,
           gradeBand: null,
@@ -145,7 +145,7 @@ describe("P1-C V2 offline pilot analysis", () => {
       "SPAN-01": 1,
     });
     expect(report.distributions.evidenceRelationCandidateCounts["V2C-REL-01"]).toEqual({
-      "REL-01-CAND-A": 1,
+      "CAND-01": 1,
     });
     expect(report.distributions.evidenceRelationTypeCounts["V2C-REL-01"]).toEqual({
       LIMITED_SUPPORT: 1,
@@ -207,6 +207,76 @@ describe("P1-C V2 offline pilot analysis", () => {
         "PASSAGE_VERSION_NOT_IN_MANIFEST",
       ]),
     );
+  });
+
+  it("does not echo invalid category values into the report", () => {
+    const invalidCandidate = "student@example.com";
+    const invalidGroup = "group supplied by participant";
+    const invalidTask = "free-form-task-with-sensitive-text";
+    const invalidGrade = "13-17 / özel destek profili";
+    const invalidCompleteness = "participant supplied completeness";
+    const report = analyzeOfflinePilotText(
+      json([
+        {
+          ...response({ taskDesignId: "V2C-EVF-01" }),
+          evidenceCandidateId: invalidCandidate,
+        },
+        {
+          ...response(),
+          analysisGroup: invalidGroup,
+          taskDesignId: invalidTask,
+          gradeBand: invalidGrade,
+          answerCompleteness: invalidCompleteness,
+        },
+      ]),
+    );
+
+    expect(report.status).toBe("INVALID_DATA");
+    expect(report.dataQuality.issues).toContainEqual({
+      code: "EVIDENCE_CANDIDATE_INVALID",
+      recordIndex: 0,
+      field: "evidenceCandidateId",
+    });
+    expect(report.summary.groupCounts).toEqual({ GENERAL_STUDENT_POPULATION: 1 });
+    expect(report.summary.taskCounts).toEqual({ "V2C-EVF-01": 1 });
+    expect(report.summary.completenessCounts).toEqual({ COMPLETE: 1, INVALID: 1 });
+    expect(report.distributions.evidenceFindingCandidateCounts).toEqual({});
+    expect(report.strata.groupGradeCounts).toEqual({
+      GENERAL_STUDENT_POPULATION: { G7: 1 },
+      MISSING: { MISSING: 1 },
+    });
+
+    const serializedReport = JSON.stringify(report);
+    expect(serializedReport).not.toContain(invalidCandidate);
+    expect(serializedReport).not.toContain(invalidGroup);
+    expect(serializedReport).not.toContain(invalidTask);
+    expect(serializedReport).not.toContain(invalidGrade);
+    expect(serializedReport).not.toContain(invalidCompleteness);
+  });
+
+  it("rejects an unknown evidence relation candidate", () => {
+    const invalidCandidate = "REL-01-CAND-A";
+    const report = analyzeOfflinePilotText(
+      json([
+        response({
+          taskDesignId: "V2C-REL-01",
+          passageVersionId: "synthetic-pv-rel-01",
+          questionVersionId: "synthetic-qv-rel-01",
+          answer: undefined,
+          evidenceCandidateId: invalidCandidate,
+          relationType: "LIMITED_SUPPORT",
+        }),
+      ]),
+    );
+
+    expect(report.status).toBe("INVALID_DATA");
+    expect(report.dataQuality.issues).toContainEqual({
+      code: "EVIDENCE_CANDIDATE_INVALID",
+      recordIndex: 0,
+      field: "evidenceCandidateId",
+    });
+    expect(report.distributions.evidenceRelationCandidateCounts).toEqual({});
+    expect(JSON.stringify(report)).not.toContain(invalidCandidate);
   });
 
   it("rejects a task paired with another task's passage binding", () => {

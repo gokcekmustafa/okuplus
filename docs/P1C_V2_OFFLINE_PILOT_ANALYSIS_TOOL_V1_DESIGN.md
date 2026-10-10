@@ -182,6 +182,9 @@ Her kayıt aşağıdaki anonim/sürüm alanlarını taşımalıdır:
   doğrular;
 - `answerCompleteness`: `COMPLETE`, `BLANK`, `PARTIAL`, `INVALID` veya
   `REVIEW_REQUIRED`;
+- `gradeBand`: hedef yaş/sınıf henüz tasarım kararı değil; kayıt düzeyinde yalnızca
+  `G1`–`G12` biçimindeki sentetik sınıf kodları kabul edilir. Serbest metinler
+  `GRADE_BAND_INVALID` olarak işaretlenir ve rapor tablolarına taşınmaz;
 - INFERENCE için `answer.optionId`;
 - EVIDENCE_FINDING için `evidenceCandidateId`;
 - EVIDENCE_RELATION için birbirinden ayrı `evidenceCandidateId` ve
@@ -189,11 +192,19 @@ Her kayıt aşağıdaki anonim/sürüm alanlarını taşımalıdır:
 - varsa anonim `raterCode`/`score` listesi ve ayrı `adjudication` kaydı.
 
 Araç yalnızca mevcut 12 tasarım görevini ve görev türüyle uyumlu alanları kabul
-eder. Bilinmeyen görev, yanlış cevap şekli, eksik zorunlu sürüm alanı veya
-geçersiz grup fatal veri kalite hatasıdır. Kimlik, tenant veya iletişim alanları
+eder. EVIDENCE_FINDING için aday kimlikleri ilgili görevin `SPAN-01`–`SPAN-04`
+havuzundan, EVIDENCE_RELATION için ilgili görevin belgelenmiş `CAND-*`
+havuzundan gelmelidir; bilinmeyen adaylar dağılıma eklenmez. Bilinmeyen görev,
+yanlış cevap şekli, eksik zorunlu sürüm alanı veya geçersiz grup fatal veri
+kalitesi hatasıdır. Kimlik, tenant veya iletişim alanları
 (`email`, `phone`, `tenantId`, `studentId`, `userId`, `name`, `address`, vb.)
 herhangi bir iç içe nesnede reddedilir. Yinelenen katılımcı/görev/sürüm/sıra
 anahtarı sessizce silinmez; `DUPLICATE_RESPONSE` olarak raporlanır.
+
+Rapor özetleri ve dağılımları yalnızca izin verilen görev, grup, tamamlanma,
+sınıf ve aday kategorilerini içerir. Geçersiz alanların ham metni rapora
+eklenmez; ilgili kayıt hata kodu ve indeksiyle birlikte `INVALID_DATA` olarak
+işaretlenir. Böylece hata içeren JSON çıktısı da girdi değerlerini yankılamaz.
 
 Eksik grup veya sınıf bilgisi kayda geçirilir ve toplulaştırmaya `MISSING` hücresi
 olarak girer. Grup üyeliği P1-C yanıtlarından, WPM'den, Antrenman verisinden veya
