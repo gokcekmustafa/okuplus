@@ -132,4 +132,59 @@ describe("learning path completion regression", () => {
     expect([...completed]).toEqual(["step-a", "step-b", "measurement"]);
     expect(completed.has("terminal")).toBe(false);
   });
+
+  it("keeps independent P0 paths independent while joining their shared checkpoint", () => {
+    const completed = resolveP0LinearCompletion(
+      [
+        {
+          id: "fast-practice",
+          pathId: "fast-path",
+          type: "PRACTICE",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "reading-teaching",
+          pathId: "reading-path",
+          type: "TEACHING",
+          prerequisiteStepId: null,
+          completionRule: {},
+        },
+        {
+          id: "reading-practice",
+          pathId: "reading-path",
+          type: "PRACTICE",
+          prerequisiteStepId: "reading-teaching",
+          completionRule: {},
+        },
+        {
+          id: "shared-reinforcement",
+          pathId: "common-path",
+          type: "REINFORCEMENT",
+          prerequisiteStepId: null,
+          completionRule: {
+            prerequisiteStepIds: ["fast-practice", "reading-practice"],
+          },
+        },
+        {
+          id: "measurement",
+          pathId: "common-path",
+          type: "MEASUREMENT",
+          prerequisiteStepId: "shared-reinforcement",
+          completionRule: {},
+        },
+      ],
+      new Set(["fast-practice", "reading-teaching", "reading-practice", "shared-reinforcement"]),
+    );
+
+    expect(completed).toEqual(
+      new Set([
+        "fast-practice",
+        "reading-teaching",
+        "reading-practice",
+        "shared-reinforcement",
+        "measurement",
+      ]),
+    );
+  });
 });
