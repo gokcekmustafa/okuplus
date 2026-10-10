@@ -60,9 +60,10 @@ jobs:
         run: npm run sync --prefix mobile
 
       - name: Build Android debug APK
+        working-directory: mobile/android
         run: |
-          chmod +x mobile/android/gradlew
-          mobile/android/gradlew assembleDebug --no-daemon --stacktrace
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
