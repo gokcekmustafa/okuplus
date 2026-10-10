@@ -154,6 +154,10 @@ describe("education V2 P0 forward migration contract", () => {
     expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_URL");
     expect(provisioning).toContain("EDUCATION_V2_P0_PRODUCTION_DATABASE_HOST");
     expect(provisioning).toContain("assertApprovedTargetFingerprint");
+    expect(provisioning).toContain('mode: "MANIFEST_ONLY_DRY_RUN"');
+    expect(provisioning).toContain('databaseAction: "NOT_RUN"');
+    expect(provisioning).toContain('publicationState: "NOT_VERIFIED"');
+    expect(provisioning).toContain("lessonStepCount");
     expect(provisioning).toContain("where: { code_version:");
     expect(provisioning).toContain("where: { pathId_code:");
     expect(provisioning).toContain("where: { unitId_stableKey:");
