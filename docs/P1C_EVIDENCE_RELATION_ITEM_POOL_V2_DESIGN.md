@@ -28,7 +28,33 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - `EVIDENCE_RELATION` görevinde `evidenceCandidateId` ve `relationType` iki ayrı response alanıdır. Bir alan diğerinin puanını üretmez.
 - Aynı passage kullanılırsa görev sırası counterbalance edilir ve tekrar okuma etkisi kaydedilir. Mümkün olduğunda paralel passage kullanılır.
 - Yanıt, response id veya route alanı başka bir göreve taşınmaz. Eksik, duplicate, unknown veya çelişkili response server tarafında `REVIEW_REQUIRED` üretir.
-- Relation türleri item bazında versioned metadata ile sınırlandırılır. Önerilen sözlük: `DIRECT_SUPPORT`, `LIMITED_SUPPORT`, `COMPARISON`, `CAUSAL_SUPPORT`, `NOT_SUPPORTED_OR_CONTRADICTS`.
+- Relation türleri item bazında versioned metadata ile sınırlandırılır. Önerilen sözlük ve karar sırası aşağıda tanımlıdır; her item yalnızca kendi izinli etiketlerini kullanır.
+
+### 1.1 İşlemsel relation sözlüğü
+
+| `relationType`                 | İşlemsel karar kuralı                                                                                                                                     | Örtüşme/yanlış sınıflandırma sınırı                                                                                                                                                                          |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DIRECT_SUPPORT`               | Aday kanıt, claim'in kapsamını değiştirmeden metinde açıkça verilen olguyu doğrudan destekler. Ek neden, zaman veya genelleme eklenmez.                   | Aday yalnızca aynı konudan söz ediyor veya claim'in bir kısmını ima ediyorsa `DIRECT_SUPPORT` değildir; `LIMITED_SUPPORT` ya da `NOT_SUPPORTED_OR_CONTRADICTS` değerlendirilir.                              |
+| `LIMITED_SUPPORT`              | Aday kanıt claim ile uyumlu bir gözlem, eşzamanlılık, koşul veya kısmi ilişki gösterir; ancak claim'in tamamını, tek nedeni veya kesin sonucu kanıtlamaz. | “İlgili” olmak tek başına yeterli değildir. Hiçbir destek yoksa `NOT_SUPPORTED_OR_CONTRADICTS`; kesin nedensellik için ek kanıt varsa bile item metadata'sı izin vermiyorsa `PENDING_EXPERT_DECISION` kalır. |
+| `COMPARISON`                   | Claim iki açıkça tanımlanmış kişi/nesne/koşul arasındaki fark veya benzerliği ister ve aday bu karşılaştırmayı doğrudan taşır.                            | Tek bir grubun gözlemi comparison değildir. Farkın yönü veya karşılaştırma birimi belirsizse `PENDING_EXPERT_DECISION`.                                                                                      |
+| `CAUSAL_SUPPORT`               | Passage açık bir müdahale/karşılaştırma ve sonuç ilişkisi kurar; aday bu ilişkinin neden-sonuç kanıtını taşır.                                            | Korelasyon, ardışıklık, öneri veya planlanan deney causal support sayılmaz. Mevcut havuzda bu etiket hiçbir item için hedeflenmemiştir; yeni madde için `PENDING_EXPERT_DECISION` gerekir.                   |
+| `NOT_SUPPORTED_OR_CONTRADICTS` | Aday claim'i desteklemez, claim ile çelişir veya claim'in gerekli koşulunu karşılamaz.                                                                    | “Kısmen destekliyor” durumları bu etikete indirgenmez; önce `LIMITED_SUPPORT` kontrol edilir. Çelişki ile ilgisizlik ayrımı raporlamada ayrıca tutulmalıdır.                                                 |
+
+#### Etiket seçimi ve belirsizlik protokolü
+
+1. Önce adayın claim ile herhangi bir metinsel bağı olup olmadığı kontrol edilir; bağ yoksa `NOT_SUPPORTED_OR_CONTRADICTS`.
+2. Bağ varsa doğrudan kapsam kontrolü yapılır; kapsam tam ve ek varsayım yoksa `DIRECT_SUPPORT`.
+3. Bağ var ancak claim'in yalnız bir kısmı, bir koşulu veya eşzamanlı gözlemi destekleniyorsa `LIMITED_SUPPORT`.
+4. Karşılaştırma veya nedensellik için gereken koşullar item metadata'sında açıkça tanımlı değilse etiket seçilmez, `PENDING_EXPERT_DECISION` yazılır.
+5. Bir aday iki etikete eşit derecede uyuyorsa otomatik puan verilmez. Response yapısı geçerli olsa bile tasarım notu `PENDING_EXPERT_DECISION`; eksik/ambiguous/çelişkili/version doğrulanamayan runtime yanıtı `REVIEW_REQUIRED` olur.
+
+Mevcut dört `V2C-REL-*` maddesinin tasarım hedefi özellikle `LIMITED_SUPPORT`'tır: `REL-01`, `REL-02`, `REL-03` ve `REL-04` için beklenen relation etiketi aynıdır. Bu, kategorileri eşit dağıtma kararı değildir; her dört metin de gözlem ile sınırlı ilişkiyi gösterip kesin sonuç veya tek neden iddiasını sınırladığı için seçilmiştir. `DIRECT_SUPPORT`, `COMPARISON` ve `CAUSAL_SUPPORT` için yeni adaylar bu havuza eklenmemiş, uzman kararına açık `PENDING_EXPERT_DECISION` olarak bırakılmıştır.
+
+### 1.2 `PARTIAL_REVIEW` ve `REVIEW_REQUIRED` ayrımı
+
+- **`REVIEW_REQUIRED`:** Güvenlik durumudur. Yanıt eksik, blank, duplicate, unknown, ambiguous, çelişkili veya version/mapping ile doğrulanamıyorsa üretilecek durumdur. Scorer route kanıtı üretmez ve otomatik atama yapmaz.
+- **`PARTIAL_REVIEW`:** Yalnızca tasarım/pilot disposition'ıdır. Yapısal olarak geçerli bir relation yanıtında iki alanın (`evidenceCandidateId`, `relationType`) birinin doğru diğerinin yanlış olması veya serbest açıklamanın kısmi olması gibi insan incelemesine aday bir sonucu belirtir. Runtime'da ayrı bir sözleşme tanımlanmadan otomatik durum olarak yayımlanamaz; hiçbir zaman `READY` veya route kanıtı değildir.
+- İki kavram birbirinin yerine kullanılmaz. `PARTIAL_REVIEW` adaylığı daha sonra eksik/ambiguous/çelişkili olduğu anlaşılırsa güvenli sonuç `REVIEW_REQUIRED` olur.
 
 ## 2. INFERENCE adayları
 
@@ -39,10 +65,17 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-01@1.0`
 - **Metin:** “Apartmanın balkonundaki üç saksı bir hafta boyunca aynı miktarda sulandı. Güneş alan saksıdaki toprak ertesi gün kururken gölgede kalan saksıdaki toprak daha uzun süre nemli kaldı. Rüzgâr alan köşedeki saksıda ise yüzey hızlı kurudu, fakat toprağın altı nemini korudu.”
 - **Birincil boyut:** `INFERENCE`
+- **Tasarım/sürüm referansı:** `V2C-INF-01`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Yönerge/yanıt biçimi:** “Bu gözlemlerden hangisi metinle en iyi desteklenir?” Dört seçenekli tek seçim; response `selectedOptionId`.
-- **Beklenen yanıt/gerekçe:** `A`; güneş ve rüzgâr yüzey kuruluğunu etkileyebilir, fakat yüzey görüntüsü saksının tamamının kuruduğunu kesinleştirmez.
+- **Seçenekler:**
+  - `V2C-INF-01-OPT-A`: Güneş ve rüzgâr alan yerlerde yüzey daha hızlı kuruyabilir; bu, toprağın tamamının kuruduğunu tek başına göstermez.
+  - `V2C-INF-01-OPT-B`: Gölgedeki saksı, diğer saksılardan daha az sulandığı için daha uzun süre nemli kalmıştır.
+  - `V2C-INF-01-OPT-C`: Üç saksının toprağı da sulamadan sonraki gün tamamen kurumuştur.
+  - `V2C-INF-01-OPT-D`: Saksıların her birine hafta boyunca farklı miktarda su verilmiştir.
+- **Cevap anahtarı:** `V2C-INF-01-OPT-A`.
+- **Beklenen yanıt/gerekçe:** A; güneş ve rüzgâr yüzey kuruluğuyla ilişkilidir, ancak yüzey görüntüsü toprağın tamamının kuruduğunu kanıtlamaz. Seçenek B, sulama miktarı hakkında metinde olmayan bilgi ekler; C metindeki alt toprak gözlemiyle çelişir; D aynı miktarda sulama bilgisini tersine çevirir.
 - **Destekleyici kanıt:** `P1C-V2-TXT-01-SPAN-02` (güneş alan toprağın ertesi gün kuruduğu) ve `SPAN-03` (rüzgâr alan saksının yüzey/alt nem ayrımı).
-- **Makul yanlışlar/hata türleri:** `B` yüzey kuruluğunu tam kuruma sanma; `C` tek değişkeni tüm saksılara genelleme; `D` ölçüm yapılmadığı halde sulama miktarını sonuç sanma.
+- **Seçenek/ipuçları incelemesi:** A doğru olsa da “tek başına” kapsamı sınırlar; B ve D bilgi uydurma, C ise yüzey-alt ayrımını gözden kaçırma hatasını temsil eder. Seçenek uzunluğu veya “güneş/rüzgâr” tekrarının doğru cevabı ele verme riski uzman tarafından incelenmelidir.
 - **Puanlama:** Doğru seçenek 1, diğerleri 0; kısmi puan yok. Yanıt yoksa `REVIEW_REQUIRED`.
 - **Yaş/dil/ön bilgi:** Günlük yaşam bağlamı, temel neden-sonuç ve yüzey/alt ayrımı; özel botanik bilgisi gerektirmemeli.
 - **Uzman soruları:** A seçeneği metnin kapsamını aşmadan yazılmış mı? “Kuruma” kelimesi yüzey ve tüm toprak ayrımını yaş grubu için açık bırakıyor mu?
@@ -53,10 +86,17 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-02@1.0`
 - **Metin:** “Kütüphane sorumlusu, sessiz çalışma saatlerinde masaların bir bölümünü pencereye yakın, bir bölümünü kapıya yakın düzenledi. Öğrenciler pencere kenarındaki masalarda daha uzun süre çalıştı; kapı yanındaki masalarda ise giriş çıkışlar sıklaştıkça notlarına daha sık ara verdiler. Sorumlu, ertesi hafta masaların yerini değiştirmeyi değil, giriş akışını düzenlemeyi önerdi.”
 - **Birincil boyut:** `INFERENCE`
+- **Tasarım/sürüm referansı:** `V2C-INF-02`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Yönerge/yanıt biçimi:** “Metne göre sorumlunun önerisi hangi gözleme dayanıyor olabilir?” Dört seçenekli tek seçim.
-- **Beklenen yanıt/gerekçe:** `B`; ara verme davranışı masanın kendisinden çok giriş çıkış akışıyla ilişkili göründüğü için akışı düzenlemek önerilmiştir.
+- **Seçenekler:**
+  - `V2C-INF-02-OPT-A`: Pencere kenarındaki masalar bütün öğrenciler için en iyi çalışma yeridir.
+  - `V2C-INF-02-OPT-B`: Giriş çıkışları düzenlemek, kapı yanındaki masalarda notlara verilen araları azaltabilir.
+  - `V2C-INF-02-OPT-C`: Masaların yeri değiştirilmediği için öğrenciler artık ara vermeyecektir.
+  - `V2C-INF-02-OPT-D`: Sessiz çalışma saatleri kaldırılırsa kütüphanede daha uzun çalışılabilir.
+- **Cevap anahtarı:** `V2C-INF-02-OPT-B`.
+- **Beklenen yanıt/gerekçe:** B; kapı yanındaki giriş çıkışlar sıklaştığında ara verme artmış, sorumlu da bu akışı düzenlemeyi önermiştir. A tek gözlemi geneller; C kesin sonuç ve metin dışı değişiklik ekler; D önerilmeyen bir müdahaledir.
 - **Destekleyici kanıt:** `P1C-V2-TXT-02-SPAN-02` ve `SPAN-03`.
-- **Makul yanlışlar/hata türleri:** `A` pencereyi tek neden sanma; `C` yer değiştirmenin yapıldığını sanma; `D` sessiz saatlerin kaldırılacağını çıkarma.
+- **Seçenek/ipuçları incelemesi:** B, metindeki öneriyi aynen kopyalamak yerine gözlemden sınırlı sonuç çıkarır. A konuya yakın ama aşırı genelleyicidir; C ve D öneri ile sonuç arasını karıştırır. “Giriş çıkış” tekrarının ipucu etkisi ve “azaltabilir” kipinin yaşa uygunluğu uzman tarafından incelenmelidir.
 - **Puanlama:** Exact-match 1/0; kısmi yok. Belirsiz veya birden fazla seçim `REVIEW_REQUIRED`.
 - **Yaş/dil/ön bilgi:** Okul/kütüphane bağlamı; “akış” sözcüğü uzman incelemesinde yaşa göre kontrol edilmeli.
 - **Uzman soruları:** B, metindeki öneri ile gözlem arasında gerçekten sınırlı bir çıkarım mı? Cevap seçenekleri önerilmeyen müdahaleleri gereksiz yere ele veriyor mu?
@@ -67,10 +107,17 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-03@1.0`
 - **Metin:** “Mahalledeki kompost kutusuna sebze kabukları, kuru yapraklar ve bazen karton parçaları eklendi. Kutu yalnızca kabuklarla doldurulduğunda içi ıslandı ve koku oluştu. Kuru yaprak eklendiği haftalarda karışım daha gevşek kaldı. Gönüllüler, her eklemede malzemeleri karıştırıp kuru yaprak oranını gözlemlemeye karar verdi.”
 - **Birincil boyut:** `INFERENCE`
+- **Tasarım/sürüm referansı:** `V2C-INF-03`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Yönerge/yanıt biçimi:** “Gönüllülerin karıştırma ve kuru yaprakları izleme kararı en çok hangi sonuca dayanır?” Dört seçenekli tek seçim.
-- **Beklenen yanıt/gerekçe:** `C`; yalnızca ıslak malzeme eklemek nem ve koku ile ilişkilendiği için karışım dengesi izlenmek istenmiştir.
+- **Seçenekler:**
+  - `V2C-INF-03-OPT-A`: Koku oluşmasının tek nedeni karton parçalarının kompost kutusuna eklenmesidir.
+  - `V2C-INF-03-OPT-B`: Kuru yaprak eklemek karışımı her durumda tamamen kurutur.
+  - `V2C-INF-03-OPT-C`: Malzemelerin oranı ve karıştırılması, kutudaki nem ve karışımın yapısıyla ilişkili olabilir.
+  - `V2C-INF-03-OPT-D`: Kutuda koku oluştuğu için kompost yapma çalışması artık bırakılmalıdır.
+- **Cevap anahtarı:** `V2C-INF-03-OPT-C`.
+- **Beklenen yanıt/gerekçe:** C; yalnız kabuklarla doldurma nem ve kokuyla, kuru yaprak ekleme ise daha gevşek karışımla birlikte gözlenmiştir. A karton hakkında kanıtlanmamış neden kurar; B “her durumda” genellemesidir; D metinde olmayan bir karardır.
 - **Destekleyici kanıt:** `P1C-V2-TXT-03-SPAN-02` ve `SPAN-03`.
-- **Makul yanlışlar/hata türleri:** `A` kartonu temel neden sanma; `B` tüm kokunun kuru yapraktan geldiğini sanma; `D` kompostun artık kullanılmayacağını çıkarma.
+- **Seçenek/ipuçları incelemesi:** C, iki gözlemi kapsamı aşmadan birleştirir. A ve B tek değişkeni kesinleştirme, D ise gözlemden karar çıkarma hatasıdır. “Nem”, “gevşek” ve “oran” sözcüklerinin hedef yaş için ek ön bilgi gerektirip gerektirmediği uzman tarafından incelenmelidir.
 - **Puanlama:** Doğru seçim 1; kısmi yok. Boş/çoklu cevap `REVIEW_REQUIRED`.
 - **Yaş/dil/ön bilgi:** Gündelik çevre bağlamı; kompost bilgisi metinden anlaşılabilir olmalı.
 - **Uzman soruları:** C, gözlemden sınırlı sonuç çıkarıyor mu; “denge” sözcüğü metinsel olarak yeterince destekli mi?
@@ -81,10 +128,17 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-04@1.0`
 - **Metin:** “Belediye, akşam saatlerinde bisiklet yolunun üç bölümünde gözlem yaptı. Aydınlatması güçlü bölümde yayalar bisikletlileri daha erken fark etti. Ağaçların gölge yaptığı bölümde fark etme mesafesi kısaldı. Yağışlı akşamlarda tüm bölümlerde gözlem sayısı azaldı; ekip bu günleri ayrı değerlendirmeyi planladı.”
 - **Birincil boyut:** `INFERENCE`
+- **Tasarım/sürüm referansı:** `V2C-INF-04`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Yönerge/yanıt biçimi:** “Bu gözlemler hangi sonucu en dikkatli biçimde destekler?” Dört seçenekli tek seçim.
-- **Beklenen yanıt/gerekçe:** `D`; aydınlatma ve gölge, fark etme mesafesiyle ilişkili görünür; yağışlı günler ayrı tutulmalıdır.
+- **Seçenekler:**
+  - `V2C-INF-04-OPT-A`: Güçlü aydınlatma, bisiklet yolundaki bütün kazaları önler.
+  - `V2C-INF-04-OPT-B`: Yağışlı akşamlarda bisiklet yolu kullanıma kapatılmıştır.
+  - `V2C-INF-04-OPT-C`: Gözlem sayısının azalması, yağışlı akşamlarda görünürlüğün kesin olarak azaldığını kanıtlar.
+  - `V2C-INF-04-OPT-D`: Aydınlatma ve gölge, yayaların bisikletlileri fark etme mesafesiyle ilişkili olabilir; yağışlı günler ayrıca değerlendirilmelidir.
+- **Cevap anahtarı:** `V2C-INF-04-OPT-D`.
+- **Beklenen yanıt/gerekçe:** D; iki bölümde fark etme mesafesiyle ilgili gözlem vardır ve yağışlı günlerin ayrıca ele alınması planlanmıştır. A kazaları önleme, B yolun kapanması ve C kesin görünürlük sonucu hakkında metinde olmayan iddialardır.
 - **Destekleyici kanıt:** `P1C-V2-TXT-04-SPAN-02`, `SPAN-03` ve `SPAN-04`.
-- **Makul yanlışlar/hata türleri:** `A` aydınlatmanın her kazayı önlediğini söyleme; `B` yağışta yolun kapandığını çıkarma; `C` gözlem sayısı azalmasını görünürlük kanıtı sanma.
+- **Seçenek/ipuçları incelemesi:** D üç gözlemi sınırlı bir sonuçta birleştirir. A, B ve C sırasıyla aşırı genelleme, metin dışı sonuç ve gözlem sayısını ölçüm sonucu sanma hatalarını temsil eder. D'nin diğer seçeneklerden belirgin biçimde uzun olması ve “ayrıca” kelimesinin ipucu etkisi özellikle incelenmelidir.
 - **Puanlama:** Exact-match 1/0; kısmi yok.
 - **Yaş/dil/ön bilgi:** Kamusal alan bağlamı; “fark etme mesafesi” açıklaması metinde bulunmalı.
 - **Uzman soruları:** D seçeneği üç bulguyu gereğinden fazla birleştiriyor mu? Yağışın ayrı değerlendirilmesi inference içinde ölçülüyor mu?
@@ -99,6 +153,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-05@1.0`
 - **Metin/spanlar:** `SPAN-01` “Bahçenin kuzey kenarında öğleden sonra uzun bir gölge oluştu.” `SPAN-02` “Öğrenciler bu bölgedeki banklara daha erken oturdu.” `SPAN-03` “Sabah saatlerinde banklar güneşliydi.” `SPAN-04` “Bahçedeki ağaçların yaprakları yazın çoğaldı.”
 - **Birincil boyut:** `EVIDENCE_FINDING`
+- **Tasarım/sürüm referansı:** `V2C-EVF-01`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Kuzey kenarındaki banklar öğleden sonra gölgede kalmıştır.”
 - **Yönerge/yanıt biçimi:** “Claim'i doğrudan destekleyen span'i seç.” Tek seçim; response `evidenceSpanId`.
 - **Beklenen yanıt/gerekçe:** `SPAN-01`; gölgenin oluştuğunu doğrudan söyler.
@@ -113,6 +168,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-06@1.0`
 - **Metin/spanlar:** `SPAN-01` “Yağmur başladığında durakta bekleyenlerin çoğu saçak altına geçti.” `SPAN-02` “Durakta iki bank ve bir bilgilendirme panosu vardı.” `SPAN-03` “Otobüsün geliş saati panoda yazıyordu.” `SPAN-04` “Bazı yolcular şemsiyelerini kapının yanında kapattı.”
 - **Birincil boyut:** `EVIDENCE_FINDING`
+- **Tasarım/sürüm referansı:** `V2C-EVF-02`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Yağmur başlayınca bekleyenlerin bir bölümü daha korunaklı bir yere geçti.”
 - **Yönerge/yanıt biçimi:** Dört span arasından claim'i doğrudan destekleyeni seç.
 - **Beklenen yanıt/gerekçe:** `SPAN-01`; hem zaman hem hareket hem de saçak bilgisi vardır.
@@ -127,6 +183,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-07@1.0`
 - **Metin/spanlar:** `SPAN-01` “Kantin, meyve kabuklarını ayrı bir kovada toplamaya başladı.” `SPAN-02` “Kovaların üzerindeki etiketler her sabah yenilendi.” `SPAN-03` “Kantin ekibi öğle arasında masaları sildi.” `SPAN-04` “Meyve kabukları kompost kutusuna taşındı.”
 - **Birincil boyut:** `EVIDENCE_FINDING`
+- **Tasarım/sürüm referansı:** `V2C-EVF-03`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Kantin meyve kabuklarını diğer atıklardan ayrı toplamıştır.”
 - **Yönerge/yanıt biçimi:** Claim'i doğrudan destekleyen span'i seç.
 - **Beklenen yanıt/gerekçe:** `SPAN-01`; ayrı kova açıkça ayrıştırmayı gösterir. `SPAN-04` sonraki taşıma adımıdır ve tek başına toplama biçimini anlatmaz.
@@ -141,6 +198,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-08@1.0`
 - **Metin/spanlar:** `SPAN-01` “Harita ekibi parkın iki girişini farklı renklerle işaretledi.” `SPAN-02` “Çocuklar haritaya kendi isimlerini yazdı.” `SPAN-03` “Parkın çevresinde dört sokak bulunuyor.” `SPAN-04` “Ekip haritayı cuma günü sergileyecek.”
 - **Birincil boyut:** `EVIDENCE_FINDING`
+- **Tasarım/sürüm referansı:** `V2C-EVF-04`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Haritada parkın iki girişi birbirinden ayırt edilmiştir.”
 - **Yönerge/yanıt biçimi:** Claim'i doğrudan destekleyen span'i seç.
 - **Beklenen yanıt/gerekçe:** `SPAN-01`; iki giriş ve farklı renkler doğrudan ayrımı gösterir.
@@ -168,6 +226,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** `P1C-V2-TXT-09@1.0`
 - **Metin:** “Sınıftaki küçük bitkinin yaprakları pencereye bakan tarafta daha sık görünüyordu. Öğretmen saksıyı her gün çevirmedi; yalnızca ışığın gün içinde değiştiğini gözlemledi. Bitkinin daha hızlı büyüdüğünü söylemek için henüz ölçüm yapılmadı.”
 - **Birincil boyut:** `EVIDENCE_RELATION`
+- **Tasarım/sürüm referansı:** `V2C-REL-01`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Bitkinin yaprak dağılımı ışık yönüyle ilişkili olabilir.”
 - **Aday kanıtlar:** `CAND-01` “Yapraklar pencereye bakan tarafta daha sıktı.” `CAND-02` “Saksı her gün çevrilmedi.” `CAND-03` “Daha hızlı büyüdüğünü söylemek için ölçüm yapılmadı.”
 - **Yönerge/yanıt biçimi:** “Claim'i en doğrudan destekleyen kanıtı seç (`evidenceCandidateId`) ve ilişkinin niteliğini seç (`relationType`).”
@@ -183,14 +242,15 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** “Park görevlisi yağmurdan sonra yaya yolunun bir bölümünde su kaldığını kaydetti. Aynı bölümde eğimin daha az olduğunu da not etti. Görevli, eğim değişikliğinin suyun akışını etkileyip etkilemediğini ölçmek için yeni bir gözlem planladı.”
 - **Passage ID:** `P1C-V2-TXT-10@1.0`
 - **Birincil boyut:** `EVIDENCE_RELATION`
+- **Tasarım/sürüm referansı:** `V2C-REL-02`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Yolun az eğimli olması, suyun daha uzun süre kalmasına katkı sağlayabilir.”
-- **Aday kanıtlar:** `CAND-01` “Yağmurdan sonra yolun bir bölümünde su kaldı.” `CAND-02` “Aynı bölümde eğim daha azdı.” `CAND-03` “Eğim değişikliğinin etkisi henüz ölçülmedi.”
+- **Aday kanıtlar:** `CAND-01` “Yağmurdan sonra yolun bir bölümünde su kaldı.” `CAND-02` “Suyun kaldığı aynı bölümde yolun eğimi daha azdı.” `CAND-03` “Eğim değişikliğinin etkisi henüz ölçülmedi.”
 - **Yönerge/yanıt biçimi:** İki alanlı response: aday kanıt + relation türü.
-- **Beklenen yanıt/gerekçe:** `CAND-02` + `LIMITED_SUPPORT`; eğim ve su kalması birlikte gözlenmiştir, katkı henüz deneyle doğrulanmamıştır.
-- **Makul yanlışlar/hata türleri:** `CAND-01` tek başına eğimi kanıt sanma; `CAND-03` araştırma planını sonuç sanma; `CAUSAL_SUPPORT` ile kesin nedensellik kurma.
+- **Beklenen yanıt/gerekçe:** `CAND-02` + `LIMITED_SUPPORT`; tek aday cümlesi su kalması ile aynı bölümdeki düşük eğimi birlikte verir. Bu birliktelik claim'i sınırlı biçimde destekler, katkı henüz deneyle doğrulanmamıştır.
+- **Makul yanlışlar/hata türleri:** `CAND-01` yalnız su kaldığını görüp eğim ilişkisini tamamlamama; `CAND-03` araştırma planını sonuç sanma; `CAUSAL_SUPPORT` ile kesin nedensellik kurma.
 - **Puanlama:** Evidence ve relation ayrı 0/1; kısmi yanıt final route evidence değildir.
 - **Yaş/dil/ön bilgi:** Günlük çevre/yağmur bağlamı; “eğim” kısa tanımla veya uzman kararıyla kontrol edilmeli.
-- **Uzman soruları:** Claim'in “katkı sağlayabilir” sınırı metinle uyumlu mu? CAND-01 ve CAND-02 birlikte verilince doğru ilişki aşırı kolaylaşıyor mu?
+- **Uzman soruları:** Claim'in “katkı sağlayabilir” sınırı metinle uyumlu mu? Tek aday olarak CAND-02 hem gözlemi hem ilişkiyi yeterince taşıyor mu? Aday cümlenin bileşik yapısı okuma yükünü artırıyor mu? Yeterli değilse görev `PENDING_EXPERT_DECISION` olarak kalmalı; response alanı çoğaltılmamalıdır.
 - **Pilot karıştırıcıları:** Eğim sözcüğü, “aynı bölüm” referansı, adayların uzunluk farkı.
 
 ### V2C-REL-03 — Sınıf kitaplığında ödünç alma
@@ -198,6 +258,7 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** “Sınıf kitaplığında yeni bir ödünç alma çizelgesi kullanılmaya başlandı. İlk hafta öğrenciler kitapları daha düzenli geri getirdi; ancak öğretmen aynı hafta kitap seçme saatlerinin de değiştiğini belirtti. Bu nedenle çizelgenin tek başına düzeni sağladığı sonucuna henüz varılmadı.”
 - **Passage ID:** `P1C-V2-TXT-11@1.0`
 - **Birincil boyut:** `EVIDENCE_RELATION`
+- **Tasarım/sürüm referansı:** `V2C-REL-03`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Yeni çizelge, kitapların daha düzenli geri getirilmesine katkıda bulunmuş olabilir.”
 - **Aday kanıtlar:** `CAND-01` “İlk hafta kitaplar daha düzenli geri getirildi.” `CAND-02` “Kitap seçme saatleri de değişti.” `CAND-03` “Çizelgenin tek başına etkisi henüz belirlenmedi.”
 - **Yönerge/yanıt biçimi:** Claim'i destekleyen en uygun aday kanıtı ve relation türünü ayrı seç.
@@ -213,14 +274,15 @@ Her aday görev tek bir `primaryConstruct` taşır. Bir görev aynı anda iki di
 - **Passage:** “Pazar esnafı çilek kasalarını sabah güneşi almayan bir bölüme taşıdı. Öğleden sonra bazı kasalarda meyveler daha diri görünüyordu; aynı gün kasalara daha az ürün konduğu da kaydedildi. Esnaf, gölge ve kasa doluluğunun etkisini ayrı ayrı incelemek istedi.”
 - **Passage ID:** `P1C-V2-TXT-12@1.0`
 - **Birincil boyut:** `EVIDENCE_RELATION`
+- **Tasarım/sürüm referansı:** `V2C-REL-04`; mapping `P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN`; contract `P1_ADAPTIVE_MEASUREMENT_V2_C_DESIGN`.
 - **Sabit claim:** “Kasaların gölgede tutulması meyvelerin daha diri kalmasına yardımcı olmuş olabilir.”
-- **Aday kanıtlar:** `CAND-01` “Kasalar sabah güneşi almayan bölüme taşındı.” `CAND-02` “Bazı kasalarda meyveler daha diri göründü.” `CAND-03` “Aynı gün kasalara daha az ürün kondu.” `CAND-04` “Gölge ve doluluk etkileri ayrı incelenecek.”
+- **Aday kanıtlar:** `CAND-01` “Kasalar sabah güneşi almayan bölüme taşındı.” `CAND-02` “Kasalar gölgeye taşındıktan sonra bazı kasalarda meyveler daha diri göründü.” `CAND-03` “Aynı gün kasalara daha az ürün kondu.” `CAND-04` “Gölge ve doluluk etkileri ayrı incelenecek.”
 - **Yönerge/yanıt biçimi:** `evidenceCandidateId` ve `relationType` alanlarını bağımsız doldur.
-- **Beklenen yanıt/gerekçe:** `CAND-02` + `LIMITED_SUPPORT`; diri görünüm gözlenmiştir fakat gölgenin tek neden olduğu ayrıştırılmamıştır. `CAND-04` sınırlılığı açıklar, ana destek değildir.
+- **Beklenen yanıt/gerekçe:** `CAND-02` + `LIMITED_SUPPORT`; tek aday cümlesi gölgeye taşınma ile diri görünümü birlikte verir, ancak doluluk değişkeni nedeniyle gölgenin tek neden olduğunu göstermez. `CAND-04` sınırlılığı açıklar, ana destek değildir.
 - **Makul yanlışlar/hata türleri:** `CAND-01` koşulu sonuç sanma; `CAND-03` alternatif faktörü destekleyici kanıt sanma; `CAUSAL_SUPPORT` ile kesinleştirme; `CAND-04` ile claim'i desteklediğini sanma.
 - **Puanlama:** Selection 0/1, relation 0/1; disagreement veya iki alanın çelişkisi `REVIEW_REQUIRED`.
 - **Yaş/dil/ön bilgi:** Pazar/yiyecek bağlamı; “diri” sözcüğünün hedef yaşta anlaşılması doğrulanmalı.
-- **Uzman soruları:** `CAND-02` ile `CAND-04` işlevsel olarak yeterince ayrılıyor mu? “Yardımcı olmuş olabilir” sınırlı ilişkiyi doğru temsil ediyor mu?
+- **Uzman soruları:** Birleşik CAND-02 ile CAND-04 işlevsel olarak yeterince ayrılıyor mu? CAND-02 tek seçimle sınırlı desteği taşıyor mu? “Yardımcı olmuş olabilir” sınırlı ilişkiyi doğru temsil ediyor mu? Yeterli değilse `PENDING_EXPERT_DECISION` yazılmalı; ikinci bir evidence alanı sessizce eklenmemelidir.
 - **Pilot karıştırıcıları:** Görsel kaliteyi yorumlama, “diri” kelimesi, alternatif açıklamanın hatırlanması, aday uzunluğu.
 
 ## 5. Boyutlar arası karşılaştırmalı kontrol

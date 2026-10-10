@@ -144,27 +144,31 @@ Her boyut için uzmanlar ayrı form doldurur; dimension kararları item-level ka
 
 ### 4.1 INFERENCE
 
-| İnceleme sorusu                                                    | Karar/not                                     |
-| ------------------------------------------------------------------ | --------------------------------------------- |
-| Sonuç metinden destekleniyor ama aynen kopyalanmıyor mu?           |                                               |
-| Seçenekler doğru evidence span'ini ifşa etmiyor mu?                |                                               |
-| Doğru cevap kapsamı aşmıyor mu?                                    |                                               |
-| Nedensellik, zaman veya karşılaştırma gereksiz yere eklenmiyor mu? |                                               |
-| Ön bilgi ve seçenek eleme yükü kontrol edildi mi?                  |                                               |
-| Genel dimension kararı                                             | `KEEP` / `REVISE` / `REJECT` / `PENDING_DATA` |
-| Gerekçe                                                            |                                               |
+| İnceleme sorusu                                                                                                                                      | Karar/not                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Sonuç metinden destekleniyor ama aynen kopyalanmıyor mu?                                                                                             |                                               |
+| Seçenekler doğru evidence span'ini ifşa etmiyor mu?                                                                                                  |                                               |
+| Doğru cevap kapsamı aşmıyor mu?                                                                                                                      |                                               |
+| Nedensellik, zaman veya karşılaştırma gereksiz yere eklenmiyor mu?                                                                                   |                                               |
+| Ön bilgi ve seçenek eleme yükü kontrol edildi mi?                                                                                                    |                                               |
+| `V2C-INF-04` için “fark etme mesafesi”, “yağışlı günleri ayrıca değerlendirme” ve seçeneklerin uzunluğu hedef yaş/dil yükünü orantısız artırıyor mu? |                                               |
+| `V2C-INF-04` gerçekten sınırlı çıkarım mı ölçüyor, yoksa bisiklet/güvenlik ön bilgisi veya çok koşullu uzun seçenek okuma becerisi mi ölçülüyor?     |                                               |
+| Genel dimension kararı                                                                                                                               | `KEEP` / `REVISE` / `REJECT` / `PENDING_DATA` |
+| Gerekçe                                                                                                                                              |                                               |
 
 ### 4.2 EVIDENCE_FINDING
 
-| İnceleme sorusu                                                        | Karar/not                                     |
-| ---------------------------------------------------------------------- | --------------------------------------------- |
-| Claim öğrenciye sabit ve bağımsız veriliyor mu?                        |                                               |
-| Doğru span claim'i doğrudan destekliyor mu?                            |                                               |
-| Konu benzerliği olan ama yetersiz span mevcut mu?                      |                                               |
-| Span uzunluğu, paragraf konumu veya anahtar kelime ipucu yaratıyor mu? |                                               |
-| Inference cevabı bu göreve taşınmıyor mu?                              |                                               |
-| Genel dimension kararı                                                 | `KEEP` / `REVISE` / `REJECT` / `PENDING_DATA` |
-| Gerekçe                                                                |                                               |
+| İnceleme sorusu                                                                                                                                                | Karar/not                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Claim öğrenciye sabit ve bağımsız veriliyor mu?                                                                                                                |                                               |
+| Doğru span claim'i doğrudan destekliyor mu?                                                                                                                    |                                               |
+| Konu benzerliği olan ama yetersiz span mevcut mu?                                                                                                              |                                               |
+| Span uzunluğu, paragraf konumu veya anahtar kelime ipucu yaratıyor mu?                                                                                         |                                               |
+| Inference cevabı bu göreve taşınmıyor mu?                                                                                                                      |                                               |
+| `V2C-EVF-02` için “saçak altı” ve “korunaklı” eş anlamlılığının hedef yaş/dil için açık olduğu doğrulandı mı?                                                  |                                               |
+| `V2C-EVF-02` gerçekten claim'i destekleyen span'i bulmayı mı ölçüyor, yoksa yağmur/şemsiye sözcüklerini eşleştirme veya otobüs durağı ön bilgisi mi ölçülüyor? |                                               |
+| Genel dimension kararı                                                                                                                                         | `KEEP` / `REVISE` / `REJECT` / `PENDING_DATA` |
+| Gerekçe                                                                                                                                                        |                                               |
 
 ### 4.3 EVIDENCE_RELATION
 
