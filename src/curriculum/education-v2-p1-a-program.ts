@@ -823,6 +823,12 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
   const stepKeys = new Set<string>();
   const referencedPrerequisites = new Set<string>();
   const pathSteps = program.path.units.flatMap((unit) => unit.steps);
+  const contentUsage = new Map<string, number>();
+  const exerciseUsage = new Map<string, number>();
+
+  const recordUsage = (usage: Map<string, number>, key: string | undefined) => {
+    if (key) usage.set(key, (usage.get(key) ?? 0) + 1);
+  };
 
   if (
     program.path.code !== `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`
@@ -831,7 +837,8 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
   }
   if (program.path.units.length !== 2) errors.push("P1-A iki pedagojik unit içermeli");
   if (pathSteps.length !== 9) errors.push("P1-A dokuz adımlı akış içermeli");
-  for (const unit of program.path.units) {
+  for (const [index, unit] of program.path.units.entries()) {
+    if (unit.position !== index + 1) errors.push(`Unit sırası geçersiz: ${unit.code}`);
     if (unit.steps.length === 0) errors.push(`Boş unit: ${unit.code}`);
     for (const step of unit.steps) {
       if (stepKeys.has(step.key)) errors.push(`Tekrarlı step: ${step.key}`);
@@ -843,11 +850,37 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
       }
       if (step.type === "ASSESSMENT" && !step.assessmentKey)
         errors.push(`Assessment bağlantısı eksik: ${step.key}`);
+      if (step.type === "TEACHING" && (step.exerciseKey || step.assessmentKey))
+        errors.push(`Teach adımı exercise/assessment taşıyamaz: ${step.key}`);
+      if (step.type === "ASSESSMENT" && (step.contentKey || step.exerciseKey))
+        errors.push(`Assessment adımı doğrudan content/exercise taşıyamaz: ${step.key}`);
+      if (step.type !== "TEACHING" && step.type !== "ASSESSMENT" && step.contentKey)
+        errors.push(`Exercise adımı doğrudan content taşıyamaz: ${step.key}`);
+      recordUsage(contentUsage, step.contentKey);
+      recordUsage(exerciseUsage, step.exerciseKey);
+      recordUsage(
+        exerciseUsage,
+        step.assessmentKey
+          ? assessmentByKey.get(step.assessmentKey)?.templateExerciseKey
+          : undefined,
+      );
       for (const prerequisite of step.prerequisiteStepKeys ?? []) {
         referencedPrerequisites.add(prerequisite);
         if (!pathSteps.some((candidate) => candidate.key === prerequisite)) {
           errors.push(`Bilinmeyen prerequisite: ${step.key} -> ${prerequisite}`);
         }
+      }
+      const globalStepIndex = pathSteps.indexOf(step);
+      const expectedPrevious = pathSteps[globalStepIndex - 1]?.key;
+      const prerequisites = step.prerequisiteStepKeys ?? [];
+      if (globalStepIndex === 0 && prerequisites.length > 0) {
+        errors.push(`İlk unit adımı prerequisite taşıyamaz: ${step.key}`);
+      }
+      if (
+        globalStepIndex > 0 &&
+        (prerequisites.length !== 1 || prerequisites[0] !== expectedPrevious)
+      ) {
+        errors.push(`P1-A linear prerequisite zinciri geçersiz: ${step.key}`);
       }
     }
   }
@@ -866,14 +899,42 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
       errors.push(`Exercise soru sayısı yetersiz: ${exercise.key}`);
     if (exercise.contract.competency !== exercise.skillCode)
       errors.push(`Exercise skill eşleşmiyor: ${exercise.key}`);
+    const questionKeys = exercise.questions.map((question) => question.key);
+    if (new Set(questionKeys).size !== questionKeys.length)
+      errors.push(`Exercise soru anahtarı tekrarlı: ${exercise.key}`);
+    recordUsage(contentUsage, exercise.contentKey);
   }
   for (const assessment of program.assessments) {
-    if (!exerciseByKey.has(assessment.templateExerciseKey))
-      errors.push(`Assessment template eksik: ${assessment.key}`);
+    const exercise = exerciseByKey.get(assessment.templateExerciseKey);
+    if (!exercise) errors.push(`Assessment template eksik: ${assessment.key}`);
     if (assessment.questionKeys.length !== assessment.config.questionCount)
       errors.push(`Assessment soru sayısı uyuşmuyor: ${assessment.key}`);
+    if (exercise) {
+      const exerciseQuestionKeys = exercise.questions.map((question) => question.key);
+      if (
+        assessment.questionKeys.length !== exerciseQuestionKeys.length ||
+        assessment.questionKeys.some((key, index) => key !== exerciseQuestionKeys[index])
+      ) {
+        errors.push(`Assessment soru/template eşleşmesi uyuşmuyor: ${assessment.key}`);
+      }
+    }
     if (assessment.config.minimumAnsweredCount > assessment.config.questionCount)
       errors.push(`Assessment answered sınırı geçersiz: ${assessment.key}`);
+    if (
+      assessment.config.minimumScorableCount > assessment.config.questionCount ||
+      assessment.config.completionMinimumScore < 0 ||
+      assessment.config.completionMinimumScore > 1
+    ) {
+      errors.push(`Assessment completion sınırı geçersiz: ${assessment.key}`);
+    }
+  }
+  for (const content of program.content) {
+    if ((contentUsage.get(content.key) ?? 0) !== 1)
+      errors.push(`Content kullanım sayısı geçersiz: ${content.key}`);
+  }
+  for (const exercise of program.exercises) {
+    if ((exerciseUsage.get(exercise.key) ?? 0) !== 1)
+      errors.push(`Exercise kullanım sayısı geçersiz: ${exercise.key}`);
   }
   if (referencedPrerequisites.size === 0) errors.push("P1-A prerequisite zinciri yok");
   return errors;
