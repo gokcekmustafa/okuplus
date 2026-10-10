@@ -15,15 +15,15 @@
     "build:ios": "cap build ios"
   },
   "dependencies": {
-    "@aparajita/capacitor-secure-storage": "^8.0.1",
-    "@capacitor/android": "^8.5.3",
-    "@capacitor/app": "^8.0.0",
-    "@capacitor/core": "^8.5.3",
-    "@capacitor/ios": "^8.5.3",
-    "@capacitor/keyboard": "^8.0.0"
+    "@aparajita/capacitor-secure-storage": "^6.0.1",
+    "@capacitor/android": "6.2.2",
+    "@capacitor/app": "6.0.3",
+    "@capacitor/core": "6.2.2",
+    "@capacitor/ios": "6.2.2",
+    "@capacitor/keyboard": "6.0.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.3",
+    "@capacitor/cli": "6.2.2",
     "typescript": "^5.7.3"
   }
 }
