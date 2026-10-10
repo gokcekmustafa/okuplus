@@ -15,7 +15,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         for context in URLContexts {
-            _ = CAPBridge.handleOpenUrl(context.url, context.options)
+            _ = CAPBridge.handleOpenUrl(context.url, [:])
         }
     }
 
