@@ -160,6 +160,19 @@ describe("P1-C V2 design-only documentation", () => {
     }
   });
 
+  it("keeps the PR-local target population source link valid", () => {
+    const targetPath = "docs/P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN.md";
+    const targetLink = `[Hedef öğrenci profili ve pilot kapsamı kararı](./P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN.md)`;
+    const missingSourceCommitLink = `https://github.com/gokcekmustafa/okuplus/blob/${currentSourceCommit}/${targetPath}`;
+
+    expect(targetPopulation).toContain("P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN");
+    expect(handoffV2).toContain(targetLink);
+    expect(handoffV2).not.toContain(missingSourceCommitLink);
+    expect(handoffV2).toContain(
+      `https://github.com/gokcekmustafa/okuplus/blob/${currentSourceCommit}/${sourcePath}`,
+    );
+  });
+
   it("keeps independent group definition, age stratification, and non-academic test scope explicit", () => {
     for (const document of [handoffV2, reviewV21, pilotV21]) {
       expect(document).toMatch(/P1-C.*(?:cevap|yanıt)/isu);

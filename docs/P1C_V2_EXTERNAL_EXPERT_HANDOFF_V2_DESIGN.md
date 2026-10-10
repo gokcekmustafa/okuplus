@@ -25,7 +25,7 @@ Bu belge V1 item bankasını, scorer'ı, mapping'i, published version'ları veya
 Uzman kararları aynı commit'teki immutable tasarım kaynaklarına dayanmalıdır:
 
 - [V2 aday havuzu](https://github.com/gokcekmustafa/okuplus/blob/f1c8ab90ceec29a4cc129b406d4ab961d6548e31/docs/P1C_EVIDENCE_RELATION_ITEM_POOL_V2_DESIGN.md)
-- [Hedef öğrenci profili ve pilot kapsamı kararı](https://github.com/gokcekmustafa/okuplus/blob/f1c8ab90ceec29a4cc129b406d4ab961d6548e31/docs/P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN.md)
+- [Hedef öğrenci profili ve pilot kapsamı kararı](./P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN.md)
 - [Önceki dış uzman paketi](https://github.com/gokcekmustafa/okuplus/blob/f1c8ab90ceec29a4cc129b406d4ab961d6548e31/docs/P1C_V2_EXTERNAL_EXPERT_HANDOFF_V1_DESIGN.md)
 - [V2 uzman inceleme formu](https://github.com/gokcekmustafa/okuplus/blob/f1c8ab90ceec29a4cc129b406d4ab961d6548e31/docs/P1C_EVIDENCE_RELATION_EXPERT_REVIEW_V2_DESIGN.md)
 - [V2 pilot taslağı](https://github.com/gokcekmustafa/okuplus/blob/f1c8ab90ceec29a4cc129b406d4ab961d6548e31/docs/P1C_EVIDENCE_RELATION_PILOT_V2_DESIGN.md)
