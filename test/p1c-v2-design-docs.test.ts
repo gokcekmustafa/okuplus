@@ -17,9 +17,26 @@ const handoff = readFileSync(
   new URL("../docs/P1C_V2_EXTERNAL_EXPERT_HANDOFF_V1_DESIGN.md", import.meta.url),
   "utf8",
 );
+const targetPopulation = readFileSync(
+  new URL("../docs/P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN.md", import.meta.url),
+  "utf8",
+);
+const handoffV2 = readFileSync(
+  new URL("../docs/P1C_V2_EXTERNAL_EXPERT_HANDOFF_V2_DESIGN.md", import.meta.url),
+  "utf8",
+);
+const reviewV21 = readFileSync(
+  new URL("../docs/P1C_EVIDENCE_RELATION_EXPERT_REVIEW_V2_1_DESIGN.md", import.meta.url),
+  "utf8",
+);
+const pilotV21 = readFileSync(
+  new URL("../docs/P1C_EVIDENCE_RELATION_PILOT_V2_1_DESIGN.md", import.meta.url),
+  "utf8",
+);
 
 const sourceCommit = "573d22aa03ae5957588dbf0581f96695f70a88c5";
 const sourcePath = "docs/P1C_EVIDENCE_RELATION_ITEM_POOL_V2_DESIGN.md";
+const currentSourceCommit = "f1c8ab90ceec29a4cc129b406d4ab961d6548e31";
 
 describe("P1-C V2 design-only documentation", () => {
   const itemBlocks = [
@@ -81,6 +98,80 @@ describe("P1-C V2 design-only documentation", () => {
       expect(handoff, `${taskId} limited support review`).toContain(taskId);
       expect(handoff, `${taskId} limited support target`).toContain("`LIMITED_SUPPORT`");
     }
+  });
+
+  it("keeps the target population decision open and records the two pilot groups safely", () => {
+    expect(targetPopulation).toContain("P1C_V2_TARGET_POPULATION_DECISION_V1_DESIGN");
+    expect(targetPopulation).toContain("Hedef sınıf aralığı:** Henüz belirlenmedi");
+    expect(targetPopulation).toContain("PENDING_EXPERT_RECOMMENDATION");
+    expect(targetPopulation).toContain("Genel öğrenci kitlesi");
+    expect(targetPopulation).toContain("Okuma becerisini geliştirmeye ihtiyaç duyan öğrenciler");
+    expect(targetPopulation).toMatch(/P1-C V2.*yanıt|P1-C cevap/iu);
+    expect(targetPopulation).toContain("WPM");
+    expect(targetPopulation).toContain("örneklem büyüklüğü");
+    expect(targetPopulation).toContain("yaş/sınıf etkisi ile öğrenci grubu etkisi");
+  });
+
+  it("keeps the new v2.1 documents distinct and versioned", () => {
+    expect(handoffV2).toContain("P1C_V2_EXTERNAL_EXPERT_HANDOFF_V2_DESIGN");
+    expect(reviewV21).toContain("P1C_EVIDENCE_RELATION_EXPERT_REVIEW_V2_1_DESIGN");
+    expect(pilotV21).toContain("P1C_EVIDENCE_RELATION_PILOT_V2_1_DESIGN");
+    expect(handoffV2).toContain(currentSourceCommit);
+    expect(reviewV21).toContain(currentSourceCommit);
+    expect(pilotV21).toContain(currentSourceCommit);
+    expect(handoffV2).toContain("P1C_V2_EXTERNAL_EXPERT_HANDOFF_V1_DESIGN");
+    expect(reviewV21).toContain("önceki `P1C_EVIDENCE_RELATION_EXPERT_REVIEW_V2_DESIGN`");
+    expect(pilotV21).toContain("P1C_EVIDENCE_RELATION_PILOT_V2_1_DESIGN");
+  });
+
+  it("pins all 12 tasks in the new handoff and keeps review gates separate", () => {
+    const sourceUrl = `https://github.com/gokcekmustafa/okuplus/blob/${currentSourceCommit}/${sourcePath}`;
+    const taskIds = [
+      "V2C-INF-01",
+      "V2C-INF-02",
+      "V2C-INF-03",
+      "V2C-INF-04",
+      "V2C-EVF-01",
+      "V2C-EVF-02",
+      "V2C-EVF-03",
+      "V2C-EVF-04",
+      "V2C-REL-01",
+      "V2C-REL-02",
+      "V2C-REL-03",
+      "V2C-REL-04",
+    ];
+
+    for (const taskId of taskIds) {
+      expect(handoffV2, `${taskId} v2 coverage`).toContain(`[${taskId}`);
+      expect(
+        handoffV2.split("\n").find((line) => line.includes(`[${taskId}`)),
+        `${taskId} pinned source`,
+      ).toContain(sourceUrl);
+    }
+
+    for (const document of [handoffV2, reviewV21, pilotV21]) {
+      expect(document).toContain("Kapı 1");
+      expect(document).toContain("Kapı 2");
+      expect(document).toContain("Kapı 3");
+      expect(document).toContain("NOT_CALIBRATED");
+      expect(document).toContain("productionAssignmentEnabled=false");
+      expect(document).toContain("reviewRequired=true");
+      expect(document).toContain("resultLevelId=null");
+    }
+  });
+
+  it("keeps independent group definition, age stratification, and non-academic test scope explicit", () => {
+    for (const document of [handoffV2, reviewV21, pilotV21]) {
+      expect(document).toMatch(/P1-C.*(?:cevap|yanıt)/isu);
+      expect(document).toContain("WPM");
+      expect(document).toContain("Antrenman");
+      expect(document).toContain("yaş/sınıf");
+      expect(document).toContain("DOLDURULMADI");
+    }
+
+    expect(handoffV2).toContain("yalnız doküman bütünlüğünü doğrular");
+    expect(pilotV21).toContain("Örneklem büyüklüğü");
+    expect(reviewV21).toContain("AGE_GRADE");
   });
 
   it("contains four distinct candidate tasks for each C dimension", () => {
