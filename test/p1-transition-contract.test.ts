@@ -66,6 +66,27 @@ describe("P1 transition foundation contracts", () => {
     expect(index).toContain('id="learning-path-transition-retry"');
   });
 
+  it("does not claim that P0 is complete when reconcile is blocked", async () => {
+    const [transition, app] = await Promise.all([
+      readFile(
+        new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    ]);
+
+    expect(transition).toContain('"P0_GRAPH_NOT_READY"');
+    expect(transition).toContain('"P0_NOT_COMPLETED"');
+    expect(transition).toContain('"FINAL_MEASUREMENT_MISSING"');
+    expect(transition).toContain('"P1_CURRICULUM_UNAVAILABLE"');
+    expect(transition).toContain('"MEASUREMENT_REVIEW_REQUIRED"');
+    expect(transition).toContain("canonicalGraphReady");
+    expect(app).toContain("function p1TransitionReviewMessage(result)");
+    expect(app).not.toContain(
+      '"P0 tamamlandı. Ölçüm veya uygun içerik kontrolleri tamamlanmadan yeni öğrenme yolu açılamıyor."',
+    );
+  });
+
   it("reads P0 completion without writing P0 progress", async () => {
     const transition = await readFile(
       new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),

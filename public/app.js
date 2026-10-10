@@ -4270,6 +4270,23 @@ async function reconcileP0ToP1(p0LearningPathId) {
   );
 }
 
+function p1TransitionReviewMessage(result) {
+  switch (result?.readiness?.status) {
+    case "P0_GRAPH_NOT_READY":
+      return "Öğrenme yolunun 22 istasyonluk içeriği şu anda doğrulanamadı. İlerlemelerin korunuyor; daha sonra tekrar deneyebilirsin.";
+    case "P0_NOT_COMPLETED":
+      return "Öğrenme yolundaki 22 istasyon henüz tamamlanmadı. Eksik adımları tamamladığında yeni öğrenme yolu yeniden kontrol edilecek.";
+    case "FINAL_MEASUREMENT_MISSING":
+      return "22 istasyon tamamlandı; son ölçüm sonucu henüz bulunamadı. Ölçme-Değerlendirme sonucu oluştuğunda yeni öğrenme yolu açılabilir.";
+    case "P1_CURRICULUM_UNAVAILABLE":
+      return "P0 ve ölçüm tamamlandı; uygun yeni öğrenme yolu veya ilk istasyon şu anda yayınlanmış değil.";
+    case "MEASUREMENT_REVIEW_REQUIRED":
+      return "P0 tamamlandı; ölçüm sonucu otomatik yeni öğrenme yolu seçimi için henüz yeterli değil. Ölçüm incelemesi tamamlanmadan yeni yol açılmadı.";
+    default:
+      return "Yeni öğrenme yolu şu anda açılamadı. Mevcut ilerlemen korunuyor; daha sonra tekrar deneyebilirsin.";
+  }
+}
+
 function isUsableLearningPathNode(node) {
   if (!node?.id || node.status !== "active") return false;
   if (node.type === "TEACHING" || node.type === "SMALL_STUDY") {
@@ -4320,9 +4337,7 @@ async function finishP1Reconcile(p0LearningPathId, result) {
   activeLearningStepNavigationFromStepId = null;
   navigate("dashboard");
   if (result?.outcome === "REVIEW_REQUIRED") {
-    setLearningPathTransitionStatus(
-      "P0 tamamlandı. Ölçüm veya uygun içerik kontrolleri tamamlanmadan yeni öğrenme yolu açılamıyor.",
-    );
+    setLearningPathTransitionStatus(p1TransitionReviewMessage(result), { error: true });
   } else if (pendingP1Reconcile) {
     setLearningPathTransitionStatus(
       "P0 tamamlandı. Yeni öğrenme yolun hazırlanıyor; bağlantı düzelince tekrar kontrol edebilirsin.",
