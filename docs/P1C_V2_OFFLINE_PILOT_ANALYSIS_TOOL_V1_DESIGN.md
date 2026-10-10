@@ -41,35 +41,78 @@ Kök nesne `manifest` ve `records` alanlarını taşır:
     "datasetVersion": "P1C-V2-PILOT-DATASET-V1",
     "itemPoolId": "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V2-C-DESIGN",
     "sourceCommit": "f1c8ab90ceec29a4cc129b406d4ab961d6548e31",
-    "taskVersionIds": ["V2C-INF-01@2.0"],
-    "passageVersionIds": ["P1C-V2-TXT-01@1.0"],
-    "questionVersionIds": ["V2C-INF-01-Q@2.0"],
+    "designStatus": "DESIGN_ONLY",
+    "taskDesignIds": [
+      "V2C-INF-01",
+      "V2C-INF-02",
+      "V2C-INF-03",
+      "V2C-INF-04",
+      "V2C-EVF-01",
+      "V2C-EVF-02",
+      "V2C-EVF-03",
+      "V2C-EVF-04",
+      "V2C-REL-01",
+      "V2C-REL-02",
+      "V2C-REL-03",
+      "V2C-REL-04"
+    ],
+    "passageDesignRefs": {
+      "V2C-INF-01": "P1C-V2-TXT-01@1.0",
+      "V2C-INF-02": "P1C-V2-TXT-02@1.0",
+      "V2C-INF-03": "P1C-V2-TXT-03@1.0",
+      "V2C-INF-04": "P1C-V2-TXT-04@1.0",
+      "V2C-EVF-01": "P1C-V2-TXT-05@1.0",
+      "V2C-EVF-02": "P1C-V2-TXT-06@1.0",
+      "V2C-EVF-03": "P1C-V2-TXT-07@1.0",
+      "V2C-EVF-04": "P1C-V2-TXT-08@1.0",
+      "V2C-REL-01": "P1C-V2-TXT-09@1.0",
+      "V2C-REL-02": "P1C-V2-TXT-10@1.0",
+      "V2C-REL-03": "P1C-V2-TXT-11@1.0",
+      "V2C-REL-04": "P1C-V2-TXT-12@1.0"
+    },
+    "passageVersionStatus": "NOT_CREATED",
+    "passageVersionIds": [],
+    "passageVersionBindings": {
+      "V2C-INF-01": null,
+      "V2C-INF-02": null,
+      "V2C-INF-03": null,
+      "V2C-INF-04": null,
+      "V2C-EVF-01": null,
+      "V2C-EVF-02": null,
+      "V2C-EVF-03": null,
+      "V2C-EVF-04": null,
+      "V2C-REL-01": null,
+      "V2C-REL-02": null,
+      "V2C-REL-03": null,
+      "V2C-REL-04": null
+    },
+    "questionVersionStatus": "NOT_CREATED",
+    "questionVersionIds": [],
+    "questionVersionBindings": {
+      "V2C-INF-01": null,
+      "V2C-INF-02": null,
+      "V2C-INF-03": null,
+      "V2C-INF-04": null,
+      "V2C-EVF-01": null,
+      "V2C-EVF-02": null,
+      "V2C-EVF-03": null,
+      "V2C-EVF-04": null,
+      "V2C-REL-01": null,
+      "V2C-REL-02": null,
+      "V2C-REL-03": null,
+      "V2C-REL-04": null
+    },
     "mappingVersion": "P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN",
     "rubricVersion": "P1C_EVIDENCE_RELATION_RUBRIC_V1_DESIGN",
-    "pilotProtocolVersion": "P1C_EVIDENCE_RELATION_PILOT_V2_DESIGN",
+    "pilotProtocolStatus": "DESIGN_ONLY",
+    "pilotProtocolVersion": null,
     "groupCriteriaVersion": "EXTERNAL_CRITERIA-V1",
     "groupCriteriaReference": "local/redacted",
     "targetGradeStatus": "NOT_DETERMINED",
     "targetGradeBand": null,
     "analysisGroups": ["GENERAL_STUDENT_POPULATION", "STUDENTS_NEEDING_READING_DEVELOPMENT"]
   },
-  "records": [
-    {
-      "pilotParticipantId": "anon-001",
-      "analysisGroup": "GENERAL_STUDENT_POPULATION",
-      "gradeBand": "G7",
-      "taskDesignId": "V2C-INF-01",
-      "passageVersionId": "P1C-V2-TXT-01@1.0",
-      "questionVersionId": "V2C-INF-01-Q@2.0",
-      "taskOrder": 1,
-      "answerCompleteness": "COMPLETE",
-      "answer": { "optionId": "V2C-INF-01-OPT-A" },
-      "raterScores": [
-        { "raterCode": "R1", "score": 1 },
-        { "raterCode": "R2", "score": 1 }
-      ]
-    }
-  ]
+  "records": []
 }
 ```
 
@@ -78,18 +121,58 @@ kaynak commit'idir. Hedef yaş/sınıf henüz belirlenmediyse `targetGradeStatus
 `NOT_DETERMINED` ve `targetGradeBand` boş/null tutulur; araç bunu kendisi
 belirlemez.
 
+Bu örnek mevcut aday havuzunun gerçek durumunu gösterir: passage ve
+`QuestionVersion` kayıtları henüz oluşturulmadığı için sürüm listeleri boştur ve
+tamamlanmış yanıt kaydı geçerli sayılamaz. İlerideki bir sentetik fixture, yalnız
+gerçekten oluşturulmuş immutable sürüm kimliklerini `passageVersionBindings`,
+`questionVersionBindings`, `passageVersionIds` ve `questionVersionIds` içinde
+tekrarlayabilir. `V2C-INF-01@2.0` veya `V2C-INF-01-Q@2.0` gibi tasarım kimlikleri
+gerçek sürüm kimliği olarak kabul edilmez.
+
 ### JSONL
 
 İlk satır manifest zarfıdır, sonraki satırlar response zarfıdır:
 
 ```jsonl
-{"type":"manifest","manifest":{"datasetVersion":"P1C-V2-PILOT-DATASET-V1","itemPoolId":"OKU-CANONICAL-PLACEMENT-ITEM-BANK-V2-C-DESIGN","sourceCommit":"f1c8ab90ceec29a4cc129b406d4ab961d6548e31","taskVersionIds":["V2C-EVF-01@2.0"],"passageVersionIds":["P1C-V2-TXT-05@1.0"],"questionVersionIds":["V2C-EVF-01-Q@2.0"],"mappingVersion":"P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN","rubricVersion":"P1C_EVIDENCE_RELATION_RUBRIC_V1_DESIGN","pilotProtocolVersion":"P1C_EVIDENCE_RELATION_PILOT_V2_DESIGN","groupCriteriaVersion":"EXTERNAL_CRITERIA-V1","groupCriteriaReference":"local/redacted","targetGradeStatus":"NOT_DETERMINED","targetGradeBand":null,"analysisGroups":["GENERAL_STUDENT_POPULATION","STUDENTS_NEEDING_READING_DEVELOPMENT"]}}
-{"type":"response","record":{"pilotParticipantId":"anon-001","analysisGroup":"GENERAL_STUDENT_POPULATION","gradeBand":"G7","taskDesignId":"V2C-EVF-01","passageVersionId":"P1C-V2-TXT-05@1.0","questionVersionId":"V2C-EVF-01-Q@2.0","taskOrder":1,"answerCompleteness":"COMPLETE","evidenceCandidateId":"SPAN-01"}}
+{"type":"manifest","manifest":{"datasetVersion":"P1C-V2-PILOT-DATASET-V1","itemPoolId":"OKU-CANONICAL-PLACEMENT-ITEM-BANK-V2-C-DESIGN","sourceCommit":"f1c8ab90ceec29a4cc129b406d4ab961d6548e31","designStatus":"DESIGN_ONLY","taskDesignIds":["V2C-INF-01","..."],"passageDesignRefs":{},"passageVersionStatus":"NOT_CREATED","passageVersionIds":[],"passageVersionBindings":{},"questionVersionStatus":"NOT_CREATED","questionVersionIds":[],"questionVersionBindings":{},"mappingVersion":"P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN","rubricVersion":"P1C_EVIDENCE_RELATION_RUBRIC_V1_DESIGN","pilotProtocolStatus":"DESIGN_ONLY","pilotProtocolVersion":null,"groupCriteriaVersion":"EXTERNAL_CRITERIA-V1","groupCriteriaReference":"local/redacted","targetGradeStatus":"NOT_DETERMINED","targetGradeBand":null,"analysisGroups":["GENERAL_STUDENT_POPULATION","STUDENTS_NEEDING_READING_DEVELOPMENT"]}}
+{"type":"response","record":{"pilotParticipantId":"anon-001","analysisGroup":"GENERAL_STUDENT_POPULATION","gradeBand":"G7","taskDesignId":"V2C-EVF-01","passageVersionId":"immutable-passage-id-from-provisioning","questionVersionId":"immutable-question-id-from-provisioning","taskOrder":1,"answerCompleteness":"COMPLETE","evidenceCandidateId":"SPAN-01"}}
 ```
 
-Zarf türü, görev alanlarını yanlış biçimde birbirine karıştırmayı önler.
+JSONL örneğindeki `...`, boş map ve açıklayıcı immutable kimlikler şema
+anlatımıdır; çalıştırılabilir veri değildir. Gerçek dosyada map'in tüm 12 task
+anahtarını taşıması ve bu iki immutable kimliğin manifestteki ilgili binding ile
+aynı olması zorunludur. Zarf türü, görev alanlarını yanlış biçimde birbirine
+karıştırmayı önler.
 
 ## Yanıt sözleşmesi ve doğrulama
+
+### Tasarım kimliği ile immutable sürüm ayrımı
+
+Mevcut havuz `DESIGN_ONLY` durumundadır. `V2C-INF-*`, `V2C-EVF-*` ve
+`V2C-REL-*` değerleri task tasarım kimlikleridir; `P1C-V2-TXT-*@1.0` değerleri
+de aday havuzundaki tasarım metni referanslarıdır. Bunların hiçbiri gerçek
+`QuestionVersion` veya provision edilmiş immutable passage kimliği değildir.
+
+Manifest bu ayrımı zorunlu alanlarla taşır:
+
+- `taskDesignIds` ve `passageDesignRefs`: commit'e sabitlenmiş aday havuzu
+  ilişkileri. Araç, mevcut havuzun desteklemediği task–metin eşleşmesini kabul
+  etmez. REL-02, REL-03 ve REL-04 için de sırasıyla
+  `P1C-V2-TXT-10@1.0`, `P1C-V2-TXT-11@1.0` ve `P1C-V2-TXT-12@1.0` tasarım
+  referansları sabittir.
+- `passageVersionBindings` ve `questionVersionBindings`: ileride gerçekten
+  oluşturulacak immutable sürümlerin task'a bağlı kimlikleri.
+- `passageVersionIds` ve `questionVersionIds`: binding'lerde kullanılan gerçek
+  kimliklerin listeleri.
+- `passageVersionStatus`/`questionVersionStatus`: `NOT_CREATED` iken ilgili
+  liste boş ve bütün binding'ler `null` olmalıdır. `AVAILABLE` olsa bile kimlik
+  task tasarım adını taklit edemez ve her response doğru task binding'iyle
+  eşleşmelidir.
+
+Bu nedenle mevcut design-only manifest, complete pilot yanıtı için yeterli
+değildir; araç bunu sessizce geçerli saymaz. Protocol sürümü de mevcut taslakta
+belirlenmemişse `pilotProtocolStatus: DESIGN_ONLY` ve `pilotProtocolVersion:
+null` olarak kalır. Uydurma `@2.0` kimlikleri kullanılmaz.
 
 Her kayıt aşağıdaki anonim/sürüm alanlarını taşımalıdır:
 

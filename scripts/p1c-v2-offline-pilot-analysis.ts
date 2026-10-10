@@ -30,6 +30,32 @@ const RELATION_TYPES = [
 ] as const;
 
 const COMPLETENESS_VALUES = ["COMPLETE", "BLANK", "PARTIAL", "INVALID", "REVIEW_REQUIRED"] as const;
+const VERSION_STATUSES = ["NOT_CREATED", "AVAILABLE"] as const;
+const PILOT_PROTOCOL_STATUSES = ["DESIGN_ONLY", "SET"] as const;
+
+const CANONICAL_DESIGN_CONTRACT = {
+  datasetVersion: "P1C-V2-PILOT-DATASET-V1",
+  itemPoolId: "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V2-C-DESIGN",
+  sourceCommit: "f1c8ab90ceec29a4cc129b406d4ab961d6548e31",
+  mappingVersion: "P1_ADAPTIVE_ITEM_MAPPING_V2_C_DESIGN",
+  rubricVersion: "P1C_EVIDENCE_RELATION_RUBRIC_V1_DESIGN",
+  pilotProtocolVersion: "P1_ADAPTIVE_PILOT_CALIBRATION_PROTOCOL_V1",
+} as const;
+
+const CANONICAL_DESIGN_PASSAGE_REFS = {
+  "V2C-INF-01": "P1C-V2-TXT-01@1.0",
+  "V2C-INF-02": "P1C-V2-TXT-02@1.0",
+  "V2C-INF-03": "P1C-V2-TXT-03@1.0",
+  "V2C-INF-04": "P1C-V2-TXT-04@1.0",
+  "V2C-EVF-01": "P1C-V2-TXT-05@1.0",
+  "V2C-EVF-02": "P1C-V2-TXT-06@1.0",
+  "V2C-EVF-03": "P1C-V2-TXT-07@1.0",
+  "V2C-EVF-04": "P1C-V2-TXT-08@1.0",
+  "V2C-REL-01": "P1C-V2-TXT-09@1.0",
+  "V2C-REL-02": "P1C-V2-TXT-10@1.0",
+  "V2C-REL-03": "P1C-V2-TXT-11@1.0",
+  "V2C-REL-04": "P1C-V2-TXT-12@1.0",
+} as const;
 
 const FORBIDDEN_KEYS = new Set([
   "address",
@@ -55,17 +81,26 @@ type AnalysisGroup = (typeof ANALYSIS_GROUPS)[number];
 type TaskId = (typeof TASK_IDS)[number];
 type RelationType = (typeof RELATION_TYPES)[number];
 type Completeness = (typeof COMPLETENESS_VALUES)[number];
+type VersionStatus = (typeof VERSION_STATUSES)[number];
+type PilotProtocolStatus = (typeof PILOT_PROTOCOL_STATUSES)[number];
 
 export interface OfflinePilotManifest {
   datasetVersion: string;
   itemPoolId: string;
   sourceCommit: string;
-  taskVersionIds: string[];
+  designStatus: "DESIGN_ONLY";
+  taskDesignIds: string[];
+  passageDesignRefs: Record<TaskId, string | null>;
+  passageVersionStatus: VersionStatus;
   passageVersionIds: string[];
+  passageVersionBindings: Record<TaskId, string | null>;
+  questionVersionStatus: VersionStatus;
   questionVersionIds: string[];
+  questionVersionBindings: Record<TaskId, string | null>;
   mappingVersion: string;
   rubricVersion: string;
-  pilotProtocolVersion: string;
+  pilotProtocolStatus: PilotProtocolStatus;
+  pilotProtocolVersion?: string | null;
   groupCriteriaVersion: string;
   groupCriteriaReference: string;
   targetGradeStatus: string;
@@ -192,8 +227,12 @@ function stringOrNull(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || typeof value === "string";
 }
 
-function nonEmptyStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length > 0 && value.every((item) => nonEmptyString(item));
+function isDesignIdentifier(value: string): boolean {
+  return /^V2C-(?:INF|EVF|REL)-\d{2}(?:-Q)?(?:@.+)?$/u.test(value);
+}
+
+function isDesignPassageReference(value: string): boolean {
+  return /^P1C-V2-TXT-\d{2}@\d+\.\d+$/u.test(value);
 }
 
 function parseManifest(value: unknown): {
@@ -210,9 +249,12 @@ function parseManifest(value: unknown): {
     "datasetVersion",
     "itemPoolId",
     "sourceCommit",
+    "designStatus",
+    "passageVersionStatus",
+    "questionVersionStatus",
     "mappingVersion",
     "rubricVersion",
-    "pilotProtocolVersion",
+    "pilotProtocolStatus",
     "groupCriteriaVersion",
     "groupCriteriaReference",
     "targetGradeStatus",
@@ -227,9 +269,147 @@ function parseManifest(value: unknown): {
     recordIssue(issues, "MANIFEST_SOURCE_COMMIT_INVALID", undefined, "sourceCommit");
   }
 
-  for (const field of ["taskVersionIds", "passageVersionIds", "questionVersionIds"]) {
-    if (!nonEmptyStringArray(value[field]))
+  if (value.datasetVersion !== CANONICAL_DESIGN_CONTRACT.datasetVersion)
+    recordIssue(issues, "MANIFEST_DATASET_VERSION_UNSUPPORTED", undefined, "datasetVersion");
+  if (value.itemPoolId !== CANONICAL_DESIGN_CONTRACT.itemPoolId)
+    recordIssue(issues, "MANIFEST_ITEM_POOL_UNSUPPORTED", undefined, "itemPoolId");
+  if (value.sourceCommit !== CANONICAL_DESIGN_CONTRACT.sourceCommit)
+    recordIssue(issues, "MANIFEST_SOURCE_COMMIT_UNSUPPORTED", undefined, "sourceCommit");
+  if (value.mappingVersion !== CANONICAL_DESIGN_CONTRACT.mappingVersion)
+    recordIssue(issues, "MANIFEST_MAPPING_VERSION_UNSUPPORTED", undefined, "mappingVersion");
+  if (value.rubricVersion !== CANONICAL_DESIGN_CONTRACT.rubricVersion)
+    recordIssue(issues, "MANIFEST_RUBRIC_VERSION_UNSUPPORTED", undefined, "rubricVersion");
+  if (value.designStatus !== "DESIGN_ONLY")
+    recordIssue(issues, "MANIFEST_DESIGN_STATUS_INVALID", undefined, "designStatus");
+
+  const taskDesignIds = value.taskDesignIds;
+  if (
+    !Array.isArray(taskDesignIds) ||
+    taskDesignIds.length !== TASK_IDS.length ||
+    new Set(taskDesignIds).size !== TASK_IDS.length ||
+    TASK_IDS.some((taskId) => !taskDesignIds.includes(taskId))
+  ) {
+    recordIssue(issues, "MANIFEST_TASK_DESIGN_IDS_INVALID", undefined, "taskDesignIds");
+  }
+
+  const passageDesignRefs = value.passageDesignRefs;
+  if (!isObject(passageDesignRefs)) {
+    recordIssue(issues, "MANIFEST_PASSAGE_DESIGN_REFS_INVALID", undefined, "passageDesignRefs");
+  } else {
+    if (Object.keys(passageDesignRefs).length !== TASK_IDS.length)
+      recordIssue(issues, "MANIFEST_PASSAGE_DESIGN_REFS_INVALID", undefined, "passageDesignRefs");
+    for (const taskId of TASK_IDS) {
+      const expected = CANONICAL_DESIGN_PASSAGE_REFS[taskId];
+      if (passageDesignRefs[taskId] !== expected)
+        recordIssue(issues, "MANIFEST_TASK_PASSAGE_DESIGN_MISMATCH", undefined, taskId);
+    }
+  }
+
+  for (const field of ["passageVersionIds", "questionVersionIds"]) {
+    const versionList = value[field];
+    if (versionList !== undefined && !Array.isArray(versionList)) {
       recordIssue(issues, "MANIFEST_VERSION_LIST_INVALID", undefined, field);
+    } else if (Array.isArray(versionList) && !versionList.every((item) => nonEmptyString(item))) {
+      recordIssue(issues, "MANIFEST_VERSION_LIST_INVALID", undefined, field);
+    }
+  }
+
+  if (!VERSION_STATUSES.includes(value.passageVersionStatus as VersionStatus))
+    recordIssue(issues, "MANIFEST_VERSION_STATUS_INVALID", undefined, "passageVersionStatus");
+  if (!VERSION_STATUSES.includes(value.questionVersionStatus as VersionStatus))
+    recordIssue(issues, "MANIFEST_VERSION_STATUS_INVALID", undefined, "questionVersionStatus");
+
+  const passageVersionIds = Array.isArray(value.passageVersionIds) ? value.passageVersionIds : [];
+  const questionVersionIds = Array.isArray(value.questionVersionIds)
+    ? value.questionVersionIds
+    : [];
+  if (value.passageVersionStatus === "NOT_CREATED" && passageVersionIds.length > 0)
+    recordIssue(issues, "PASSAGE_VERSION_LIST_MUST_BE_EMPTY", undefined, "passageVersionIds");
+  if (value.questionVersionStatus === "NOT_CREATED" && questionVersionIds.length > 0)
+    recordIssue(issues, "QUESTION_VERSION_LIST_MUST_BE_EMPTY", undefined, "questionVersionIds");
+  if (value.passageVersionStatus === "AVAILABLE" && passageVersionIds.length === 0)
+    recordIssue(issues, "PASSAGE_VERSION_LIST_REQUIRED", undefined, "passageVersionIds");
+  if (value.questionVersionStatus === "AVAILABLE" && questionVersionIds.length === 0)
+    recordIssue(issues, "QUESTION_VERSION_LIST_REQUIRED", undefined, "questionVersionIds");
+  if (passageVersionIds.some((item) => typeof item === "string" && isDesignPassageReference(item)))
+    recordIssue(issues, "PASSAGE_VERSION_LIST_USES_DESIGN_REF", undefined, "passageVersionIds");
+  if (questionVersionIds.some((item) => typeof item === "string" && isDesignIdentifier(item)))
+    recordIssue(issues, "QUESTION_VERSION_LIST_USES_DESIGN_ID", undefined, "questionVersionIds");
+
+  for (const field of ["passageVersionBindings", "questionVersionBindings"]) {
+    const bindings = value[field];
+    if (!isObject(bindings)) {
+      recordIssue(issues, "MANIFEST_VERSION_BINDINGS_INVALID", undefined, field);
+      continue;
+    }
+    if (Object.keys(bindings).length !== TASK_IDS.length)
+      recordIssue(issues, "MANIFEST_VERSION_BINDINGS_INVALID", undefined, field);
+    for (const taskId of TASK_IDS) {
+      const binding = bindings[taskId];
+      if (binding !== null && !nonEmptyString(binding))
+        recordIssue(issues, "MANIFEST_VERSION_BINDING_INVALID", undefined, `${field}.${taskId}`);
+      if (
+        field === "passageVersionBindings" &&
+        typeof binding === "string" &&
+        isDesignPassageReference(binding)
+      ) {
+        recordIssue(issues, "PASSAGE_BINDING_USES_DESIGN_REF", undefined, `${field}.${taskId}`);
+      }
+      if (
+        field === "questionVersionBindings" &&
+        typeof binding === "string" &&
+        isDesignIdentifier(binding)
+      ) {
+        recordIssue(issues, "QUESTION_BINDING_USES_DESIGN_ID", undefined, `${field}.${taskId}`);
+      }
+      if (
+        field === "passageVersionBindings" &&
+        typeof binding === "string" &&
+        !passageVersionIds.includes(binding)
+      )
+        recordIssue(issues, "PASSAGE_BINDING_NOT_IN_LIST", undefined, `${field}.${taskId}`);
+      if (
+        field === "questionVersionBindings" &&
+        typeof binding === "string" &&
+        !questionVersionIds.includes(binding)
+      )
+        recordIssue(issues, "QUESTION_BINDING_NOT_IN_LIST", undefined, `${field}.${taskId}`);
+      if (value.passageVersionStatus === "NOT_CREATED" && binding !== null)
+        recordIssue(issues, "PASSAGE_BINDING_MUST_BE_NULL", undefined, `${field}.${taskId}`);
+      if (value.questionVersionStatus === "NOT_CREATED" && binding !== null)
+        recordIssue(issues, "QUESTION_BINDING_MUST_BE_NULL", undefined, `${field}.${taskId}`);
+    }
+  }
+
+  if (!PILOT_PROTOCOL_STATUSES.includes(value.pilotProtocolStatus as PilotProtocolStatus))
+    recordIssue(issues, "MANIFEST_PILOT_PROTOCOL_STATUS_INVALID", undefined, "pilotProtocolStatus");
+  if (
+    value.pilotProtocolStatus === "DESIGN_ONLY" &&
+    value.pilotProtocolVersion !== undefined &&
+    value.pilotProtocolVersion !== null
+  )
+    recordIssue(
+      issues,
+      "MANIFEST_PILOT_PROTOCOL_VERSION_UNSET_REQUIRED",
+      undefined,
+      "pilotProtocolVersion",
+    );
+  if (value.pilotProtocolStatus === "SET") {
+    if (!nonEmptyString(value.pilotProtocolVersion)) {
+      recordIssue(
+        issues,
+        "MANIFEST_PILOT_PROTOCOL_VERSION_REQUIRED",
+        undefined,
+        "pilotProtocolVersion",
+      );
+    } else if (value.pilotProtocolVersion !== CANONICAL_DESIGN_CONTRACT.pilotProtocolVersion) {
+      recordIssue(
+        issues,
+        "MANIFEST_PILOT_PROTOCOL_VERSION_UNSUPPORTED",
+        undefined,
+        "pilotProtocolVersion",
+      );
+    }
   }
 
   if (
@@ -499,14 +679,51 @@ function parseDataset(text: string, extension: string): ParsedDataset {
   });
 
   const passageVersions = new Set(
-    datasetManifestVersions(manifestResult.manifest, "passageVersionIds"),
+    Array.isArray(manifestResult.manifest.passageVersionIds)
+      ? manifestResult.manifest.passageVersionIds.filter(nonEmptyString)
+      : [],
   );
   const questionVersions = new Set(
-    datasetManifestVersions(manifestResult.manifest, "questionVersionIds"),
+    Array.isArray(manifestResult.manifest.questionVersionIds)
+      ? manifestResult.manifest.questionVersionIds.filter(nonEmptyString)
+      : [],
   );
+  const passageBindings = isObject(manifestResult.manifest.passageVersionBindings)
+    ? (manifestResult.manifest.passageVersionBindings as JsonObject)
+    : {};
+  const questionBindings = isObject(manifestResult.manifest.questionVersionBindings)
+    ? (manifestResult.manifest.questionVersionBindings as JsonObject)
+    : {};
   records.forEach((record, index) => {
+    if (isDesignPassageReference(record.passageVersionId)) {
+      recordIssue(recordIssues, "PASSAGE_VERSION_USES_DESIGN_REF", index, "passageVersionId");
+    }
+    if (isDesignIdentifier(record.questionVersionId)) {
+      recordIssue(recordIssues, "QUESTION_VERSION_USES_DESIGN_ID", index, "questionVersionId");
+    }
+    const expectedPassageVersion = passageBindings[record.taskDesignId];
+    if (expectedPassageVersion === null) {
+      recordIssue(recordIssues, "PASSAGE_VERSION_NOT_CREATED", index, "passageVersionId");
+    } else if (
+      nonEmptyString(expectedPassageVersion) &&
+      record.passageVersionId !== expectedPassageVersion
+    ) {
+      recordIssue(recordIssues, "TASK_PASSAGE_VERSION_MISMATCH", index, "passageVersionId");
+    }
     if (passageVersions.size > 0 && !passageVersions.has(record.passageVersionId)) {
       recordIssue(recordIssues, "PASSAGE_VERSION_NOT_IN_MANIFEST", index, "passageVersionId");
+    }
+    const expectedQuestionVersion = questionBindings[record.taskDesignId];
+    if (
+      expectedQuestionVersion === null ||
+      manifestResult.manifest.questionVersionStatus === "NOT_CREATED"
+    ) {
+      recordIssue(recordIssues, "QUESTION_VERSION_NOT_CREATED", index, "questionVersionId");
+    } else if (
+      nonEmptyString(expectedQuestionVersion) &&
+      record.questionVersionId !== expectedQuestionVersion
+    ) {
+      recordIssue(recordIssues, "TASK_QUESTION_VERSION_MISMATCH", index, "questionVersionId");
     }
     if (questionVersions.size > 0 && !questionVersions.has(record.questionVersionId)) {
       recordIssue(recordIssues, "QUESTION_VERSION_NOT_IN_MANIFEST", index, "questionVersionId");
@@ -520,14 +737,6 @@ function parseDataset(text: string, extension: string): ParsedDataset {
     recordIssues,
     duplicateIssues,
   };
-}
-
-function datasetManifestVersions(
-  manifest: OfflinePilotManifest,
-  field: "passageVersionIds" | "questionVersionIds",
-): string[] {
-  const value = manifest[field];
-  return Array.isArray(value) ? value.filter(nonEmptyString) : [];
 }
 
 function increment(table: DistributionTable, row: string, column: string): void {
@@ -588,7 +797,7 @@ function analyzeDataset(dataset: ParsedDataset): OfflinePilotAnalysisReport {
   ];
   const report = emptyReport(allIssues.length > 0 ? "INVALID_DATA" : "OK");
   report.dataQuality.issues = allIssues;
-  report.versionIntegrity.valid = dataset.manifestIssues.length === 0;
+  report.versionIntegrity.valid = allIssues.length === 0;
   if (dataset.manifest.targetGradeStatus === "NOT_DETERMINED") {
     report.versionIntegrity.warnings.push("TARGET_GRADE_NOT_DETERMINED");
   }
