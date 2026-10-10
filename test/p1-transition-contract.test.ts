@@ -47,6 +47,25 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain("p0LearningPathId: node.learningPathId");
   });
 
+  it("refreshes the path and opens the first assigned P1 station without a manual reload", async () => {
+    const [app, index] = await Promise.all([
+      readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+      readFile(new URL("../public/index.html", import.meta.url), "utf8"),
+    ]);
+
+    expect(app).toContain('result?.outcome === "ASSIGNED"');
+    expect(app).toContain('result?.outcome === "ALREADY_ASSIGNED"');
+    expect(app).toContain('String(node.learningPathCode || "").startsWith("EDUCATION_V2_P1_")');
+    expect(app).toContain('return node.type !== "NEXT_LEARNING"');
+    expect(app).toContain('const path = await insightApi("learning-path")');
+    expect(app).toContain("activeLearningPathNodeFromData(path)");
+    expect(app).toContain("learningPathEntryMode = true");
+    expect(app).toContain('result?.outcome === "REVIEW_REQUIRED"');
+    expect(app).toContain("pendingP1Reconcile");
+    expect(index).toContain('id="learning-path-transition-status"');
+    expect(index).toContain('id="learning-path-transition-retry"');
+  });
+
   it("reads P0 completion without writing P0 progress", async () => {
     const transition = await readFile(
       new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
@@ -58,6 +77,22 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("learningPath: { code: { startsWith: P1_PATH_PREFIX } }");
     expect(transition).not.toContain("tx.studentLearningStepProgress.update");
     expect(transition).not.toContain("tx.studentLearningStepProgress.delete");
+  });
+
+  it("reads the complete 22-step P0 family from all three canonical path areas", async () => {
+    const transition = await readFile(
+      new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(transition).toContain(
+      'const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const',
+    );
+    expect(transition).toContain("ACADEMIC_P0_LESSONS.length * 3");
+    expect(transition).toContain("tx.learningPath.findMany");
+    expect(transition).toContain("selectedPaths.length === P0_PATH_AREAS.length");
+    expect(transition).toContain("steps.length === P0_CANONICAL_STEP_COUNT");
+    expect(transition).toContain("step.pathId === previous.pathId");
   });
 
   it("pins candidate versions and rejects candidates outside the published level scope", async () => {
