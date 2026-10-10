@@ -1,12 +1,22 @@
-import { readFileSync, rmSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFile as execFileCallback } from "node:child_process";
+import { readFileSync, rmSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
+  analyzeOfflinePilotFile,
   analyzeOfflinePilotText,
   type OfflinePilotManifest,
   type OfflinePilotResponse,
 } from "../scripts/p1c-v2-offline-pilot-analysis";
+
+const execFile = promisify(execFileCallback);
+const analyzerScriptPath = fileURLToPath(
+  new URL("../scripts/p1c-v2-offline-pilot-analysis.ts", import.meta.url),
+);
+const tsxCliPath = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
 
 const manifest: OfflinePilotManifest = {
   datasetVersion: "P1C-V2-PILOT-DATASET-V1",
@@ -101,6 +111,33 @@ function response(overrides: Partial<OfflinePilotResponse> = {}): OfflinePilotRe
 
 function json(records: OfflinePilotResponse[]): string {
   return JSON.stringify({ manifest, records });
+}
+
+function jsonl(records: OfflinePilotResponse[]): string {
+  return [
+    JSON.stringify({ type: "manifest", manifest }),
+    ...records.map((record) => JSON.stringify({ type: "response", record })),
+  ].join("\n");
+}
+
+async function runCli(args: string[]): Promise<{
+  status: number;
+  stdout: string;
+  stderr: string;
+}> {
+  try {
+    const result = await execFile(process.execPath, [tsxCliPath, analyzerScriptPath, ...args], {
+      encoding: "utf8",
+    });
+    return { status: 0, stdout: result.stdout, stderr: result.stderr };
+  } catch (error: unknown) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string };
+    return {
+      status: typeof failure.code === "number" ? failure.code : 1,
+      stdout: failure.stdout ?? "",
+      stderr: failure.stderr ?? "",
+    };
+  }
 }
 
 describe("P1-C V2 offline pilot analysis", () => {
@@ -433,14 +470,96 @@ describe("P1-C V2 offline pilot analysis", () => {
     expect(source).not.toMatch(/https?:\/\//u);
   });
 
-  it("uses only synthetic temporary files for file-level execution", () => {
+  it("analyzes valid JSON and JSONL through the real file reader", async () => {
     const directory = mkdtempSync(join(tmpdir(), "okupratik-p1c-offline-"));
-    const file = join(directory, "synthetic.json");
+    const jsonFile = join(directory, "synthetic.json");
+    const jsonlFile = join(directory, "synthetic.jsonl");
     try {
-      writeFileSync(file, json([response()]), "utf8");
-      expect(readFileSync(file, "utf8")).toContain("P1C-V2-PILOT-DATASET-V1");
+      writeFileSync(jsonFile, json([response()]), "utf8");
+      writeFileSync(jsonlFile, jsonl([response()]), "utf8");
+
+      const jsonReport = await analyzeOfflinePilotFile(jsonFile);
+      const jsonlReport = await analyzeOfflinePilotFile(jsonlFile);
+
+      expect(jsonReport.status).toBe("OK");
+      expect(jsonReport.summary.responseCount).toBe(1);
+      expect(jsonlReport.status).toBe("OK");
+      expect(jsonlReport.summary.responseCount).toBe(1);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+    expect(existsSync(jsonFile)).toBe(false);
+    expect(existsSync(jsonlFile)).toBe(false);
+    expect(existsSync(directory)).toBe(false);
+  });
+
+  it("returns safe file errors without echoing malformed input or paths", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "okupratik-p1c-offline-errors-"));
+    const invalidJsonFile = join(directory, "invalid.json");
+    const invalidJsonlFile = join(directory, "invalid.jsonl");
+    const emptyJsonFile = join(directory, "empty.json");
+    const emptyJsonlFile = join(directory, "empty.jsonl");
+    const invalidSecret = "secret@example.com";
+    try {
+      writeFileSync(invalidJsonFile, `{"email":"${invalidSecret}"`, "utf8");
+      writeFileSync(invalidJsonlFile, `not-jsonl ${invalidSecret}`, "utf8");
+      writeFileSync(emptyJsonFile, "", "utf8");
+      writeFileSync(emptyJsonlFile, "", "utf8");
+
+      const reports = await Promise.all([
+        analyzeOfflinePilotFile(invalidJsonFile),
+        analyzeOfflinePilotFile(invalidJsonlFile),
+        analyzeOfflinePilotFile(emptyJsonFile),
+        analyzeOfflinePilotFile(emptyJsonlFile),
+        analyzeOfflinePilotFile(join(directory, "does-not-exist.json")),
+      ]);
+
+      expect(reports.slice(0, 4).map((report) => report.status)).toEqual([
+        "INVALID_DATA",
+        "INVALID_DATA",
+        "INVALID_DATA",
+        "INVALID_DATA",
+      ]);
+      expect(reports[4]?.status).toBe("INVALID_INPUT");
+      for (const report of reports) {
+        const serialized = JSON.stringify(report);
+        expect(serialized).not.toContain(invalidSecret);
+        expect(serialized).not.toContain(directory);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    expect(existsSync(directory)).toBe(false);
+  });
+
+  it("returns the defined CLI exit codes and keeps output sanitized", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "okupratik-p1c-offline-cli-"));
+    const validFile = join(directory, "synthetic.json");
+    const invalidFile = join(directory, "invalid.json");
+    const invalidSecret = "cli-secret@example.com";
+    try {
+      writeFileSync(validFile, json([response()]), "utf8");
+      writeFileSync(invalidFile, `{"email":"${invalidSecret}"`, "utf8");
+
+      const validRun = await runCli([validFile]);
+      expect(validRun.status).toBe(0);
+      expect(JSON.parse(validRun.stdout).status).toBe("OK");
+      expect(`${validRun.stdout}${validRun.stderr}`).not.toContain("anon-001");
+
+      const invalidRun = await runCli([invalidFile]);
+      expect(invalidRun.status).toBe(1);
+      expect(JSON.parse(invalidRun.stdout).status).toBe("INVALID_DATA");
+      expect(`${invalidRun.stdout}${invalidRun.stderr}`).not.toContain(invalidSecret);
+
+      const missingArgumentRun = await runCli([]);
+      expect(missingArgumentRun.status).toBe(2);
+      expect(missingArgumentRun.stderr).toContain("Usage:");
+      expect(`${missingArgumentRun.stdout}${missingArgumentRun.stderr}`).not.toContain(
+        invalidSecret,
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    expect(existsSync(directory)).toBe(false);
   });
 });
