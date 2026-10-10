@@ -1,6 +1,30 @@
 // OkuPratik — minimal SPA (vanilla JS)
-// Session yönetimi: access + refresh token localStorage'da tutulur.
+// Web'de access + refresh token localStorage'da tutulur. Native kabukta
+// tokenlar uygulamanın secure-storage köprüsünde tutulur.
 // Sayfa yenilendiğinde /auth/me ile doğrulanır; 401 ise /auth/refresh denenir.
+
+const runtimeConfig = globalThis.__OKUPRATIK_RUNTIME__ ?? {};
+const configuredApiBaseUrl =
+  typeof runtimeConfig.apiBaseUrl === "string" ? runtimeConfig.apiBaseUrl.replace(/\/$/u, "") : "";
+const nativeMobileRuntime = runtimeConfig.nativeMobile === true;
+const secureStoragePlugin = runtimeConfig.secureStoragePlugin ?? null;
+const SECURE_SESSION_KEY = "oku.session.v1";
+const nativeSession = { accessToken: null, refreshToken: null, tenantId: null };
+let currentPage = null;
+
+function resolveApiRequest(input) {
+  if (!configuredApiBaseUrl || typeof input !== "string" || !input.startsWith("/")) {
+    return input;
+  }
+  return new URL(input, configuredApiBaseUrl).toString();
+}
+
+// The web SPA keeps same-origin fetch behavior. Native Capacitor builds route
+// the same requests to the explicit API origin without rewriting 69 call sites.
+if (configuredApiBaseUrl) {
+  const browserFetch = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = (input, init) => browserFetch(resolveApiRequest(input), init);
+}
 
 const STORAGE_KEYS = {
   accessToken: "oku.accessToken",
@@ -210,11 +234,34 @@ const PREMIUM_LIMIT_FEATURES = new Set(["PRACTICE", "PRACTICE_QUESTION"]);
 // ---------- Yardımcılar ----------
 
 function getStoredTokens() {
+  if (nativeMobileRuntime) return { ...nativeSession };
   return {
     accessToken: localStorage.getItem(STORAGE_KEYS.accessToken),
     refreshToken: localStorage.getItem(STORAGE_KEYS.refreshToken),
     tenantId: localStorage.getItem(STORAGE_KEYS.tenantId),
   };
+}
+
+async function hydrateNativeSession() {
+  if (!nativeMobileRuntime) return;
+  try {
+    const serialized = await secureStoragePlugin?.getItem?.(SECURE_SESSION_KEY);
+    if (!serialized) return;
+    const parsed = JSON.parse(serialized);
+    nativeSession.accessToken = typeof parsed?.accessToken === "string" ? parsed.accessToken : null;
+    nativeSession.refreshToken =
+      typeof parsed?.refreshToken === "string" ? parsed.refreshToken : null;
+    nativeSession.tenantId = typeof parsed?.tenantId === "string" ? parsed.tenantId : null;
+  } catch {
+    nativeSession.accessToken = null;
+    nativeSession.refreshToken = null;
+    nativeSession.tenantId = null;
+  } finally {
+    // Never leave a legacy browser token copy in a native WebView storage.
+    localStorage.removeItem(STORAGE_KEYS.accessToken);
+    localStorage.removeItem(STORAGE_KEYS.refreshToken);
+    localStorage.removeItem(STORAGE_KEYS.tenantId);
+  }
 }
 
 function soundEffectsEnabled() {
@@ -313,6 +360,13 @@ function hideCelebration() {
 }
 
 function setStoredSession(data) {
+  if (nativeMobileRuntime) {
+    nativeSession.accessToken = data.tokens.accessToken;
+    nativeSession.refreshToken = data.tokens.refreshToken;
+    nativeSession.tenantId = data.tenantContext?.tenantId ?? "";
+    void secureStoragePlugin?.setItem?.(SECURE_SESSION_KEY, JSON.stringify(nativeSession));
+    return;
+  }
   localStorage.setItem(STORAGE_KEYS.accessToken, data.tokens.accessToken);
   localStorage.setItem(STORAGE_KEYS.refreshToken, data.tokens.refreshToken);
   localStorage.setItem(STORAGE_KEYS.tenantId, data.tenantContext?.tenantId ?? "");
@@ -328,6 +382,16 @@ function clearStoredSession() {
   resetExerciseState();
   exerciseRequestedSessionId = null;
   exerciseScope = null;
+  if (nativeMobileRuntime) {
+    nativeSession.accessToken = null;
+    nativeSession.refreshToken = null;
+    nativeSession.tenantId = null;
+    void secureStoragePlugin?.remove?.(SECURE_SESSION_KEY);
+    localStorage.removeItem(STORAGE_KEYS.accessToken);
+    localStorage.removeItem(STORAGE_KEYS.refreshToken);
+    localStorage.removeItem(STORAGE_KEYS.tenantId);
+    return;
+  }
   localStorage.removeItem(STORAGE_KEYS.accessToken);
   localStorage.removeItem(STORAGE_KEYS.refreshToken);
   localStorage.removeItem(STORAGE_KEYS.tenantId);
@@ -930,7 +994,11 @@ async function socialLogin(provider, idToken, nonce, displayName) {
       idToken,
       nonce,
       displayName: displayName || undefined,
-      platform: "WEB",
+      platform: /iPad|iPhone|iPod/u.test(navigator.userAgent)
+        ? "IOS"
+        : nativeMobileRuntime
+          ? "ANDROID"
+          : "WEB",
       deviceName: navigator.userAgent.slice(0, 120),
     }),
   });
@@ -975,9 +1043,17 @@ function providerButtonMessage(provider) {
 function startGoogleLogin() {
   const button = $("google-login-btn");
   if (!button || button.disabled) return;
+  if (nativeMobileRuntime) {
+    providerButtonMessage("Google");
+    $("social-login-status").textContent =
+      "Mobil Google girişi, native sağlayıcı bağlantısı tamamlandığında etkinleştirilecek.";
+    return;
+  }
   setAsyncButtonState(button, true, "Yükleniyor…");
   $("social-login-status").textContent = "Google ile giriş yapılıyor…";
-  window.location.assign("/auth/social/google/start");
+  window.location.assign(
+    new URL("/auth/social/google/start", configuredApiBaseUrl || location.origin),
+  );
 }
 
 $("google-login-btn").addEventListener("click", startGoogleLogin);
@@ -4616,6 +4692,8 @@ function navigate(page) {
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && !canAccessPage(page)) return;
 
+  currentPage = page;
+
   setUserMenuOpen(false);
   for (const name of PAGES) {
     $("page-" + name)?.classList.toggle("hidden", name !== page);
@@ -4705,6 +4783,15 @@ function navigate(page) {
   }
   closeSidebar();
 }
+
+globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__ = () => {
+  const fallbackPage = roleHomePage();
+  if (currentPage && currentPage !== fallbackPage) navigate(fallbackPage);
+  else {
+    const appPlugin = globalThis.Capacitor?.registerPlugin?.("App");
+    void appPlugin?.exitApp?.();
+  }
+};
 
 function setUserMenuOpen(open) {
   const menu = $("user-menu");
@@ -17218,6 +17305,7 @@ function setupAssignmentEvents() {
   });
 }
 async function init() {
+  await hydrateNativeSession();
   setupThemeEvents();
   setupPersonDataEvents();
   setupAccountProfileEvents();

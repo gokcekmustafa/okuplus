@@ -22,3 +22,12 @@ reports/
 .DS_Store
 # Local PostgreSQL data, recovery evidence, and temporary diagnostics
 .tmp/
+
+# Generated Capacitor web bundle; native projects consume it during `mobile npm run sync`.
+mobile/www/
+mobile/node_modules/
+mobile/android/app/src/main/assets/public/
+mobile/android/app/src/main/assets/capacitor.config.json
+mobile/android/app/src/main/assets/capacitor.plugins.json
+mobile/ios/App/App/public/
+mobile/ios/App/App/capacitor.config.json

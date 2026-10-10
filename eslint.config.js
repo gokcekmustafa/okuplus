@@ -6,7 +6,14 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["node_modules/", "dist/", "coverage/"],
+    ignores: [
+      "node_modules/",
+      "dist/",
+      "coverage/",
+      "mobile/android/",
+      "mobile/ios/",
+      "mobile/www/",
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
@@ -28,6 +35,12 @@ export default tseslint.config(
     files: ["public/**/*.js"],
     languageOptions: {
       globals: globals.browser,
+    },
+  },
+  {
+    files: ["mobile/scripts/**/*.mjs"],
+    languageOptions: {
+      globals: globals.node,
     },
   },
   prettier,

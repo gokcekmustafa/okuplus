@@ -9,7 +9,10 @@ describe("Google login UI contract", () => {
     expect(index).toContain('id="login-form"');
     expect(index).toContain('id="google-login-btn"');
     expect(index).toContain("Google ile devam et");
-    expect(app).toContain('window.location.assign("/auth/social/google/start")');
+    expect(app).toContain(
+      'new URL("/auth/social/google/start", configuredApiBaseUrl || location.origin)',
+    );
+    expect(app).toContain("nativeMobileRuntime");
     expect(app).toContain('"Google ile giriş yapılıyor…"');
     expect(app).not.toContain("Web SDK bu dağıtımda başlatılmadı; sahte giriş yapılmadı.");
   });
