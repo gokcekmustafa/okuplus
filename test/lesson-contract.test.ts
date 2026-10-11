@@ -54,4 +54,18 @@ describe("published learning lesson contract", () => {
 
     expect(parseLessonMetadata(legacyP1ALesson)).toBeNull();
   });
+
+  it("accepts a published content-only teaching lesson without an exercise template", () => {
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE",
+        routeFamily: "P1-A",
+        exerciseTemplateVersionId: null,
+      }),
+    ).toMatchObject({
+      contractVersion: 1,
+      exerciseTemplateVersionId: null,
+    });
+  });
 });

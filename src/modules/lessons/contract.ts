@@ -38,7 +38,10 @@ export const lessonMetadataSchema = z
     explanation: z.string().trim().min(1).max(5000),
     workedExample: z.string().trim().min(1).max(5000),
     guidedPractice: z.string().trim().min(1).max(5000),
-    exerciseTemplateVersionId: z.string().trim().min(1).max(120),
+    // Content-only teaching lessons do not need an exercise template. P0
+    // lessons keep their published template binding; P1-A teaching content
+    // legitimately uses null and is still resolved by contentVersionId.
+    exerciseTemplateVersionId: z.string().trim().min(1).max(120).nullable(),
     completionLabel: z.string().trim().min(1).max(160).default("Dersi tamamladım"),
     area: z.enum(["FAST_READING", "READING_COMPREHENSION"]).optional(),
     stage: z.enum(["TEACHING", "SMALL_STUDY", "PRACTICE"]).optional(),
