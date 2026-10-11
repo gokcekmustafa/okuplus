@@ -27,6 +27,7 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('"https://okuplus.vercel.app"');
     expect(script).toContain('url.pathname === "/auth/login" || url.pathname === "/auth/logout"');
     expect(script).toContain('page.locator("#guest-login-btn")');
+    expect(script).toContain('loginUrl.searchParams.set("auth", "google-error")');
     expect(script).toContain('"/student/today"');
     expect(script).toContain('"/student/progress"');
     expect(script).toContain('"/student/history?page=1&pageSize=5"');

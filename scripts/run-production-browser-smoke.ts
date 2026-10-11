@@ -119,13 +119,17 @@ async function runDomain(
       if (response.status() >= 400) report.httpErrors += 1;
     });
 
-    await page.goto(`${baseUrl}/`, {
+    // The app's social-login error return path intentionally opens the normal
+    // credential form. Use it to make the smoke deterministic even when the
+    // anonymous guest shell is not selected during the first paint.
+    const loginUrl = new URL(`${baseUrl}/`);
+    loginUrl.searchParams.set("auth", "google-error");
+    await page.goto(loginUrl.toString(), {
       waitUntil: "domcontentloaded",
       timeout: REQUEST_TIMEOUT_MS,
     });
-    // New unauthenticated visitors land on the guest screen first. The
-    // credentials-based smoke flow must use the same visible login affordance
-    // as a real user instead of waiting on the hidden login form.
+    // If the guest shell is selected despite the explicit login return state,
+    // use the same visible login affordance as a real user.
     const loginForm = page.locator("#login-form");
     if (!(await loginForm.isVisible())) {
       await page.locator("#guest-login-btn").waitFor({
