@@ -41,8 +41,10 @@ type PublishedPath = {
   id: string;
   tenantId: string | null;
   code: string;
+  version: number;
   title: string;
   area: string;
+  enrolled?: boolean;
   units: PathUnitRow[];
 };
 
@@ -165,6 +167,7 @@ const PATH_SELECT = {
   id: true,
   tenantId: true,
   code: true,
+  version: true,
   title: true,
   area: true,
   units: {
@@ -232,14 +235,28 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
       ],
     },
     orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-    select: PATH_SELECT,
+    select: {
+      ...PATH_SELECT,
+      enrollments: {
+        where: {
+          tenantId: actor.tenantId!,
+          studentId: actor.userId,
+          OR: [
+            { routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] as const } },
+            { routeStatus: null },
+          ],
+        },
+        select: { id: true },
+      },
+    },
   });
 
   const pathsByArea = new Map<string, PublishedPath>();
   for (const row of rows) {
     const current = pathsByArea.get(row.area);
-    if (shouldReplacePublishedPath(current, row, actor.tenantId)) {
-      pathsByArea.set(row.area, row as PublishedPath);
+    const candidate = { ...row, enrolled: row.enrollments.length > 0 } as PublishedPath;
+    if (shouldReplacePublishedPath(current, candidate, actor.tenantId)) {
+      pathsByArea.set(row.area, candidate);
     }
   }
   const areaOrder = new Map([
@@ -255,8 +272,9 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
 }
 
 export function shouldReplacePublishedPath(
-  current: { code: string; tenantId: string | null } | undefined,
-  candidate: { code: string; tenantId: string | null },
+  current:
+    { code: string; tenantId: string | null; version?: number; enrolled?: boolean } | undefined,
+  candidate: { code: string; tenantId: string | null; version?: number; enrolled?: boolean },
   actorTenantId: string | null,
 ): boolean {
   if (!current) return true;
@@ -268,6 +286,25 @@ export function shouldReplacePublishedPath(
   const candidateIsCanonicalP0 = candidate.code.startsWith(P0_PATH_PREFIX);
   const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
   if (candidateIsCanonicalP0 !== currentIsCanonicalP0) return candidateIsCanonicalP0;
+
+  const sameCanonicalP0Version =
+    candidateIsCanonicalP0 &&
+    currentIsCanonicalP0 &&
+    candidate.code === current.code &&
+    (candidate.version === undefined ||
+      current.version === undefined ||
+      candidate.version === current.version);
+  if (sameCanonicalP0Version && Boolean(candidate.enrolled) !== Boolean(current.enrolled)) {
+    return Boolean(candidate.enrolled);
+  }
+
+  if (sameCanonicalP0Version && candidate.enrolled && current.enrolled) {
+    const candidateIsTenantSpecific = candidate.tenantId === actorTenantId;
+    const currentIsTenantSpecific = current.tenantId === actorTenantId;
+    if (candidateIsTenantSpecific !== currentIsTenantSpecific) {
+      return candidateIsTenantSpecific;
+    }
+  }
 
   if (candidateIsCanonicalP0 && currentIsCanonicalP0) {
     const candidateIsGlobal = candidate.tenantId === null;
