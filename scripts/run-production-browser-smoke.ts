@@ -123,6 +123,17 @@ async function runDomain(
       waitUntil: "domcontentloaded",
       timeout: REQUEST_TIMEOUT_MS,
     });
+    // New unauthenticated visitors land on the guest screen first. The
+    // credentials-based smoke flow must use the same visible login affordance
+    // as a real user instead of waiting on the hidden login form.
+    const loginForm = page.locator("#login-form");
+    if (!(await loginForm.isVisible())) {
+      await page.locator("#guest-login-btn").waitFor({
+        state: "visible",
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+      await page.locator("#guest-login-btn").click();
+    }
     await page.waitForSelector("#login-form", { state: "visible", timeout: REQUEST_TIMEOUT_MS });
     const loginResponse = page.waitForResponse(
       (response) =>
