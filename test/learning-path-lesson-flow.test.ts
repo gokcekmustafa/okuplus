@@ -44,10 +44,12 @@ describe("roadmap lesson flow contract", () => {
     ).toContain("getLearningStepNavigation");
   });
 
-  it("exposes dedicated focused lesson endpoints beside the legacy catalog", () => {
+  it("exposes only the canonical focused learning-path lesson endpoints", () => {
     expect(routes).toContain('"/student/learning-path/steps/:stepId/lesson"');
     expect(routes).toContain('"/student/learning-path/steps/:stepId/lesson/complete"');
-    expect(routes).toContain('"/student/lessons"');
+    expect(routes).not.toContain('"/student/lessons"');
+    expect(service).not.toContain("listStudentLessons");
+    expect(service).not.toContain("completeStudentLesson");
   });
 
   it("keeps exercise replay navigation server-authoritative and progress-neutral", () => {

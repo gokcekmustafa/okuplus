@@ -2975,7 +2975,8 @@ function renderLearningPathCourse(data) {
   if (!learningPathCourseModules.length) {
     list.innerHTML =
       '<p class="muted learning-path-course-empty">Yayınlanmış öğrenme bölümü bulunamadı.</p>';
-    renderLessonDetail(null);
+    const detail = $("lesson-detail");
+    if (detail) detail.innerHTML = '<p class="muted">Yayınlanmış öğrenme bölümü bulunamadı.</p>';
     return;
   }
   if (
@@ -3994,20 +3995,6 @@ void setupOnboardingEvents();
 
 // ---------- Ders deneyimi ----------
 
-function lessonApi(path, options) {
-  options = options || {};
-  return authenticatedFetch(
-    "/student/lessons" + path,
-    Object.assign({}, options, {
-      headers: Object.assign(
-        {},
-        options.method && options.method !== "GET" ? csrfHeaders() : {},
-        options.headers || {},
-      ),
-    }),
-  );
-}
-
 function learningPathProgressLabel(node) {
   const position = Number(node?.learningPathPosition || 0);
   const total = Number(node?.learningPathTotal || 0);
@@ -4022,34 +4009,6 @@ function learningPathTargetWithProgress(current, target, direction) {
     learningPathPosition: currentPosition + (direction === "previous" ? -1 : 1),
     learningPathTotal: current.learningPathTotal,
   };
-}
-
-function renderLessonDetail(lesson) {
-  const detail = $("lesson-detail");
-  if (!detail) return;
-  if (!lesson) {
-    detail.innerHTML = '<p class="muted">Bir ders seçtiğinde burada başlayacağız.</p>';
-    return;
-  }
-  const completed = Boolean(lesson.completion?.completed);
-  detail.innerHTML = `
-    <p class="insight-eyebrow">DERS</p>
-    <h3>${escapeHtml(lesson.title)}</h3>
-    <p class="lesson-objective"><strong>Bugünkü amacın:</strong> ${escapeHtml(lesson.objective)}</p>
-    <section><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
-    <section><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
-    <section><h4>Şimdi sen dene</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
-    <div class="lesson-flow" aria-label="Ders akışı">
-      <span class="badge badge-info">Ders</span><span aria-hidden="true">→</span>
-      <span class="badge badge-info">Örnek</span><span aria-hidden="true">→</span>
-      <span class="badge badge-success">Egzersiz</span><span aria-hidden="true">→</span>
-      <span class="badge badge-neutral">Sonuç</span>
-    </div>
-    <div class="lesson-actions">
-      <button type="button" class="btn btn-primary" data-lesson-start>${completed ? "Egzersizi tekrar aç" : "Egzersize geç"}</button>
-      <button type="button" class="btn btn-secondary" data-lesson-complete ${completed ? "disabled" : ""}>${completed ? "Ders tamamlandı" : escapeHtml(lesson.completionLabel)}</button>
-    </div>
-    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>`;
 }
 
 function setLessonPageMode(focused) {
@@ -4156,28 +4115,6 @@ function renderLearningPathTerminalStep(node) {
     </div>`;
 }
 
-function renderLessonList(items) {
-  setLessonPageMode(false);
-  const list = $("lesson-list");
-  if (!list) return;
-  if (!items.length) {
-    list.innerHTML =
-      '<p class="muted">Şu an yayınlanmış ders bulunmuyor. Egzersizlerin hazır olduğunda burada görünecek.</p>';
-    renderLessonDetail(null);
-    return;
-  }
-  if (!selectedLessonId || !items.some((lesson) => lesson.id === selectedLessonId)) {
-    selectedLessonId = items[0].id;
-  }
-  list.innerHTML = items
-    .map(
-      (lesson) =>
-        `<button type="button" class="lesson-list-item ${lesson.id === selectedLessonId ? "active" : ""}" data-lesson-id="${escapeHtml(lesson.id)}" aria-pressed="${lesson.id === selectedLessonId}"><strong>${escapeHtml(lesson.title)}</strong><span>${escapeHtml(lesson.skill?.name || "Gelişim çalışması")}</span><small>${lesson.completion?.completed ? "Tamamlandı" : "Hazır"}</small></button>`,
-    )
-    .join("");
-  renderLessonDetail(items.find((item) => item.id === selectedLessonId) || items[0]);
-}
-
 function learningPathStepApi(stepId, suffix, options) {
   options = options || {};
   const { navigationFromStepId, ...requestOptions } = options;
@@ -4238,8 +4175,6 @@ async function loadFocusedLearningPathStep() {
     activeLearningStepNode = learningStep;
     activeLearningStepNavigation = normalizeLearningPathNavigation(data?.navigation, learningStep);
     activeLearningStepNavigationFromStepId = null;
-    lessonData = data?.lesson ? [data.lesson] : [];
-    selectedLessonId = data?.lesson?.id || null;
     renderFocusedLesson(data?.lesson || null, learningStep, activeLearningStepNavigation);
     status.textContent = "";
   } catch (err) {
@@ -4520,55 +4455,6 @@ async function loadLessons() {
   }
 }
 
-async function startSelectedLesson() {
-  const lesson = lessonData.find((item) => item.id === selectedLessonId);
-  if (!lesson) return;
-  const status = $("lesson-detail-status");
-  try {
-    const data = await parseResponse(
-      await authenticatedFetch("/student/exercises/start", {
-        method: "POST",
-        body: JSON.stringify({
-          templateVersionId: lesson.exerciseTemplateVersionId,
-          clientSessionId: `lesson-${lesson.id}-${Date.now()}`,
-        }),
-      }),
-    );
-    exerciseSession = data;
-    exerciseRequestedSessionId = data.id;
-    rememberExerciseSession(data.id);
-    navigate("exercise");
-    void loadExercisePage();
-  } catch (err) {
-    if (status)
-      status.textContent = formatStudentError(
-        err,
-        "Egzersiz başlatılamadı. Tekrar deneyebilirsin.",
-      );
-  }
-}
-
-async function completeSelectedLesson() {
-  const lesson = lessonData.find((item) => item.id === selectedLessonId);
-  if (!lesson || lesson.completion?.completed) return;
-  const status = $("lesson-detail-status");
-  try {
-    const updated = await parseResponse(
-      await lessonApi(`/${encodeURIComponent(lesson.id)}/complete`, { method: "POST", body: "{}" }),
-    );
-    const index = lessonData.findIndex((item) => item.id === lesson.id);
-    if (index >= 0) lessonData[index] = updated;
-    renderLessonList(lessonData);
-    const updatedStatus = $("lesson-detail-status");
-    if (updatedStatus) {
-      updatedStatus.textContent = "Ders tamamlandı. Şimdi egzersizle pekiştirebilirsin.";
-    }
-  } catch (err) {
-    if (status)
-      status.textContent = formatStudentError(err, "Ders tamamlanamadı. Tekrar deneyebilirsin.");
-  }
-}
-
 function setupLessonEvents() {
   $("lessons-refresh")?.addEventListener("click", () => void loadLessons());
   $("lesson-list")?.addEventListener("click", (event) => {
@@ -4594,8 +4480,6 @@ function setupLessonEvents() {
     }
   });
   $("lesson-detail")?.addEventListener("click", (event) => {
-    if (event.target.closest("[data-lesson-start]")) void startSelectedLesson();
-    if (event.target.closest("[data-lesson-complete]")) void completeSelectedLesson();
     if (event.target.closest("[data-learning-step-complete]")) void completeFocusedLearningStep();
     if (event.target.closest("[data-learning-terminal-complete]"))
       void completeLearningPathTerminalStep();
@@ -9652,8 +9536,6 @@ let trainingActivitiesState = "idle";
 let trainingActivitiesStateMessage = "";
 let activeTrainingActivityId = null;
 let exerciseMode = null;
-let lessonData = [];
-let selectedLessonId = null;
 let activeLearningStepNode = null;
 let activeLearningStepNavigation = null;
 let activeLearningStepNavigationFromStepId = null;

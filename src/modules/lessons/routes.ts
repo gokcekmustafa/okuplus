@@ -3,13 +3,7 @@ import { ok } from "../../lib/response.js";
 import { validationError } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import type { AuthProvider } from "../auth/index.js";
-import {
-  completeStudentLearningStepLesson,
-  completeStudentLesson,
-  getStudentLearningStepLesson,
-  getStudentLesson,
-  listStudentLessons,
-} from "./service.js";
+import { completeStudentLearningStepLesson, getStudentLearningStepLesson } from "./service.js";
 
 function actor(request: FastifyRequest) {
   return {
@@ -17,12 +11,6 @@ function actor(request: FastifyRequest) {
     tenantId: request.tenantContext?.tenantId ?? null,
     platformRole: request.authUser!.platformRole ?? null,
   };
-}
-
-function id(request: FastifyRequest): string {
-  const value = (request.params as { id?: string }).id;
-  if (typeof value !== "string" || !value.trim()) throw validationError("Ders kimliği gerekli");
-  return value.trim();
 }
 
 function stepId(request: FastifyRequest): string {
@@ -48,14 +36,5 @@ export async function lessonStudentRoutes(
     "/student/learning-path/steps/:stepId/lesson/complete",
     { preHandler },
     async (request) => ok(await completeStudentLearningStepLesson(stepId(request), actor(request))),
-  );
-  app.get("/student/lessons", { preHandler }, async (request) =>
-    ok(await listStudentLessons(actor(request))),
-  );
-  app.get("/student/lessons/:id", { preHandler }, async (request) =>
-    ok(await getStudentLesson(id(request), actor(request))),
-  );
-  app.post("/student/lessons/:id/complete", { preHandler }, async (request) =>
-    ok(await completeStudentLesson(id(request), actor(request))),
   );
 }
