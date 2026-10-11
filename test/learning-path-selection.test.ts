@@ -85,7 +85,49 @@ describe("published learning-path selection", () => {
     expect(shouldReplacePublishedPath(tenantPath, globalPath, "tenant-1")).toBe(false);
   });
 
-  it("does not let an enrolled legacy path displace canonical P0", () => {
+  it("preserves a legacy enrolled path over an un-enrolled canonical path", () => {
+    expect(
+      shouldReplacePublishedPath(
+        {
+          code: "EDU-V2-P0-FAST-FOUNDATION",
+          tenantId: null,
+          enrolled: true,
+          completedProgressCount: 22,
+          progressCount: 22,
+        },
+        {
+          code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+          tenantId: null,
+          enrolled: false,
+          completedProgressCount: 9,
+          progressCount: 9,
+        },
+        "tenant-1",
+      ),
+    ).toBe(false);
+  });
+
+  it("preserves the enrolled P0 path with the most completed progress", () => {
+    const canonical = {
+      code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+      tenantId: null,
+      enrolled: true,
+      completedProgressCount: 9,
+      progressCount: 9,
+    };
+    const legacy = {
+      code: "EDU-V2-P0-FAST-FOUNDATION",
+      tenantId: null,
+      enrolled: true,
+      completedProgressCount: 22,
+      progressCount: 22,
+    };
+
+    expect(shouldReplacePublishedPath(canonical, legacy, "tenant-1")).toBe(true);
+    expect(shouldReplacePublishedPath(legacy, canonical, "tenant-1")).toBe(false);
+  });
+
+  it("still prefers canonical P0 when neither path has student enrollment", () => {
     expect(
       shouldReplacePublishedPath(
         {
@@ -96,9 +138,9 @@ describe("published learning-path selection", () => {
         },
         {
           code: "EDU-V2-P0-FAST-FOUNDATION",
-          tenantId: "tenant-1",
+          tenantId: null,
           version: 1,
-          enrolled: true,
+          enrolled: false,
         },
         "tenant-1",
       ),

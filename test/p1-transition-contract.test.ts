@@ -122,6 +122,7 @@ describe("P1 transition foundation contracts", () => {
     );
 
     expect(transition).toContain('const P0_PATH_PREFIX = "EDUCATION_V2_P0_"');
+    expect(transition).toContain('const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-"');
     expect(transition).toContain("tx.studentLearningStepProgress.findMany");
     expect(transition).toContain("learningPath: { code: { startsWith: P1_PATH_PREFIX } }");
     expect(transition).not.toContain("tx.studentLearningStepProgress.update");
@@ -143,6 +144,7 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("steps.length === P0_CANONICAL_STEP_COUNT");
     expect(transition).toContain("EDUCATION_V2_P0_PATH_SCOPE_CODE");
     expect(transition).toContain("pathScopeCode");
+    expect(transition).toContain("anchorIsCanonical");
     expect(transition).toContain("steps.every(hasP0StepArtifact)");
     expect(transition).toContain('contentVersion?.status === "PUBLISHED"');
     expect(transition).toContain('exerciseTemplateVersion?.status === "PUBLISHED"');
