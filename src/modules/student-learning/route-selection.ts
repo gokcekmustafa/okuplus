@@ -7,7 +7,7 @@ import {
 } from "../measurements/adaptive-route-contract.js";
 
 /** The policy contract is separate from the curriculum version. */
-export const P1_ROUTE_SELECTION_POLICY_VERSION = "P1_ROUTE_SELECTION_V1_1" as const;
+export const P1_ROUTE_SELECTION_POLICY_VERSION = "P1_ROUTE_SELECTION_V1_2" as const;
 
 export const P1_ROUTE_FAMILIES = ["A", "B", "C", "D"] as const;
 export type P1RouteFamily = (typeof P1_ROUTE_FAMILIES)[number];
@@ -201,33 +201,12 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     );
   }
 
-  if (!hasReadingComprehensionEvidence(measurement.skillResults)) {
-    return selectionResult(
-      "REVIEW_REQUIRED",
-      null,
-      null,
-      ["MEASUREMENT_INSUFFICIENT"],
-      measurement,
-      null,
-      false,
-      "HIGH",
-      "Okuduğunu anlama için gerekli ölçüm sinyalleri eksik",
-    );
-  }
+  const hasBaseMeasurementEvidence = hasReadingComprehensionEvidence(measurement.skillResults);
+  if (!hasBaseMeasurementEvidence) fallbackReasonCode = "MEASUREMENT_FALLBACK";
 
   const adaptive = readAdaptiveRouteMeasurement(measurement.metrics);
   if (adaptive.status === "INVALID") {
-    return selectionResult(
-      "REVIEW_REQUIRED",
-      null,
-      null,
-      ["MEASUREMENT_INSUFFICIENT"],
-      measurement,
-      null,
-      false,
-      "HIGH",
-      "Uyarlanabilir ölçüm sözleşmesi geçersiz",
-    );
+    fallbackReasonCode = "MEASUREMENT_FALLBACK";
   }
   if (adaptive.status === "VALID") {
     const reviewSignal = adaptiveReviewSignal(measurement.metrics);
@@ -267,7 +246,9 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     }
   }
 
-  const profile = readRouteSelectionProfile(measurement.metrics);
+  const profile = hasBaseMeasurementEvidence
+    ? readRouteSelectionProfile(measurement.metrics)
+    : null;
   if (profile === "MEASUREMENT_CONFLICT") {
     return selectionResult(
       "REVIEW_REQUIRED",

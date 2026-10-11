@@ -88,19 +88,21 @@ Mevcut bankada bu üç dimension için trusted item mapping ve ayrı scorer kan�
 
 ## 4. Fail-closed davranışın korunması
 
-Aşağıdaki durumlar otomatik route assignment'ı engeller ve `REVIEW_REQUIRED` olarak kalır:
+Aşağıdaki durumlar B/C/D'nin otomatik atanmasını engeller. Final ölçüm veya P0 tamamlanmamışsa, ya da sinyal çelişkiliyse genel karar da `REVIEW_REQUIRED` olarak kalır:
 
-- geçersiz/bozuk measurement contract;
+- final P0 ölçümünün bulunmaması veya P0'ın tamamlanmamış olması;
+- çelişkili server-side measurement sinyalleri;
 - `NOT_CALIBRATED` veya `productionAssignmentEnabled=false` iken B/C/D'yi otomatik atama;
 - eksik required dimension ile B/C/D'yi otomatik atama;
 - yanlış veya eski item mapping sürümü;
+- geçersiz/bozuk adaptive alt-sözleşmesi veya temel okuduğunu-anlama beceri kanıtının eksik olması B/C/D'yi otomatik açmaz; çelişki yoksa final ölçüm mevcutken P1-A fallback'i mümkündür;
 - tamamlanmamış assessment/session;
 - null/ambiguous/çelişkili server score;
 - route selection kararının yalnızca client, Training veya WPM sinyaline dayanması;
 - aynı anda başka aktif P1 olması;
 - P0 tamamlanmamış olması.
 
-P0 tamamlanmış, final ölçüm mevcut ve yalnızca B/C/D kanıtı yetersiz veya kalibrasyonsuz ise; çelişkili bir sinyal yoksa bu durum P1-A'nın genel fallback olarak atanmasını engellemez. Bu fallback B/C/D ihtiyacını doğrulanmış saymaz ve B/C/D ataması açmaz. Geçersiz contract, eksik final ölçüm veya çelişkili sinyal yine `REVIEW_REQUIRED` kalır. P0 history'si, P0 22-step linear davranışı ve Training/Assignment/Measurement ayrımı korunur.
+P0 tamamlanmış ve final ölçüm mevcutsa; temel beceri kanıtı eksik, adaptive alt-sözleşmesi geçersiz, B/C/D kanıtı yetersiz veya kalibrasyonsuz olsa bile çelişkili bir sinyal yoksa P1-A genel fallback olarak atanabilir. Bu fallback B/C/D ihtiyacını doğrulanmış saymaz ve B/C/D atamasını açmaz. Final ölçümün yokluğu, P0'ın tamamlanmamış olması veya çelişkili sinyal `REVIEW_REQUIRED` kalır. P0 history'si, P0 22-step linear davranışı ve Training/Assignment/Measurement ayrımı korunur.
 
 ## 5. Kalan gerçek dış bağımlılıklar
 
