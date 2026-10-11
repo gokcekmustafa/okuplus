@@ -4670,31 +4670,6 @@ textarea:focus-visible {
   gap: 8px;
 }
 
-.lesson-list-item {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  padding: 14px;
-  border: 1px solid var(--border, #d9e1ec);
-  border-radius: 14px;
-  background: var(--surface, #fff);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.lesson-list-item:hover,
-.lesson-list-item:focus-visible,
-.lesson-list-item.active {
-  border-color: var(--primary, #3857d6);
-  outline: none;
-}
-
-.lesson-list-item span,
-.lesson-list-item small {
-  color: var(--muted, #657187);
-}
-
 .lesson-detail section {
   margin-top: 18px;
 }
