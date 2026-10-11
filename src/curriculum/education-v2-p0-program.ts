@@ -16,6 +16,12 @@ import { LESSON_METADATA_TYPE } from "../modules/lessons/contract.js";
 
 export const EDUCATION_V2_P0_PROGRAM_ID = "OKU-EDUCATION-V2-P0-FOUNDATION";
 export const EDUCATION_V2_P0_AGE_BAND = "13–17";
+/**
+ * Stable technical suffix for the P0 path family. It is not a Level.code.
+ * Student access remains scoped by the actual Level relation on the path.
+ */
+export const EDUCATION_V2_P0_PATH_SCOPE_CODE = "G8_12";
+export const EDUCATION_V2_P0_DEFAULT_LEVEL_CODE = "G9_12";
 export const EDUCATION_V2_P0_LEVEL_CODE_ENV = "EDUCATION_V2_P0_LEVEL_CODE";
 export const EDUCATION_V2_P0_SKILL_CODES_ENV = "EDUCATION_V2_P0_SKILL_CODES";
 

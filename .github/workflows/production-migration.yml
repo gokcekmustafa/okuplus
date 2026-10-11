@@ -32,10 +32,10 @@ on:
           - education-v2-p1-bcd
         default: none
       education_v2_level_code:
-        description: "Existing production Level.code required only for Education V2 P0"
+        description: "Existing production Level.code used for P0 student scope; canonical path suffix is G8_12"
         required: false
         type: string
-        default: G8_12
+        default: G9_12
       education_v2_production_release_id:
         description: "Approved immutable Education V2 P0 production release identifier"
         required: false
@@ -171,6 +171,10 @@ jobs:
           }
           if [ "${SEED_P0}" = "education-v2-p0" ]; then
             test -n "${EDUCATION_V2_LEVEL_CODE}" || { echo "FAIL: Education V2 Level.code is missing"; exit 1; }
+            test "${EDUCATION_V2_LEVEL_CODE}" = "G9_12" || {
+              echo "FAIL: this P0 release uses the existing G9_12 student scope; G8_12 is only the canonical path suffix"
+              exit 1
+            }
             test -n "${EDUCATION_V2_PRODUCTION_RELEASE_ID}" || { echo "FAIL: Education V2 production release identifier is missing"; exit 1; }
             test -n "${PRODUCTION_DATABASE_NAME}" || { echo "FAIL: production database name variable is missing"; exit 1; }
             test -n "${PRODUCTION_DATABASE_HOST}" || { echo "FAIL: production database host variable is missing"; exit 1; }

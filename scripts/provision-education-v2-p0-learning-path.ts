@@ -6,7 +6,10 @@ import {
   ACADEMIC_P0_LESSONS,
   type AcademicLesson,
 } from "../src/curriculum/academic-reading-p0.js";
-import { getProgramExercise } from "../src/curriculum/education-v2-p0-program.js";
+import {
+  EDUCATION_V2_P0_PATH_SCOPE_CODE,
+  getProgramExercise,
+} from "../src/curriculum/education-v2-p0-program.js";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
 import {
   resolveTrainingRuntimeConfig,
@@ -549,6 +552,7 @@ async function main(): Promise<void> {
           mode: "MANIFEST_ONLY_DRY_RUN",
           environment: target?.environment ?? "STAGING",
           levelCode: target?.levelCode ?? "NOT_CONFIGURED",
+          pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
           pathCount: 3,
           lessonStepCount,
           terminalStepCount: 4,
@@ -640,17 +644,17 @@ async function main(): Promise<void> {
 
       const paths = [
         {
-          code: `EDUCATION_V2_P0_FAST_READING_${level.code}`,
+          code: `EDUCATION_V2_P0_FAST_READING_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
           title: "Eğitim V2 P0 · Hızlı Okuma",
           area: "FAST_READING" as const,
         },
         {
-          code: `EDUCATION_V2_P0_READING_COMPREHENSION_${level.code}`,
+          code: `EDUCATION_V2_P0_READING_COMPREHENSION_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
           title: "Eğitim V2 P0 · Okuduğunu Anlama",
           area: "READING_COMPREHENSION" as const,
         },
         {
-          code: `EDUCATION_V2_P0_COMMON_${level.code}`,
+          code: `EDUCATION_V2_P0_COMMON_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
           title: "Eğitim V2 P0 · Ortak Öğrenme",
           area: "COMMON" as const,
         },

@@ -76,11 +76,13 @@ describe("P1 transition foundation contracts", () => {
     ]);
 
     expect(transition).toContain('"P0_GRAPH_NOT_READY"');
+    expect(transition).toContain('"P0_LEVEL_SCOPE_NOT_READY"');
     expect(transition).toContain('"P0_NOT_COMPLETED"');
     expect(transition).toContain('"FINAL_MEASUREMENT_MISSING"');
     expect(transition).toContain('"P1_CURRICULUM_UNAVAILABLE"');
     expect(transition).toContain('"MEASUREMENT_REVIEW_REQUIRED"');
     expect(transition).toContain("canonicalGraphReady");
+    expect(transition).toContain("p0LevelScopeReady");
     expect(app).toContain("function p1TransitionReviewMessage(result)");
     expect(app).not.toContain(
       '"P0 tamamlandı. Ölçüm veya uygun içerik kontrolleri tamamlanmadan yeni öğrenme yolu açılamıyor."',
@@ -113,9 +115,17 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("tx.learningPath.findMany");
     expect(transition).toContain("selectedPaths.length === P0_PATH_AREAS.length");
     expect(transition).toContain("steps.length === P0_CANONICAL_STEP_COUNT");
+    expect(transition).toContain("EDUCATION_V2_P0_PATH_SCOPE_CODE");
+    expect(transition).toContain("pathScopeCode");
+    expect(transition).toContain("steps.every(hasP0StepArtifact)");
+    expect(transition).toContain('contentVersion?.status === "PUBLISHED"');
+    expect(transition).toContain('exerciseTemplateVersion?.status === "PUBLISHED"');
+    expect(transition).toContain('assessment?.status === "PUBLISHED"');
     expect(transition).toContain("const P0_CANONICAL_PATH_VERSION = 1");
     expect(transition).toContain("version: P0_CANONICAL_PATH_VERSION");
-    expect(transition).toContain("level: { code: levelCode }");
+    expect(transition).toContain("levelScopeReady");
+    expect(transition).toContain('"P0_LEVEL_SCOPE_NOT_READY"');
+    expect(transition).not.toContain("level: { code: levelCode }");
     expect(transition).toContain("step.pathId === previous.pathId");
   });
 

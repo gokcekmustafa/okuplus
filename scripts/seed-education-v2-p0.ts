@@ -3,6 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import {
   EDUCATION_V2_P0_PROGRAM,
   EDUCATION_V2_P0_PROGRAM_ID,
+  EDUCATION_V2_P0_PATH_SCOPE_CODE,
   EDUCATION_V2_P0_SKILL_MANIFEST,
   contentId,
   contentVersionId,
@@ -163,6 +164,8 @@ function readTarget(): SeedTarget | null {
 }
 
 function readRequiredCodes(): { levelCode: string; skillCodes: string[] } {
+  // This is the existing student Level scope (G9_12 for the current release).
+  // The persistent canonical path suffix is the separate G8_12 contract below.
   const levelCode = process.env[LEVEL_ENV]?.trim();
   if (!levelCode) fail(`${LEVEL_ENV} verilmedi; mevcut Level kaydı seçilmeyecek`);
   const expected = EDUCATION_V2_P0_SKILL_MANIFEST.map((skill) => skill.code);
@@ -758,6 +761,7 @@ async function main(): Promise<void> {
           programId: EDUCATION_V2_P0_PROGRAM_ID,
           ageBand: EDUCATION_V2_P0_PROGRAM.ageBand,
           levelCode,
+          pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
           skillCodes,
           skillProvisioning: {
             source: "EDUCATION_V2_P0_SKILL_MANIFEST",
@@ -770,6 +774,9 @@ async function main(): Promise<void> {
             0,
           ),
           pathCount: contentOnly ? 0 : EDUCATION_V2_P0_PROGRAM.paths.length,
+          persistentPathProvisioning: contentOnly
+            ? "SEPARATE_CANONICAL_PROVISIONER"
+            : "LEGACY_PROGRAM_GRAPH",
           assessmentCount: EDUCATION_V2_P0_PROGRAM.assessments.length,
           databaseAction: "NOT_RUN",
           publicationState: "NOT_VERIFIED",

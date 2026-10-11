@@ -1,20 +1,28 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { ACADEMIC_P0_LESSONS } from "../src/curriculum/academic-reading-p0.js";
+import {
+  EDUCATION_V2_P0_DEFAULT_LEVEL_CODE,
+  EDUCATION_V2_P0_PATH_SCOPE_CODE,
+} from "../src/curriculum/education-v2-p0-program.js";
 import { parseCatalogTargetUrl } from "../src/curriculum/catalog-target-verification.js";
 import { providerForHost, targetIdentityFingerprint } from "../src/lib/db-fingerprint-contract.js";
 
-const LEVEL_CODE = process.env.EDUCATION_V2_P0_LEVEL_CODE?.trim() || "G8_12";
+const LEVEL_CODE =
+  process.env.EDUCATION_V2_P0_LEVEL_CODE?.trim() || EDUCATION_V2_P0_DEFAULT_LEVEL_CODE;
 const EXPECTED_PATHS = [
   {
-    code: `EDUCATION_V2_P0_FAST_READING_${LEVEL_CODE}`,
+    code: `EDUCATION_V2_P0_FAST_READING_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
     area: "FAST_READING" as const,
   },
   {
-    code: `EDUCATION_V2_P0_READING_COMPREHENSION_${LEVEL_CODE}`,
+    code: `EDUCATION_V2_P0_READING_COMPREHENSION_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
     area: "READING_COMPREHENSION" as const,
   },
-  { code: `EDUCATION_V2_P0_COMMON_${LEVEL_CODE}`, area: "COMMON" as const },
+  {
+    code: `EDUCATION_V2_P0_COMMON_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
+    area: "COMMON" as const,
+  },
 ] as const;
 
 type MatchStatus = "MATCH" | "MISMATCH" | "UNVERIFIED";
@@ -219,7 +227,6 @@ async function main(): Promise<void> {
         version: 1,
         status: "PUBLISHED",
         deletedAt: null,
-        level: { code: LEVEL_CODE },
       },
       select: {
         code: true,
@@ -276,21 +283,52 @@ async function main(): Promise<void> {
         .sort()
         .map((type) => [type, allSteps.filter((step) => step.type === type).length]),
     );
-    const complete =
+    const activePublishedStepCount = allSteps.filter(
+      (step) => step.status === "PUBLISHED" && step.isActive,
+    ).length;
+    const graphReady =
       missingPathCodes.length === 0 &&
       missingExpectedStableKeys.length === 0 &&
       paths.length === EXPECTED_PATHS.length &&
+      activePublishedStepCount === expectedKeys.size &&
       paths.every(
         (path) => path.units.length > 0 && path.units.every((unit) => unit.status === "PUBLISHED"),
       ) &&
       invalidPublishedLinks.length === 0;
+    const observedLevelCodes = [
+      ...new Set(paths.map((path) => path.level?.code ?? "UNSCOPED")),
+    ].sort();
+    const levelScopeMismatches = paths
+      .filter((path) => path.level?.code !== LEVEL_CODE)
+      .map((path) => path.code);
+    const levelScopeReady =
+      paths.length === EXPECTED_PATHS.length && levelScopeMismatches.length === 0;
+    const complete = graphReady && levelScopeReady;
     const report = {
       ...baseReport,
       status: complete ? "PASS" : "BLOCKED",
+      p0Graph: {
+        status: graphReady ? "PASS" : "BLOCKED",
+        pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
+        publishedPathCount: paths.length,
+        publishedUnitCount: paths.reduce((count, path) => count + path.units.length, 0),
+        publishedStepCount: activePublishedStepCount,
+        expectedPathCodes: EXPECTED_PATHS.map((path) => path.code),
+        missingPathCodes,
+        expectedStepCount: expectedKeys.size,
+        stepsByType,
+        missingExpectedStableKeys,
+        invalidPublishedLinks: invalidPublishedLinks.map((step) => step.stableKey),
+      },
+      p0LevelScope: {
+        status: levelScopeReady ? "PASS" : "BLOCKED",
+        expectedLevelCode: LEVEL_CODE,
+        observedLevelCodes,
+        levelScopeMismatches,
+      },
       publishedPathCount: paths.length,
       publishedUnitCount: paths.reduce((count, path) => count + path.units.length, 0),
-      publishedStepCount: allSteps.filter((step) => step.status === "PUBLISHED" && step.isActive)
-        .length,
+      publishedStepCount: activePublishedStepCount,
       expectedPathCodes: EXPECTED_PATHS.map((path) => path.code),
       missingPathCodes,
       expectedStepCount: expectedKeys.size,

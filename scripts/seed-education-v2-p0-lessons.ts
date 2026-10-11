@@ -8,6 +8,7 @@ import {
 import {
   EDUCATION_V2_P0_PROGRAM,
   EDUCATION_V2_P0_PROGRAM_ID,
+  EDUCATION_V2_P0_PATH_SCOPE_CODE,
   getProgramIds,
   templateVersionId,
   type ProgramExercise,
@@ -89,6 +90,8 @@ function readTarget(): { target: Target; approvedTarget: Target; fingerprint: st
   if (environment !== "STAGING" && environment !== "PRODUCTION") {
     fail(`${ENVIRONMENT}=STAGING veya PRODUCTION gerekli`);
   }
+  // Lesson content uses the existing Level only as a release-scope preflight.
+  // Persistent canonical paths keep their independent G8_12 technical suffix.
   required(LEVEL_CODE);
 
   const target = parseCatalogTargetUrl(
@@ -446,6 +449,7 @@ async function main(): Promise<void> {
           mode: "MANIFEST_ONLY_DRY_RUN",
           lessonContentCount: plans.length,
           skills: [...new Set(plans.map((plan) => plan.lesson.skillCode))],
+          pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
           databaseAction: "NOT_RUN",
           target: safeSummary(null),
         },

@@ -3,6 +3,8 @@ import { lessonMetadataSchema } from "../src/modules/lessons/contract.js";
 import {
   EDUCATION_V2_P0_PROGRAM,
   EDUCATION_V2_P0_PROGRAM_ID,
+  EDUCATION_V2_P0_DEFAULT_LEVEL_CODE,
+  EDUCATION_V2_P0_PATH_SCOPE_CODE,
   EDUCATION_V2_P0_SKILL_MANIFEST,
   getProgramIds,
   lessonMetadataFor,
@@ -10,6 +12,11 @@ import {
 } from "../src/curriculum/education-v2-p0-program.js";
 
 describe("Education V2 P0 first program manifest", () => {
+  it("ayrı teknik path eki ile mevcut öğrenci Level kapsamını açıkça ayırır", () => {
+    expect(EDUCATION_V2_P0_PATH_SCOPE_CODE).toBe("G8_12");
+    expect(EDUCATION_V2_P0_DEFAULT_LEVEL_CODE).toBe("G9_12");
+  });
+
   it("iki eğitim alanında öğretimden uygulamaya kadar küçük bir akış tanımlar", () => {
     expect(EDUCATION_V2_P0_PROGRAM.programId).toBe(EDUCATION_V2_P0_PROGRAM_ID);
     expect(EDUCATION_V2_P0_PROGRAM.paths).toHaveLength(3);
