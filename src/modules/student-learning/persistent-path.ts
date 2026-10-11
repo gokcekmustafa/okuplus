@@ -19,6 +19,7 @@ export type PersistentLearningActor = {
 
 type StepRow = {
   id: string;
+  prerequisiteStepId: string | null;
   contentVersionId: string | null;
   exerciseTemplateVersionId: string | null;
   assessmentId: string | null;
@@ -53,6 +54,7 @@ type PathRow = {
 };
 
 type CompletionEvidenceStep = Pick<StepRow, "id" | "type" | "completionRule"> & {
+  prerequisiteStepId: string | null;
   contentVersionId: string | null;
   exerciseTemplateVersionId: string | null;
   assessmentId: string | null;
@@ -73,6 +75,14 @@ function prerequisiteIds(value: Prisma.JsonValue): string[] {
     : [];
 }
 
+function stepPrerequisiteIds(
+  step: Pick<CompletionEvidenceStep, "prerequisiteStepId" | "completionRule">,
+): string[] {
+  const ids = new Set(prerequisiteIds(step.completionRule));
+  if (step.prerequisiteStepId) ids.add(step.prerequisiteStepId);
+  return [...ids];
+}
+
 export function areLearningStepPrerequisitesComplete(
   value: Prisma.JsonValue,
   completed: ReadonlySet<string>,
@@ -81,12 +91,25 @@ export function areLearningStepPrerequisitesComplete(
 }
 
 function isPublishedStep(step: StepRow): boolean {
-  if (step.type === "TEACHING" || step.type === "SMALL_STUDY") {
+  if (step.type === "TEACHING") {
     return Boolean(
       step.contentVersion?.status === "PUBLISHED" &&
       step.contentVersion.content.status === "PUBLISHED" &&
       step.contentVersion.content.deletedAt === null,
     );
+  }
+  if (step.type === "SMALL_STUDY") {
+    const contentReady = Boolean(
+      step.contentVersion?.status === "PUBLISHED" &&
+      step.contentVersion.content.status === "PUBLISHED" &&
+      step.contentVersion.content.deletedAt === null,
+    );
+    const templateReady = Boolean(
+      step.exerciseTemplateVersion?.status === "PUBLISHED" &&
+      step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
+      step.exerciseTemplateVersion.template.deletedAt === null,
+    );
+    return contentReady || templateReady;
   }
   if (step.type === "PRACTICE" || step.type === "REINFORCEMENT") {
     return Boolean(
@@ -182,6 +205,7 @@ export async function getPersistentAcademicProgram(
                 orderBy: { position: "asc" },
                 select: {
                   id: true,
+                  prerequisiteStepId: true,
                   contentVersionId: true,
                   exerciseTemplateVersionId: true,
                   assessmentId: true,
@@ -488,19 +512,62 @@ async function publishedCompletionEvidenceSteps(actor: PersistentLearningActor) 
         path: {
           status: "PUBLISHED",
           deletedAt: null,
-          OR: [{ tenantId: null }, { tenantId: actor.tenantId! }],
+          AND: [
+            { OR: [{ tenantId: null }, { tenantId: actor.tenantId! }] },
+            {
+              OR: [
+                { code: { not: { startsWith: "EDUCATION_V2_P1_" } } },
+                {
+                  code: { startsWith: "EDUCATION_V2_P1_" },
+                  enrollments: {
+                    some: {
+                      tenantId: actor.tenantId!,
+                      studentId: actor.userId,
+                      routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
         },
       },
     },
     select: {
       id: true,
       type: true,
+      prerequisiteStepId: true,
       completionRule: true,
       contentVersionId: true,
       exerciseTemplateVersionId: true,
       assessmentId: true,
     },
   }) as Promise<CompletionEvidenceStep[]>;
+}
+
+function publishedLearningPathScope(actor: PersistentLearningActor): Prisma.LearningPathWhereInput {
+  return {
+    status: "PUBLISHED",
+    deletedAt: null,
+    AND: [
+      { OR: [{ tenantId: null }, { tenantId: actor.tenantId! }] },
+      {
+        OR: [
+          { code: { not: { startsWith: "EDUCATION_V2_P1_" } } },
+          {
+            code: { startsWith: "EDUCATION_V2_P1_" },
+            enrollments: {
+              some: {
+                tenantId: actor.tenantId!,
+                studentId: actor.userId,
+                routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] },
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export async function resolveLearningStepForTemplate(
@@ -515,14 +582,14 @@ export async function resolveLearningStepForTemplate(
     const steps = allSteps.filter(
       (step) =>
         step.exerciseTemplateVersionId === templateVersionId &&
-        (step.type === "PRACTICE" || step.type === "REINFORCEMENT"),
+        (step.type === "SMALL_STUDY" || step.type === "PRACTICE" || step.type === "REINFORCEMENT"),
     );
     if (!steps.length) return { matched: false, stepId: null, unlocked: false };
     const completed = await withTenantContext(actor, (tx) =>
       completedStepIdsFromEvidence(tx, actor, allSteps),
     );
     const candidate = steps.find((step) =>
-      areLearningStepPrerequisitesComplete(step.completionRule, completed),
+      stepPrerequisiteIds(step).every((id) => completed.has(id)),
     );
     return { matched: true, stepId: candidate?.id ?? steps[0]!.id, unlocked: Boolean(candidate) };
   } catch (error) {
@@ -550,7 +617,7 @@ export async function resolveLearningStepForContent(
       completedStepIdsFromEvidence(tx, actor, allSteps),
     );
     const candidate = steps.find((step) =>
-      prerequisiteIds(step.completionRule).every((id) => completed.has(id)),
+      stepPrerequisiteIds(step).every((id) => completed.has(id)),
     );
     return { matched: true, stepId: candidate?.id ?? steps[0]!.id, unlocked: Boolean(candidate) };
   } catch (error) {
@@ -578,7 +645,7 @@ export async function resolveLearningStepForAssessment(
     return {
       matched: true,
       stepId: step.id,
-      unlocked: areLearningStepPrerequisitesComplete(step.completionRule, completed),
+      unlocked: stepPrerequisiteIds(step).every((id) => completed.has(id)),
     };
   } catch (error) {
     if (isMissingLearningPathTable(error)) return { matched: false, stepId: null, unlocked: false };
@@ -596,7 +663,7 @@ export async function completeLearningStep(
     await withTenantContext(actor, async (tx) => {
       const step = await tx.learningStep.findUnique({
         where: { id: stepId },
-        select: { id: true, type: true, completionRule: true },
+        select: { id: true, type: true, prerequisiteStepId: true, completionRule: true },
       });
       if (!step) return;
       const progress = await tx.studentLearningStepProgress.findUnique({
@@ -610,13 +677,14 @@ export async function completeLearningStep(
         select: { status: true },
       });
       if (progress?.status === "COMPLETED") return;
-      const prerequisites = prerequisiteIds(step.completionRule);
+      const prerequisites = stepPrerequisiteIds(step);
       const prerequisiteSteps = prerequisites.length
         ? await tx.learningStep.findMany({
             where: { id: { in: prerequisites } },
             select: {
               id: true,
               type: true,
+              prerequisiteStepId: true,
               completionRule: true,
               contentVersionId: true,
               exerciseTemplateVersionId: true,
@@ -712,7 +780,13 @@ async function completeBoundStep(
 ): Promise<void> {
   if (!("learningStep" in prisma)) return;
   try {
-    const steps = await prisma.learningStep.findMany({ where, select: { id: true } });
+    const steps = await prisma.learningStep.findMany({
+      where: {
+        ...where,
+        unit: { path: publishedLearningPathScope(actor) },
+      },
+      select: { id: true },
+    });
     if (steps.length === 1) await completeLearningStep(steps[0]!.id, actor, evidence);
   } catch (error) {
     if (!isMissingLearningPathTable(error)) throw error;
@@ -727,7 +801,7 @@ export function completeLearningStepForTemplate(
   return completeBoundStep(
     {
       exerciseTemplateVersionId: templateVersionId,
-      type: { in: ["PRACTICE", "REINFORCEMENT"] },
+      type: { in: ["SMALL_STUDY", "PRACTICE", "REINFORCEMENT"] },
       unit: { path: { status: "PUBLISHED" } },
     },
     actor,

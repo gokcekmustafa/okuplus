@@ -2678,12 +2678,20 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
   learningPathEntryMode = true;
-  if (type === "TEACHING" || type === "SMALL_STUDY") {
+  if (type === "TEACHING") {
     if (!node?.contentVersionId) {
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
       return;
     }
     navigate("lessons");
+    return;
+  }
+  if (type === "SMALL_STUDY" && node?.contentVersionId) {
+    navigate("lessons");
+    return;
+  }
+  if (type === "SMALL_STUDY" && !tv) {
+    alert("Bu kısa çalışmanın yayınlanmış içeriği veya egzersizi henüz hazır değil.");
     return;
   }
   if (type === "ASSESSMENT" && node?.assessmentId) {
@@ -4291,8 +4299,11 @@ function p1TransitionReviewMessage(result) {
 
 function isUsableLearningPathNode(node) {
   if (!node?.id || node.status !== "active") return false;
-  if (node.type === "TEACHING" || node.type === "SMALL_STUDY") {
+  if (node.type === "TEACHING") {
     return Boolean(node.contentVersionId);
+  }
+  if (node.type === "SMALL_STUDY") {
+    return Boolean(node.contentVersionId || node.templateVersionId);
   }
   if (node.type === "PRACTICE" || node.type === "REINFORCEMENT") {
     return Boolean(node.templateVersionId);

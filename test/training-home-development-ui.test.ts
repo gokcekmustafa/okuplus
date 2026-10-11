@@ -143,7 +143,9 @@ describe("training home and development UI", () => {
     expect(app).toContain('class="learning-map-v6-lock"');
     expect(app).not.toContain(">Kilitli<");
     expect(app).not.toContain('class="path-node-label"');
-    expect(app).toContain('if (type === "TEACHING" || type === "SMALL_STUDY")');
+    expect(app).toContain('if (type === "TEACHING")');
+    expect(app).toContain('if (type === "SMALL_STUDY" && node?.contentVersionId)');
+    expect(app).toContain("Boolean(node.contentVersionId || node.templateVersionId)");
     expect(app).toContain("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
     expect(app).toContain("learning-map-v6-summary");
     expect(app).toContain("learning-map-v6-action");

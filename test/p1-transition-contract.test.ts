@@ -1,5 +1,31 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
+import { isReadyP1CandidateStep } from "../src/modules/student-learning/p1-transition.js";
+
+const publishedContent = {
+  status: "PUBLISHED",
+  content: { status: "PUBLISHED", deletedAt: null },
+} as const;
+const publishedTemplate = {
+  status: "PUBLISHED",
+  template: { status: "PUBLISHED", deletedAt: null },
+} as const;
+
+function candidateStep(
+  type: "TEACHING" | "SMALL_STUDY" | "PRACTICE" | "REINFORCEMENT" | "ASSESSMENT",
+  overrides: Partial<Parameters<typeof isReadyP1CandidateStep>[0]> = {},
+) {
+  return {
+    type,
+    contentVersionId: null,
+    contentVersion: null,
+    exerciseTemplateVersionId: null,
+    exerciseTemplateVersion: null,
+    assessmentId: null,
+    assessment: null,
+    ...overrides,
+  } as Parameters<typeof isReadyP1CandidateStep>[0];
+}
 
 describe("P1 transition foundation contracts", () => {
   it("keeps the migration additive and protects the single active route invariant", async () => {
@@ -139,6 +165,94 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain('status: "PUBLISHED"');
     expect(transition).toContain("levelId: null");
     expect(transition).toContain("{ levelId }");
+  });
+
+  it("accepts P1-A template-backed small study without weakening other artifact contracts", () => {
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("SMALL_STUDY", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: publishedTemplate,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("SMALL_STUDY", {
+          contentVersionId: "content-version-1",
+          contentVersion: publishedContent,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("PRACTICE", {
+          contentVersionId: "content-version-1",
+          contentVersion: publishedContent,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("REINFORCEMENT", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: publishedTemplate,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("TEACHING", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: publishedTemplate,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("SMALL_STUDY", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: {
+            status: "PUBLISHED",
+            template: { status: "DRAFT", deletedAt: null },
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the P1 candidate check tied to the published assessment artifact", () => {
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("ASSESSMENT", {
+          assessmentId: "assessment-1",
+          assessment: { status: "PUBLISHED", deletedAt: null },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("ASSESSMENT", {
+          assessmentId: "assessment-1",
+          assessment: { status: "PUBLISHED", deletedAt: new Date() },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps template-backed small study support explicit in the runtime contracts", async () => {
+    const [persistent, app] = await Promise.all([
+      readFile(
+        new URL("../src/modules/student-learning/persistent-path.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../public/app.js", import.meta.url), "utf8"),
+    ]);
+
+    expect(persistent).toContain('step.type === "SMALL_STUDY"');
+    expect(persistent).toContain('type: { in: ["SMALL_STUDY", "PRACTICE", "REINFORCEMENT"] }');
+    expect(app).toContain('if (type === "SMALL_STUDY" && node?.contentVersionId)');
+    expect(app).toContain("Boolean(node.contentVersionId || node.templateVersionId)");
   });
 
   it("makes duplicate assignment idempotent", async () => {
