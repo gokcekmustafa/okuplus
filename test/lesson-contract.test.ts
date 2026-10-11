@@ -30,4 +30,28 @@ describe("published learning lesson contract", () => {
   it("rejects unknown metadata fields so arbitrary content is not treated as a lesson", () => {
     expect(parseLessonMetadata({ ...validLesson(), runtimeOnly: true })).toBeNull();
   });
+
+  it("reads already-published P1-A metadata from the pre-version contract safely", () => {
+    const legacyP1ALesson = {
+      ...validLesson(),
+      contractVersion: undefined,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE",
+      routeFamily: "P1-A",
+    };
+
+    delete (legacyP1ALesson as { contractVersion?: unknown }).contractVersion;
+
+    expect(parseLessonMetadata(legacyP1ALesson)).toMatchObject({
+      contractVersion: 1,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE",
+      routeFamily: "P1-A",
+    });
+  });
+
+  it("does not treat an unversioned non-canonical envelope as a lesson", () => {
+    const legacyP1ALesson = { ...validLesson(), routeFamily: "P1-A" };
+    delete (legacyP1ALesson as { contractVersion?: unknown }).contractVersion;
+
+    expect(parseLessonMetadata(legacyP1ALesson)).toBeNull();
+  });
 });

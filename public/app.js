@@ -2656,18 +2656,23 @@ function learningPathVisualStatus(status) {
   return status === "available" ? "locked" : status;
 }
 
-function learningPathNodesFromData(data) {
+function learningPathEntriesFromData(data) {
   var groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
   return groups.flatMap(function (group) {
-    return Array.isArray(group?.nodes) ? group.nodes.filter(Boolean) : [];
+    var groupNodes = Array.isArray(group?.nodes) ? group.nodes : [];
+    return groupNodes.filter(Boolean).map(function (node) {
+      return { node: node, area: group.path?.area || "COMMON" };
+    });
   });
 }
 
 function activeLearningPathNodeFromData(data) {
   return (
-    learningPathNodesFromData(data).find(function (node) {
-      return node.status === "active";
-    }) || null
+    (
+      sortGuidedLearningNodes(learningPathEntriesFromData(data)).find(function (entry) {
+        return entry.node.status === "active";
+      }) || null
+    )?.node || null
   );
 }
 
@@ -2775,29 +2780,17 @@ function learningPathNodeSkill(node) {
   );
 }
 
-function learningPathNodeStage(node) {
-  var type = String(node?.type || "");
-  return type === "TEACHING" ? 0 : type === "SMALL_STUDY" ? 1 : type === "PRACTICE" ? 2 : 0;
-}
-
 function sortGuidedLearningNodes(entries) {
   return entries
     .map(function (entry, index) {
-      var skill = learningPathNodeSkill(entry.node);
-      var skillIndex = skill ? GUIDED_LEARNING_SKILL_ORDER.indexOf(skill) : 99;
-      var commonRank =
-        entry.node.type === "REINFORCEMENT"
-          ? 0
-          : entry.node.type === "ASSESSMENT"
-            ? 1
-            : entry.node.type === "MEASUREMENT"
-              ? 2
-              : entry.node.type === "NEXT_LEARNING"
-                ? 3
-                : 0;
+      // The API returns canonical P0 paths first and the assigned P1 route
+      // afterwards. Keep that order intact: re-sorting by skill/type moved
+      // P1-A stations in front of P0's shared terminal stations, so a student
+      // who had completed 22 P0 stations appeared to be on station 20.
+      var phase = String(entry.node?.learningPathCode || "").startsWith("EDUCATION_V2_P1_") ? 1 : 0;
       return {
         ...entry,
-        sortKey: skill ? skillIndex * 10 + learningPathNodeStage(entry.node) : 1000 + commonRank,
+        sortKey: phase,
         originalIndex: index,
       };
     })
@@ -3052,14 +3045,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var container = $("learning-path");
   if (!container) return;
   var groups = Array.isArray(pathGroups) ? pathGroups : [];
-  var entries = sortGuidedLearningNodes(
-    groups.flatMap(function (group) {
-      var groupNodes = Array.isArray(group?.nodes) ? group.nodes : [];
-      return groupNodes.filter(Boolean).map(function (node) {
-        return { node: node, area: group.path?.area || "COMMON" };
-      });
-    }),
-  );
+  var entries = sortGuidedLearningNodes(learningPathEntriesFromData({ paths: groups }));
   if (!entries.length) {
     renderLearningPathEmptyState(null);
     return;

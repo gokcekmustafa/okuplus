@@ -320,6 +320,7 @@ async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): 
         changelog: `${EDUCATION_V2_P1_A_PROGRAM_ID}; contentKey=${plan.content.key}; yaş=${EDUCATION_V2_P1_A_PROGRAM.ageBand}`,
         metadata: asJson({
           programId: EDUCATION_V2_P1_A_PROGRAM_ID,
+          contractVersion: 1,
           lessonType: plan.content.lesson ? "LEARNING_LESSON" : "LEARNING_EXERCISE",
           skillCode: plan.content.skillCode,
           objective: plan.content.lesson?.objective ?? plan.content.body,
