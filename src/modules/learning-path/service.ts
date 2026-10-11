@@ -292,30 +292,16 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     progressByPath.set(pathId, current);
   }
 
-  const pathsByArea = new Map<string, PublishedPath>();
-  for (const row of rows) {
-    const current = pathsByArea.get(row.area);
+  const candidates = rows.map((row) => {
     const progress = progressByPath.get(row.id) ?? { total: 0, completed: 0 };
-    const candidate = {
+    return {
       ...row,
       enrolled: row.enrollments.length > 0,
       progressCount: progress.total,
       completedProgressCount: progress.completed,
     } as PublishedPath;
-    if (shouldReplacePublishedPath(current, candidate, actor.tenantId)) {
-      pathsByArea.set(row.area, candidate);
-    }
-  }
-  const areaOrder = new Map([
-    ["FAST_READING", 0],
-    ["READING_COMPREHENSION", 1],
-    ["COMMON", 2],
-  ]);
-  return [...pathsByArea.values()].sort(
-    (a, b) =>
-      (areaOrder.get(a.area) ?? Number.MAX_SAFE_INTEGER) -
-        (areaOrder.get(b.area) ?? Number.MAX_SAFE_INTEGER) || a.area.localeCompare(b.area),
-  );
+  });
+  return selectPublishedPathCandidates(candidates, actor.tenantId);
 }
 
 export function shouldReplacePublishedPath(
@@ -397,6 +383,58 @@ export function shouldReplacePublishedPath(
   }
 
   return false;
+}
+
+type PublishedPathSelectionCandidate = {
+  code: string;
+  area: string;
+  tenantId: string | null;
+  version?: number;
+  enrolled?: boolean;
+  progressCount?: number;
+  completedProgressCount?: number;
+};
+
+/**
+ * Keeps the completed P0 curriculum visible after an assigned P1 route is
+ * created for the same area. P1 is a new phase after P0; it must not replace
+ * the historical P0 projection that the student has already completed.
+ *
+ * Within each phase and area we still keep the existing canonical/enrollment
+ * selection rules, so duplicate published records do not produce duplicate
+ * modules or weaken tenant isolation.
+ */
+export function selectPublishedPathCandidates<T extends PublishedPathSelectionCandidate>(
+  candidates: readonly T[],
+  actorTenantId: string | null,
+): T[] {
+  const p0ByArea = new Map<string, T>();
+  const p1ByArea = new Map<string, T>();
+
+  for (const candidate of candidates) {
+    const target = candidate.code.startsWith(P1_PATH_PREFIX) ? p1ByArea : p0ByArea;
+    const current = target.get(candidate.area);
+    if (shouldReplacePublishedPath(current, candidate, actorTenantId)) {
+      target.set(candidate.area, candidate);
+    }
+  }
+
+  const areaOrder = new Map([
+    ["FAST_READING", 0],
+    ["READING_COMPREHENSION", 1],
+    ["COMMON", 2],
+  ]);
+  return [...p0ByArea.values(), ...p1ByArea.values()].sort((a, b) => {
+    const aPhase = a.code.startsWith(P1_PATH_PREFIX) ? 1 : 0;
+    const bPhase = b.code.startsWith(P1_PATH_PREFIX) ? 1 : 0;
+    return (
+      aPhase - bPhase ||
+      (areaOrder.get(a.area) ?? Number.MAX_SAFE_INTEGER) -
+        (areaOrder.get(b.area) ?? Number.MAX_SAFE_INTEGER) ||
+      a.area.localeCompare(b.area) ||
+      a.code.localeCompare(b.code)
+    );
+  });
 }
 
 async function findPublishedPath(tx: PrismaTypes.TransactionClient, actor: LearningPathActor) {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { shouldReplacePublishedPath } from "../src/modules/learning-path/service.js";
+import {
+  selectPublishedPathCandidates,
+  shouldReplacePublishedPath,
+} from "../src/modules/learning-path/service.js";
 
 describe("published learning-path selection", () => {
   it("prefers canonical P0 over a legacy path in the same area", () => {
@@ -125,6 +128,51 @@ describe("published learning-path selection", () => {
 
     expect(shouldReplacePublishedPath(canonical, legacy, "tenant-1")).toBe(true);
     expect(shouldReplacePublishedPath(legacy, canonical, "tenant-1")).toBe(false);
+  });
+
+  it("keeps the completed P0 area when an assigned P1 route uses the same area", () => {
+    const selected = selectPublishedPathCandidates(
+      [
+        {
+          code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+          area: "FAST_READING",
+          tenantId: null,
+          enrolled: true,
+          completedProgressCount: 9,
+          progressCount: 9,
+        },
+        {
+          code: "EDUCATION_V2_P0_READING_COMPREHENSION_G8_12",
+          area: "READING_COMPREHENSION",
+          tenantId: null,
+          enrolled: true,
+          completedProgressCount: 9,
+          progressCount: 9,
+        },
+        {
+          code: "EDUCATION_V2_P0_COMMON_G8_12",
+          area: "COMMON",
+          tenantId: null,
+          enrolled: true,
+          completedProgressCount: 4,
+          progressCount: 4,
+        },
+        {
+          code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+          area: "READING_COMPREHENSION",
+          tenantId: null,
+          enrolled: true,
+        },
+      ],
+      "tenant-1",
+    );
+
+    expect(selected.map((path) => path.code)).toEqual([
+      "EDUCATION_V2_P0_FAST_READING_G8_12",
+      "EDUCATION_V2_P0_READING_COMPREHENSION_G8_12",
+      "EDUCATION_V2_P0_COMMON_G8_12",
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+    ]);
   });
 
   it("still prefers canonical P0 when neither path has student enrollment", () => {
