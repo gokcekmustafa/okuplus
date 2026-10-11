@@ -171,6 +171,64 @@ function hasP0StepArtifact(step: P0Step): boolean {
   return true;
 }
 
+export type P1CandidateStepReadinessInput = {
+  type: P0Step["type"];
+  contentVersionId: string | null;
+  contentVersion: {
+    status: string;
+    content: { status: string; deletedAt: Date | null };
+  } | null;
+  exerciseTemplateVersionId: string | null;
+  exerciseTemplateVersion: {
+    status: string;
+    template: { status: string; deletedAt: Date | null };
+  } | null;
+  assessmentId: string | null;
+  assessment: { status: string; deletedAt: Date | null } | null;
+};
+
+function hasPublishedContentArtifact(step: P1CandidateStepReadinessInput): boolean {
+  return Boolean(
+    step.contentVersionId &&
+    step.contentVersion?.status === "PUBLISHED" &&
+    step.contentVersion.content.status === "PUBLISHED" &&
+    step.contentVersion.content.deletedAt === null,
+  );
+}
+
+function hasPublishedTemplateArtifact(step: P1CandidateStepReadinessInput): boolean {
+  return Boolean(
+    step.exerciseTemplateVersionId &&
+    step.exerciseTemplateVersion?.status === "PUBLISHED" &&
+    step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
+    step.exerciseTemplateVersion.template.deletedAt === null,
+  );
+}
+
+/**
+ * Checks the artifact contract for one published P1 candidate step.
+ * SMALL_STUDY is intentionally content-or-template backed: P0 uses the
+ * lesson form while P1-A uses a published exercise template for its short
+ * study stations.
+ */
+export function isReadyP1CandidateStep(step: P1CandidateStepReadinessInput): boolean {
+  if (step.type === "TEACHING") return hasPublishedContentArtifact(step);
+  if (step.type === "SMALL_STUDY") {
+    return hasPublishedContentArtifact(step) || hasPublishedTemplateArtifact(step);
+  }
+  if (step.type === "PRACTICE" || step.type === "REINFORCEMENT") {
+    return hasPublishedTemplateArtifact(step);
+  }
+  if (step.type === "ASSESSMENT") {
+    return Boolean(
+      step.assessmentId &&
+      step.assessment?.status === "PUBLISHED" &&
+      step.assessment.deletedAt === null,
+    );
+  }
+  return false;
+}
+
 /**
  * Resolves only the P0 completion that is valid for the same path and its
  * linear prerequisite chain. A future raw completion cannot jump over an
@@ -540,9 +598,19 @@ async function loadCandidates(
             where: { status: "PUBLISHED", isActive: true },
             select: {
               type: true,
-              contentVersion: { select: { status: true } },
-              exerciseTemplateVersion: { select: { status: true } },
-              assessment: { select: { status: true } },
+              contentVersionId: true,
+              exerciseTemplateVersionId: true,
+              assessmentId: true,
+              contentVersion: {
+                select: { status: true, content: { select: { status: true, deletedAt: true } } },
+              },
+              exerciseTemplateVersion: {
+                select: {
+                  status: true,
+                  template: { select: { status: true, deletedAt: true } },
+                },
+              },
+              assessment: { select: { status: true, deletedAt: true } },
             },
           },
         },
@@ -554,14 +622,7 @@ async function loadCandidates(
     const curriculumReady =
       path.units.length > 0 &&
       path.units.every((unit) => unit.steps.length > 0) &&
-      steps.every((step) => {
-        if (step.type === "TEACHING") return step.contentVersion?.status === "PUBLISHED";
-        if (step.type === "ASSESSMENT") return step.assessment?.status === "PUBLISHED";
-        return (
-          step.contentVersion?.status === "PUBLISHED" &&
-          step.exerciseTemplateVersion?.status === "PUBLISHED"
-        );
-      });
+      steps.every(isReadyP1CandidateStep);
     return curriculumReady
       ? [
           {
