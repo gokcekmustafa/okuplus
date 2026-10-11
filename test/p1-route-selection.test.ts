@@ -100,7 +100,7 @@ describe("P0 to P1 route selection", () => {
     });
   });
 
-  it("uses the server classifier decision for C and never falls back on an unresolved signal", () => {
+  it("uses the server classifier decision for C and keeps conflicting signals in review", () => {
     const decided = selectP1Route({
       levelId: "level-1",
       measurement: measurement({
@@ -164,6 +164,41 @@ describe("P0 to P1 route selection", () => {
     expect(unresolved.reasonCodes).toContain("MEASUREMENT_CONFLICT");
   });
 
+  it("uses P1-A for an insufficient specialized signal while preserving conflict review", () => {
+    const result = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({
+        adaptiveRouteMeasurement: {
+          contractVersion: ADAPTIVE_ROUTE_MEASUREMENT_CONTRACT_VERSION,
+          source: "OFFICIAL_PLACEMENT",
+          assessmentId: "assessment-c-insufficient",
+          itemMappingVersion: ADAPTIVE_PLACEMENT_ITEM_MAPPING_VERSION,
+          calibrationStatus: "NOT_CALIBRATED",
+          productionAssignmentEnabled: false,
+          signals: {
+            C: {
+              needsRoute: true,
+              decisionStatus: "REVIEW_REQUIRED",
+              decisionReason: "INSUFFICIENT_EVIDENCE",
+              evidence: {
+                INFERENCE: { score: 0, scoredCount: 4 },
+                EVIDENCE_FINDING: { score: null, scoredCount: 0 },
+              },
+            },
+          },
+        },
+      }),
+      candidates,
+    });
+
+    expect(result).toMatchObject({
+      status: "READY",
+      routeFamily: "A",
+      recommendedPathId: "p1-a",
+      reasonCodes: ["MEASUREMENT_FALLBACK"],
+    });
+  });
+
   it("passes the real server scorer output into P1-C selection", () => {
     const metadata = (skillCode: string, stableQuestionId: string) => ({
       canonicalManifestId: "OKU-READING-PLACEMENT-V1",
@@ -212,9 +247,13 @@ describe("P0 to P1 route selection", () => {
       measurement: measurement({ adaptiveRouteMeasurement: scored.measurement }),
       candidates,
     });
-    expect(uncalibrated.status).toBe("REVIEW_REQUIRED");
-    expect(uncalibrated.recommendedPathId).toBeNull();
-    expect(uncalibrated.reason).toContain("kalibrasyonu tamamlanmadı");
+    expect(uncalibrated).toMatchObject({
+      status: "READY",
+      routeFamily: "A",
+      recommendedPathId: "p1-a",
+      reasonCodes: ["MEASUREMENT_FALLBACK"],
+    });
+    expect(uncalibrated.reason).toContain("genel fallback");
 
     const calibrated = selectP1Route({
       levelId: "level-1",
@@ -234,16 +273,19 @@ describe("P0 to P1 route selection", () => {
     });
   });
 
-  it("fails closed for incomplete official evidence", () => {
+  it("uses P1-A when official B/C/D evidence is incomplete but not contradictory", () => {
     const result = selectP1Route({
       levelId: "level-1",
       measurement: measurement(officialNeed("C", false)),
       candidates,
     });
-    expect(result.status).toBe("REVIEW_REQUIRED");
-    expect(result.routeFamily).toBe("C");
-    expect(result.recommendedPathId).toBeNull();
-    expect(result.reasonCodes).toContain("INFERENCE_EVIDENCE_NEED");
+    expect(result).toMatchObject({
+      status: "READY",
+      routeFamily: "A",
+      recommendedPathId: "p1-a",
+      reasonCodes: ["MEASUREMENT_FALLBACK"],
+      uncertainty: "MEDIUM",
+    });
   });
 
   it("ignores legacy client-shaped profile fields", () => {

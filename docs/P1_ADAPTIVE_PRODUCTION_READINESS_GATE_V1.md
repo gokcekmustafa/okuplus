@@ -6,17 +6,17 @@
 
 ## 1. Mevcut canonical durum
 
-| Bileşen               | Durum                       | Yorum                                                                                                    |
-| --------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
-| P0                    | Aktif canonical akış        | 22 step linear progression korunur                                                                       |
-| P1-A                  | Balanced fallback/candidate | P0 geçmişini ve tek aktif P1 kuralını bozmaz                                                             |
-| P1-B                  | Kapalı                      | Fluency, accuracy, meaning preservation, transfer ayrı güvenilir kanıt değil                             |
-| P1-C                  | Teknik aday                 | INFERENCE ve EVIDENCE_FINDING adayları var; EVIDENCE_RELATION bağımsızlığı ve akademik calibration eksik |
-| P1-D                  | Kapalı                      | Contextual meaning, lexical relation, domain context için güvenilir item/scorer yok                      |
-| Item bank             | `DESIGN_ONLY`               | `OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1` / `1.0.1`                                                         |
-| Assessment            | `DESIGN_ONLY`               | `OKU-READING-PLACEMENT-V1` / `1.1.0`                                                                     |
-| Measurement           | `NOT_CALIBRATED`            | Route selection gate'i kapalı                                                                            |
-| Production assignment | `false`                     | B/C/D otomatik atanamaz                                                                                  |
+| Bileşen               | Durum                               | Yorum                                                                                                                      |
+| --------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| P0                    | Aktif canonical akış                | 22 step linear progression korunur                                                                                         |
+| P1-A                  | Balanced/general fallback candidate | P0 final ölçümü tamamlandığında, çelişkisiz fakat B/C/D için yetersiz kanıtta güvenli genel fallback olarak kullanılabilir |
+| P1-B                  | Kapalı                              | Fluency, accuracy, meaning preservation, transfer ayrı güvenilir kanıt değil                                               |
+| P1-C                  | Teknik aday                         | INFERENCE ve EVIDENCE_FINDING adayları var; EVIDENCE_RELATION bağımsızlığı ve akademik calibration eksik                   |
+| P1-D                  | Kapalı                              | Contextual meaning, lexical relation, domain context için güvenilir item/scorer yok                                        |
+| Item bank             | `DESIGN_ONLY`                       | `OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1` / `1.0.1`                                                                           |
+| Assessment            | `DESIGN_ONLY`                       | `OKU-READING-PLACEMENT-V1` / `1.1.0`                                                                                       |
+| Measurement           | `NOT_CALIBRATED`                    | Route selection gate'i kapalı                                                                                              |
+| Production assignment | `false`                             | B/C/D otomatik atanamaz                                                                                                    |
 
 ## 2. Zorunlu kapılar
 
@@ -90,9 +90,9 @@ Mevcut bankada bu üç dimension için trusted item mapping ve ayrı scorer kan�
 
 Aşağıdaki durumlar otomatik route assignment'ı engeller ve `REVIEW_REQUIRED` olarak kalır:
 
-- `NOT_CALIBRATED` scoring contract;
-- `productionAssignmentEnabled=false`;
-- eksik required dimension;
+- geçersiz/bozuk measurement contract;
+- `NOT_CALIBRATED` veya `productionAssignmentEnabled=false` iken B/C/D'yi otomatik atama;
+- eksik required dimension ile B/C/D'yi otomatik atama;
 - yanlış veya eski item mapping sürümü;
 - tamamlanmamış assessment/session;
 - null/ambiguous/çelişkili server score;
@@ -100,7 +100,7 @@ Aşağıdaki durumlar otomatik route assignment'ı engeller ve `REVIEW_REQUIRED`
 - aynı anda başka aktif P1 olması;
 - P0 tamamlanmamış olması.
 
-Bu kapılar P1-A fallback'ini, P0 history'sini, P0 22-step linear davranışını veya mevcut Training/Assignment/Measurement ayrımını gevşetmez.
+P0 tamamlanmış, final ölçüm mevcut ve yalnızca B/C/D kanıtı yetersiz veya kalibrasyonsuz ise; çelişkili bir sinyal yoksa bu durum P1-A'nın genel fallback olarak atanmasını engellemez. Bu fallback B/C/D ihtiyacını doğrulanmış saymaz ve B/C/D ataması açmaz. Geçersiz contract, eksik final ölçüm veya çelişkili sinyal yine `REVIEW_REQUIRED` kalır. P0 history'si, P0 22-step linear davranışı ve Training/Assignment/Measurement ayrımı korunur.
 
 ## 5. Kalan gerçek dış bağımlılıklar
 

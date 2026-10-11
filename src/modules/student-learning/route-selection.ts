@@ -7,7 +7,7 @@ import {
 } from "../measurements/adaptive-route-contract.js";
 
 /** The policy contract is separate from the curriculum version. */
-export const P1_ROUTE_SELECTION_POLICY_VERSION = "P1_ROUTE_SELECTION_V1" as const;
+export const P1_ROUTE_SELECTION_POLICY_VERSION = "P1_ROUTE_SELECTION_V1_1" as const;
 
 export const P1_ROUTE_FAMILIES = ["A", "B", "C", "D"] as const;
 export type P1RouteFamily = (typeof P1_ROUTE_FAMILIES)[number];
@@ -17,6 +17,7 @@ export const ROUTE_REASON_CODES = [
   "INFERENCE_EVIDENCE_NEED",
   "VOCABULARY_CONTEXT_NEED",
   "BALANCED_PROFILE",
+  "MEASUREMENT_FALLBACK",
   "MEASUREMENT_INSUFFICIENT",
   "MEASUREMENT_CONFLICT",
 ] as const;
@@ -101,6 +102,15 @@ function adaptiveReviewSignal(metrics: unknown): {
   if (adaptive.status !== "VALID") return null;
   for (const family of ["B", "C", "D"] as const) {
     const signal = adaptive.measurement.signals[family];
+    if (
+      signal?.decisionStatus === "REVIEW_REQUIRED" &&
+      signal.decisionReason === "MIXED_DIMENSION_EVIDENCE"
+    ) {
+      return { family, reasonCode: "MEASUREMENT_CONFLICT" };
+    }
+  }
+  for (const family of ["B", "C", "D"] as const) {
+    const signal = adaptive.measurement.signals[family];
     if (signal?.decisionStatus !== "REVIEW_REQUIRED") continue;
     return {
       family,
@@ -170,11 +180,13 @@ function findCandidate(
 /**
  * Pure P0 -> P1 route decision. It does not read or mutate the database.
  * B/C/D are fail-closed until the complete, versioned official contract is
- * persisted by the assessment pipeline. In particular, legacy client-shaped
- * profile fields cannot activate a route.
+ * persisted by the assessment pipeline. An incomplete, non-contradictory
+ * specialized signal may therefore select only the generic P1-A fallback;
+ * legacy client-shaped profile fields cannot activate a specialized route.
  */
 export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
   const { measurement, candidates, levelId } = input;
+  let fallbackReasonCode: RouteReasonCode = "BALANCED_PROFILE";
   if (!measurement || !measurement.isFinalP0Measurement) {
     return selectionResult(
       "REVIEW_REQUIRED",
@@ -219,7 +231,7 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
   }
   if (adaptive.status === "VALID") {
     const reviewSignal = adaptiveReviewSignal(measurement.metrics);
-    if (reviewSignal) {
+    if (reviewSignal?.reasonCode === "MEASUREMENT_CONFLICT") {
       return selectionResult(
         "REVIEW_REQUIRED",
         null,
@@ -232,6 +244,7 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
         `P1-${reviewSignal.family} için server-side route ihtiyacı kesinleştirilemedi`,
       );
     }
+    if (reviewSignal) fallbackReasonCode = "MEASUREMENT_FALLBACK";
     const activeFamilies = (
       Object.keys(adaptive.measurement.signals) as AdaptiveRouteFamily[]
     ).filter((family) => adaptive.measurement.signals[family]?.needsRoute === true);
@@ -250,28 +263,7 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     }
     const activeFamily = activeFamilies[0];
     if (activeFamily && !hasCompleteAdaptiveRouteEvidence(adaptive.measurement, activeFamily)) {
-      const calibrationBlocked =
-        adaptive.measurement.calibrationStatus !== "CALIBRATED" ||
-        adaptive.measurement.productionAssignmentEnabled !== true;
-      return selectionResult(
-        "REVIEW_REQUIRED",
-        null,
-        activeFamily,
-        [
-          activeFamily === "B"
-            ? "FLUENCY_ACCURACY_NEED"
-            : activeFamily === "C"
-              ? "INFERENCE_EVIDENCE_NEED"
-              : "VOCABULARY_CONTEXT_NEED",
-        ],
-        measurement,
-        null,
-        false,
-        "HIGH",
-        calibrationBlocked
-          ? `P1-${activeFamily} için assessment kalibrasyonu tamamlanmadı`
-          : `P1-${activeFamily} için gerekli resmi kanıtların tamamı yok`,
-      );
+      fallbackReasonCode = "MEASUREMENT_FALLBACK";
     }
   }
 
@@ -305,7 +297,7 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
         ? "INFERENCE_EVIDENCE_NEED"
         : family === "D"
           ? "VOCABULARY_CONTEXT_NEED"
-          : "BALANCED_PROFILE";
+          : fallbackReasonCode;
   const candidate = findCandidate(candidates, family, levelId);
   if (!candidate) {
     return selectionResult(
@@ -329,7 +321,9 @@ export function selectP1Route(input: SelectP1RouteInput): RouteSelectionResult {
     measurement,
     profile,
     true,
-    "LOW",
-    `P1-${family} rotası ölçüm sözleşmesine göre seçildi`,
+    reasonCode === "MEASUREMENT_FALLBACK" ? "MEDIUM" : "LOW",
+    reasonCode === "MEASUREMENT_FALLBACK"
+      ? "P1-A genel fallback'i: P1-B/C/D için güvenilir rota ihtiyacı doğrulanamadı"
+      : `P1-${family} rotası ölçüm sözleşmesine göre seçildi`,
   );
 }
