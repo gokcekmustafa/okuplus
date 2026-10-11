@@ -49,6 +49,62 @@ describe("published learning-path selection", () => {
     ).toBe(false);
   });
 
+  it("preserves an enrolled canonical P0 path when a global duplicate exists", () => {
+    const globalPath = {
+      code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+      tenantId: null,
+      version: 1,
+      enrolled: false,
+    };
+    const enrolledPath = {
+      code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+      tenantId: "tenant-1",
+      version: 1,
+      enrolled: true,
+    };
+
+    expect(shouldReplacePublishedPath(globalPath, enrolledPath, "tenant-1")).toBe(true);
+    expect(shouldReplacePublishedPath(enrolledPath, globalPath, "tenant-1")).toBe(false);
+  });
+
+  it("keeps the tenant-scoped enrolled path when both canonical duplicates are enrolled", () => {
+    const globalPath = {
+      code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+      tenantId: null,
+      version: 1,
+      enrolled: true,
+    };
+    const tenantPath = {
+      code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+      tenantId: "tenant-1",
+      version: 1,
+      enrolled: true,
+    };
+
+    expect(shouldReplacePublishedPath(globalPath, tenantPath, "tenant-1")).toBe(true);
+    expect(shouldReplacePublishedPath(tenantPath, globalPath, "tenant-1")).toBe(false);
+  });
+
+  it("does not let an enrolled legacy path displace canonical P0", () => {
+    expect(
+      shouldReplacePublishedPath(
+        {
+          code: "EDUCATION_V2_P0_FAST_READING_G8_12",
+          tenantId: null,
+          version: 1,
+          enrolled: false,
+        },
+        {
+          code: "EDU-V2-P0-FAST-FOUNDATION",
+          tenantId: "tenant-1",
+          version: 1,
+          enrolled: true,
+        },
+        "tenant-1",
+      ),
+    ).toBe(false);
+  });
+
   it("does not replace canonical P0 with a legacy path", () => {
     expect(
       shouldReplacePublishedPath(
