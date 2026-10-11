@@ -3109,16 +3109,26 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var label = node.label || node.code || "Öğrenme adımı";
       var statusLabel = learningPathStatusLabel(visualStatus);
       var areaLabel = learningPathAreaLabel(entry.area);
+      var stepNumber = index + 1;
       var disabled = visualStatus === "locked" ? " disabled" : "";
       var current = currentNode?.id === node.id ? ' aria-current="step"' : "";
-      var aria = areaLabel + " · " + kind.label + " · " + label + " · " + statusLabel;
+      var aria =
+        "İstasyon " +
+        stepNumber +
+        " · " +
+        areaLabel +
+        " · " +
+        kind.label +
+        " · " +
+        label +
+        " · " +
+        statusLabel;
       var isCurrent = currentNode?.id === node.id;
       var actionLabel = learningPathActionLabel(node, visualStatus);
       var lockMarkup =
         visualStatus === "locked"
           ? '<span class="learning-map-v6-lock" aria-label="Bu durak henüz açılmadı" title="Bu durak henüz açılmadı">🔒</span>'
           : "";
-      var stepNumber = index + 1;
       var characterMarkup = isCurrent
         ? '<span class="learning-map-v6-character"><img src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /></span>'
         : "";
@@ -3136,6 +3146,8 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         (isCurrent ? " is-current" : "") +
         '" role="listitem" data-map-index="' +
         stepNumber +
+        '" data-station-number="' +
+        stepNumber +
         '"><button type="button" class="learning-map-v6-node ' +
         escapeHtml(visualStatus) +
         '" data-node-id="' +
@@ -3151,11 +3163,13 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         disabled +
         '><span class="learning-map-v6-marker-wrap">' +
         characterMarkup +
-        '<span class="learning-map-v6-marker" aria-hidden="true"><span>' +
-        escapeHtml(
-          visualStatus === "completed" ? "✓" : visualStatus === "locked" ? "·" : kind.icon,
-        ) +
-        '</span></span></span><span class="learning-map-v6-copy"><span class="learning-map-v6-area">' +
+        '<span class="learning-map-v6-marker" aria-hidden="true"><span class="learning-map-v6-marker-content">' +
+        (visualStatus === "completed"
+          ? '<span class="learning-map-v6-marker-check">✓</span>'
+          : "") +
+        '<span class="learning-map-v6-marker-number">' +
+        escapeHtml(String(stepNumber)) +
+        '</span></span></span></span><span class="learning-map-v6-copy"><span class="learning-map-v6-area">' +
         escapeHtml(areaLabel) +
         '</span><strong class="learning-map-v6-kind">' +
         escapeHtml(kind.label) +
