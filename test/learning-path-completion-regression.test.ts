@@ -20,6 +20,30 @@ describe("learning path completion regression", () => {
     expect(evidence.get("step-b")?.completed).toBe(false);
   });
 
+  it("restores legacy sessions without a step id only when the template is unique", () => {
+    const evidence = resolveLearningPathStepEvidence(
+      [{ id: "step-a", exerciseTemplateVersionId: "template-v1", contentVersionId: null }],
+      [{ learningStepId: null, templateVersionId: "template-v1" }],
+      new Set(),
+    );
+
+    expect(evidence.get("step-a")?.completed).toBe(true);
+  });
+
+  it("does not restore a legacy session across steps sharing a template", () => {
+    const evidence = resolveLearningPathStepEvidence(
+      [
+        { id: "step-a", exerciseTemplateVersionId: "template-v1", contentVersionId: null },
+        { id: "step-b", exerciseTemplateVersionId: "template-v1", contentVersionId: null },
+      ],
+      [{ learningStepId: null, templateVersionId: "template-v1" }],
+      new Set(),
+    );
+
+    expect(evidence.get("step-a")?.completed).toBe(false);
+    expect(evidence.get("step-b")?.completed).toBe(false);
+  });
+
   it("does not use shared content as completion evidence for either step", () => {
     const evidence = resolveLearningPathStepEvidence(
       [

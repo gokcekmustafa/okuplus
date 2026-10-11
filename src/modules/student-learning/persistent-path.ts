@@ -2,6 +2,7 @@ import type { PlatformRole, Prisma } from "@prisma/client";
 import { Prisma as PrismaNamespace } from "@prisma/client";
 import { validationError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
+import { resolveLearningPathStepEvidence } from "../learning-path/service.js";
 import {
   ACADEMIC_P0_COMMON_FLOW,
   ACADEMIC_P0_LESSONS,
@@ -409,6 +410,9 @@ async function completedStepIdsFromEvidence(
   const assessmentIds = steps
     .map((step) => step.assessmentId)
     .filter((id): id is string => Boolean(id));
+  const templateVersionIds = steps
+    .map((step) => step.exerciseTemplateVersionId)
+    .filter((id): id is string => Boolean(id));
 
   const [progress, sessions, lessons, assessments] = await Promise.all([
     db.studentLearningStepProgress.findMany({
@@ -425,7 +429,12 @@ async function completedStepIdsFromEvidence(
           where: {
             tenantId: actor.tenantId!,
             studentId: actor.userId,
-            learningStepId: { in: [...stepIds] },
+            OR: [
+              { learningStepId: { in: [...stepIds] } },
+              ...(templateVersionIds.length
+                ? [{ learningStepId: null, templateVersionId: { in: templateVersionIds } }]
+                : []),
+            ],
             status: "COMPLETED",
             assignmentId: null,
             assessmentId: null,
@@ -461,7 +470,6 @@ async function completedStepIdsFromEvidence(
 
   const completed = new Set(progress.map((item) => item.learningStepId));
   const completedContents = new Set(lessons.map((lesson) => lesson.contentVersionId));
-  const stepById = new Map(steps.map((step) => [step.id, step] as const));
   const contentUsage = new Map<string, number>();
   for (const step of steps) {
     if (step.contentVersionId) {
@@ -493,14 +501,17 @@ async function completedStepIdsFromEvidence(
     }
   }
 
-  // A session started from the current Learning Path stores the exact step.
-  // Keep this explicit mapping even when a template version is shared by more
-  // than one historical step.
-  for (const session of sessions) {
-    const step = session.learningStepId ? stepById.get(session.learningStepId) : undefined;
-    if (step && step.exerciseTemplateVersionId === session.templateVersionId) {
-      completed.add(step.id);
-    }
+  const stepEvidence = resolveLearningPathStepEvidence(
+    steps.map((step) => ({
+      id: step.id,
+      exerciseTemplateVersionId: step.exerciseTemplateVersionId,
+      contentVersionId: step.contentVersionId,
+    })),
+    sessions,
+    completedContents,
+  );
+  for (const [stepId, evidence] of stepEvidence) {
+    if (evidence.completed) completed.add(stepId);
   }
   return completed;
 }

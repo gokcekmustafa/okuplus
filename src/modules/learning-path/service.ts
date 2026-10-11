@@ -45,6 +45,8 @@ type PublishedPath = {
   title: string;
   area: string;
   enrolled?: boolean;
+  progressCount?: number;
+  completedProgressCount?: number;
   units: PathUnitRow[];
 };
 
@@ -88,8 +90,14 @@ export function resolveLearningPathStepEvidence(
   completedContentVersionIds: ReadonlySet<string>,
 ): ReadonlyMap<string, LearningPathStepEvidence> {
   const stepById = new Map(steps.map((step) => [step.id, step] as const));
+  const stepsByTemplateVersion = new Map<string, string[]>();
   const contentUsage = new Map<string, number>();
   for (const step of steps) {
+    if (step.exerciseTemplateVersionId) {
+      const stepIds = stepsByTemplateVersion.get(step.exerciseTemplateVersionId) ?? [];
+      stepIds.push(step.id);
+      stepsByTemplateVersion.set(step.exerciseTemplateVersionId, stepIds);
+    }
     if (step.contentVersionId) {
       contentUsage.set(step.contentVersionId, (contentUsage.get(step.contentVersionId) ?? 0) + 1);
     }
@@ -97,10 +105,17 @@ export function resolveLearningPathStepEvidence(
 
   const sessionCounts = new Map<string, number>();
   for (const session of sessions) {
-    if (!session.learningStepId) continue;
-    const step = stepById.get(session.learningStepId);
+    // Sessions created before learningStepId was persisted can still be
+    // recovered when their template belongs to exactly one step in this path.
+    // A shared template remains intentionally ambiguous and is never used to
+    // complete more than one step.
+    const step = session.learningStepId
+      ? stepById.get(session.learningStepId)
+      : stepsByTemplateVersion.get(session.templateVersionId)?.length === 1
+        ? stepById.get(stepsByTemplateVersion.get(session.templateVersionId)![0]!)
+        : undefined;
     if (!step || step.exerciseTemplateVersionId !== session.templateVersionId) continue;
-    sessionCounts.set(session.learningStepId, (sessionCounts.get(session.learningStepId) ?? 0) + 1);
+    sessionCounts.set(step.id, (sessionCounts.get(step.id) ?? 0) + 1);
   }
 
   return new Map(
@@ -251,10 +266,42 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     },
   });
 
+  const pathIds = rows.map((row) => row.id);
+  // Keep an already-enrolled path as the source of truth while old and new
+  // canonical records coexist. Progress counts are only a tie-breaker between
+  // enrolled P0 records; they never make an unassigned P1 path selectable.
+  const progressRows = pathIds.length
+    ? await tx.studentLearningStepProgress.findMany({
+        where: {
+          tenantId: actor.tenantId!,
+          studentId: actor.userId,
+          learningStep: { unit: { pathId: { in: pathIds } } },
+        },
+        select: {
+          status: true,
+          learningStep: { select: { unit: { select: { pathId: true } } } },
+        },
+      })
+    : [];
+  const progressByPath = new Map<string, { total: number; completed: number }>();
+  for (const row of progressRows) {
+    const pathId = row.learningStep.unit.pathId;
+    const current = progressByPath.get(pathId) ?? { total: 0, completed: 0 };
+    current.total += 1;
+    if (row.status === "COMPLETED") current.completed += 1;
+    progressByPath.set(pathId, current);
+  }
+
   const pathsByArea = new Map<string, PublishedPath>();
   for (const row of rows) {
     const current = pathsByArea.get(row.area);
-    const candidate = { ...row, enrolled: row.enrollments.length > 0 } as PublishedPath;
+    const progress = progressByPath.get(row.id) ?? { total: 0, completed: 0 };
+    const candidate = {
+      ...row,
+      enrolled: row.enrollments.length > 0,
+      progressCount: progress.total,
+      completedProgressCount: progress.completed,
+    } as PublishedPath;
     if (shouldReplacePublishedPath(current, candidate, actor.tenantId)) {
       pathsByArea.set(row.area, candidate);
     }
@@ -273,8 +320,23 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
 
 export function shouldReplacePublishedPath(
   current:
-    { code: string; tenantId: string | null; version?: number; enrolled?: boolean } | undefined,
-  candidate: { code: string; tenantId: string | null; version?: number; enrolled?: boolean },
+    | {
+        code: string;
+        tenantId: string | null;
+        version?: number;
+        enrolled?: boolean;
+        progressCount?: number;
+        completedProgressCount?: number;
+      }
+    | undefined,
+  candidate: {
+    code: string;
+    tenantId: string | null;
+    version?: number;
+    enrolled?: boolean;
+    progressCount?: number;
+    completedProgressCount?: number;
+  },
   actorTenantId: string | null,
 ): boolean {
   if (!current) return true;
@@ -282,6 +344,22 @@ export function shouldReplacePublishedPath(
   const candidateIsAssignedP1 = candidate.code.startsWith(P1_PATH_PREFIX);
   const currentIsAssignedP1 = current.code.startsWith(P1_PATH_PREFIX);
   if (candidateIsAssignedP1 !== currentIsAssignedP1) return candidateIsAssignedP1;
+
+  const candidateIsEnrolled = Boolean(candidate.enrolled);
+  const currentIsEnrolled = Boolean(current.enrolled);
+  if (candidateIsEnrolled !== currentIsEnrolled) return candidateIsEnrolled;
+
+  const candidateIsP0 = !candidateIsAssignedP1;
+  const currentIsP0 = !currentIsAssignedP1;
+  if (candidateIsP0 && currentIsP0 && candidateIsEnrolled && currentIsEnrolled) {
+    const candidateCompleted = candidate.completedProgressCount ?? 0;
+    const currentCompleted = current.completedProgressCount ?? 0;
+    if (candidateCompleted !== currentCompleted) return candidateCompleted > currentCompleted;
+
+    const candidateProgress = candidate.progressCount ?? 0;
+    const currentProgress = current.progressCount ?? 0;
+    if (candidateProgress !== currentProgress) return candidateProgress > currentProgress;
+  }
 
   const candidateIsCanonicalP0 = candidate.code.startsWith(P0_PATH_PREFIX);
   const currentIsCanonicalP0 = current.code.startsWith(P0_PATH_PREFIX);
@@ -366,6 +444,9 @@ async function readPathState(
 
   const pathSteps = flattenSteps(path);
   const pathStepIds = pathSteps.map((step) => step.id);
+  const templateVersionIds = pathSteps
+    .map((step) => step.exerciseTemplateVersionId)
+    .filter((id): id is string => Boolean(id));
   const stepById = new Map(pathSteps.map((step) => [step.id, step] as const));
   const localContentUsage = new Map<string, number>();
   for (const step of pathSteps) {
@@ -413,7 +494,12 @@ async function readPathState(
             where: {
               tenantId: actor.tenantId,
               studentId: actor.userId,
-              learningStepId: { in: pathStepIds },
+              OR: [
+                { learningStepId: { in: pathStepIds } },
+                ...(templateVersionIds.length
+                  ? [{ learningStepId: null, templateVersionId: { in: templateVersionIds } }]
+                  : []),
+              ],
               context: "INDIVIDUAL",
               sessionType: "PRACTICE",
               status: "COMPLETED",

@@ -24,6 +24,7 @@ import {
 } from "./route-selection.js";
 
 const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
+const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-";
 const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
@@ -339,8 +340,15 @@ async function loadP0State(
       id: p0LearningPathId,
       status: "PUBLISHED",
       deletedAt: null,
-      code: { startsWith: P0_PATH_PREFIX },
-      OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+      AND: [
+        {
+          OR: [
+            { code: { startsWith: P0_PATH_PREFIX } },
+            { code: { startsWith: P0_LEGACY_PATH_PREFIX } },
+          ],
+        },
+        { OR: [{ tenantId: null }, { tenantId: actor.tenantId }] },
+      ],
       enrollments: { some: { tenantId: actor.tenantId, studentId: actor.userId } },
     },
     select: {
@@ -353,6 +361,7 @@ async function loadP0State(
   });
   if (!anchorPath) return null;
 
+  const anchorIsCanonical = anchorPath.code.startsWith(P0_PATH_PREFIX);
   const pathScopeCode =
     anchorPath.code.match(
       /^EDUCATION_V2_P0_(?:FAST_READING|READING_COMPREHENSION|COMMON)_(.+)$/u,
@@ -362,9 +371,9 @@ async function loadP0State(
     where: {
       status: "PUBLISHED",
       deletedAt: null,
-      ...(canonicalCodes.length
+      ...(anchorIsCanonical && canonicalCodes.length
         ? { code: { in: canonicalCodes } }
-        : { code: { startsWith: P0_PATH_PREFIX } }),
+        : { code: { startsWith: P0_LEGACY_PATH_PREFIX } }),
       OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
       version: P0_CANONICAL_PATH_VERSION,
     },
