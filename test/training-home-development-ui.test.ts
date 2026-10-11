@@ -128,6 +128,12 @@ describe("training home and development UI", () => {
     expect(index).toContain('data-user-menu-action="logout"');
     expect(index).toContain('id="user-name"');
     expect(app).toContain("learning-map-v6-character");
+    expect(app).toContain('data-station-number="');
+    expect(app).toContain('class="learning-map-v6-marker-number"');
+    expect(app).toContain('class="learning-map-v6-marker-check"');
+    expect(app).toContain('"İstasyon " +');
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-marker-content");
+    expect(styles).toContain(".student-shell #learning-path-card .learning-map-v6-marker-number");
   });
 
   it("keeps the student home focused on the roadmap", () => {
