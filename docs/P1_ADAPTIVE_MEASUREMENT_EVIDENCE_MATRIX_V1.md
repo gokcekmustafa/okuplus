@@ -95,8 +95,8 @@
 1. Bu 36 madde, C için teknik/editorial adaylar üretir; mapping label'ı akademik kanıt değildir.
 2. C `EVIDENCE_RELATION`, yalnızca `INFERENCE` ile aynı maddede etiketlendiği için bağımsız kanıt kabul edilmemelidir. Ayrı relation görevi veya uzman kararı gerekir.
 3. B ve D için mevcut item bankasından dolaylı skor türetmek yasaktır.
-4. Eksik, çelişkili, yanlış sürümlü veya tamamlanmamış kanıt `REVIEW_REQUIRED` kalır.
-5. `calibrationStatus=NOT_CALIBRATED` veya `productionAssignmentEnabled=false` iken hiçbir B/C/D route'u otomatik atanamaz. P1-A fallback'i ve P0 22-step davranışı bu belgeyle değişmez.
+4. Eksik, çelişkili, yanlış sürümlü veya tamamlanmamış kanıt B/C/D route'u için `REVIEW_REQUIRED` kalır; çelişki veya geçersiz contract genel route kararını da durdurur.
+5. `calibrationStatus=NOT_CALIBRATED` veya `productionAssignmentEnabled=false` iken hiçbir B/C/D route'u otomatik atanamaz. P0 final ölçümü mevcut ve sinyal çelişkisiz olduğu sürece P1-A, doğrulanmamış B/C/D ihtiyacını yok sayan genel fallback olarak atanabilir; bu, B/C/D'yi production-ready ilan etmez.
 6. Yeni item/mapping üretilecekse mevcut bankaya sessizce ekleme yapılmaz; yeni manifest/mapping sürümü, answer key, scorer contract, uzman incelemesi ve pilot kararı gerekir.
 
 ## 6. İnceleme kayıt alanı
