@@ -298,7 +298,7 @@ describe("P0 to P1 route selection", () => {
     expect(result.routeFamily).toBe("A");
   });
 
-  it("requires a final measurement and all three reading-comprehension signals", () => {
+  it("requires a final measurement but uses P1-A when base skill evidence is incomplete", () => {
     const notFinal = selectP1Route({
       levelId: "level-1",
       measurement: { ...measurement(), isFinalP0Measurement: false },
@@ -310,9 +310,28 @@ describe("P0 to P1 route selection", () => {
       candidates,
     });
     expect(notFinal.reasonCodes).toContain("MEASUREMENT_INSUFFICIENT");
-    expect(incomplete.reasonCodes).toContain("MEASUREMENT_INSUFFICIENT");
     expect(notFinal.status).toBe("REVIEW_REQUIRED");
-    expect(incomplete.status).toBe("REVIEW_REQUIRED");
+    expect(incomplete).toMatchObject({
+      status: "READY",
+      routeFamily: "A",
+      recommendedPathId: "p1-a",
+      reasonCodes: ["MEASUREMENT_FALLBACK"],
+    });
+  });
+
+  it("uses P1-A when the adaptive sub-contract is invalid but the final P0 result exists", () => {
+    const result = selectP1Route({
+      levelId: "level-1",
+      measurement: measurement({ adaptiveRouteMeasurement: { contractVersion: "legacy" } }),
+      candidates,
+    });
+
+    expect(result).toMatchObject({
+      status: "READY",
+      routeFamily: "A",
+      recommendedPathId: "p1-a",
+      reasonCodes: ["MEASUREMENT_FALLBACK"],
+    });
   });
 
   it("does not choose a route when official signals conflict or content is absent", () => {
