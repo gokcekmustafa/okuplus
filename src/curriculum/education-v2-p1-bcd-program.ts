@@ -336,7 +336,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1b-study-1",
           "‘Kütüphane kapanmadan önce öğrenciler notlarını düzenledi.’ cümlesinde koşulu bildiren grup hangisidir?",
           [
-            ["a", "Kütüphane kapanmadan önce"],
+            ["a", "Kapanmadan önce"],
             ["b", "öğrenciler"],
             ["c", "notlarını"],
             ["d", "düzenledi"],
@@ -390,10 +390,10 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1b-practice-1",
           "‘Okul, öğle arasında bahçeye gölgelikler kurdu. Böylece öğrenciler sıcak günlerde dışarıda daha rahat dinlenebildi.’ Bu metni destekleyen ayrıntı hangisidir?",
           [
-            ["a", "Gölgeliklerin öğrencilerin dinlenmesini kolaylaştırması"],
-            ["b", "Öğle arasının her gün aynı sürmesi"],
-            ["c", "Bahçenin okuldan uzakta olması"],
-            ["d", "Sıcak günlerin hiç yaşanmaması"],
+            ["a", "Gölgeliklerin dinlenmeyi kolaylaştırması"],
+            ["b", "Öğle arasının her gün aynı sürede yapılması"],
+            ["c", "Bahçenin okul binasından uzakta bulunması"],
+            ["d", "Sıcak günlerin okulda hiç yaşanmaması"],
           ],
           "a",
           "İkinci cümle gölgeliklerin öğrenci dinlenmesine katkısını açıklar.",
@@ -444,7 +444,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1b-reinforcement-1",
           "‘Gönüllüler parkta fidan dikti. Yağmurdan sonra fidanların çevresindeki toprak yeniden düzeltildi.’ İkinci cümle ilk cümleye nasıl bağlanır?",
           [
-            ["a", "İlk çalışmanın bakımını açıklar"],
+            ["a", "Bakım çalışmasını açıklar"],
             ["b", "İlk cümleyi reddeder"],
             ["c", "Yeni bir konuya geçer"],
             ["d", "Kişisel görüş ekler"],
@@ -471,7 +471,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "Bir ayrıntı metnin anlamına uymuyorsa ne yapılmalıdır?",
           [
             ["a", "Ayrıntıyı metinden bağımsız kabul etmek"],
-            ["b", "Ayrıntının cümle içindeki görevini yeniden kontrol etmek"],
+            ["b", "Ayrıntının cümledeki görevini kontrol etmek"],
             ["c", "En uzun cevabı seçmek"],
             ["d", "Metni okumayı bırakmak"],
           ],
@@ -512,7 +512,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1b-assessment-2",
           "Aynı metinde ‘buraya’ sözcüğü neyi gösterir?",
           [
-            ["a", "Kullanılmayan ve temizlenen alanı"],
+            ["a", "Temizlenen alanı"],
             ["b", "Başka bir mahalleyi"],
             ["c", "Çocukların evini"],
             ["d", "Kitaplığın içini"],
@@ -527,7 +527,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "Akıcı okuma sırasında bir cümlenin anlamı kaybolursa en uygun yaklaşım nedir?",
           [
             ["a", "Daha da hızlanmak"],
-            ["b", "Anlam grubunu ve ilişkiyi yeniden okumak"],
+            ["b", "Anlam grubunu yeniden okumak"],
             ["c", "Cevabı tahmin etmek"],
             ["d", "Metin dışı bilgi eklemek"],
           ],
@@ -622,7 +622,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-study-1",
           "‘Ece, sunumdan önce kaynak listesini kontrol etti ve eksik kitapları not aldı.’ Ece'nin ne yaptığı kesin olarak söylenebilir?",
           [
-            ["a", "Sunum için kaynaklarını düzenlediği"],
+            ["a", "Kaynaklarını düzenlediği"],
             ["b", "Bütün kitapları okuduğu"],
             ["c", "Sunumu tek başına yaptığı"],
             ["d", "Kaynak listesini yazdığı"],
@@ -635,7 +635,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-study-2",
           "Bir metinsel kanıtı seçerken hangisi aranır?",
           [
-            ["a", "Sonucu doğrudan destekleyen açık bilgi"],
+            ["a", "Sonucu destekleyen açık bilgi"],
             ["b", "Okuyucunun kişisel anısı"],
             ["c", "En şaşırtıcı ayrıntı"],
             ["d", "Metinde hiç geçmeyen bilgi"],
@@ -676,7 +676,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-practice-1",
           "‘Köydeki eski değirmen onarıldı. Ziyaretçiler artık içerideki mekanizmayı inceleyebiliyor.’ Hangi çıkarım desteklenir?",
           [
-            ["a", "Değirmen hem korunmuş hem de ziyaretçilere açıklanmıştır"],
+            ["a", "Değirmen korunmuş ve ziyaretçilere açılmıştır"],
             ["b", "Değirmeni yalnızca köylüler kullanır"],
             ["c", "Değirmen daha önce hiç çalışmamıştır"],
             ["d", "Ziyaretçiler değirmeni satın almıştır"],
@@ -702,7 +702,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-practice-3",
           "‘Öğrenciler deney sonuçlarını tabloya geçirdi ve sonuçları farklı gruplarla karşılaştırdı.’ Bu davranış hangi amacı destekler?",
           [
-            ["a", "Sonuçları düzenleyip değerlendirmek"],
+            ["a", "Sonuçları değerlendirmek"],
             ["b", "Deneyi hiç yapmamak"],
             ["c", "Tabloyu süslemek"],
             ["d", "Grupları çalışmadan ayırmak"],
@@ -730,7 +730,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-reinforcement-1",
           "Kanıt ile sonuç arasındaki ilişkiyi kontrol etmek için ne yapılır?",
           [
-            ["a", "Sonucun hangi açık bilgilerden çıktığı gösterilir"],
+            ["a", "Sonucu destekleyen bilgiler gösterilir"],
             ["b", "Sonuca kişisel örnek eklenir"],
             ["c", "Yalnızca son cümle okunur"],
             ["d", "En güçlü görünen seçenek seçilir"],
@@ -743,7 +743,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-reinforcement-2",
           "Metin yalnızca bir olasılığı söylüyorsa hangi seçim güvenlidir?",
           [
-            ["a", "Metnin kesin olarak desteklediği sınırlı sonuç"],
+            ["a", "Metnin desteklediği sınırlı sonuç"],
             ["b", "Olasılığı kesin gerçek saymak"],
             ["c", "Metin dışı bilgiyi eklemek"],
             ["d", "En ayrıntılı seçeneği seçmek"],
@@ -784,7 +784,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-assessment-1",
           "‘Müze, eski haritaları dijital ekrana aktardı. Ziyaretçiler haritaları büyüterek farklı dönemleri karşılaştırabiliyor.’ Hangi çıkarım desteklenir?",
           [
-            ["a", "Teknoloji, ziyaretçilerin tarihî bilgiyi karşılaştırmasına yardım ediyor"],
+            ["a", "Teknoloji, tarihî karşılaştırmayı kolaylaştırıyor"],
             ["b", "Haritalar artık sergilenmiyor"],
             ["c", "Ziyaretçiler haritaları değiştirebiliyor"],
             ["d", "Müze yalnızca dijital ekranlardan oluşuyor"],
@@ -798,10 +798,10 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-assessment-2",
           "Aynı metinde hangi bilgi sonucu doğrudan destekler?",
           [
-            ["a", "Haritaların büyütülüp dönemlerin karşılaştırılabilmesi"],
-            ["b", "Müzenin eski olması"],
-            ["c", "Ekranların büyük olması"],
-            ["d", "Ziyaretçilerin müzeye gelmesi"],
+            ["a", "Haritaları büyütüp dönemleri karşılaştırabilmek"],
+            ["b", "Müzenin tarihî bir binada bulunması"],
+            ["c", "Ekranların ziyaretçiler tarafından büyük görülmesi"],
+            ["d", "Ziyaretçilerin müzeye farklı günlerde gelmesi"],
           ],
           "a",
           "Karşılaştırma olanağı teknoloji ile öğrenme arasındaki bağı gösterir.",
@@ -812,7 +812,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-assessment-3",
           "Metin ‘öğrenciler daha dikkatli olabilir’ diyorsa hangi ifade metnin sınırını aşar?",
           [
-            ["a", "Bütün öğrencilerin kesinlikle dikkatli olduğu"],
+            ["a", "Bütün öğrencilerin dikkatli olduğu"],
             ["b", "Dikkatin artabileceği"],
             ["c", "Metnin bir olasılık belirttiği"],
             ["d", "Sonucun kesin olmadığı"],
@@ -826,7 +826,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1c-assessment-4",
           "Güvenilir bir çıkarımın son kontrolü hangisidir?",
           [
-            ["a", "Her iddianın metinde en az bir destekleyici bağı olması"],
+            ["a", "Her iddianın metin desteği olması"],
             ["b", "Seçeneğin en uzun olması"],
             ["c", "Kişisel deneyime uyması"],
             ["d", "Metnin başlığıyla aynı kelimeyi içermesi"],
@@ -908,7 +908,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-study-1",
           "‘Kışın bazı kuşlar daha sıcak bölgelere göç eder.’ cümlesinde ‘göç eder’ ne anlama gelir?",
           [
-            ["a", "Başka bir yere düzenli olarak gider"],
+            ["a", "Başka yere düzenli gider"],
             ["b", "Yuva yapmadan bekler"],
             ["c", "Kanatlarını saklar"],
             ["d", "Aynı yerde uyur"],
@@ -934,7 +934,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-study-3",
           "Kelime anlamını bağlamdan çıkarırken ilk olarak ne yapılmalıdır?",
           [
-            ["a", "Kelimenin çevresindeki cümle kanıtlarını okumak"],
+            ["a", "Cümle çevresindeki kanıtları okumak"],
             ["b", "İlk akla gelen anlamı seçmek"],
             ["c", "Sözcüğü metinden koparmak"],
             ["d", "Yalnızca sözlük sırasını düşünmek"],
@@ -988,10 +988,10 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-practice-3",
           "Alan bilgisi kelime anlamını nasıl destekler?",
           [
-            ["a", "Konuya özgü ilişkileri anlamayı kolaylaştırır"],
-            ["b", "Her kelimeye tek anlam verir"],
-            ["c", "Cümle kanıtlarını gereksiz kılar"],
-            ["d", "Metindeki sözcükleri değiştirir"],
+            ["a", "Konu ilişkilerini anlamaya yardım eder"],
+            ["b", "Her kelime için yalnızca tek bir anlam belirler"],
+            ["c", "Cümle kanıtlarını artık gereksiz hâle getirir"],
+            ["d", "Metindeki sözcüklerin anlamını kendiliğinden değiştirir"],
           ],
           "a",
           "Alan bilgisi bağlamdaki ilişkileri yorumlamaya yardım eder.",
@@ -1016,7 +1016,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-reinforcement-1",
           "Bir kelime için birden fazla anlam mümkünse en güvenilir seçim hangisidir?",
           [
-            ["a", "Cümlenin bütün anlamını koruyan seçim"],
+            ["a", "Cümlenin anlamını koruyan seçim"],
             ["b", "En yaygın görünen seçim"],
             ["c", "En uzun açıklama"],
             ["d", "Kişisel deneyime uyan seçim"],
@@ -1029,7 +1029,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-reinforcement-2",
           "‘Arıların çiçeklerden nektar toplaması, bal üretiminin ilk aşamasıdır.’ ‘Aşama’ sözcüğü neyi anlatır?",
           [
-            ["a", "Bir sürecin basamaklarından biri"],
+            ["a", "Sürecin bir basamağı"],
             ["b", "Bir çiçek türü"],
             ["c", "Toplama aracı"],
             ["d", "Balın rengi"],
@@ -1042,7 +1042,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-reinforcement-3",
           "Sözcük ilişkisini kontrol ederken hangi soru yararlıdır?",
           [
-            ["a", "Bu kelime cümlede hangi bilgiyle ilişki kuruyor?"],
+            ["a", "Kelime cümlede hangi bilgiyle ilişkili?"],
             ["b", "Bu kelime kaç harfli?"],
             ["c", "Bu kelimeyi daha önce gördüm mü?"],
             ["d", "Bu konu hakkında kişisel fikrim ne?"],
@@ -1084,7 +1084,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-assessment-2",
           "‘Düzenli sulama, fidanın köklenmesini kolaylaştırdı.’ ‘Köklenmek’ burada ne demektir?",
           [
-            ["a", "Köklerinin toprağa yerleşmesi"],
+            ["a", "Köklerin toprağa yerleşmesi"],
             ["b", "Yapraklarını dökmesi"],
             ["c", "Başka yere taşınması"],
             ["d", "Sulamayı bırakması"],
@@ -1112,7 +1112,7 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
           "p1d-assessment-4",
           "Kelime anlamının doğru olduğunu son olarak nasıl kontrol edersin?",
           [
-            ["a", "Seçtiğin anlam cümlenin tamamını açıklıyorsa"],
+            ["a", "Seçtiğin anlam cümleyi açıklıyorsa"],
             ["b", "Kelime tanıdık geliyorsa"],
             ["c", "En kısa seçenekse"],
             ["d", "Metin dışı bir örneğe uyuyorsa"],

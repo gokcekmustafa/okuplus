@@ -200,7 +200,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Metnin ana düşüncesi aşağıdakilerden hangisidir?",
           [
             "Beton zeminler her zaman ağaçlardan daha sıcaktır.",
-            "Bir gözlemi anlamlandırmak için düzenli ölçüm ve kanıt karşılaştırması gerekir.",
+            "Düzenli ölçüm ve kanıt karşılaştırması gerekir.",
             "Fen kulübü yalnızca gölgede oynanabilecek oyunlar aramıştır.",
             "Yağmur, okul bahçesindeki bütün ölçümleri geçersiz kılar.",
           ],
@@ -267,10 +267,10 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Mina görüntülere bakınca neden hemen “Göl küçülmüş” dememiştir?",
           [
-            "Uydu görüntülerini hiç beğenmediği için.",
-            "Tarih ve görüntü koşullarını kontrol etmeden renk farkını yorumlamak istemediği için.",
-            "Gölün çevresinde hiç bitki olmadığını düşündüğü için.",
-            "Sunum yapmayı ertelemek istediği için.",
+            "Uydu görüntülerinin renklerini hiç güvenilir bulmadığı için.",
+            "Renk farkına bakıp hemen sonuç çıkarmak istemediği için.",
+            "Göl çevresindeki bitki örtüsünü ve su çizgisini incelemek istemediği için.",
+            "Sunumda göl yerine başka bir konu anlatmayı planladığı için.",
           ],
           "b",
           "Mina önce tarihleri ve görüntü koşullarını araştırmış, renk farkını doğrudan tek sonuca bağlamamıştır.",
@@ -296,7 +296,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Mina’nın sunumundaki temel uyarı nedir?",
           [
             "Renk farkları her zaman aynı nedeni gösterir.",
-            "Görüntüleri yorumlarken tarih ve üretim koşulları dikkate alınmalıdır.",
+            "Yorumda tarih ve üretim koşulları dikkate alınmalıdır.",
             "Uydu görüntüleri yalnızca göller için kullanılabilir.",
             "Yukarıdan gözlem yapmak yerdeki ölçümleri gereksiz kılar.",
           ],
@@ -350,7 +350,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Kitap katalog kaydının işlevi nedir?",
           [
             "Bir haberin doğruluğunu tek başına kanıtlamak.",
-            "Kitabın adı, yazarı ve konusu hakkında bilgi bulmaya yardım etmek.",
+            "Kitap bilgilerini bulmaya yardım etmek.",
             "İki haberi aynı başlıkta birleştirmek.",
             "Araştırma notundaki eksikleri silmek.",
           ],
@@ -418,7 +418,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Deniz günlüğüne hangi bilgileri yazmıştır?",
           [
             "Yalnızca odasının sıcaklığını.",
-            "Işığı kapattığı, ekranı bıraktığı ve uykuya daldığını düşündüğü saatleri.",
+            "Işık, ekran ve uyku saatlerini.",
             "Her gün kaç sayfa kitap okuduğunu.",
             "Telefonundaki uygulamaların adlarını.",
           ],
@@ -431,7 +431,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Deniz’in gözlemini tıbbi sonuç olarak görmemesi neden önemlidir?",
           [
-            "Tek kişilik bir kaydın yalnızca kendi alışkanlığı hakkında fikir vermesi nedeniyle.",
+            "Tek kişilik kayıt yalnızca kendi alışkanlığını gösterir.",
             "Günlük tutmanın hiçbir işe yaramaması nedeniyle.",
             "Akşamları ışığın hiç değişmemesi nedeniyle.",
             "Telefon kullanımının her zaman zararsız olması nedeniyle.",
@@ -471,7 +471,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Arılar çiçekleri ziyaret ederken polen nasıl taşınabilir?",
           [
-            "Arının vücuduna yapışan polen başka çiçeklere taşınabilir.",
+            "Arının vücudundaki polen başka çiçeğe taşınabilir.",
             "Çiçekler poleni toprağın altına gönderir.",
             "Kelebekler arıların taşıdığı poleni siler.",
             "Polen yalnızca rüzgârla hareket eder.",
@@ -486,7 +486,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Elif’in grubu gözlem çizelgesine hangisini yazmıştır?",
           [
             "Çiçeklerin satış fiyatını.",
-            "Ziyaretçinin türünü, konduğu çiçeği ve kalma süresini.",
+            "Ziyaretçi türü, çiçek ve kalma süresi.",
             "Bahçedeki öğrencilerin sınav notlarını.",
             "Her çiçeğin kök uzunluğunu.",
           ],
@@ -499,7 +499,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Grup neden bir canlıyı görmemeyi onun hiç gelmediğinin kanıtı saymamıştır?",
           [
-            "Gözlem yalnızca belirli saatlerde yapılmıştır.",
+            "Gözlem yalnızca belirli saatlerdeydi.",
             "Çiçekler gün içinde hiç açılmamıştır.",
             "Polen yalnızca gece taşınır.",
             "Bahçede hiç çizelge tutulmamıştır.",
@@ -553,7 +553,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Metne göre toprağın su tutma özelliği hangi unsurlarla ilişkilidir?",
           [
-            "Taneciklerin yapısı, sıkışma durumu ve organik madde miktarıyla.",
+            "Tanecik yapısı, sıkışma ve organik maddeyle.",
             "Yalnızca bahçenin duvar rengiyle.",
             "Sadece yağmurun ses düzeyiyle.",
             "Öğrencilerin örnekleri etiketlemesiyle.",
@@ -567,7 +567,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "“Toprakta çok su var” cümlesi neden tek başına yeterli değildir?",
           [
-            "Suyun tamamı bitki köklerinin kullanabileceği durumda olmayabilir.",
+            "Su köklerin kullanacağı biçimde olmayabilir.",
             "Bitkilerin suya hiç ihtiyacı yoktur.",
             "Organik madde suyun toprağa girmesini engeller.",
             "Kumlu toprak her zaman suyla kaplıdır.",
@@ -621,7 +621,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Harita uzaklaştırıldığında neden bazı ayrıntılar gösterilmeyebilir?",
           [
-            "Ayrıntılar üst üste binip haritanın okunmasını zorlaştırabileceği için.",
+            "Ayrıntılar üst üste binip okunabilirliği bozabilir.",
             "Gerçek alandaki yollar kaybolduğu için.",
             "Haritalar hiç sembol kullanmadığı için.",
             "Yakınlaştırılmış haritalar daha az alan gösterdiği için.",
@@ -675,7 +675,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Selin, “Peki.” mesajını neden kesin olarak kızgınlık kanıtı saymamıştır?",
           [
-            "Mesajda ses tonu ve yüz ifadesi gibi bağlam ipuçları bulunmadığı için.",
+            "Ses tonu ve yüz ifadesi gibi bağlam ipuçları yoktu.",
             "Mert’in hiç mesaj göndermediği için.",
             "Dosyanın henüz hazırlanmadığı için.",
             "Tek kelimelik mesajların her zaman olumlu olduğu için.",
@@ -690,7 +690,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
           "Mert’in gerçek durumu neymiş?",
           [
             "Dosyaya kızmış ve çalışmayı bırakmış.",
-            "Otobüse yetişmeye çalıştığı için mesajı aceleyle yazmış.",
+            "Otobüse yetiştiği için aceleyle yazmış.",
             "Mesajı Selin yerine başka birine göndermiş.",
             "Dosyayı hiç açmamış ve cevap vermemiş.",
           ],
@@ -743,10 +743,10 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Öğrenciler fotoğraftaki yüzlere bakarak neden uzun bir hikâye kurmamıştır?",
           [
-            "Görselin zamanı ve olayı tek başına açıkça göstermediği için.",
-            "Fotoğraf siyah beyaz olduğu için.",
-            "Meydanda hiç insan bulunmadığı için.",
-            "Kütüphane kataloğu olmadığı için.",
+            "Görselin zamanı ve olayı açıkça belli değildi.",
+            "Fotoğrafın siyah beyaz çekilmiş olması nedeniyle.",
+            "Fotoğrafta meydanda hiç insan bulunmadığı için.",
+            "Kütüphane kataloğunda fotoğraf kaydı bulunmadığı için.",
           ],
           "a",
           "Fotoğrafın ne zaman ve hangi olay sırasında çekildiği ilk bakışta belli değildir.",
@@ -771,7 +771,7 @@ export const FIRST_REAL_CURRICULUM_PACK = {
         mc(
           "Sunumda bazı soruların açık bırakılması hangi yaklaşımı gösterir?",
           [
-            "Kanıtın yetmediği yerde belirsizliği dürüstçe belirtmeyi.",
+            "Kanıt yetmeyince belirsizliği belirtmeyi.",
             "Tarihsel belgeleri hiç kullanmamayı.",
             "Yalnızca fotoğrafın görünüşüne güvenmeyi.",
             "Her ipucunu kesin gerçek kabul etmeyi.",

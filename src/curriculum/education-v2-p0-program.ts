@@ -400,7 +400,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "fast-attention-study-2",
           "‘Yağmur başladığı için maç ertelendi.’ cümlesinde dikkat edilmesi gereken temel ilişki hangisidir?",
           [
-            ["a", "Yağmur ile erteleme arasındaki neden-sonuç ilişkisi"],
+            ["a", "Yağmurun ertelemeye neden olması"],
             ["b", "Maçın hangi gün oynandığı"],
             ["c", "Cümlenin kaç kelimeden oluştuğu"],
             ["d", "Yağmurun renginin nasıl göründüğü"],
@@ -476,7 +476,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "fast-chunking-practice-1",
           "‘Sessiz kütüphane köşesinde kitap okudu.’ cümlesinde birlikte anlam taşıyan grup hangisidir?",
           [
-            ["a", "sessiz kütüphane köşesinde"],
+            ["a", "sessiz kütüphane köşesi"],
             ["b", "köşesinde kitap"],
             ["c", "kitap okudu"],
             ["d", "sessiz kitap"],
@@ -491,7 +491,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "Kelime gruplarını belirlerken en güvenilir ölçüt hangisidir?",
           [
             ["a", "Her grubu aynı sayıda kelimeyle kurmak"],
-            ["b", "Birlikte anlam taşıyan kelimeleri ilişkilendirmek"],
+            ["b", "Kelimeler arasında anlam bağı kurmak"],
             ["c", "Yalnızca en uzun kelimeleri seçmek"],
             ["d", "Noktalamayı ve eylemi yok saymak"],
           ],
@@ -535,7 +535,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "rc-detail-study-2",
           "Ana fikri destekleyen ayrıntı aşağıdakilerden hangisidir?",
           [
-            ["a", "Metindeki düşünceyi örnekleyen veya kanıtlayan bilgi"],
+            ["a", "Düşünceyi destekleyen bilgi"],
             ["b", "Metinde hiç geçmeyen kişisel yorum"],
             ["c", "Soruyla ilgisiz en küçük ayrıntı"],
             ["d", "Yalnızca başlığın tekrar edilmesi"],
@@ -580,7 +580,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "rc-main-idea-practice-2",
           "Bir seçeneğin ana fikir olduğunu kontrol etmek için ne yapılmalıdır?",
           [
-            ["a", "Seçeneği metindeki iki veya daha fazla ayrıntıyla karşılaştırmak"],
+            ["a", "Seçeneği ayrıntılarla karşılaştırmak"],
             ["b", "En kısa seçeneği işaretlemek"],
             ["c", "Yalnızca ilk cümleyi okumak"],
             ["d", "Metin kanıtı aramadan tahmin etmek"],
@@ -627,7 +627,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           [
             ["a", "Her zaman kesin çıkarımdır"],
             ["b", "Metne dayalı zorunlu bir sonuçtur"],
-            ["c", "Tahmin olabilir, fakat güvenilir çıkarım değildir"],
+            ["c", "Kanıtsız bir tahmin olabilir"],
             ["d", "Ana fikrin kendisidir"],
           ],
           "c",
@@ -701,7 +701,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "common-test-1",
           "İyi bir okuma çalışmasının ana fikri bulmaya en doğrudan katkısı nedir?",
           [
-            ["a", "Metnin bütünündeki ortak düşünceyi görmeyi sağlaması"],
+            ["a", "Metnin ortak düşüncesini göstermesi"],
             ["b", "Yalnızca en uzun kelimeyi bulması"],
             ["c", "Metni okumadan cevap vermesi"],
             ["d", "Her ayrıntıyı ana fikir sayması"],
@@ -715,7 +715,7 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "common-test-2",
           "Bir seçeneği işaretlemeden önce en güvenilir kontrol hangisidir?",
           [
-            ["a", "Seçeneğin metin kanıtıyla eşleşip eşleşmediğini kontrol etmek"],
+            ["a", "Seçeneği metin kanıtıyla karşılaştırmak"],
             ["b", "Seçeneğin en kısa olmasını beklemek"],
             ["c", "Yalnızca kendi bilgine güvenmek"],
             ["d", "Açıklamayı okumadan ilerlemek"],
@@ -729,10 +729,10 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "common-test-3",
           "Çıkarım ile tahmin arasındaki temel fark nedir?",
           [
-            ["a", "Çıkarım metin kanıtına dayanır; tahmin kanıtsız kalabilir"],
-            ["b", "Tahmin her zaman daha doğrudur"],
+            ["a", "Çıkarım kanıta dayanır, tahmin dayanmayabilir"],
+            ["b", "Tahmin her durumda doğru kabul edilir"],
             ["c", "Çıkarım yalnızca başlığa dayanır"],
-            ["d", "Aralarında fark yoktur"],
+            ["d", "Çıkarım ile tahmin arasında fark yoktur"],
           ],
           "a",
           "Çıkarım, metindeki kanıtların zorunlu olarak gösterdiği sonucu arar.",
@@ -743,9 +743,9 @@ export const EDUCATION_V2_P0_PROGRAM: EducationV2P0Program = {
           "common-test-4",
           "Hızlı okuma çalışmasında anlamı korumak için ne yapılmalıdır?",
           [
-            ["a", "Anlam gruplarını fark edip metnin düşüncesini kontrol etmek"],
-            ["b", "Her cümleyi atlamak"],
-            ["c", "Sadece süreyi önemsemek"],
+            ["a", "Anlam gruplarıyla düşünceyi kontrol etmek"],
+            ["b", "Her cümleyi anlam kontrolü yapmadan atlamak"],
+            ["c", "Yalnızca süreyi önemseyerek okumak"],
             ["d", "Cevapları metin dışında aramak"],
           ],
           "a",

@@ -38,6 +38,7 @@ describe("8G-9 first-real curriculum pack QA", () => {
     });
     expect(result.metrics.mcCorrectPositionCounts).toEqual({ a: 7, b: 7, c: 6, d: 7 });
     expect(result.metrics.mcMaxPositionRatio).toBeLessThanOrEqual(0.45);
+    expect(result.metrics.mcCorrectClearLengthOutlierCount).toBe(0);
   });
 
   it("fixture katalogu production candidate olarak sınıflandıramaz", () => {

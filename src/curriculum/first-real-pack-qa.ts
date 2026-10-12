@@ -1,4 +1,5 @@
 import { FIRST_REAL_CURRICULUM_PACK } from "./first-real-pack.js";
+import { assessOptionLengthQuality } from "./option-length-quality.js";
 
 const CONTENT_MIN_WORDS = 100;
 const CONTENT_MAX_WORDS = 180;
@@ -38,6 +39,8 @@ export type CurriculumQaMetrics = {
   cognitiveDemandCounts: Record<string, number>;
   mcCorrectPositionCounts: Record<string, number>;
   mcMaxPositionRatio: number;
+  mcCorrectLongestCount: number;
+  mcCorrectClearLengthOutlierCount: number;
   trackContentCounts: Record<string, number>;
 };
 
@@ -107,6 +110,8 @@ export function runFirstRealPackQa(): CurriculumQaResult {
   const contentSlugs = new Set<string>();
   const questionPrompts = new Set<string>();
   let questionCount = 0;
+  let mcCorrectLongestCount = 0;
+  let mcCorrectClearLengthOutlierCount = 0;
 
   if (pack.contents.length !== EXPECTED_CONTENT_COUNT) {
     addError(errors, `İçerik sayısı ${EXPECTED_CONTENT_COUNT} olmalı: ${pack.contents.length}`);
@@ -240,6 +245,18 @@ export function runFirstRealPackQa(): CurriculumQaResult {
           } else {
             const positionId = String.fromCharCode(97 + correctOption.position);
             mcCorrectPositionCounts[positionId] = (mcCorrectPositionCounts[positionId] ?? 0) + 1;
+            const lengthQuality = assessOptionLengthQuality({
+              options: question.options,
+              correctOptionId: correctId,
+            });
+            if (lengthQuality?.correctIsLongest) mcCorrectLongestCount += 1;
+            if (lengthQuality?.clearOutlier) {
+              mcCorrectClearLengthOutlierCount += 1;
+              addWarning(
+                warnings,
+                `${questionPath} doğru seçenek uzunluk bakımından belirgin aykırı: doğru=${lengthQuality.correctLength}, yanlış medyan=${lengthQuality.wrongMedianLength}`,
+              );
+            }
             if (normalize(question.hint).includes(normalize(correctOption.text))) {
               addError(errors, `${questionPath} hint doğru seçeneği aynen sızdırıyor`);
             }
@@ -311,6 +328,8 @@ export function runFirstRealPackQa(): CurriculumQaResult {
       cognitiveDemandCounts,
       mcCorrectPositionCounts,
       mcMaxPositionRatio,
+      mcCorrectLongestCount,
+      mcCorrectClearLengthOutlierCount,
       trackContentCounts,
     },
   };
