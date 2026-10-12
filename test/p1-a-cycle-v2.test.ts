@@ -12,6 +12,7 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
 import { validateLearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 import { buildEducationV2P1ALearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
+import { assessOptionLengthQuality } from "../src/curriculum/option-length-quality.js";
 
 describe("Education V2 P1-A cycle 2 authoring contract", () => {
   it("contains nine original, ordered steps across two units", () => {
@@ -109,6 +110,15 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
       ]),
     );
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(2);
+  });
+
+  it("keeps v2 options free of clear correct-answer length cues", () => {
+    const questions = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap(
+      (exercise) => exercise.questions,
+    );
+    expect(
+      questions.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
+    ).toHaveLength(0);
   });
 
   it("keeps the cycle candidate closed until expert review", () => {

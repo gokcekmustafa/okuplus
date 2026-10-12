@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EDUCATION_V2_P0_PROGRAM } from "../src/curriculum/education-v2-p0-program.js";
 import { EDUCATION_V2_P1_A_PROGRAM } from "../src/curriculum/education-v2-p1-a-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "../src/curriculum/education-v2-p1-bcd-program.js";
 import { FIRST_REAL_CURRICULUM_PACK } from "../src/curriculum/first-real-pack.js";
 import {
@@ -18,6 +19,7 @@ function educationQuestions(): EducationQuestion[] {
   return [
     ...EDUCATION_V2_P0_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
     ...EDUCATION_V2_P1_A_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
+    ...EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
     ...EDUCATION_V2_P1_BCD_PROGRAMS.flatMap((program) =>
       program.exercises.flatMap((exercise) => exercise.questions),
     ),
@@ -67,7 +69,7 @@ describe("multiple-choice option length quality", () => {
       }));
 
     const all = [...education, ...independent];
-    expect(all).toHaveLength(106);
+    expect(all).toHaveLength(128);
     expect(
       all.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
     ).toHaveLength(0);
