@@ -58,9 +58,15 @@ export type LearningCycleNextPolicy = "ASSIGN_NEXT" | "REVIEW_REQUIRED" | "END_O
 export type LearningCycleVersionedReference = {
   /** Stable authoring key or catalog key. */
   key: string;
-  /** Immutable version/id when the source manifest can determine it. */
+  /** Immutable version/id for the source binding. */
   versionId?: string;
   /** Immutable question versions associated with a template/assessment. */
+  questionVersionIds?: readonly string[];
+};
+
+export type LearningCycleCatalogVersion = {
+  key: string;
+  versionId: string;
   questionVersionIds?: readonly string[];
 };
 
@@ -69,6 +75,9 @@ export type LearningCycleResourceCatalog = {
   exerciseKeys: readonly string[];
   assessmentKeys: readonly string[];
   questionVersionIds: readonly string[];
+  contentVersions: readonly LearningCycleCatalogVersion[];
+  exerciseVersions: readonly LearningCycleCatalogVersion[];
+  assessmentVersions: readonly LearningCycleCatalogVersion[];
 };
 
 export type LearningCycleStepManifest = {
@@ -113,6 +122,8 @@ export type LearningCycleValidationError = {
     | "MISSING_REFERENCE"
     | "UNKNOWN_REFERENCE"
     | "INVALID_VERSION_REFERENCE"
+    | "VERSION_MISMATCH"
+    | "SOURCE_CATALOG_INVALID"
     | "INVALID_COMPLETION_REFERENCE"
     | "MISSING_FINAL_MEASUREMENT";
   path: string;
@@ -141,6 +152,7 @@ function referenceErrors(
   path: string,
   knownKeys: ReadonlySet<string>,
   knownQuestionVersionIds: ReadonlySet<string>,
+  expectedVersions: ReadonlyMap<string, LearningCycleCatalogVersion>,
 ): LearningCycleValidationError[] {
   if (!reference) return [];
   const errors: LearningCycleValidationError[] = [];
@@ -157,6 +169,33 @@ function referenceErrors(
         "INVALID_VERSION_REFERENCE",
         `${path}.versionId`,
         "Sürüm kimliği verildiyse boş olamaz.",
+      ),
+    );
+  }
+  const expectedVersion = expectedVersions.get(reference.key);
+  if (expectedVersion && reference.versionId === undefined) {
+    errors.push(
+      error(
+        "INVALID_VERSION_REFERENCE",
+        `${path}.versionId`,
+        "Katalog bağlantısı için sürüm kimliği zorunludur.",
+      ),
+    );
+  } else if (expectedVersion && reference.versionId !== expectedVersion.versionId) {
+    errors.push(
+      error(
+        "VERSION_MISMATCH",
+        `${path}.versionId`,
+        `Sürüm kimliği kaynak kataloğuyla eşleşmiyor: beklenen ${expectedVersion.versionId}.`,
+      ),
+    );
+  }
+  if (knownKeys.has(reference.key) && !expectedVersion) {
+    errors.push(
+      error(
+        "INVALID_VERSION_REFERENCE",
+        `${path}.versionId`,
+        "Kaynak anahtarı için katalog sürüm kaydı eksik.",
       ),
     );
   }
@@ -185,8 +224,101 @@ function referenceErrors(
       }
       seen.add(questionVersionId);
     }
+    if (expectedVersion?.questionVersionIds) {
+      const expectedQuestionVersionIds = expectedVersion.questionVersionIds;
+      if (
+        questionVersionIds.length !== expectedQuestionVersionIds.length ||
+        questionVersionIds.some((id, index) => id !== expectedQuestionVersionIds[index])
+      ) {
+        errors.push(
+          error(
+            "VERSION_MISMATCH",
+            `${path}.questionVersionIds`,
+            "Soru sürümü bağları kaynak kataloğuyla eşleşmiyor.",
+          ),
+        );
+      }
+    }
+  } else if (expectedVersion?.questionVersionIds?.length) {
+    errors.push(
+      error(
+        "INVALID_VERSION_REFERENCE",
+        `${path}.questionVersionIds`,
+        "Bu kaynak için soru sürümü bağları eksik.",
+      ),
+    );
   }
   return errors;
+}
+
+function catalogEntriesErrors(
+  entries: readonly LearningCycleCatalogVersion[],
+  keys: ReadonlySet<string>,
+  knownQuestionVersionIds: ReadonlySet<string>,
+  path: string,
+): LearningCycleValidationError[] {
+  const errors: LearningCycleValidationError[] = [];
+  const seen = new Set<string>();
+  for (const [index, entry] of entries.entries()) {
+    const entryPath = `${path}[${index}]`;
+    if (!isNonEmpty(entry.key)) {
+      errors.push(
+        error("INVALID_VERSION_REFERENCE", `${entryPath}.key`, "Katalog anahtarı boş olamaz."),
+      );
+    } else if (!keys.has(entry.key)) {
+      errors.push(
+        error("UNKNOWN_REFERENCE", `${entryPath}.key`, `Katalogda olmayan anahtar: ${entry.key}`),
+      );
+    } else if (seen.has(entry.key)) {
+      errors.push(
+        error("INVALID_VERSION_REFERENCE", `${entryPath}.key`, "Katalog anahtarı tekrarlı."),
+      );
+    }
+    if (!isNonEmpty(entry.versionId)) {
+      errors.push(
+        error("INVALID_VERSION_REFERENCE", `${entryPath}.versionId`, "Sürüm kimliği boş olamaz."),
+      );
+    }
+    if (entry.questionVersionIds !== undefined) {
+      const questionIds = new Set<string>();
+      for (const [questionIndex, questionVersionId] of entry.questionVersionIds.entries()) {
+        const questionPath = `${entryPath}.questionVersionIds[${questionIndex}]`;
+        if (!isNonEmpty(questionVersionId)) {
+          errors.push(error("INVALID_VERSION_REFERENCE", questionPath, "Soru sürümü boş olamaz."));
+        } else if (questionIds.has(questionVersionId)) {
+          errors.push(error("INVALID_VERSION_REFERENCE", questionPath, "Soru sürümü tekrarlı."));
+        } else if (!knownQuestionVersionIds.has(questionVersionId)) {
+          errors.push(
+            error(
+              "UNKNOWN_REFERENCE",
+              questionPath,
+              `Bilinmeyen soru sürümü: ${questionVersionId}`,
+            ),
+          );
+        }
+        questionIds.add(questionVersionId);
+      }
+    }
+    seen.add(entry.key);
+  }
+  return errors;
+}
+
+function catalogCoverageErrors(
+  keys: ReadonlySet<string>,
+  entries: readonly LearningCycleCatalogVersion[],
+  path: string,
+): LearningCycleValidationError[] {
+  const entryKeys = new Set(entries.map((entry) => entry.key));
+  return [...keys]
+    .filter((key) => !entryKeys.has(key))
+    .map((key) =>
+      error(
+        "INVALID_VERSION_REFERENCE",
+        `${path}.${key}`,
+        "Kaynak anahtarı için sürüm kaydı eksik.",
+      ),
+    );
 }
 
 function allowedTaskKinds(type: LearningCycleStepType): readonly LearningCycleTaskKind[] {
@@ -233,14 +365,123 @@ export function validateLearningCycleManifest(
   if (manifest.targetSkillCodes.length === 0) {
     errors.push(error("MANIFEST_FIELD", "targetSkillCodes", "En az bir hedef beceri gerekir."));
   }
+  const skillCodes = new Set<string>();
+  for (const [index, skillCode] of manifest.targetSkillCodes.entries()) {
+    if (!isNonEmpty(skillCode)) {
+      errors.push(
+        error("MANIFEST_FIELD", `targetSkillCodes[${index}]`, "Hedef beceri boş olamaz."),
+      );
+    } else if (skillCodes.has(skillCode)) {
+      errors.push(
+        error("MANIFEST_FIELD", `targetSkillCodes[${index}]`, "Hedef beceri tekrarlı olamaz."),
+      );
+    }
+    skillCodes.add(skillCode);
+  }
   if (manifest.learningOutcomes.length === 0) {
     errors.push(error("MANIFEST_FIELD", "learningOutcomes", "En az bir öğrenme kazanımı gerekir."));
+  }
+  const outcomes = new Set<string>();
+  for (const [index, outcome] of manifest.learningOutcomes.entries()) {
+    if (!isNonEmpty(outcome)) {
+      errors.push(
+        error("MANIFEST_FIELD", `learningOutcomes[${index}]`, "Öğrenme kazanımı boş olamaz."),
+      );
+    } else if (outcomes.has(outcome)) {
+      errors.push(
+        error("MANIFEST_FIELD", `learningOutcomes[${index}]`, "Öğrenme kazanımı tekrarlı olamaz."),
+      );
+    }
+    outcomes.add(outcome);
   }
 
   const contentKeys = new Set(manifest.resourceCatalog.contentKeys);
   const exerciseKeys = new Set(manifest.resourceCatalog.exerciseKeys);
   const assessmentKeys = new Set(manifest.resourceCatalog.assessmentKeys);
   const questionVersionIds = new Set(manifest.resourceCatalog.questionVersionIds);
+  if (contentKeys.size !== manifest.resourceCatalog.contentKeys.length) {
+    errors.push(
+      error("MANIFEST_FIELD", "resourceCatalog.contentKeys", "İçerik anahtarları tekrarlı."),
+    );
+  }
+  if (exerciseKeys.size !== manifest.resourceCatalog.exerciseKeys.length) {
+    errors.push(
+      error("MANIFEST_FIELD", "resourceCatalog.exerciseKeys", "Alıştırma anahtarları tekrarlı."),
+    );
+  }
+  if (assessmentKeys.size !== manifest.resourceCatalog.assessmentKeys.length) {
+    errors.push(
+      error(
+        "MANIFEST_FIELD",
+        "resourceCatalog.assessmentKeys",
+        "Değerlendirme anahtarları tekrarlı.",
+      ),
+    );
+  }
+  if (questionVersionIds.size !== manifest.resourceCatalog.questionVersionIds.length) {
+    errors.push(
+      error(
+        "MANIFEST_FIELD",
+        "resourceCatalog.questionVersionIds",
+        "Soru sürümü kimlikleri tekrarlı.",
+      ),
+    );
+  }
+  for (const [index, questionVersionId] of manifest.resourceCatalog.questionVersionIds.entries()) {
+    if (!isNonEmpty(questionVersionId)) {
+      errors.push(
+        error(
+          "INVALID_VERSION_REFERENCE",
+          `resourceCatalog.questionVersionIds[${index}]`,
+          "Soru sürümü kimliği boş olamaz.",
+        ),
+      );
+    }
+  }
+  errors.push(
+    ...catalogEntriesErrors(
+      manifest.resourceCatalog.contentVersions,
+      contentKeys,
+      questionVersionIds,
+      "resourceCatalog.contentVersions",
+    ),
+    ...catalogEntriesErrors(
+      manifest.resourceCatalog.exerciseVersions,
+      exerciseKeys,
+      questionVersionIds,
+      "resourceCatalog.exerciseVersions",
+    ),
+    ...catalogEntriesErrors(
+      manifest.resourceCatalog.assessmentVersions,
+      assessmentKeys,
+      questionVersionIds,
+      "resourceCatalog.assessmentVersions",
+    ),
+    ...catalogCoverageErrors(
+      contentKeys,
+      manifest.resourceCatalog.contentVersions,
+      "resourceCatalog.contentVersions",
+    ),
+    ...catalogCoverageErrors(
+      exerciseKeys,
+      manifest.resourceCatalog.exerciseVersions,
+      "resourceCatalog.exerciseVersions",
+    ),
+    ...catalogCoverageErrors(
+      assessmentKeys,
+      manifest.resourceCatalog.assessmentVersions,
+      "resourceCatalog.assessmentVersions",
+    ),
+  );
+  const contentVersions = new Map(
+    manifest.resourceCatalog.contentVersions.map((entry) => [entry.key, entry]),
+  );
+  const exerciseVersions = new Map(
+    manifest.resourceCatalog.exerciseVersions.map((entry) => [entry.key, entry]),
+  );
+  const assessmentVersions = new Map(
+    manifest.resourceCatalog.assessmentVersions.map((entry) => [entry.key, entry]),
+  );
   const stepByKey = new Map<string, LearningCycleStepManifest>();
 
   for (const [index, step] of manifest.steps.entries()) {
@@ -314,18 +555,21 @@ export function validateLearningCycleManifest(
       `${path}.content`,
       contentKeys,
       questionVersionIds,
+      contentVersions,
     );
     const exerciseErrors = referenceErrors(
       step.exercise,
       `${path}.exercise`,
       exerciseKeys,
       questionVersionIds,
+      exerciseVersions,
     );
     const assessmentErrors = referenceErrors(
       step.assessment,
       `${path}.assessment`,
       assessmentKeys,
       questionVersionIds,
+      assessmentVersions,
     );
     errors.push(...contentErrors, ...exerciseErrors, ...assessmentErrors);
 
@@ -489,6 +733,51 @@ function p0QuestionVersionCatalog(): string[] {
   );
 }
 
+function p0ExerciseVersionId(exercise: ProgramExercise): string {
+  const isCommonVersion = exercise.key === "common-reinforcement" || exercise.key === "common-test";
+  return getProgramIds(
+    "templateVersion",
+    `${exercise.key}-${isCommonVersion ? "v1" : "academic-v2"}`,
+  );
+}
+
+function p0ContentVersions(): LearningCycleCatalogVersion[] {
+  return ACADEMIC_P0_LESSONS.flatMap((lesson) =>
+    lesson.stages
+      .filter((stage) => stage.stage !== "PRACTICE")
+      .map((stage) => {
+        const key = p0AcademicContentKey(lesson, stage.stage);
+        return { key, versionId: getProgramIds("contentVersion", `${key}-v1`) };
+      }),
+  );
+}
+
+function p0ExerciseVersions(): LearningCycleCatalogVersion[] {
+  return EDUCATION_V2_P0_PROGRAM.exercises.map((exercise) => ({
+    key: exercise.key,
+    versionId: p0ExerciseVersionId(exercise),
+    questionVersionIds: exercise.questions.map((question) =>
+      p0QuestionVersionId(exercise.key, question.key),
+    ),
+  }));
+}
+
+function p0AssessmentVersions(): LearningCycleCatalogVersion[] {
+  return EDUCATION_V2_P0_PROGRAM.assessments.map((assessment) => {
+    const exercise = EDUCATION_V2_P0_PROGRAM.exercises.find(
+      (candidate) => candidate.key === assessment.templateExerciseKey,
+    );
+    if (!exercise) throw new Error(`P0 assessment exercise bulunamadı: ${assessment.key}`);
+    return {
+      key: assessment.key,
+      versionId: getProgramIds("assessment", assessment.key),
+      questionVersionIds: assessment.questionKeys.map((questionKey) =>
+        p0QuestionVersionId(exercise.key, questionKey),
+      ),
+    };
+  });
+}
+
 /** Builds the canonical 18 lesson stages + 4 common P0 stages. */
 export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest {
   const catalogValidation = validateAcademicReadingP0Catalog();
@@ -597,6 +886,9 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
       exerciseKeys: EDUCATION_V2_P0_PROGRAM.exercises.map((exercise) => exercise.key),
       assessmentKeys: EDUCATION_V2_P0_PROGRAM.assessments.map((item) => item.key),
       questionVersionIds: p0QuestionVersionCatalog(),
+      contentVersions: p0ContentVersions(),
+      exerciseVersions: p0ExerciseVersions(),
+      assessmentVersions: p0AssessmentVersions(),
     },
     steps,
     completion: {
@@ -678,6 +970,24 @@ export function buildEducationV2P1ALearningCycleManifest(): LearningCycleManifes
       questionVersionIds: EDUCATION_V2_P1_A_PROGRAM.exercises.flatMap((exercise) =>
         exercise.questions.map((question) => p1AQuestionVersionId(exercise.key, question.key)),
       ),
+      contentVersions: EDUCATION_V2_P1_A_PROGRAM.content.map((item) => ({
+        key: item.key,
+        versionId: p1AContentVersionId(item.key),
+      })),
+      exerciseVersions: EDUCATION_V2_P1_A_PROGRAM.exercises.map((exercise) => ({
+        key: exercise.key,
+        versionId: p1ATemplateVersionId(exercise.key),
+        questionVersionIds: exercise.questions.map((question) =>
+          p1AQuestionVersionId(exercise.key, question.key),
+        ),
+      })),
+      assessmentVersions: EDUCATION_V2_P1_A_PROGRAM.assessments.map((assessment) => ({
+        key: assessment.key,
+        versionId: p1AAssessmentId(assessment.key),
+        questionVersionIds: assessment.questionKeys.map((questionKey) =>
+          p1AQuestionVersionId(assessment.templateExerciseKey, questionKey),
+        ),
+      })),
     },
     steps,
     completion: {
@@ -765,6 +1075,28 @@ export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleMani
             p1BCDId(program, "questionVersion", `${exercise.key}-${question.key}-v1`),
           ),
         ),
+        contentVersions: program.content.map((item) => ({
+          key: item.key,
+          versionId: p1BCDContentVersionId(program, item.key),
+        })),
+        exerciseVersions: program.exercises.map((exercise) => ({
+          key: exercise.key,
+          versionId: p1BCDTemplateVersionId(program, exercise.key),
+          questionVersionIds: exercise.questions.map((question) =>
+            p1BCDId(program, "questionVersion", `${exercise.key}-${question.key}-v1`),
+          ),
+        })),
+        assessmentVersions: program.assessments.map((assessment) => ({
+          key: assessment.key,
+          versionId: p1BCDId(program, "assessment", assessment.key),
+          questionVersionIds: assessment.questionKeys.map((questionKey) =>
+            p1BCDId(
+              program,
+              "questionVersion",
+              `${assessment.templateExerciseKey}-${questionKey}-v1`,
+            ),
+          ),
+        })),
       },
       steps,
       completion: {

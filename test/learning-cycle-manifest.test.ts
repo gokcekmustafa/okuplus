@@ -114,4 +114,32 @@ describe("versioned learning cycle manifest", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some((item) => item.code === "MISSING_FINAL_MEASUREMENT")).toBe(true);
   });
+
+  it("sürüm uyuşmazlığını, eksik hedef bilgisini ve katalog binding açığını bildirir", () => {
+    const manifest = copyManifest(buildEducationV2P1ALearningCycleManifest());
+    const practiceIndex = manifest.steps.findIndex((step) => step.type === "PRACTICE");
+    const practice = manifest.steps[practiceIndex];
+    if (!practice?.exercise) throw new Error("P1-A practice bağlantısı eksik");
+    manifest.targetSkillCodes = [""];
+    manifest.learningOutcomes = [""];
+    manifest.steps = manifest.steps.map((step, index) =>
+      index === practiceIndex
+        ? {
+            ...step,
+            exercise: { ...practice.exercise, versionId: "wrong-template-version" },
+          }
+        : step,
+    );
+    manifest.resourceCatalog = {
+      ...manifest.resourceCatalog,
+      exerciseVersions: manifest.resourceCatalog.exerciseVersions.slice(1),
+    };
+
+    const result = validateLearningCycleManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((item) => item.code === "MANIFEST_FIELD")).toBe(true);
+    expect(result.errors.some((item) => item.code === "VERSION_MISMATCH")).toBe(true);
+    expect(result.errors.some((item) => item.code === "INVALID_VERSION_REFERENCE")).toBe(true);
+  });
 });
