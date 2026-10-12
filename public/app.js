@@ -3518,26 +3518,70 @@ function renderTrainingActivities() {
     .map((activity) => {
       const available = activity.available !== false;
       const progress = activity.progress;
-      const completed = progress?.status === "COMPLETED";
-      const inProgress = progress?.status === "IN_PROGRESS";
-      const statusLabel = completed ? "✓ Tamamlandı" : inProgress ? "● Devam ediyor" : "Yeni";
-      const actionLabel = completed ? "Tekrar çalış →" : inProgress ? "Devam et →" : "Başla →";
+      const packageProgress = activity.packageProgress;
+      const totalPackages = Number(packageProgress?.totalPackages) || 0;
+      const completedPackages = Math.min(
+        totalPackages,
+        Math.max(0, Number(packageProgress?.completedPackages) || 0),
+      );
+      const currentPackageNumber = Number(packageProgress?.currentPackageNumber) || 1;
+      const currentPackageStatus = packageProgress?.currentPackageStatus || "AVAILABLE";
+      const completed = totalPackages > 0 && completedPackages === totalPackages;
+      const inProgress = currentPackageStatus === "IN_PROGRESS";
+      const statusLabel = completed
+        ? "✓ Tamamlandı"
+        : inProgress
+          ? "● Devam ediyor"
+          : currentPackageNumber > 1
+            ? `Paket ${currentPackageNumber} hazır`
+            : "Yeni";
+      const actionLabel = completed
+        ? "Tekrar çalış →"
+        : inProgress
+          ? "Devam et →"
+          : currentPackageNumber > 1
+            ? `Paket ${currentPackageNumber}'e başla →`
+            : "Başla →";
       const score =
         typeof progress?.averageScore === "number"
           ? `Sonuç: ${Math.round(progress.averageScore * 100)}%`
           : "";
       const attempts = Number(progress?.attemptCount) > 0 ? `${progress.attemptCount} cevap` : "";
-      const resultDetails = [score, attempts].filter(Boolean).join(" · ");
-      const resumeSessionId = inProgress ? progress.sessionId : "";
+      const packageDetails =
+        totalPackages > 0 ? `${completedPackages}/${totalPackages} paket tamamlandı` : "";
+      const resultDetails = [packageDetails, score, attempts].filter(Boolean).join(" · ");
+      const resumeSessionId = inProgress ? packageProgress?.currentSessionId || "" : "";
       const skillLabel = skillLabels[activity.competency] || "Okuma becerisi";
       const activityTitleId = `training-activity-title-${activity.id}`;
       const activityDescriptionId = `training-activity-description-${activity.id}`;
+      const packageTrack = packageProgress?.packages?.length
+        ? `<div class="training-activity-package-track" aria-label="Paket ilerlemesi">${packageProgress.packages
+            .map((item) => {
+              const statusClass = String(item.status || "").toLowerCase();
+              const label =
+                item.status === "COMPLETED"
+                  ? `Paket ${item.packageNumber} tamamlandı`
+                  : item.status === "IN_PROGRESS"
+                    ? `Paket ${item.packageNumber} devam ediyor`
+                    : item.status === "LOCKED"
+                      ? `Paket ${item.packageNumber} kilitli; önceki paketi tamamla`
+                      : `Paket ${item.packageNumber} hazır`;
+              return `<span class="training-activity-package-dot is-${escapeHtml(statusClass)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${escapeHtml(String(item.packageNumber))}</span>`;
+            })
+            .join("")}</div>`
+        : "";
+      const packageHint =
+        currentPackageStatus === "LOCKED"
+          ? "Önceki paketi tamamladığında bu paket açılır."
+          : totalPackages > 0
+            ? `Sıra: ${currentPackageNumber}. paket`
+            : "Bu beceri için doğrulanmış paket bulunmuyor.";
       return `<article class="training-activity-card" aria-labelledby="${escapeHtml(activityTitleId)}" aria-describedby="${escapeHtml(activityDescriptionId)}">
         <div class="training-activity-card-head">
           <div class="training-activity-identity">
             <span class="training-activity-icon" aria-hidden="true">${escapeHtml(skillIcons[activity.competency] || "✦")}</span>
             <div>
-              <p class="training-activity-kicker">BAĞIMSIZ ANTRENMAN</p>
+              <p class="training-activity-kicker">BECERİ ANTRENMANI</p>
               <h4 id="${escapeHtml(activityTitleId)}">${escapeHtml(activity.title || "Antrenman")}</h4>
             </div>
           </div>
@@ -3545,6 +3589,8 @@ function renderTrainingActivities() {
         </div>
         <p id="${escapeHtml(activityDescriptionId)}">${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
         <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
+        ${packageTrack}
+        <p class="training-activity-package-hint">${escapeHtml(packageHint)}</p>
         <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
         <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" data-training-action-label="${escapeHtml(actionLabel)}" aria-describedby="${escapeHtml(activityDescriptionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
       </article>`;

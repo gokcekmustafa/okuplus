@@ -1,10 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  deriveActivityPackageProgress,
   TRAINING_ACTIVITY_CATALOG,
   findTrainingActivity,
   listTrainingActivities,
   startTrainingActivity,
+} from "../src/modules/training/index.js";
+import type {
+  TrainingActivityPackage,
+  TrainingActivitySessionSnapshot,
 } from "../src/modules/training/index.js";
 import { isIndependentTrainingSession } from "../src/modules/training/session-origin.js";
 
@@ -14,6 +19,7 @@ const index = readFileSync("public/index.html", "utf8");
 const sessions = readFileSync("src/modules/sessions/service.ts", "utf8");
 const aggregation = readFileSync("src/modules/progress/aggregation.ts", "utf8");
 const activities = readFileSync("src/modules/training/activities.ts", "utf8");
+const studentLearningService = readFileSync("src/modules/student-learning/service.ts", "utf8");
 
 describe("independent training activities", () => {
   it("publishes the six student activities with stable, Turkish copy", () => {
@@ -53,7 +59,7 @@ describe("independent training activities", () => {
     expect(index).toContain('id="training-activities-status"');
     expect(index).toContain('id="exercise-page-kicker"');
     expect(index).toContain('id="exercise-page-title"');
-    expect(index).toContain("Bir beceri seç, kısa bir çalışma yap ve istersen tekrar et.");
+    expect(index).toContain("Kısa çalışmalar · İstediğin zaman tekrar edebilirsin.");
     expect(index).toContain("Buradaki sonuçlar resmi ölçüm veya seviye");
     expect(index).toContain("belirleme için kullanılmaz.");
     expect(app).toContain('authenticatedFetch("/student/training/activities"');
@@ -61,7 +67,7 @@ describe("independent training activities", () => {
     expect(app).toContain("data-training-activity-session");
     expect(activities).toContain("loadActivityProgress");
     expect(activities).toContain("isIndependentTrainingSession");
-    expect(activities).toContain("progress: progress.get(activity.id) ?? null");
+    expect(activities).toContain("legacyProgress: currentSession");
     expect(app).toContain("Beceri");
     expect(app).toContain("Tekrar çalış →");
     expect(app).toContain("Devam et →");
@@ -96,6 +102,117 @@ describe("independent training activities", () => {
     expect(sessions).toContain("!session.trainingSessionItem");
     expect(aggregation).toContain("isIndependentTrainingSession(session.deviceInfo)");
     expect(aggregation).toContain("session.trainingSessionItem");
+  });
+
+  it("unlocks independent packages only after the previous package is completed", () => {
+    const packages: TrainingActivityPackage[] = [
+      {
+        packageNumber: 1,
+        templateVersionId: "tv-foundation",
+        templateVersionIds: ["tv-foundation"],
+        difficulty: "FOUNDATION",
+        questionCount: 2,
+      },
+      {
+        packageNumber: 2,
+        templateVersionId: "tv-developing",
+        templateVersionIds: ["tv-developing"],
+        difficulty: "DEVELOPING",
+        questionCount: 2,
+      },
+      {
+        packageNumber: 3,
+        templateVersionId: "tv-challenging",
+        templateVersionIds: ["tv-challenging"],
+        difficulty: "CHALLENGING",
+        questionCount: 2,
+      },
+    ];
+    const session = (id: string, templateVersionId: string, status: "IN_PROGRESS" | "COMPLETED") =>
+      ({
+        id,
+        templateVersionId,
+        status,
+        averageScore: null,
+        attemptCount: 2,
+        lastActivityAt: "2026-10-12T10:00:00.000Z",
+        completedAt: status === "COMPLETED" ? "2026-10-12T10:00:00.000Z" : null,
+      }) satisfies TrainingActivitySessionSnapshot;
+
+    expect(deriveActivityPackageProgress(packages, []).packages.map((item) => item.status)).toEqual(
+      ["AVAILABLE", "LOCKED", "LOCKED"],
+    );
+    expect(
+      deriveActivityPackageProgress(packages, [session("s1", "tv-foundation", "IN_PROGRESS")]),
+    ).toMatchObject({
+      completedPackages: 0,
+      currentPackageNumber: 1,
+      currentPackageStatus: "IN_PROGRESS",
+      currentSessionId: "s1",
+    });
+    expect(
+      deriveActivityPackageProgress(packages, [
+        session("s1", "tv-foundation", "COMPLETED"),
+      ]).packages.map((item) => item.status),
+    ).toEqual(["COMPLETED", "AVAILABLE", "LOCKED"]);
+  });
+
+  it("keeps replay available after all published packages are completed", () => {
+    const packages: TrainingActivityPackage[] = [
+      {
+        packageNumber: 1,
+        templateVersionId: "tv-one",
+        templateVersionIds: ["tv-one"],
+        difficulty: "FOUNDATION",
+        questionCount: 1,
+      },
+      {
+        packageNumber: 2,
+        templateVersionId: "tv-two",
+        templateVersionIds: ["tv-two"],
+        difficulty: "DEVELOPING",
+        questionCount: 1,
+      },
+    ];
+    const sessions: TrainingActivitySessionSnapshot[] = [
+      {
+        id: "s1",
+        templateVersionId: "tv-one",
+        status: "COMPLETED",
+        averageScore: 1,
+        attemptCount: 1,
+        lastActivityAt: "2026-10-12T10:00:00.000Z",
+        completedAt: "2026-10-12T10:00:00.000Z",
+      },
+      {
+        id: "s2",
+        templateVersionId: "tv-two",
+        status: "COMPLETED",
+        averageScore: 1,
+        attemptCount: 1,
+        lastActivityAt: "2026-10-12T11:00:00.000Z",
+        completedAt: "2026-10-12T11:00:00.000Z",
+      },
+    ];
+    expect(deriveActivityPackageProgress(packages, sessions)).toMatchObject({
+      completedPackages: 2,
+      totalPackages: 2,
+      currentPackageNumber: 2,
+      currentPackageStatus: "COMPLETED",
+      currentSessionId: null,
+    });
+  });
+
+  it("keeps package progress scoped to the independent activity and student tenant query", () => {
+    expect(activities).toContain("tenantId: actor.tenantId");
+    expect(activities).toContain("studentId: actor.userId");
+    expect(activities).toContain("templateVersionId");
+    expect(activities).toContain("packageProgress");
+    expect(activities).toContain("isIndependentTrainingSession");
+    expect(studentLearningService).toContain("independent:${independentTrainingActivityId}");
+    expect(studentLearningService).toContain("activeIndependent");
+    expect(studentLearningService).toContain("learningStep = independentTraining");
+    expect(aggregation).toContain("isIndependentTrainingSession(session.deviceInfo)");
   });
 
   it("keeps the catalog service student-only and rejects unknown activities", async () => {

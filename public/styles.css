@@ -7010,6 +7010,50 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
+.student-shell .training-activity-package-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.student-shell .training-activity-package-dot {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid #d7dbea;
+  border-radius: 50%;
+  background: #f7f8fc;
+  color: #74809a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.student-shell .training-activity-package-dot.is-completed {
+  border-color: #a8dec2;
+  background: #e8f8ef;
+  color: #187653;
+}
+
+.student-shell .training-activity-package-dot.is-in_progress,
+.student-shell .training-activity-package-dot.is-available {
+  border-color: #c2b8f3;
+  background: #f1efff;
+  color: #6651cc;
+}
+
+.student-shell .training-activity-package-dot.is-locked {
+  background: #eef0f5;
+  color: #9aa2b4;
+}
+
+.student-shell .training-activity-package-hint {
+  margin: -4px 0 0;
+  color: var(--student-muted);
+  font-size: 12px;
+}
+
 .student-shell .training-activity-meta {
   display: flex;
   flex-wrap: wrap;

@@ -4,8 +4,15 @@ export {
   startTrainingActivity,
   TRAINING_ACTIVITY_CATALOG,
   findTrainingActivity,
+  deriveActivityPackageProgress,
 } from "./activities.js";
-export type { TrainingActivityId } from "./activities.js";
+export type {
+  TrainingActivityId,
+  TrainingActivityPackage,
+  TrainingActivityPackageProgress,
+  TrainingActivityPackageStatus,
+  TrainingActivitySessionSnapshot,
+} from "./activities.js";
 export {
   DAILY_TRAINING_COMPOSITION,
   dailySessionDateKey,

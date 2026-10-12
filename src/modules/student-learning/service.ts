@@ -29,6 +29,7 @@ import {
 } from "../learning-path/index.js";
 import {
   independentTrainingDeviceInfo,
+  isIndependentTrainingSession,
   learningPathReplayDeviceInfo,
 } from "../training/session-origin.js";
 
@@ -789,6 +790,9 @@ export async function startPersonalExercise(
     throw forbiddenError("Bu uç yalnızca öğrencilere açıktır");
   }
   const independentTraining = input.independentTraining === true;
+  const independentTrainingActivityId = independentTraining
+    ? input.independentTrainingActivityId?.trim() || null
+    : null;
   const replay = input.replay === true;
   if (replay && independentTraining) {
     throw validationError("Bağımsız antrenman öğrenme yolu tekrarı olarak başlatılamaz");
@@ -877,7 +881,9 @@ export async function startPersonalExercise(
     throw validationError("Bu uygulama için önceki öğrenme adımları tamamlanmalı");
   }
   const result = await prisma.$transaction(async (tx) => {
-    const requestLockKey = `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
+    const requestLockKey = independentTrainingActivityId
+      ? `exercise-start:${tenantId}:${actor.userId}:independent:${independentTrainingActivityId}`
+      : `exercise-start:${tenantId}:${actor.userId}:${clientSessionId ?? "no-client"}`;
     await tx.$queryRaw`
       SELECT 1::int AS acquired
       FROM pg_advisory_xact_lock(hashtextextended(${requestLockKey}, 0))
@@ -891,7 +897,30 @@ export async function startPersonalExercise(
         select: { id: true },
       });
       if (byClient) return { sessionId: byClient.id, isNew: false };
-    } else {
+    }
+
+    if (independentTrainingActivityId) {
+      const activeCandidates = await tx.exerciseSession.findMany({
+        where: {
+          tenantId,
+          studentId: actor.userId,
+          context: "INDIVIDUAL",
+          sessionType: "PRACTICE",
+          status: "IN_PROGRESS",
+          assignmentId: null,
+          assessmentId: null,
+        },
+        orderBy: { startedAt: "desc" },
+        select: { id: true, deviceInfo: true },
+      });
+      const activeIndependent = activeCandidates.find((candidate) => {
+        if (!isIndependentTrainingSession(candidate.deviceInfo)) return false;
+        if (!candidate.deviceInfo || typeof candidate.deviceInfo !== "object") return false;
+        const activityId = (candidate.deviceInfo as { activityId?: unknown }).activityId;
+        return activityId === independentTrainingActivityId;
+      });
+      if (activeIndependent) return { sessionId: activeIndependent.id, isNew: false };
+    } else if (!clientSessionId) {
       const active = await tx.exerciseSession.findFirst({
         where: {
           tenantId,
