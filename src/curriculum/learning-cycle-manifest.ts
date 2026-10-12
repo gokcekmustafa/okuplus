@@ -1,0 +1,799 @@
+import {
+  ACADEMIC_P0_LESSONS,
+  validateAcademicReadingP0Catalog,
+  type AcademicLesson,
+} from "./academic-reading-p0.js";
+import {
+  EDUCATION_V2_P0_PROGRAM_ID,
+  EDUCATION_V2_P0_PROGRAM,
+  getProgramIds,
+  questionVersionId as p0QuestionVersionId,
+  type ProgramExercise,
+} from "./education-v2-p0-program.js";
+import {
+  EDUCATION_V2_P1_A_PATH_VERSION,
+  EDUCATION_V2_P1_A_PROGRAM,
+  p1AAssessmentId,
+  p1AContentVersionId,
+  p1AQuestionVersionId,
+  p1ATemplateVersionId,
+  validateP1AProgram,
+} from "./education-v2-p1-a-program.js";
+import {
+  EDUCATION_V2_P1_BCD_PROGRAMS,
+  p1BCDContentVersionId,
+  p1BCDId,
+  p1BCDTemplateVersionId,
+  validateP1BCDProgram,
+  type P1BCDProgram,
+} from "./education-v2-p1-bcd-program.js";
+
+/**
+ * Versioned, persistence-agnostic contract for one learning cycle.
+ *
+ * This is an authoring/validation contract. It does not imply that the
+ * referenced content, template or assessment versions have been provisioned
+ * or published in any environment. Production availability is still checked
+ * by the existing graph/provisioning validators.
+ */
+export const LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION = 1 as const;
+
+export const LEARNING_CYCLE_TASK_KINDS = ["NEW", "RETRIEVAL", "TRANSFER", "CHECKPOINT"] as const;
+export type LearningCycleTaskKind = (typeof LEARNING_CYCLE_TASK_KINDS)[number];
+
+export const LEARNING_CYCLE_STEP_TYPES = [
+  "TEACHING",
+  "SMALL_STUDY",
+  "PRACTICE",
+  "REINFORCEMENT",
+  "ASSESSMENT",
+  "MEASUREMENT",
+  "NEXT_LEARNING",
+] as const;
+export type LearningCycleStepType = (typeof LEARNING_CYCLE_STEP_TYPES)[number];
+
+export type LearningCycleRouteFamily = "P0" | "A" | "B" | "C" | "D";
+export type LearningCycleNextPolicy = "ASSIGN_NEXT" | "REVIEW_REQUIRED" | "END_OF_PROGRAM";
+
+export type LearningCycleVersionedReference = {
+  /** Stable authoring key or catalog key. */
+  key: string;
+  /** Immutable version/id when the source manifest can determine it. */
+  versionId?: string;
+  /** Immutable question versions associated with a template/assessment. */
+  questionVersionIds?: readonly string[];
+};
+
+export type LearningCycleResourceCatalog = {
+  contentKeys: readonly string[];
+  exerciseKeys: readonly string[];
+  assessmentKeys: readonly string[];
+  questionVersionIds: readonly string[];
+};
+
+export type LearningCycleStepManifest = {
+  stableKey: string;
+  order: number;
+  type: LearningCycleStepType;
+  taskKind: LearningCycleTaskKind;
+  prerequisiteKeys: readonly string[];
+  required: boolean;
+  content?: LearningCycleVersionedReference;
+  exercise?: LearningCycleVersionedReference;
+  assessment?: LearningCycleVersionedReference;
+};
+
+export type LearningCycleManifest = {
+  schemaVersion: typeof LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION;
+  cycleId: string;
+  cycleVersion: number;
+  sequence: number;
+  routeFamily: LearningCycleRouteFamily;
+  targetSkillCodes: readonly string[];
+  learningOutcomes: readonly string[];
+  resourceCatalog: LearningCycleResourceCatalog;
+  steps: readonly LearningCycleStepManifest[];
+  completion: {
+    requiredStepKeys: readonly string[];
+    checkpointStepKeys: readonly string[];
+    requiresFinalMeasurement: boolean;
+    nextCycle: LearningCycleNextPolicy;
+  };
+};
+
+export type LearningCycleValidationError = {
+  code:
+    | "MANIFEST_FIELD"
+    | "DUPLICATE_STEP"
+    | "STEP_ORDER"
+    | "UNKNOWN_PREREQUISITE"
+    | "PREREQUISITE_ORDER"
+    | "PREREQUISITE_CYCLE"
+    | "STEP_TASK_MISMATCH"
+    | "MISSING_REFERENCE"
+    | "UNKNOWN_REFERENCE"
+    | "INVALID_VERSION_REFERENCE"
+    | "INVALID_COMPLETION_REFERENCE"
+    | "MISSING_FINAL_MEASUREMENT";
+  path: string;
+  message: string;
+};
+
+export type LearningCycleValidationResult = {
+  valid: boolean;
+  errors: readonly LearningCycleValidationError[];
+};
+
+function error(
+  code: LearningCycleValidationError["code"],
+  path: string,
+  message: string,
+): LearningCycleValidationError {
+  return { code, path, message };
+}
+
+function isNonEmpty(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function referenceErrors(
+  reference: LearningCycleVersionedReference | undefined,
+  path: string,
+  knownKeys: ReadonlySet<string>,
+  knownQuestionVersionIds: ReadonlySet<string>,
+): LearningCycleValidationError[] {
+  if (!reference) return [];
+  const errors: LearningCycleValidationError[] = [];
+  if (!isNonEmpty(reference.key)) {
+    errors.push(error("INVALID_VERSION_REFERENCE", `${path}.key`, "Kaynak anahtarı boş olamaz."));
+  } else if (!knownKeys.has(reference.key)) {
+    errors.push(
+      error("UNKNOWN_REFERENCE", `${path}.key`, `Bilinmeyen kaynak anahtarı: ${reference.key}`),
+    );
+  }
+  if (reference.versionId !== undefined && !isNonEmpty(reference.versionId)) {
+    errors.push(
+      error(
+        "INVALID_VERSION_REFERENCE",
+        `${path}.versionId`,
+        "Sürüm kimliği verildiyse boş olamaz.",
+      ),
+    );
+  }
+  const questionVersionIds = reference.questionVersionIds;
+  if (questionVersionIds !== undefined) {
+    if (questionVersionIds.length === 0) {
+      errors.push(
+        error(
+          "INVALID_VERSION_REFERENCE",
+          `${path}.questionVersionIds`,
+          "Soru sürümü listesi verildiyse en az bir kimlik içermelidir.",
+        ),
+      );
+    }
+    const seen = new Set<string>();
+    for (const [index, questionVersionId] of questionVersionIds.entries()) {
+      const questionPath = `${path}.questionVersionIds[${index}]`;
+      if (!isNonEmpty(questionVersionId)) {
+        errors.push(error("INVALID_VERSION_REFERENCE", questionPath, "Soru sürümü boş olamaz."));
+      } else if (seen.has(questionVersionId)) {
+        errors.push(error("INVALID_VERSION_REFERENCE", questionPath, "Soru sürümü tekrarlı."));
+      } else if (!knownQuestionVersionIds.has(questionVersionId)) {
+        errors.push(
+          error("UNKNOWN_REFERENCE", questionPath, `Bilinmeyen soru sürümü: ${questionVersionId}`),
+        );
+      }
+      seen.add(questionVersionId);
+    }
+  }
+  return errors;
+}
+
+function allowedTaskKinds(type: LearningCycleStepType): readonly LearningCycleTaskKind[] {
+  switch (type) {
+    case "TEACHING":
+      return ["NEW"];
+    case "SMALL_STUDY":
+      return ["NEW", "RETRIEVAL", "TRANSFER"];
+    case "PRACTICE":
+      return ["NEW", "RETRIEVAL", "TRANSFER"];
+    case "REINFORCEMENT":
+      return ["RETRIEVAL", "TRANSFER"];
+    case "ASSESSMENT":
+    case "MEASUREMENT":
+    case "NEXT_LEARNING":
+      return ["CHECKPOINT"];
+  }
+}
+
+/**
+ * Validates structure and references without connecting to Prisma or an
+ * external service. Error ordering follows manifest ordering, so the result
+ * is deterministic for the same input.
+ */
+export function validateLearningCycleManifest(
+  manifest: LearningCycleManifest,
+): LearningCycleValidationResult {
+  const errors: LearningCycleValidationError[] = [];
+  if (manifest.schemaVersion !== LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION) {
+    errors.push(error("MANIFEST_FIELD", "schemaVersion", "Desteklenmeyen manifest şeması."));
+  }
+  if (!isNonEmpty(manifest.cycleId))
+    errors.push(error("MANIFEST_FIELD", "cycleId", "Döngü kimliği boş olamaz."));
+  if (!Number.isInteger(manifest.cycleVersion) || manifest.cycleVersion < 1) {
+    errors.push(
+      error("MANIFEST_FIELD", "cycleVersion", "Döngü sürümü pozitif tam sayı olmalıdır."),
+    );
+  }
+  if (!Number.isInteger(manifest.sequence) || manifest.sequence < 0) {
+    errors.push(
+      error("MANIFEST_FIELD", "sequence", "Döngü sırası sıfır veya pozitif tam sayı olmalıdır."),
+    );
+  }
+  if (manifest.targetSkillCodes.length === 0) {
+    errors.push(error("MANIFEST_FIELD", "targetSkillCodes", "En az bir hedef beceri gerekir."));
+  }
+  if (manifest.learningOutcomes.length === 0) {
+    errors.push(error("MANIFEST_FIELD", "learningOutcomes", "En az bir öğrenme kazanımı gerekir."));
+  }
+
+  const contentKeys = new Set(manifest.resourceCatalog.contentKeys);
+  const exerciseKeys = new Set(manifest.resourceCatalog.exerciseKeys);
+  const assessmentKeys = new Set(manifest.resourceCatalog.assessmentKeys);
+  const questionVersionIds = new Set(manifest.resourceCatalog.questionVersionIds);
+  const stepByKey = new Map<string, LearningCycleStepManifest>();
+
+  for (const [index, step] of manifest.steps.entries()) {
+    const path = `steps[${index}].stableKey`;
+    if (!isNonEmpty(step.stableKey)) continue;
+    if (stepByKey.has(step.stableKey)) {
+      errors.push(error("DUPLICATE_STEP", path, `Adım anahtarı tekrarlı: ${step.stableKey}`));
+    } else {
+      stepByKey.set(step.stableKey, step);
+    }
+  }
+
+  for (const [index, step] of manifest.steps.entries()) {
+    const path = `steps[${index}]`;
+    if (!isNonEmpty(step.stableKey)) {
+      errors.push(error("MANIFEST_FIELD", `${path}.stableKey`, "Adım anahtarı boş olamaz."));
+    }
+    if (step.order !== index + 1) {
+      errors.push(
+        error("STEP_ORDER", `${path}.order`, `Adım sırası ${index + 1} olmalı: ${step.stableKey}`),
+      );
+    }
+    if (!allowedTaskKinds(step.type).includes(step.taskKind)) {
+      errors.push(
+        error(
+          "STEP_TASK_MISMATCH",
+          `${path}.taskKind`,
+          `${step.type} adımı ${step.taskKind} görev türünü taşıyamaz.`,
+        ),
+      );
+    }
+    if (step.required !== true && step.required !== false) {
+      errors.push(error("MANIFEST_FIELD", `${path}.required`, "required boolean olmalıdır."));
+    }
+    const prerequisites = new Set<string>();
+    for (const [prerequisiteIndex, prerequisiteKey] of step.prerequisiteKeys.entries()) {
+      const prerequisitePath = `${path}.prerequisiteKeys[${prerequisiteIndex}]`;
+      if (!isNonEmpty(prerequisiteKey)) {
+        errors.push(
+          error("UNKNOWN_PREREQUISITE", prerequisitePath, "Ön koşul anahtarı boş olamaz."),
+        );
+      } else if (prerequisites.has(prerequisiteKey)) {
+        errors.push(error("UNKNOWN_PREREQUISITE", prerequisitePath, "Ön koşul tekrarlı."));
+      }
+      prerequisites.add(prerequisiteKey);
+      const prerequisite = stepByKey.get(prerequisiteKey);
+      if (
+        !prerequisite &&
+        !manifest.steps.some((candidate) => candidate.stableKey === prerequisiteKey)
+      ) {
+        errors.push(
+          error(
+            "UNKNOWN_PREREQUISITE",
+            prerequisitePath,
+            `Bilinmeyen ön koşul: ${prerequisiteKey}`,
+          ),
+        );
+      } else if (prerequisite && prerequisite.order >= step.order) {
+        errors.push(
+          error(
+            "PREREQUISITE_ORDER",
+            prerequisitePath,
+            `Ön koşul mevcut adımdan önce gelmeli: ${step.stableKey} -> ${prerequisiteKey}`,
+          ),
+        );
+      }
+    }
+
+    const contentErrors = referenceErrors(
+      step.content,
+      `${path}.content`,
+      contentKeys,
+      questionVersionIds,
+    );
+    const exerciseErrors = referenceErrors(
+      step.exercise,
+      `${path}.exercise`,
+      exerciseKeys,
+      questionVersionIds,
+    );
+    const assessmentErrors = referenceErrors(
+      step.assessment,
+      `${path}.assessment`,
+      assessmentKeys,
+      questionVersionIds,
+    );
+    errors.push(...contentErrors, ...exerciseErrors, ...assessmentErrors);
+
+    const hasContent = Boolean(step.content);
+    const hasExercise = Boolean(step.exercise);
+    const hasAssessment = Boolean(step.assessment);
+    switch (step.type) {
+      case "TEACHING":
+        if (!hasContent)
+          errors.push(
+            error("MISSING_REFERENCE", `${path}.content`, "TEACHING için içerik gerekir."),
+          );
+        if (hasExercise || hasAssessment) {
+          errors.push(
+            error("STEP_TASK_MISMATCH", path, "TEACHING yalnızca içerik bağlantısı taşıyabilir."),
+          );
+        }
+        break;
+      case "SMALL_STUDY":
+        if (!hasContent && !hasExercise) {
+          errors.push(
+            error("MISSING_REFERENCE", path, "SMALL_STUDY için içerik veya alıştırma gerekir."),
+          );
+        }
+        if (hasAssessment)
+          errors.push(
+            error("STEP_TASK_MISMATCH", path, "SMALL_STUDY assessment bağlantısı taşıyamaz."),
+          );
+        break;
+      case "PRACTICE":
+      case "REINFORCEMENT":
+        if (!hasExercise)
+          errors.push(
+            error("MISSING_REFERENCE", `${path}.exercise`, `${step.type} için alıştırma gerekir.`),
+          );
+        if (hasAssessment)
+          errors.push(
+            error("STEP_TASK_MISMATCH", path, `${step.type} assessment bağlantısı taşıyamaz.`),
+          );
+        break;
+      case "ASSESSMENT":
+        if (!hasAssessment)
+          errors.push(
+            error(
+              "MISSING_REFERENCE",
+              `${path}.assessment`,
+              "ASSESSMENT için değerlendirme gerekir.",
+            ),
+          );
+        if (hasContent || hasExercise)
+          errors.push(
+            error("STEP_TASK_MISMATCH", path, "ASSESSMENT doğrudan içerik/alıştırma taşıyamaz."),
+          );
+        break;
+      case "MEASUREMENT":
+      case "NEXT_LEARNING":
+        if (hasContent || hasExercise || hasAssessment) {
+          errors.push(
+            error(
+              "STEP_TASK_MISMATCH",
+              path,
+              `${step.type} içerik, alıştırma veya assessment taşıyamaz.`,
+            ),
+          );
+        }
+        break;
+    }
+  }
+
+  const adjacency = new Map<string, string[]>();
+  for (const step of manifest.steps) {
+    adjacency.set(
+      step.stableKey,
+      step.prerequisiteKeys.filter((key) => stepByKey.has(key)),
+    );
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (key: string): void => {
+    if (visiting.has(key)) {
+      errors.push(error("PREREQUISITE_CYCLE", `steps.${key}`, `Ön koşul döngüsü bulundu: ${key}`));
+      return;
+    }
+    if (visited.has(key)) return;
+    visiting.add(key);
+    for (const prerequisite of adjacency.get(key) ?? []) visit(prerequisite);
+    visiting.delete(key);
+    visited.add(key);
+  };
+  for (const step of manifest.steps) visit(step.stableKey);
+
+  const requiredKeys = new Set<string>();
+  for (const [index, key] of manifest.completion.requiredStepKeys.entries()) {
+    const path = `completion.requiredStepKeys[${index}]`;
+    if (!stepByKey.has(key))
+      errors.push(error("INVALID_COMPLETION_REFERENCE", path, `Bilinmeyen zorunlu adım: ${key}`));
+    if (requiredKeys.has(key))
+      errors.push(error("INVALID_COMPLETION_REFERENCE", path, "Zorunlu adım tekrarlı."));
+    requiredKeys.add(key);
+  }
+  const checkpointKeys = new Set<string>();
+  for (const [index, key] of manifest.completion.checkpointStepKeys.entries()) {
+    const path = `completion.checkpointStepKeys[${index}]`;
+    const step = stepByKey.get(key);
+    if (!step)
+      errors.push(
+        error("INVALID_COMPLETION_REFERENCE", path, `Bilinmeyen checkpoint adımı: ${key}`),
+      );
+    else if (step.taskKind !== "CHECKPOINT") {
+      errors.push(error("INVALID_COMPLETION_REFERENCE", path, `Checkpoint görevi değil: ${key}`));
+    }
+    if (checkpointKeys.has(key))
+      errors.push(error("INVALID_COMPLETION_REFERENCE", path, "Checkpoint adımı tekrarlı."));
+    checkpointKeys.add(key);
+  }
+  if (
+    manifest.completion.requiresFinalMeasurement &&
+    !manifest.steps.some((step) => step.type === "MEASUREMENT")
+  ) {
+    errors.push(
+      error(
+        "MISSING_FINAL_MEASUREMENT",
+        "completion.requiresFinalMeasurement",
+        "Final ölçüm bekleniyor ancak MEASUREMENT adımı yok.",
+      ),
+    );
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+function mapTaskKind(type: LearningCycleStepType): LearningCycleTaskKind {
+  if (type === "TEACHING") return "NEW";
+  if (type === "REINFORCEMENT") return "RETRIEVAL";
+  if (type === "ASSESSMENT" || type === "MEASUREMENT" || type === "NEXT_LEARNING")
+    return "CHECKPOINT";
+  return "TRANSFER";
+}
+
+function p0AcademicContentKey(lesson: AcademicLesson, stage: string): string {
+  return `academic-${lesson.lessonKey}-${stage.toLowerCase()}`;
+}
+
+function p0ExerciseReference(
+  exercise: ProgramExercise,
+  academicVersion = true,
+): LearningCycleVersionedReference {
+  return {
+    key: exercise.key,
+    versionId: academicVersion
+      ? getProgramIds("templateVersion", `${exercise.key}-academic-v2`)
+      : getProgramIds("templateVersion", `${exercise.key}-v1`),
+    questionVersionIds: exercise.questions.map((question) =>
+      p0QuestionVersionId(exercise.key, question.key),
+    ),
+  };
+}
+
+function p0QuestionVersionCatalog(): string[] {
+  return EDUCATION_V2_P0_PROGRAM.exercises.flatMap((exercise) =>
+    exercise.questions.map((question) => p0QuestionVersionId(exercise.key, question.key)),
+  );
+}
+
+/** Builds the canonical 18 lesson stages + 4 common P0 stages. */
+export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest {
+  const catalogValidation = validateAcademicReadingP0Catalog();
+  if (!catalogValidation.valid) throw new Error(catalogValidation.errors.join("; "));
+  const steps: LearningCycleStepManifest[] = [];
+  for (const lesson of ACADEMIC_P0_LESSONS) {
+    let previousKey: string | undefined;
+    for (const stage of lesson.stages) {
+      const stableKey = `${lesson.skillCode}_${stage.stage}`;
+      const exercise = EDUCATION_V2_P0_PROGRAM.exercises.find(
+        (candidate) =>
+          candidate.skillCode === lesson.skillCode && !candidate.key.startsWith("common-"),
+      );
+      if (!exercise) throw new Error(`P0 exercise bulunamadı: ${lesson.skillCode}`);
+      steps.push({
+        stableKey,
+        order: steps.length + 1,
+        type: stage.stage,
+        taskKind: mapTaskKind(stage.stage),
+        prerequisiteKeys: previousKey ? [previousKey] : [],
+        required: true,
+        ...(stage.stage === "PRACTICE"
+          ? { exercise: p0ExerciseReference(exercise) }
+          : {
+              content: {
+                key: p0AcademicContentKey(lesson, stage.stage),
+                versionId: getProgramIds(
+                  "contentVersion",
+                  `${p0AcademicContentKey(lesson, stage.stage)}-v1`,
+                ),
+              },
+            }),
+      });
+      previousKey = stableKey;
+    }
+  }
+  const reinforcementExercise = EDUCATION_V2_P0_PROGRAM.exercises.find(
+    (exercise) => exercise.key === "common-reinforcement",
+  );
+  const assessment = EDUCATION_V2_P0_PROGRAM.assessments.find(
+    (candidate) => candidate.key === "common-assessment",
+  );
+  const assessmentExercise = assessment
+    ? EDUCATION_V2_P0_PROGRAM.exercises.find(
+        (exercise) => exercise.key === assessment.templateExerciseKey,
+      )
+    : undefined;
+  if (!reinforcementExercise || !assessment || !assessmentExercise) {
+    throw new Error("P0 ortak kaynakları bulunamadı");
+  }
+  const practiceKeys = ACADEMIC_P0_LESSONS.map((lesson) => `${lesson.skillCode}_PRACTICE`);
+  steps.push({
+    stableKey: "COMMON_REINFORCEMENT",
+    order: steps.length + 1,
+    type: "REINFORCEMENT",
+    taskKind: "RETRIEVAL",
+    prerequisiteKeys: practiceKeys,
+    required: true,
+    exercise: p0ExerciseReference(reinforcementExercise, false),
+  });
+  steps.push({
+    stableKey: "COMMON_ASSESSMENT",
+    order: steps.length + 1,
+    type: "ASSESSMENT",
+    taskKind: "CHECKPOINT",
+    prerequisiteKeys: ["COMMON_REINFORCEMENT"],
+    required: true,
+    assessment: {
+      key: assessment.key,
+      versionId: getProgramIds("assessment", assessment.key),
+      questionVersionIds: assessment.questionKeys.map((questionKey) =>
+        p0QuestionVersionId(assessmentExercise.key, questionKey),
+      ),
+    },
+  });
+  steps.push({
+    stableKey: "COMMON_MEASUREMENT",
+    order: steps.length + 1,
+    type: "MEASUREMENT",
+    taskKind: "CHECKPOINT",
+    prerequisiteKeys: ["COMMON_ASSESSMENT"],
+    required: true,
+  });
+  steps.push({
+    stableKey: "COMMON_NEXT_LEARNING",
+    order: steps.length + 1,
+    type: "NEXT_LEARNING",
+    taskKind: "CHECKPOINT",
+    prerequisiteKeys: ["COMMON_MEASUREMENT"],
+    required: false,
+  });
+  return {
+    schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
+    cycleId: EDUCATION_V2_P0_PROGRAM_ID,
+    cycleVersion: 1,
+    sequence: 0,
+    routeFamily: "P0",
+    targetSkillCodes: ACADEMIC_P0_LESSONS.map((lesson) => lesson.skillCode),
+    learningOutcomes: ACADEMIC_P0_LESSONS.map((lesson) => lesson.objective),
+    resourceCatalog: {
+      contentKeys: ACADEMIC_P0_LESSONS.flatMap((lesson) =>
+        lesson.stages
+          .filter((stage) => stage.stage !== "PRACTICE")
+          .map((stage) => p0AcademicContentKey(lesson, stage.stage)),
+      ),
+      exerciseKeys: EDUCATION_V2_P0_PROGRAM.exercises.map((exercise) => exercise.key),
+      assessmentKeys: EDUCATION_V2_P0_PROGRAM.assessments.map((item) => item.key),
+      questionVersionIds: p0QuestionVersionCatalog(),
+    },
+    steps,
+    completion: {
+      requiredStepKeys: steps.filter((step) => step.required).map((step) => step.stableKey),
+      checkpointStepKeys: ["COMMON_ASSESSMENT", "COMMON_MEASUREMENT"],
+      requiresFinalMeasurement: true,
+      nextCycle: "REVIEW_REQUIRED",
+    },
+  };
+}
+
+function outcomesFromContent(content: readonly { lesson?: { objective: string } }[]): string[] {
+  return [...new Set(content.flatMap((item) => (item.lesson ? [item.lesson.objective] : [])))];
+}
+
+function p1AStepManifest(): LearningCycleStepManifest[] {
+  const steps = EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps);
+  return steps.map((step, index) => {
+    const exercise = step.exerciseKey
+      ? EDUCATION_V2_P1_A_PROGRAM.exercises.find((candidate) => candidate.key === step.exerciseKey)
+      : undefined;
+    const assessment = step.assessmentKey
+      ? EDUCATION_V2_P1_A_PROGRAM.assessments.find(
+          (candidate) => candidate.key === step.assessmentKey,
+        )
+      : undefined;
+    return {
+      stableKey: step.key,
+      order: index + 1,
+      type: step.type,
+      taskKind: mapTaskKind(step.type),
+      prerequisiteKeys: step.prerequisiteStepKeys ?? [],
+      required: true,
+      ...(step.contentKey
+        ? { content: { key: step.contentKey, versionId: p1AContentVersionId(step.contentKey) } }
+        : {}),
+      ...(exercise
+        ? {
+            exercise: {
+              key: exercise.key,
+              versionId: p1ATemplateVersionId(exercise.key),
+              questionVersionIds: exercise.questions.map((question) =>
+                p1AQuestionVersionId(exercise.key, question.key),
+              ),
+            },
+          }
+        : {}),
+      ...(assessment
+        ? {
+            assessment: {
+              key: assessment.key,
+              versionId: p1AAssessmentId(assessment.key),
+              questionVersionIds: assessment.questionKeys.map((questionKey) =>
+                p1AQuestionVersionId(assessment.templateExerciseKey, questionKey),
+              ),
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+export function buildEducationV2P1ALearningCycleManifest(): LearningCycleManifest {
+  const sourceErrors = validateP1AProgram();
+  if (sourceErrors.length > 0) throw new Error(sourceErrors.join("; "));
+  const steps = p1AStepManifest();
+  return {
+    schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
+    cycleId: EDUCATION_V2_P1_A_PROGRAM.path.code,
+    cycleVersion: EDUCATION_V2_P1_A_PATH_VERSION,
+    sequence: 1,
+    routeFamily: "A",
+    targetSkillCodes: [...new Set(EDUCATION_V2_P1_A_PROGRAM.content.map((item) => item.skillCode))],
+    learningOutcomes: outcomesFromContent(EDUCATION_V2_P1_A_PROGRAM.content),
+    resourceCatalog: {
+      contentKeys: EDUCATION_V2_P1_A_PROGRAM.content.map((item) => item.key),
+      exerciseKeys: EDUCATION_V2_P1_A_PROGRAM.exercises.map((item) => item.key),
+      assessmentKeys: EDUCATION_V2_P1_A_PROGRAM.assessments.map((item) => item.key),
+      questionVersionIds: EDUCATION_V2_P1_A_PROGRAM.exercises.flatMap((exercise) =>
+        exercise.questions.map((question) => p1AQuestionVersionId(exercise.key, question.key)),
+      ),
+    },
+    steps,
+    completion: {
+      requiredStepKeys: steps.map((step) => step.stableKey),
+      checkpointStepKeys: ["assessment"],
+      requiresFinalMeasurement: false,
+      nextCycle: "REVIEW_REQUIRED",
+    },
+  };
+}
+
+function p1BCDStepManifest(program: P1BCDProgram): LearningCycleStepManifest[] {
+  const steps = program.path.units.flatMap((unit) => unit.steps);
+  return steps.map((step, index) => {
+    const exercise = step.exerciseKey
+      ? program.exercises.find((candidate) => candidate.key === step.exerciseKey)
+      : undefined;
+    const assessment = step.assessmentKey
+      ? program.assessments.find((candidate) => candidate.key === step.assessmentKey)
+      : undefined;
+    return {
+      stableKey: step.key,
+      order: index + 1,
+      type: step.type,
+      taskKind: mapTaskKind(step.type),
+      prerequisiteKeys: step.prerequisiteStepKeys ?? [],
+      required: true,
+      ...(step.contentKey
+        ? {
+            content: {
+              key: step.contentKey,
+              versionId: p1BCDContentVersionId(program, step.contentKey),
+            },
+          }
+        : {}),
+      ...(exercise
+        ? {
+            exercise: {
+              key: exercise.key,
+              versionId: p1BCDTemplateVersionId(program, exercise.key),
+              questionVersionIds: exercise.questions.map((question) =>
+                p1BCDId(program, "questionVersion", `${exercise.key}-${question.key}-v1`),
+              ),
+            },
+          }
+        : {}),
+      ...(assessment
+        ? {
+            assessment: {
+              key: assessment.key,
+              versionId: p1BCDId(program, "assessment", assessment.key),
+              questionVersionIds: assessment.questionKeys.map((questionKey) =>
+                p1BCDId(
+                  program,
+                  "questionVersion",
+                  `${assessment.templateExerciseKey}-${questionKey}-v1`,
+                ),
+              ),
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleManifest[] {
+  return EDUCATION_V2_P1_BCD_PROGRAMS.map((program) => {
+    const sourceErrors = validateP1BCDProgram(program);
+    if (sourceErrors.length > 0) throw new Error(sourceErrors.join("; "));
+    const steps = p1BCDStepManifest(program);
+    return {
+      schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
+      cycleId: program.path.code,
+      cycleVersion: 1,
+      sequence: 1,
+      routeFamily: program.routeFamily,
+      targetSkillCodes: [...new Set(program.content.map((item) => item.skillCode))],
+      learningOutcomes: outcomesFromContent(program.content),
+      resourceCatalog: {
+        contentKeys: program.content.map((item) => item.key),
+        exerciseKeys: program.exercises.map((item) => item.key),
+        assessmentKeys: program.assessments.map((item) => item.key),
+        questionVersionIds: program.exercises.flatMap((exercise) =>
+          exercise.questions.map((question) =>
+            p1BCDId(program, "questionVersion", `${exercise.key}-${question.key}-v1`),
+          ),
+        ),
+      },
+      steps,
+      completion: {
+        requiredStepKeys: steps.map((step) => step.stableKey),
+        checkpointStepKeys: ["b-assessment-step", "c-assessment-step", "d-assessment-step"].filter(
+          (key) => steps.some((step) => step.stableKey === key),
+        ),
+        requiresFinalMeasurement: false,
+        nextCycle: "REVIEW_REQUIRED",
+      },
+    };
+  });
+}
+
+export function buildCanonicalEducationV2LearningCycleManifests(): LearningCycleManifest[] {
+  return [
+    buildEducationV2P0LearningCycleManifest(),
+    buildEducationV2P1ALearningCycleManifest(),
+    ...buildEducationV2P1BCDLearningCycleManifests(),
+  ];
+}
+
+export function validateCanonicalEducationV2LearningCycles(): LearningCycleValidationResult {
+  const errors: LearningCycleValidationError[] = [];
+  for (const manifest of buildCanonicalEducationV2LearningCycleManifests()) {
+    const result = validateLearningCycleManifest(manifest);
+    errors.push(
+      ...result.errors.map((item) => ({ ...item, path: `${manifest.cycleId}.${item.path}` })),
+    );
+  }
+  return { valid: errors.length === 0, errors };
+}
