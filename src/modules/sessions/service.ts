@@ -28,6 +28,7 @@ import {
   isIndependentTrainingSession,
   isLearningPathReplaySession,
 } from "../training/session-origin.js";
+import { reorderJsonOptionsForSession } from "../questions/session-option-order.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
 import {
   completeLearningStepForSession,
@@ -520,7 +521,15 @@ export async function listQuestionsForSession(
         contentVersionId: question.contentVersionId,
         prompt: question.prompt,
         type: question.type,
-        options: question.options,
+        options:
+          actor.platformRole === null &&
+          session.context === "INDIVIDUAL" &&
+          question.type === "MULTIPLE_CHOICE"
+            ? reorderJsonOptionsForSession(
+                question.options,
+                `${session.id}:${question.questionVersionId}`,
+              )
+            : question.options,
         allowMultiple: question.allowMultiple,
         explanation: question.explanation,
         hint: question.hint,
@@ -547,7 +556,15 @@ export async function listQuestionsForSession(
       contentVersionId: contentVersionByContentId.get(q.questionVersion.question.contentId) ?? null,
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
-      options: q.questionVersion.options,
+      options:
+        actor.platformRole === null &&
+        session.context === "INDIVIDUAL" &&
+        q.questionVersion.question.type === "MULTIPLE_CHOICE"
+          ? reorderJsonOptionsForSession(
+              q.questionVersion.options,
+              `${session.id}:${q.questionVersion.id}`,
+            )
+          : q.questionVersion.options,
       allowMultiple:
         q.questionVersion.question.type === "MULTIPLE_CHOICE" &&
         correctAnswer?.allowMultiple === true,

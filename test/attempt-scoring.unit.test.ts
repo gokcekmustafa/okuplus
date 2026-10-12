@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { formatAttemptServerTiming, scoreAttemptValue } from "../src/modules/questions/service.js";
+import { reorderOptionsForSession } from "../src/modules/questions/session-option-order.js";
 
 vi.mock("../src/lib/prisma.js", () => ({ prisma: {} }));
 
@@ -12,6 +13,35 @@ describe("attempt performance helpers", () => {
             { id: "a", text: "Birinci" },
             { id: "b", text: "İkinci" },
           ],
+          correctAnswer: {
+            type: "MULTIPLE_CHOICE",
+            correctOptionIds: ["b"],
+            allowMultiple: false,
+            partialCredit: false,
+          },
+          question: { type: "MULTIPLE_CHOICE" },
+        },
+        ["b"],
+      ),
+    ).toEqual({ isCorrect: true, rawScore: 1 });
+  });
+
+  it("scores the same option id after its displayed position changes", () => {
+    const displayedOptions = reorderOptionsForSession(
+      [
+        { id: "a", text: "Birinci" },
+        { id: "b", text: "İkinci" },
+        { id: "c", text: "Üçüncü" },
+        { id: "d", text: "Dördüncü" },
+      ],
+      "session-with-reordered-options:question-1",
+    );
+
+    expect(displayedOptions.findIndex((option) => option.id === "b")).not.toBe(1);
+    expect(
+      scoreAttemptValue(
+        {
+          options: displayedOptions,
           correctAnswer: {
             type: "MULTIPLE_CHOICE",
             correctOptionIds: ["b"],
