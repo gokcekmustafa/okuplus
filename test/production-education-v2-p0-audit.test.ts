@@ -16,6 +16,8 @@ describe("production Education V2 P0 read-only audit", () => {
     expect(workflow).toContain("name: production-migration");
     expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/master"');
     expect(workflow).toContain('test "${CONFIRM_AUDIT}" = "EDUCATION_V2_P0_AUDIT"');
+    expect(workflow).toContain("ref: ${{ github.sha }}");
+    expect(workflow).toContain('test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"');
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
     expect(workflow).not.toContain("migrate deploy");
@@ -48,6 +50,8 @@ describe("production Education V2 P0 read-only audit", () => {
     expect(script).toContain("p0Graph");
     expect(script).toContain("p0LevelScope");
     expect(script).toContain("levelScopeMismatches");
+    expect(script).toContain("AUDIT_SOURCE_COMMIT");
+    expect(script).toContain("levelCodeSource");
     expect(script).not.toContain("level: { code: LEVEL_CODE }");
   });
 });

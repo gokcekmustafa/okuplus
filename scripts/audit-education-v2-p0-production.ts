@@ -10,6 +10,13 @@ import { providerForHost, targetIdentityFingerprint } from "../src/lib/db-finger
 
 const LEVEL_CODE =
   process.env.EDUCATION_V2_P0_LEVEL_CODE?.trim() || EDUCATION_V2_P0_DEFAULT_LEVEL_CODE;
+const AUDIT_SOURCE_COMMIT =
+  process.env.EDUCATION_V2_P0_AUDIT_SOURCE_SHA?.trim() ||
+  process.env.GITHUB_SHA?.trim() ||
+  "UNVERIFIED";
+const LEVEL_CODE_SOURCE = process.env.EDUCATION_V2_P0_LEVEL_CODE?.trim()
+  ? "workflow-env"
+  : "manifest-default";
 const EXPECTED_PATHS = [
   {
     code: `EDUCATION_V2_P0_FAST_READING_${EDUCATION_V2_P0_PATH_SCOPE_CODE}`,
@@ -114,11 +121,27 @@ function linkIsPublished(step: SafeStep): boolean {
   return true;
 }
 
-function safeFailure(): { status: "BLOCKED"; productionWrite: "NO"; reason: string } {
+function safeFailure(): {
+  status: "BLOCKED";
+  productionWrite: "NO";
+  reason: string;
+  auditSource: {
+    commit: string;
+    pathScopeCode: string;
+    levelCode: string;
+    levelCodeSource: string;
+  };
+} {
   return {
     status: "BLOCKED",
     productionWrite: "NO",
     reason: "production database connection or read-only audit query failed",
+    auditSource: {
+      commit: AUDIT_SOURCE_COMMIT,
+      pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
+      levelCode: LEVEL_CODE,
+      levelCodeSource: LEVEL_CODE_SOURCE,
+    },
   };
 }
 
@@ -200,6 +223,12 @@ async function main(): Promise<void> {
     const baseReport = {
       status: identityVerified ? "BLOCKED" : "BLOCKED",
       productionWrite: "NO" as const,
+      auditSource: {
+        commit: AUDIT_SOURCE_COMMIT,
+        pathScopeCode: EDUCATION_V2_P0_PATH_SCOPE_CODE,
+        levelCode: LEVEL_CODE,
+        levelCodeSource: LEVEL_CODE_SOURCE,
+      },
       targetIdentity: identityChecks,
       target: {
         provider: providerForHost(target.host),

@@ -38,10 +38,14 @@ jobs:
       EDUCATION_V2_P0_LEVEL_CODE: G9_12
 
     steps:
-      - name: Checkout master release
+      - name: Checkout audited source revision
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ github.sha }}
+
+      - name: Verify audited source revision
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
