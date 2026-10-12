@@ -563,6 +563,26 @@ describe("student progress", () => {
     expect(resAfter.json().data.total).toBe(countBefore);
   });
 
+  it("concurrent completion has one authoritative winner", async () => {
+    const sessionId = await createSession(STUDENT_A_ID, TENANT_A);
+    await createAttempt(sessionId, QUESTION_V1, ["opt1"]);
+
+    const completions = await Promise.all([completeSession(sessionId), completeSession(sessionId)]);
+    expect(completions.some((response) => response.statusCode === 200)).toBe(true);
+    expect(completions.every((response) => [200, 400].includes(response.statusCode))).toBe(true);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/admin/exercise-sessions/${sessionId}`,
+      headers: {
+        authorization: `Bearer ${await login(SUPER_ADMIN_EMAIL)}`,
+        "x-tenant-id": TENANT_A,
+      },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.status).toBe("COMPLETED");
+  });
+
   it("skillId null attempts are skipped", async () => {
     // Create a question without skill
     const noSkillQ = "99999994-0000-7000-8000-0000000000qns";

@@ -13281,6 +13281,7 @@ async function handleExerciseSubmitAttempt() {
 async function handleExerciseComplete() {
   if (!exerciseSession || exerciseBusy || exerciseSession.status !== "IN_PROGRESS") return;
   exerciseBusy = true;
+  let completionConfirmed = false;
   const student = isPlatformUser === false;
   const btn = $(student ? "exercise-submit-attempt" : "exercise-complete-btn");
   const errEl = $(student ? "exercise-attempt-error" : "exercise-complete-error");
@@ -13303,6 +13304,8 @@ async function handleExerciseComplete() {
               body: "{}",
             }),
           );
+    completionConfirmed = exerciseSession?.status === "COMPLETED";
+    if (!completionConfirmed) throw new Error("Tamamlanma durumu doğrulanamadı");
     const daily = student && isDailyTrainingExercise();
     if (student && typeof recordPilotTelemetry === "function") {
       recordPilotTelemetry(
@@ -13405,6 +13408,35 @@ async function handleExerciseComplete() {
     renderExerciseSession();
     $("exercise-completion-title")?.focus();
   } catch {
+    // The completion endpoint can finish the authoritative session update
+    // before a response or a non-critical follow-up operation fails. Re-read
+    // the session before showing a failure so a lost response does not turn a
+    // completed exercise into a misleading retry prompt.
+    if (!completionConfirmed && student && exerciseSession?.id) {
+      try {
+        const reconciled = await fetchStudentExercise(exerciseSession.id);
+        if (reconciled?.status === "COMPLETED") {
+          exerciseSession = reconciled;
+          completionConfirmed = true;
+        }
+      } catch {
+        // Keep the original failure when the authoritative status cannot be
+        // read back.
+      }
+    }
+    if (completionConfirmed) {
+      exerciseAwaitingNext = true;
+      try {
+        renderExerciseSession();
+        $("exercise-completion-title")?.focus();
+      } catch {
+        errEl.textContent = isDailyTrainingExercise()
+          ? "Günlük antrenman tamamlandı; sonucu görmek için sayfayı yenileyebilirsin."
+          : "Alıştırma tamamlandı; sonucu görmek için sayfayı yenileyebilirsin.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
     errEl.textContent = isDailyTrainingExercise()
       ? "Günlük antrenman tamamlanamadı. Cevapların kaydedildi; tekrar dene."
       : "Alıştırma tamamlanamadı. Cevapların kaydedildi; tekrar dene.";

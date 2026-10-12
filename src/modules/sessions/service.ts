@@ -619,7 +619,7 @@ export async function completeExerciseSession(
   }
   if (session.status === "COMPLETED") {
     if (session.trainingSessionItem) {
-      await syncTrainingSessionItem(id);
+      await syncTrainingSessionItem(id).catch(() => {});
       return getExerciseSession(id, actor);
     }
     throw validationError("Oturum zaten tamamlanmış");
@@ -760,15 +760,37 @@ export async function completeExerciseSession(
       : {}),
   };
 
-  const updated = await prisma.exerciseSession.update({
-    where: { id },
+  // Only one request may win the authoritative state transition. The initial
+  // status read above is intentionally not enough for concurrent browser
+  // retries: both requests can observe IN_PROGRESS before either update
+  // commits. Restricting the write to IN_PROGRESS makes the losing request
+  // reconcile with the durable result instead of running completion side
+  // effects a second time.
+  const transition = await prisma.exerciseSession.updateMany({
+    where: { id, status: "IN_PROGRESS" },
     data: {
       status: "COMPLETED",
       completedAt: new Date(),
       scoreSummary: scoreSummary as Prisma.InputJsonValue,
     },
+  });
+  if (transition.count !== 1) {
+    const current = await prisma.exerciseSession.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    if (current?.status === "COMPLETED") {
+      if (session.trainingSessionItem) await syncTrainingSessionItem(id).catch(() => {});
+      return getExerciseSession(id, actor);
+    }
+    throw validationError("Yalnızca devam eden oturum tamamlanabilir");
+  }
+
+  const updated = await prisma.exerciseSession.findUnique({
+    where: { id },
     select: SESSION_SELECT,
   });
+  if (!updated) throw notFoundError("Oturum bulunamadı");
 
   if (session.assessmentId) {
     const assessmentResult = await prisma.assessmentResult.create({

@@ -304,4 +304,49 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-submit-attempt").disabled).toBe(false);
     expect(h.context.exerciseBusy).toBe(false);
   });
+
+  it("reconciles a completed session when the completion response is lost", async () => {
+    const h = harness();
+    let reads = 0;
+    h.context.fetchStudentExercise = async () => {
+      reads += 1;
+      return reads === 1
+        ? { id: "session", status: "IN_PROGRESS" }
+        : { id: "session", status: "COMPLETED", scoreSummary: { totalQuestions: 1 } };
+    };
+    h.context.exerciseApi = async () => {
+      throw new Error("response lost after server completion");
+    };
+    h.context.renderExerciseSession = () => {};
+    h.context.recordPilotTelemetry = () => {};
+    h.context.refreshExerciseGamification = async () => null;
+    h.run("isDailyTrainingExercise = () => false");
+
+    await h.run("handleExerciseComplete()");
+
+    expect(reads).toBe(2);
+    expect(h.context.exerciseSession.status).toBe("COMPLETED");
+    expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
+  });
+
+  it("does not turn a post-completion UI error into an exercise failure", async () => {
+    const h = harness();
+    h.context.fetchStudentExercise = async () => ({ id: "session", status: "IN_PROGRESS" });
+    h.context.exerciseApi = async () => ({});
+    h.context.parseResponse = async () => ({
+      id: "session",
+      status: "COMPLETED",
+      scoreSummary: { totalQuestions: 1 },
+    });
+    h.context.refreshExerciseGamification = async () => null;
+    h.context.showCelebration = () => {
+      throw new Error("optional presentation failed");
+    };
+    h.context.recordPilotTelemetry = () => {};
+
+    await h.run("handleExerciseComplete()");
+
+    expect(h.context.exerciseSession.status).toBe("COMPLETED");
+    expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
+  });
 });
