@@ -1,6 +1,20 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
+const transitionTestState = vi.hoisted(() => ({ sourceApprovalRecorded: false }));
+
+vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../src/curriculum/education-v2-p1-a-cycle-v2-program.js")
+    >();
+  return {
+    ...actual,
+    isEducationV2P1ACycleV2ProductionAssignmentEnabled: () =>
+      transitionTestState.sourceApprovalRecorded,
+  };
+});
+
 import { reconcileP1ToNextCycle } from "../src/modules/student-learning/p1-transition.js";
 import type { StudentActor } from "../src/modules/student-learning/policy.js";
 import {
@@ -20,9 +34,26 @@ const ACTOR_EMAILS = [
   "p1-transition-1@example.test",
   "p1-transition-2@example.test",
   "p1-transition-3@example.test",
+  "p1-transition-4@example.test",
+  "p1-transition-5@example.test",
+  "p1-transition-6@example.test",
 ];
-const ACTOR_IDS = { complete: id(10), incomplete: id(11), unavailable: id(12) };
-const TENANT_IDS = { complete: "", incomplete: "", unavailable: "" };
+const ACTOR_IDS = {
+  complete: id(10),
+  incomplete: id(11),
+  unavailable: id(12),
+  assigned: id(13),
+  blocked: id(14),
+  concurrent: id(15),
+};
+const TENANT_IDS = {
+  complete: "",
+  incomplete: "",
+  unavailable: "",
+  assigned: "",
+  blocked: "",
+  concurrent: "",
+};
 
 type ActorFixture = {
   actor: StudentActor & { tenantId: string; platformRole: null };
@@ -249,7 +280,13 @@ async function completeInitialCycle(fixture: ActorFixture, includeAssessmentResu
       ? 100
       : fixture.actor.userId === ACTOR_IDS.unavailable
         ? 200
-        : 0;
+        : fixture.actor.userId === ACTOR_IDS.assigned
+          ? 300
+          : fixture.actor.userId === ACTOR_IDS.blocked
+            ? 400
+            : fixture.actor.userId === ACTOR_IDS.concurrent
+              ? 500
+              : 0;
   for (const [index, step] of steps.entries()) {
     if (step.type !== "ASSESSMENT") {
       await prisma.studentLearningStepProgress.create({
@@ -305,6 +342,10 @@ describe.sequential("P1 learning cycle transition integration", () => {
   let completeFixture: ActorFixture;
   let incompleteFixture: ActorFixture;
   let unavailableFixture: ActorFixture;
+  let assignedFixture: ActorFixture;
+  let blockedFixture: ActorFixture;
+  let concurrentFixture: ActorFixture;
+  let blockedNextEnrollmentId = "";
 
   beforeAll(async () => {
     await prisma.$connect();
@@ -318,15 +359,40 @@ describe.sequential("P1 learning cycle transition integration", () => {
     completeFixture = await createActor(ACTOR_IDS.complete, ACTOR_EMAILS[0]!, "complete");
     incompleteFixture = await createActor(ACTOR_IDS.incomplete, ACTOR_EMAILS[1]!, "incomplete");
     unavailableFixture = await createActor(ACTOR_IDS.unavailable, ACTOR_EMAILS[2]!, "unavailable");
+    assignedFixture = await createActor(ACTOR_IDS.assigned, ACTOR_EMAILS[3]!, "assigned");
+    blockedFixture = await createActor(ACTOR_IDS.blocked, ACTOR_EMAILS[4]!, "blocked");
+    concurrentFixture = await createActor(ACTOR_IDS.concurrent, ACTOR_EMAILS[5]!, "concurrent");
     await completeInitialCycle(completeFixture, true);
     await completeInitialCycle(incompleteFixture, false);
     await completeInitialCycle(unavailableFixture, true);
+    await completeInitialCycle(assignedFixture, true);
+    await completeInitialCycle(blockedFixture, true);
+    await completeInitialCycle(concurrentFixture, true);
+    const blockedNext = await prisma.studentLearningPath.create({
+      data: {
+        tenantId: blockedFixture.actor.tenantId,
+        studentId: blockedFixture.actor.userId,
+        learningPathId: PATH_IDS.next,
+        routeStatus: "REASSIGNED",
+      },
+      select: { id: true },
+    });
+    blockedNextEnrollmentId = blockedNext.id;
   });
 
   afterAll(async () => {
     await cleanup();
     await prisma.$disconnect();
   });
+
+  async function withSourceApproval<T>(callback: () => Promise<T>): Promise<T> {
+    transitionTestState.sourceApprovalRecorded = true;
+    try {
+      return await callback();
+    } finally {
+      transitionTestState.sourceApprovalRecorded = false;
+    }
+  }
 
   it("does not assign a fully published next graph while source review is pending", async () => {
     const beforeProgress = await prisma.studentLearningStepProgress.count({
@@ -422,6 +488,138 @@ describe.sequential("P1 learning cycle transition integration", () => {
         select: { routeStatus: true },
       }),
     ).toEqual({ routeStatus: "ACTIVE" });
+  });
+
+  it("assigns one published next cycle when the source gate is explicitly approved in isolation", async () => {
+    const result = await withSourceApproval(() =>
+      reconcileP1ToNextCycle(assignedFixture.actor, {
+        p1LearningPathId: assignedFixture.enrollmentId,
+      }),
+    );
+    expect(result).toMatchObject({
+      outcome: "ASSIGNED",
+      currentLearningPathId: assignedFixture.enrollmentId,
+      nextLearningPathId: PATH_IDS.next,
+      readiness: {
+        status: "ASSIGNED",
+        currentCycleCompleted: true,
+        nextCycleAvailable: true,
+      },
+    });
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: assignedFixture.actor.tenantId,
+          studentId: assignedFixture.actor.userId,
+          routeStatus: "ACTIVE",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.studentLearningPath.findUnique({
+        where: { id: assignedFixture.enrollmentId },
+        select: { routeStatus: true },
+      }),
+    ).toEqual({ routeStatus: "COMPLETED" });
+    expect(
+      await prisma.studentLearningPath.findUnique({
+        where: {
+          tenantId_studentId_learningPathId: {
+            tenantId: assignedFixture.actor.tenantId,
+            studentId: assignedFixture.actor.userId,
+            learningPathId: PATH_IDS.next,
+          },
+        },
+        select: { routeStatus: true },
+      }),
+    ).toEqual({ routeStatus: "ACTIVE" });
+
+    const replay = await withSourceApproval(() =>
+      reconcileP1ToNextCycle(assignedFixture.actor, {
+        p1LearningPathId: assignedFixture.enrollmentId,
+      }),
+    );
+    expect(replay).toMatchObject({
+      outcome: "ALREADY_ASSIGNED",
+      nextLearningPathId: PATH_IDS.next,
+      readiness: { status: "ALREADY_ASSIGNED" },
+    });
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: assignedFixture.actor.tenantId,
+          studentId: assignedFixture.actor.userId,
+          routeStatus: "ACTIVE",
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("does not reactivate reassigned, paused, or review-required next cycles", async () => {
+    for (const routeStatus of ["REASSIGNED", "PAUSED", "REVIEW_REQUIRED"] as const) {
+      await prisma.studentLearningPath.update({
+        where: { id: blockedNextEnrollmentId },
+        data: { routeStatus },
+      });
+      const result = await withSourceApproval(() =>
+        reconcileP1ToNextCycle(blockedFixture.actor, {
+          p1LearningPathId: blockedFixture.enrollmentId,
+        }),
+      );
+      expect(result).toMatchObject({
+        outcome: "REVIEW_REQUIRED",
+        nextLearningPathId: null,
+        readiness: {
+          status: "NEXT_CYCLE_UNAVAILABLE",
+          currentCycleCompleted: true,
+          nextCycleAvailable: false,
+        },
+      });
+      expect(
+        await prisma.studentLearningPath.findUnique({
+          where: { id: blockedFixture.enrollmentId },
+          select: { routeStatus: true },
+        }),
+      ).toEqual({ routeStatus: "ACTIVE" });
+      expect(
+        await prisma.studentLearningPath.findUnique({
+          where: { id: blockedNextEnrollmentId },
+          select: { routeStatus: true },
+        }),
+      ).toEqual({ routeStatus });
+    }
+  });
+
+  it("keeps concurrent approved retries at one active route", async () => {
+    const results = await withSourceApproval(() =>
+      Promise.all([
+        reconcileP1ToNextCycle(concurrentFixture.actor, {
+          p1LearningPathId: concurrentFixture.enrollmentId,
+        }),
+        reconcileP1ToNextCycle(concurrentFixture.actor, {
+          p1LearningPathId: concurrentFixture.enrollmentId,
+        }),
+      ]),
+    );
+    expect(results.map((result) => result.outcome).sort()).toEqual([
+      "ALREADY_ASSIGNED",
+      "ASSIGNED",
+    ]);
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: concurrentFixture.actor.tenantId,
+          studentId: concurrentFixture.actor.userId,
+          routeStatus: "ACTIVE",
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.studentLearningPath.findUnique({
+        where: { id: concurrentFixture.enrollmentId },
+        select: { routeStatus: true },
+      }),
+    ).toEqual({ routeStatus: "COMPLETED" });
   });
 
   it("keeps an incomplete cycle in review and preserves existing progress", async () => {

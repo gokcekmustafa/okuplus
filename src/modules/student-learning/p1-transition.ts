@@ -1292,6 +1292,18 @@ export async function reconcileP1ToNextCycle(
         };
       }
 
+      // A previously paused, reviewed, or reassigned next cycle is an
+      // explicit product decision, not an invitation to reactivate it. Keep
+      // the historical enrollment and require a new reviewed decision.
+      if (
+        existingNext &&
+        (existingNext.routeStatus === "REASSIGNED" ||
+          existingNext.routeStatus === "PAUSED" ||
+          existingNext.routeStatus === "REVIEW_REQUIRED")
+      ) {
+        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true, false);
+      }
+
       const now = new Date();
       await tx.studentLearningPath.updateMany({
         where: {
