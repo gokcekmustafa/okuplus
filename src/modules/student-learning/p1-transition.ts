@@ -4,6 +4,19 @@ import {
   ACADEMIC_P0_COMMON_FLOW,
   ACADEMIC_P0_LESSONS,
 } from "../../curriculum/academic-reading-p0.js";
+import {
+  EDUCATION_V2_P1_A_LEVEL_CODE,
+  EDUCATION_V2_P1_A_PATH_VERSION,
+  EDUCATION_V2_P1_A_PROGRAM,
+  EDUCATION_V2_P1_A_PATH_CODE_PREFIX,
+} from "../../curriculum/education-v2-p1-a-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
+  EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
+} from "../../curriculum/education-v2-p1-a-cycle-v2-program.js";
+import { buildEducationV2P1ALearningCycleManifest } from "../../curriculum/learning-cycle-manifest.js";
 import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
 import {
   assertTeacherClassAccess,
@@ -27,6 +40,9 @@ const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
 const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-";
 const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
+const P1_A_INITIAL_PATH_CODE = `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`;
+const P1_A_NEXT_CYCLE_PATH_CODE = "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
+export const P1_CYCLE_TRANSITION_POLICY_VERSION = "P1_CYCLE_TRANSITION_V1" as const;
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
 const P0_CANONICAL_STEP_COUNT =
   ACADEMIC_P0_LESSONS.length * 3 + ACADEMIC_P0_COMMON_FLOW.stages.length;
@@ -101,6 +117,22 @@ export type P1TransitionResult = {
   enrollmentId: string | null;
   selection: RouteSelectionResult;
   readiness: P1TransitionReadiness;
+};
+
+export type P1CycleTransitionResult = {
+  outcome: "ASSIGNED" | "ALREADY_ASSIGNED" | "REVIEW_REQUIRED";
+  currentLearningPathId: string;
+  nextLearningPathId: string | null;
+  readiness: {
+    status:
+      | "CURRENT_CYCLE_NOT_COMPLETED"
+      | "NEXT_CYCLE_UNAVAILABLE"
+      | "NOT_APPLICABLE"
+      | "ASSIGNED"
+      | "ALREADY_ASSIGNED";
+    currentCycleCompleted: boolean;
+    nextCycleAvailable: boolean;
+  };
 };
 
 export type P1TeacherOverrideInput = P1TransitionInput & {
@@ -277,6 +309,24 @@ function selectionMetadata(selection: RouteSelectionResult): Prisma.InputJsonVal
 
 function isP2002(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+export function nextP1CyclePathCode(pathCode: string): string | null {
+  return pathCode === P1_A_INITIAL_PATH_CODE ? P1_A_NEXT_CYCLE_PATH_CODE : null;
+}
+
+function p1CycleReviewResult(
+  currentLearningPathId: string,
+  status: "CURRENT_CYCLE_NOT_COMPLETED" | "NEXT_CYCLE_UNAVAILABLE" | "NOT_APPLICABLE",
+  currentCycleCompleted: boolean,
+  nextCycleAvailable = false,
+): P1CycleTransitionResult {
+  return {
+    outcome: "REVIEW_REQUIRED",
+    currentLearningPathId,
+    nextLearningPathId: null,
+    readiness: { status, currentCycleCompleted, nextCycleAvailable },
+  };
 }
 
 function routeCandidateAvailable(
@@ -828,6 +878,522 @@ export async function reconcileP0ToP1(
         },
       };
     });
+  }
+}
+
+type P1CycleStep = P1CandidateStepReadinessInput & {
+  id: string;
+  stableKey: string;
+  position: number;
+  prerequisiteStepId: string | null;
+  status: string;
+  isActive: boolean;
+  completionRule: Prisma.JsonValue;
+};
+
+type P1CycleGraph = {
+  code: string;
+  version: number;
+  units: Array<{
+    code: string;
+    status: string;
+    steps: P1CycleStep[];
+  }>;
+};
+
+function p1CycleShape(pathCode: string): {
+  version: number;
+  unitCodes: readonly string[];
+  steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[];
+} | null {
+  if (pathCode === P1_A_INITIAL_PATH_CODE) {
+    const manifest = buildEducationV2P1ALearningCycleManifest();
+    return {
+      version: EDUCATION_V2_P1_A_PATH_VERSION,
+      unitCodes: EDUCATION_V2_P1_A_PROGRAM.path.units.map((unit) => unit.code),
+      steps: manifest.steps,
+    };
+  }
+  if (pathCode === P1_A_NEXT_CYCLE_PATH_CODE) {
+    return {
+      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+      unitCodes: EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.map((unit) => unit.code),
+      steps: EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.steps,
+    };
+  }
+  return null;
+}
+
+function hasExpectedP1CycleGraph(path: P1CycleGraph): boolean {
+  const shape = p1CycleShape(path.code);
+  if (!shape || path.version !== shape.version || path.units.length !== shape.unitCodes.length) {
+    return false;
+  }
+  const actualUnitCodes = path.units.map((unit) => unit.code);
+  if (
+    actualUnitCodes.some((code, index) => code !== shape.unitCodes[index]) ||
+    path.units.some((unit) => unit.status !== "PUBLISHED")
+  ) {
+    return false;
+  }
+
+  const steps = path.units.flatMap((unit) => unit.steps);
+  const expectedSteps = new Map(shape.steps.map((step) => [step.stableKey, step]));
+  const actualKeys = steps.map((step) => step.stableKey);
+  if (
+    steps.length !== expectedSteps.size ||
+    actualKeys.some((key) => !expectedSteps.has(key)) ||
+    new Set(actualKeys).size !== actualKeys.length ||
+    steps.some((step) => step.status !== "PUBLISHED" || !step.isActive)
+  ) {
+    return false;
+  }
+
+  const actualByKey = new Map(steps.map((step) => [step.stableKey, step]));
+  return shape.steps.every((expected) => {
+    const actual = actualByKey.get(expected.stableKey);
+    if (!actual || actual.type !== expected.type || expected.prerequisiteKeys.length > 1) {
+      return false;
+    }
+    const expectedPrerequisiteId = expected.prerequisiteKeys[0]
+      ? (actualByKey.get(expected.prerequisiteKeys[0])?.id ?? null)
+      : null;
+    return actual.prerequisiteStepId === expectedPrerequisiteId;
+  });
+}
+
+function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
+  return minimumScore(rule);
+}
+
+async function isP1CycleComplete(
+  tx: Prisma.TransactionClient,
+  actor: P1StudentActor,
+  path: P1CycleGraph,
+): Promise<boolean> {
+  if (!hasExpectedP1CycleGraph(path)) return false;
+  const steps = path.units.flatMap((unit) => unit.steps);
+  if (!steps.length) return false;
+  const stepIds = steps.map((step) => step.id);
+  const templateIds = steps
+    .map((step) => step.exerciseTemplateVersionId)
+    .filter((id): id is string => Boolean(id));
+  const contentIds = steps
+    .map((step) => step.contentVersionId)
+    .filter((id): id is string => Boolean(id));
+  const assessmentIds = steps
+    .map((step) => step.assessmentId)
+    .filter((id): id is string => Boolean(id));
+
+  const [progress, sessions, lessons, assessmentResults] = await Promise.all([
+    tx.studentLearningStepProgress.findMany({
+      where: {
+        tenantId: actor.tenantId,
+        studentId: actor.userId,
+        learningStepId: { in: stepIds },
+        status: "COMPLETED",
+      },
+      select: { learningStepId: true },
+    }),
+    templateIds.length
+      ? tx.exerciseSession.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            templateVersionId: { in: templateIds },
+            status: "COMPLETED",
+            assignmentId: null,
+            assessmentId: null,
+            context: "INDIVIDUAL",
+            sessionType: "PRACTICE",
+            trainingSessionItem: { is: null },
+          },
+          select: { learningStepId: true, templateVersionId: true },
+        })
+      : Promise.resolve([]),
+    contentIds.length
+      ? tx.studentLessonProgress.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            contentVersionId: { in: contentIds },
+          },
+          select: { contentVersionId: true },
+        })
+      : Promise.resolve([]),
+    assessmentIds.length
+      ? tx.assessmentResult.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            assessmentId: { in: assessmentIds },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { assessmentId: true, score: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const evidenceCompleted = new Set(progress.map((item) => item.learningStepId));
+  const evidence = resolveLearningPathStepEvidence(
+    steps.map((step) => ({
+      id: step.id,
+      exerciseTemplateVersionId: step.exerciseTemplateVersionId,
+      contentVersionId: step.contentVersionId,
+    })),
+    sessions,
+    new Set(lessons.map((lesson) => lesson.contentVersionId)),
+  );
+  for (const [stepId, item] of evidence) {
+    if (item.completed) evidenceCompleted.add(stepId);
+  }
+
+  const latestResults = new Map<string, number | null>();
+  for (const result of assessmentResults) {
+    if (!latestResults.has(result.assessmentId))
+      latestResults.set(result.assessmentId, result.score);
+  }
+  for (const step of steps) {
+    if (!step.assessmentId || !latestResults.has(step.assessmentId)) continue;
+    const score = latestResults.get(step.assessmentId) ?? null;
+    const threshold = cycleMinimumScore(step.completionRule);
+    if (threshold === null || (score !== null && score >= threshold)) {
+      evidenceCompleted.add(step.id);
+    }
+  }
+  return steps.every((step) => evidenceCompleted.has(step.id));
+}
+
+async function loadNextP1Cycle(
+  tx: Prisma.TransactionClient,
+  actor: P1StudentActor,
+  current: { area: string; levelId: string | null },
+) {
+  return tx.learningPath.findFirst({
+    where: {
+      code: P1_A_NEXT_CYCLE_PATH_CODE,
+      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+      area: current.area as "READING_COMPREHENSION",
+      status: "PUBLISHED",
+      deletedAt: null,
+      OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+      ...(current.levelId
+        ? { AND: [{ OR: [{ levelId: null }, { levelId: current.levelId }] }] }
+        : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      version: true,
+      units: {
+        orderBy: { position: "asc" },
+        select: {
+          code: true,
+          status: true,
+          steps: {
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              stableKey: true,
+              position: true,
+              prerequisiteStepId: true,
+              status: true,
+              isActive: true,
+              type: true,
+              contentVersionId: true,
+              exerciseTemplateVersionId: true,
+              assessmentId: true,
+              completionRule: true,
+              contentVersion: {
+                select: { status: true, content: { select: { status: true, deletedAt: true } } },
+              },
+              exerciseTemplateVersion: {
+                select: {
+                  status: true,
+                  template: { select: { status: true, deletedAt: true } },
+                },
+              },
+              assessment: { select: { status: true, deletedAt: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Completes the published P1-A cycle only after all of its server-side
+ * evidence is complete, then atomically activates the next published cycle.
+ * A cycle only passes when its source release is explicitly published and its
+ * database graph is complete. A missing release decision or graph therefore
+ * remains REVIEW_REQUIRED.
+ */
+export async function reconcileP1ToNextCycle(
+  actor: StudentActor,
+  input: { p1LearningPathId: string },
+): Promise<P1CycleTransitionResult> {
+  assertStudentActor(actor);
+  try {
+    return await withTenantContext(actor, async (tx) => {
+      const enrollment = await tx.studentLearningPath.findFirst({
+        where: {
+          id: input.p1LearningPathId,
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          learningPath: { status: "PUBLISHED", deletedAt: null },
+        },
+        select: {
+          id: true,
+          routeStatus: true,
+          measurementResultId: true,
+          learningPath: {
+            select: {
+              id: true,
+              code: true,
+              version: true,
+              area: true,
+              levelId: true,
+              units: {
+                orderBy: { position: "asc" },
+                select: {
+                  code: true,
+                  status: true,
+                  steps: {
+                    orderBy: { position: "asc" },
+                    select: {
+                      id: true,
+                      stableKey: true,
+                      position: true,
+                      prerequisiteStepId: true,
+                      status: true,
+                      isActive: true,
+                      type: true,
+                      contentVersionId: true,
+                      exerciseTemplateVersionId: true,
+                      assessmentId: true,
+                      completionRule: true,
+                      contentVersion: {
+                        select: {
+                          status: true,
+                          content: { select: { status: true, deletedAt: true } },
+                        },
+                      },
+                      exerciseTemplateVersion: {
+                        select: {
+                          status: true,
+                          template: { select: { status: true, deletedAt: true } },
+                        },
+                      },
+                      assessment: { select: { status: true, deletedAt: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!enrollment) {
+        return p1CycleReviewResult(input.p1LearningPathId, "NOT_APPLICABLE", false);
+      }
+
+      const nextCode = nextP1CyclePathCode(enrollment.learningPath.code);
+      if (!nextCode) {
+        return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
+      }
+
+      // A completed or reassigned enrollment is historical state. Before
+      // returning, look up the associated next-cycle enrollment so a replay
+      // of the final request is idempotent without ever reactivating the old
+      // cycle. This check intentionally stays tenant- and student-scoped.
+      const associatedNextPath = await tx.learningPath.findFirst({
+        where: {
+          code: nextCode,
+          version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+          deletedAt: null,
+          OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+        },
+        select: { id: true, status: true },
+      });
+      const existingAssociatedNext = associatedNextPath
+        ? await tx.studentLearningPath.findUnique({
+            where: {
+              tenantId_studentId_learningPathId: {
+                tenantId: actor.tenantId,
+                studentId: actor.userId,
+                learningPathId: associatedNextPath.id,
+              },
+            },
+            select: { id: true, routeStatus: true },
+          })
+        : null;
+
+      // A completed/reassigned enrollment is historical state. Replays or
+      // stale client requests must never be able to reactivate a later cycle.
+      if (enrollment.routeStatus !== "ACTIVE") {
+        if (
+          existingAssociatedNext &&
+          (existingAssociatedNext.routeStatus === "ACTIVE" ||
+            existingAssociatedNext.routeStatus === "COMPLETED")
+        ) {
+          return {
+            outcome: "ALREADY_ASSIGNED",
+            currentLearningPathId: enrollment.id,
+            nextLearningPathId: associatedNextPath?.id ?? null,
+            readiness: {
+              status: "ALREADY_ASSIGNED",
+              currentCycleCompleted: true,
+              nextCycleAvailable: associatedNextPath?.status === "PUBLISHED",
+            },
+          };
+        }
+        return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
+      }
+
+      const currentCompleted = await isP1CycleComplete(tx, actor, enrollment.learningPath);
+      if (!currentCompleted) {
+        return p1CycleReviewResult(enrollment.id, "CURRENT_CYCLE_NOT_COMPLETED", false);
+      }
+
+      const nextPath = await loadNextP1Cycle(tx, actor, enrollment.learningPath);
+      if (
+        !isEducationV2P1ACycleV2ProductionAssignmentEnabled() ||
+        !nextPath ||
+        nextPath.code !== nextCode ||
+        !hasExpectedP1CycleGraph(nextPath) ||
+        nextPath.units.flatMap((unit) => unit.steps).some((step) => !isReadyP1CandidateStep(step))
+      ) {
+        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true, false);
+      }
+
+      const existingNext =
+        existingAssociatedNext && associatedNextPath?.id === nextPath.id
+          ? existingAssociatedNext
+          : await tx.studentLearningPath.findUnique({
+              where: {
+                tenantId_studentId_learningPathId: {
+                  tenantId: actor.tenantId,
+                  studentId: actor.userId,
+                  learningPathId: nextPath.id,
+                },
+              },
+              select: { id: true, routeStatus: true },
+            });
+      if (existingNext?.routeStatus === "ACTIVE" || existingNext?.routeStatus === "COMPLETED") {
+        return {
+          outcome: "ALREADY_ASSIGNED",
+          currentLearningPathId: enrollment.id,
+          nextLearningPathId: nextPath.id,
+          readiness: {
+            status: "ALREADY_ASSIGNED",
+            currentCycleCompleted: true,
+            nextCycleAvailable: true,
+          },
+        };
+      }
+
+      // A previously paused, reviewed, or reassigned next cycle is an
+      // explicit product decision, not an invitation to reactivate it. Keep
+      // the historical enrollment and require a new reviewed decision.
+      if (
+        existingNext &&
+        (existingNext.routeStatus === "REASSIGNED" ||
+          existingNext.routeStatus === "PAUSED" ||
+          existingNext.routeStatus === "REVIEW_REQUIRED")
+      ) {
+        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true, false);
+      }
+
+      const now = new Date();
+      await tx.studentLearningPath.updateMany({
+        where: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          routeStatus: "ACTIVE",
+          learningPath: { code: { startsWith: P1_PATH_PREFIX } },
+          id: { not: enrollment.id },
+        },
+        data: { routeStatus: "REASSIGNED" },
+      });
+      await tx.studentLearningPath.update({
+        where: { id: enrollment.id },
+        data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
+      });
+      await tx.studentLearningPath.upsert({
+        where: {
+          tenantId_studentId_learningPathId: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            learningPathId: nextPath.id,
+          },
+        },
+        update: {
+          routeStatus: "ACTIVE",
+          assignedAt: now,
+          recommendedPathId: nextPath.id,
+          measurementResultId: enrollment.measurementResultId,
+          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
+          selectionReason: {
+            source: "P1_CYCLE_CONTINUATION",
+            fromLearningPathId: enrollment.learningPath.id,
+            fromPathCode: enrollment.learningPath.code,
+            toPathCode: nextPath.code,
+          },
+        },
+        create: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          learningPathId: nextPath.id,
+          routeStatus: "ACTIVE",
+          assignedAt: now,
+          recommendedPathId: nextPath.id,
+          measurementResultId: enrollment.measurementResultId,
+          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
+          selectionReason: {
+            source: "P1_CYCLE_CONTINUATION",
+            fromLearningPathId: enrollment.learningPath.id,
+            fromPathCode: enrollment.learningPath.code,
+            toPathCode: nextPath.code,
+          },
+        },
+        select: { id: true },
+      });
+      return {
+        outcome: "ASSIGNED",
+        currentLearningPathId: enrollment.id,
+        nextLearningPathId: nextPath.id,
+        readiness: {
+          status: "ASSIGNED",
+          currentCycleCompleted: true,
+          nextCycleAvailable: true,
+        },
+      };
+    });
+  } catch (error) {
+    if (!isP2002(error)) throw error;
+    const active = await withTenantContext(actor, (tx) =>
+      tx.studentLearningPath.findFirst({
+        where: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          routeStatus: "ACTIVE",
+          learningPath: { code: P1_A_NEXT_CYCLE_PATH_CODE },
+        },
+        select: { id: true, learningPathId: true },
+      }),
+    );
+    if (!active) throw error;
+    return {
+      outcome: "ALREADY_ASSIGNED",
+      currentLearningPathId: input.p1LearningPathId,
+      nextLearningPathId: active.learningPathId,
+      readiness: {
+        status: "ALREADY_ASSIGNED",
+        currentCycleCompleted: true,
+        nextCycleAvailable: true,
+      },
+    };
   }
 }
 

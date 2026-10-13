@@ -118,6 +118,7 @@ let learningPathLoading = false;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
 let pendingP1Reconcile = null;
+let pendingP1CycleReconcile = null;
 const insightRequests = new Map();
 let insightHistoryPage = 1;
 let insightAwards = [];
@@ -4268,6 +4269,26 @@ async function reconcileP0ToP1(p0LearningPathId) {
   );
 }
 
+async function reconcileP1ToNextCycle(p1LearningPathId) {
+  return parseResponse(
+    await authenticatedFetch("/student/learning-path/p1/cycle/reconcile", {
+      method: "POST",
+      body: JSON.stringify({ p1LearningPathId }),
+    }),
+  );
+}
+
+function p1CycleTransitionReviewMessage(result) {
+  switch (result?.readiness?.status) {
+    case "CURRENT_CYCLE_NOT_COMPLETED":
+      return "Bu öğrenme döngüsünün tüm adımları henüz tamamlanmadı. İlerlemen korunuyor; eksik adımlar tamamlandığında yeniden kontrol edilecek.";
+    case "NEXT_CYCLE_UNAVAILABLE":
+      return "Bu öğrenme döngüsü tamamlandı. Sonraki döngü uzman incelemesi ve yayın hazırlığı tamamlandığında açılacak; ilerlemen korunuyor.";
+    default:
+      return "Bu öğrenme döngüsünün sonraki adımı şu anda hazır değil. İlerlemen korunuyor; daha sonra yeniden kontrol edilecek.";
+  }
+}
+
 function p1TransitionReviewMessage(result) {
   switch (result?.readiness?.status) {
     case "P0_GRAPH_NOT_READY":
@@ -4372,6 +4393,40 @@ async function retryPendingP1Reconcile() {
   } finally {
     setAsyncButtonState(button, false, "Kontrol ediliyor…");
   }
+}
+
+async function retryPendingP1CycleReconcile() {
+  const pending = pendingP1CycleReconcile;
+  const button = $("learning-path-transition-retry");
+  if (!pending || !button) return;
+  setAsyncButtonState(button, true, "Kontrol ediliyor…");
+  setLearningPathTransitionStatus("Öğrenme döngüsünün sonraki adımı kontrol ediliyor…");
+  try {
+    const result = await reconcileP1ToNextCycle(pending.p1LearningPathId);
+    pendingP1CycleReconcile = null;
+    if (result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED") {
+      resetInsights();
+      navigate("dashboard");
+      clearLearningPathTransitionStatus();
+      return;
+    }
+    setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(result), { error: true });
+  } catch {
+    setLearningPathTransitionStatus(
+      "Sonraki öğrenme döngüsü şu anda kontrol edilemedi. İlerlemen korunuyor; tekrar deneyebilirsin.",
+      { retry: true, error: true },
+    );
+  } finally {
+    setAsyncButtonState(button, false, "Kontrol ediliyor…");
+  }
+}
+
+async function retryPendingLearningPathReconcile() {
+  if (pendingP1CycleReconcile) {
+    await retryPendingP1CycleReconcile();
+    return;
+  }
+  await retryPendingP1Reconcile();
 }
 
 async function completeLearningPathTerminalStep() {
@@ -13392,6 +13447,26 @@ async function handleExerciseComplete() {
       $("exercise-completion-title")?.focus();
       return;
     }
+    let nextCycleTransition = exerciseSession.nextLearningCycle || null;
+    if (
+      student &&
+      learningPathEntryMode &&
+      exerciseSession.learningStepId &&
+      !exerciseSession.nextLearningStep &&
+      exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY" &&
+      String(activeLearningStepNode?.learningPathCode || "") ===
+        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
+    ) {
+      try {
+        nextCycleTransition ||= await reconcileP1ToNextCycle(activeLearningStepNode.learningPathId);
+      } catch {
+        // The completed session remains authoritative. Keep a separate P1
+        // retry state so this does not accidentally retry the P0 transition.
+        pendingP1CycleReconcile = {
+          p1LearningPathId: activeLearningStepNode.learningPathId,
+        };
+      }
+    }
     if (student && learningPathEntryMode && exerciseSession.learningStepId) {
       const completedStep = {
         ...(activeLearningStepNode || {}),
@@ -13412,6 +13487,16 @@ async function handleExerciseComplete() {
       // second training-style completion screen.
       exerciseBusy = false;
       returnToExercisePath();
+      if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
+        setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
+          error: true,
+        });
+      } else if (pendingP1CycleReconcile) {
+        setLearningPathTransitionStatus(
+          "Öğrenme döngün tamamlandı. Sonraki döngü şu anda kontrol edilemedi; ilerlemen korunuyor.",
+          { retry: true, error: true },
+        );
+      }
       return;
     }
     renderExerciseSession();
@@ -13467,7 +13552,7 @@ function setupExerciseEvents() {
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
   $("learning-path-transition-retry")?.addEventListener(
     "click",
-    () => void retryPendingP1Reconcile(),
+    () => void retryPendingLearningPathReconcile(),
   );
   $("training-activities-grid")?.addEventListener("click", (event) => {
     const target =

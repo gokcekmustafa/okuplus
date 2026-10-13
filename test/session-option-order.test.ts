@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   reorderJsonOptionsForSession,
   reorderOptionsForSession,
+  shouldReorderStudentOptions,
 } from "../src/modules/questions/session-option-order.js";
 
 const options = [
@@ -39,5 +40,14 @@ describe("session option order", () => {
 
     expect(reorderJsonOptionsForSession(malformed, "session-1")).toEqual(malformed);
     expect(reorderJsonOptionsForSession(scalar, "session-1")).toBe(scalar);
+  });
+
+  it("reorders every student-visible session context but never teacher/admin views", () => {
+    for (const context of ["INDIVIDUAL", "ASSIGNMENT", "ASSESSMENT"] as const) {
+      expect(shouldReorderStudentOptions(null, context, "MULTIPLE_CHOICE")).toBe(true);
+    }
+    expect(shouldReorderStudentOptions("TEACHER", "ASSIGNMENT", "MULTIPLE_CHOICE")).toBe(false);
+    expect(shouldReorderStudentOptions("SUPER_ADMIN", "ASSESSMENT", "MULTIPLE_CHOICE")).toBe(false);
+    expect(shouldReorderStudentOptions(null, "INDIVIDUAL", "TRUE_FALSE")).toBe(false);
   });
 });

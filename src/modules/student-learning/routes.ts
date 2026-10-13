@@ -13,8 +13,8 @@ import {
 } from "./service.js";
 import { startStudentReview, getStudentReview } from "./review-service.js";
 import { completeTerminalLearningStep } from "../learning-path/index.js";
-import { reconcileP0ToP1 } from "./p1-transition.js";
-import { p1TransitionSchema } from "./p1-schemas.js";
+import { reconcileP0ToP1, reconcileP1ToNextCycle } from "./p1-transition.js";
+import { p1CycleTransitionSchema, p1TransitionSchema } from "./p1-schemas.js";
 
 function hashForDiagnostics(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -250,6 +250,23 @@ export async function studentLearningRoutes(
       const input = p1TransitionSchema.parse(req.body);
       return ok(
         await reconcileP0ToP1(
+          {
+            userId: req.authUser!.id,
+            tenantId: req.tenantContext?.tenantId ?? null,
+            platformRole: req.authUser!.platformRole ?? null,
+          },
+          input,
+        ),
+      );
+    },
+  );
+  app.post(
+    "/student/learning-path/p1/cycle/reconcile",
+    { preHandler: [requireAuth(authProvider)] },
+    async (req) => {
+      const input = p1CycleTransitionSchema.parse(req.body);
+      return ok(
+        await reconcileP1ToNextCycle(
           {
             userId: req.authUser!.id,
             tenantId: req.tenantContext?.tenantId ?? null,

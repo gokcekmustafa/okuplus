@@ -12,4 +12,8 @@ export const p1TransitionSchema = z.object({
   p0LearningPathId: z.string().trim().min(1),
 });
 
+export const p1CycleTransitionSchema = z.object({
+  p1LearningPathId: z.string().trim().min(1),
+});
+
 export type P1TeacherOverrideRequest = z.infer<typeof p1TeacherOverrideSchema>;

@@ -1,6 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { isReadyP1CandidateStep } from "../src/modules/student-learning/p1-transition.js";
+import {
+  isReadyP1CandidateStep,
+  nextP1CyclePathCode,
+  P1_CYCLE_TRANSITION_POLICY_VERSION,
+} from "../src/modules/student-learning/p1-transition.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
+  EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
+  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
+} from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
 
 const publishedContent = {
   status: "PUBLISHED",
@@ -73,6 +82,43 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain("p0LearningPathId: node.learningPathId");
   });
 
+  it("keeps the next-cycle transition explicit, versioned, and publication-gated", async () => {
+    const transition = await readFile(
+      new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
+      "utf8",
+    );
+    const cycleV2 = await readFile(
+      new URL("../src/curriculum/education-v2-p1-a-cycle-v2-program.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12")).toBe(
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+    );
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12")).toBeNull();
+    expect(P1_CYCLE_TRANSITION_POLICY_VERSION).toBe("P1_CYCLE_TRANSITION_V1");
+    expect(transition).toContain('"NEXT_CYCLE_UNAVAILABLE"');
+    expect(transition).toContain('enrollment.routeStatus !== "ACTIVE"');
+    expect(transition).toContain('status: "PUBLISHED"');
+    expect(transition).toContain("hasExpectedP1CycleGraph");
+    expect(transition).toContain("stableKey");
+    expect(transition).toContain("prerequisiteStepId");
+    expect(transition).toContain("studentLearningPath.upsert");
+    expect(transition).toContain('outcome: "ALREADY_ASSIGNED"');
+    expect(cycleV2).toContain(
+      'EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus = "PUBLISHED"',
+    );
+    expect(cycleV2).not.toContain("EXPERT_REVIEW_REQUIRED");
+    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = true");
+    expect(cycleV2).toContain("isEducationV2P1ACycleV2ProductionAssignmentEnabled");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(true);
+    expect(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).toContain(
+      'exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY"',
+    );
+  });
+
   it("refreshes the path and opens the first assigned P1 station without a manual reload", async () => {
     const [app, index] = await Promise.all([
       readFile(new URL("../public/app.js", import.meta.url), "utf8"),
@@ -88,6 +134,9 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain("learningPathEntryMode = true");
     expect(app).toContain('result?.outcome === "REVIEW_REQUIRED"');
     expect(app).toContain("pendingP1Reconcile");
+    expect(app).toContain("pendingP1CycleReconcile");
+    expect(app).toContain("retryPendingP1CycleReconcile");
+    expect(app).toContain("retryPendingLearningPathReconcile");
     expect(index).toContain('id="learning-path-transition-status"');
     expect(index).toContain('id="learning-path-transition-retry"');
   });

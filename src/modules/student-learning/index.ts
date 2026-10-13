@@ -1,5 +1,5 @@
 export { studentLearningRoutes } from "./routes.js";
-export { overrideP1Route, reconcileP0ToP1 } from "./p1-transition.js";
+export { overrideP1Route, reconcileP0ToP1, reconcileP1ToNextCycle } from "./p1-transition.js";
 export {
   isP1PathCode,
   readRouteSelectionProfile,
