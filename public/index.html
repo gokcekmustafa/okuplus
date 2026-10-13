@@ -376,6 +376,10 @@
             <span class="nav-icon" aria-hidden="true">▦</span>
             <span class="nav-label">Kurum Paneli</span>
           </button>
+          <button class="nav-item" data-page="analytics" data-organization type="button">
+            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-label">Öğrenci Analitiği</span>
+          </button>
           <button
             class="nav-item"
             data-page="branch-dashboard"
@@ -1250,6 +1254,11 @@
                 <strong>Ödevler</strong>
                 <span class="muted">Mevcut ödev ve sonuç akışına erişin.</span>
               </button>
+              <button class="card dashboard-link-card" data-page="analytics" type="button">
+                <span class="eyebrow">İZLEME</span>
+                <strong>Öğrenci Analitiği</strong>
+                <span class="muted">Öğrenci kullanımını ve öğrenme kanıtlarını inceleyin.</span>
+              </button>
             </div>
           </section>
 
@@ -1321,7 +1330,176 @@
                 <span class="eyebrow">AKTİVİTELER</span><strong>Ödevler</strong
                 ><span class="muted">Şubenizdeki ödev akışına erişin.</span>
               </button>
+              <button class="card dashboard-link-card" data-page="analytics" type="button">
+                <span class="eyebrow">İZLEME</span><strong>Öğrenci Analitiği</strong
+                ><span class="muted">Şubenizdeki öğrenci kanıtlarını inceleyin.</span>
+              </button>
             </div>
+          </section>
+
+          <section id="page-analytics" class="page-view hidden">
+            <div class="page-head analytics-page-head">
+              <div>
+                <span class="eyebrow">YÖNETİM VE ÖĞRENME ANALİTİĞİ</span>
+                <h2>Öğrenci Analitiği</h2>
+                <p class="muted">
+                  Kurumunuzun yetkili öğrenci kapsamındaki gerçek sunucu kayıtlarını inceleyin.
+                </p>
+              </div>
+              <div class="analytics-range-controls" role="group" aria-label="Tarih aralığı">
+                <label class="field inline-field"
+                  ><span>Başlangıç</span><input id="analytics-from" type="date"
+                /></label>
+                <label class="field inline-field"
+                  ><span>Bitiş</span><input id="analytics-to" type="date"
+                /></label>
+                <button id="analytics-refresh" type="button" class="btn btn-primary">Yenile</button>
+              </div>
+            </div>
+            <div id="analytics-error" class="error-banner hidden" role="alert"></div>
+            <div id="analytics-status" class="management-dashboard-status muted" role="status">
+              Analitik yükleniyor…
+            </div>
+
+            <section class="analytics-section" aria-labelledby="analytics-overview-title">
+              <div class="management-section-heading">
+                <div>
+                  <span class="eyebrow">A · GENEL ÖZET</span>
+                  <h3 id="analytics-overview-title">Kullanım ve öğrenci kapsamı</h3>
+                </div>
+                <p class="muted" id="analytics-definition"></p>
+              </div>
+              <div class="management-kpi-grid analytics-kpi-grid">
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">👥</span
+                  ><span class="management-kpi-label">Kayıtlı öğrenciler</span
+                  ><strong id="analytics-registered" class="management-kpi-value">—</strong>
+                </article>
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">🟢</span
+                  ><span class="management-kpi-label">Aktif öğrenciler</span
+                  ><strong id="analytics-active" class="management-kpi-value">—</strong>
+                </article>
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">▶️</span
+                  ><span class="management-kpi-label">Alıştırma oturumları</span
+                  ><strong id="analytics-exercise-sessions" class="management-kpi-value">—</strong>
+                </article>
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">⏱️</span
+                  ><span class="management-kpi-label">Ortalama süre</span
+                  ><strong id="analytics-duration" class="management-kpi-value">—</strong>
+                </article>
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">⚠️</span
+                  ><span class="management-kpi-label">Tamamlanmayan öğrenciler</span
+                  ><strong id="analytics-not-continued" class="management-kpi-value">—</strong>
+                </article>
+                <article class="management-kpi-card">
+                  <span class="management-kpi-icon">🛠️</span
+                  ><span class="management-kpi-label">Teknik hatalar</span
+                  ><strong id="analytics-errors" class="management-kpi-value">—</strong>
+                </article>
+              </div>
+              <div class="analytics-columns">
+                <article class="card table-card">
+                  <div class="card-head">
+                    <h4>Özellik kullanımı</h4>
+                    <span class="muted">Oturum kayıtları</span>
+                  </div>
+                  <div class="table-wrap">
+                    <table class="data-table">
+                      <thead>
+                        <tr>
+                          <th>Alan</th>
+                          <th>Oturum</th>
+                          <th>Öğrenci</th>
+                        </tr>
+                      </thead>
+                      <tbody id="analytics-feature-body">
+                        <tr>
+                          <td colspan="3" class="empty-cell">Veri yükleniyor…</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </article>
+                <article class="card table-card">
+                  <div class="card-head">
+                    <h4>Kullanım yoğunluğu</h4>
+                    <span class="muted">Günlük · haftalık · aylık</span>
+                  </div>
+                  <div id="analytics-usage-summary" class="analytics-usage-summary muted">
+                    Veri yükleniyor…
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <section class="analytics-section" aria-labelledby="analytics-journey-title">
+              <div class="management-section-heading">
+                <div>
+                  <span class="eyebrow">B · ÖĞRENME YOLU</span>
+                  <h3 id="analytics-journey-title">Öğrenci listesi ve yol durumu</h3>
+                </div>
+                <p class="muted">
+                  Öğrenme Yolu, Antrenman, Ödevler ve Ölçme-Değerlendirme ayrı tutulur.
+                </p>
+              </div>
+              <div class="card table-card">
+                <div class="table-wrap">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Öğrenci</th>
+                        <th>Sınıf</th>
+                        <th>Son etkinlik</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="analytics-student-body">
+                      <tr>
+                        <td colspan="4" class="empty-cell">Öğrenciler yükleniyor…</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div id="analytics-student-pagination" class="table-footer"></div>
+              </div>
+              <article
+                id="analytics-student-detail"
+                class="card analytics-detail-card hidden"
+                aria-live="polite"
+              ></article>
+            </section>
+
+            <section class="analytics-section" aria-labelledby="analytics-performance-title">
+              <div class="management-section-heading">
+                <div>
+                  <span class="eyebrow">C · ÖĞRENME PERFORMANSI</span>
+                  <h3 id="analytics-performance-title">Beceri kanıtları</h3>
+                </div>
+                <p class="muted">Ölçüm sonucu olmayan değerler tahmin edilmez.</p>
+              </div>
+              <div id="analytics-performance-empty" class="management-empty-state">
+                <strong>Bir öğrenci seçin.</strong
+                ><span>Öğrenme yolu ve performans ayrıntıları burada görüntülenir.</span>
+              </div>
+            </section>
+
+            <section class="analytics-section" aria-labelledby="analytics-activity-title">
+              <div class="management-section-heading">
+                <div>
+                  <span class="eyebrow">D · AYRINTILI ETKİNLİK</span>
+                  <h3 id="analytics-activity-title">Zaman çizelgesi</h3>
+                </div>
+                <p class="muted">Yalnızca sunucuya kaydedilmiş etkinlikler gösterilir.</p>
+              </div>
+              <div id="analytics-activity-empty" class="management-empty-state">
+                <strong>Bir öğrenci seçin.</strong
+                ><span>Başlama, tamamlama, bırakma ve teknik hata kayıtları listelenir.</span>
+              </div>
+            </section>
           </section>
 
           <section id="page-academic-years" class="page-view hidden">
