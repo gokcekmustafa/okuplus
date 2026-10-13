@@ -155,6 +155,9 @@ jobs:
           echo "PRODUCTION_TARGET_FINGERPRINT=PASS" >> "${GITHUB_STEP_SUMMARY}"
           migration_report_file="$RUNNER_TEMP/cycle2-production-migration-forensics.json"
           npx --no-install tsx scripts/production-migration-forensics.ts >"${migration_report_file}"
+          # Keep the read-only, already-sanitized forensics report available even
+          # when the following migration policy gate blocks the run.
+          cp "${migration_report_file}" cycle2-production-migration-forensics.json
           MIGRATION_FORENSICS_REPORT_FILE="${migration_report_file}" \
             npx --no-install tsx scripts/verify-canonical-placement-migration-policy.ts
           echo "PRODUCTION_MIGRATION_POLICY=PASS" >> "${GITHUB_STEP_SUMMARY}"

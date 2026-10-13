@@ -6,6 +6,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
 import { providerForHost, targetIdentityFingerprint } from "./db-fingerprint-contract.js";
+import {
+  classifyExerciseTemplateVersionConfig,
+  type ExerciseTemplateVersionConfigRow,
+} from "../src/lib/exercise-template-version-config-policy.js";
 
 const MIGRATION_1 = "20260905090000_add_exercise_template_version_config";
 const MIGRATION_2 = "20260907150000_add_training_session_models";
@@ -76,9 +80,14 @@ type MigrationFileHistory = {
 type Migration1DataPreflight = {
   status: "PASS" | "REVIEW_REQUIRED" | "UNKNOWN";
   totalExerciseTemplateVersions: number | null;
+  observedMissingConfigCount: number | null;
+  configuredInvalidCount: number | null;
   backfillTargetCount: number | null;
   alreadyConfigured: number | null;
+  canonicalPlacementExemptCount: number | null;
   parentConfigAvailable: number | null;
+  parentConfigValid: number | null;
+  parentConfigInvalid: number | null;
   parentConfigMissing: number | null;
   missingParent: number | null;
   deterministic: "YES" | "NO" | "UNKNOWN";
@@ -612,9 +621,14 @@ async function main(): Promise<void> {
     let migration1DataPreflight: Migration1DataPreflight = {
       status: "UNKNOWN",
       totalExerciseTemplateVersions: null,
+      observedMissingConfigCount: null,
+      configuredInvalidCount: null,
       backfillTargetCount: null,
       alreadyConfigured: null,
+      canonicalPlacementExemptCount: null,
       parentConfigAvailable: null,
+      parentConfigValid: null,
+      parentConfigInvalid: null,
       parentConfigMissing: null,
       missingParent: null,
       deterministic: "UNKNOWN",
@@ -632,85 +646,103 @@ async function main(): Promise<void> {
     );
 
     if (exerciseTemplateVersionTableExists && exerciseTemplateTableExists) {
-      const rows = exerciseTemplateVersionConfigExists
-        ? await prisma.$queryRaw<
-            Array<{
-              total: number;
-              target: number;
-              configured: number;
-              parentConfigAvailable: number;
-              parentConfigMissing: number;
-              missingParent: number;
-            }>
-          >`
+      const counts = exerciseTemplateVersionConfigExists
+        ? await prisma.$queryRaw<Array<{ total: number; configured: number }>>`
             SELECT count(*)::int AS total,
                    count(*) FILTER (
-                     WHERE version."config" IS NULL OR version."config" = 'null'::jsonb
-                   )::int AS target,
-                   count(*) FILTER (WHERE version."config" IS NOT NULL)::int AS configured,
-                   count(*) FILTER (
-                     WHERE template."id" IS NOT NULL
-                       AND template."config" IS NOT NULL
-                       AND template."config" <> 'null'::jsonb
-                   )::int AS "parentConfigAvailable",
-                   count(*) FILTER (
-                     WHERE template."id" IS NOT NULL
-                       AND (template."config" IS NULL OR template."config" = 'null'::jsonb)
-                   )::int AS "parentConfigMissing",
-                   count(*) FILTER (WHERE template."id" IS NULL)::int AS "missingParent"
+                     WHERE version."config" IS NOT NULL AND version."config" <> 'null'::jsonb
+                   )::int AS configured
+            FROM "ExerciseTemplateVersion" AS version
+          `
+        : await prisma.$queryRaw<Array<{ total: number; configured: number }>>`
+            SELECT count(*)::int AS total, 0::int AS configured
+            FROM "ExerciseTemplateVersion" AS version
+          `;
+      const countSummary = counts[0] ?? { total: 0, configured: 0 };
+      const targetRows: ExerciseTemplateVersionConfigRow[] = exerciseTemplateVersionConfigExists
+        ? await prisma.$queryRaw<ExerciseTemplateVersionConfigRow[]>`
+            SELECT version."config" AS "versionConfig",
+                   template."config" AS "parentConfig",
+                   (template."id" IS NOT NULL) AS "parentExists",
+                   template."type"::text AS "templateType",
+                   version."status"::text AS "versionStatus"
             FROM "ExerciseTemplateVersion" AS version
             LEFT JOIN "ExerciseTemplate" AS template
               ON template."id" = version."templateId"
           `
-        : await prisma.$queryRaw<
-            Array<{
-              total: number;
-              parentConfigAvailable: number;
-              parentConfigMissing: number;
-              missingParent: number;
-            }>
-          >`
-            SELECT count(*)::int AS total,
-                   count(*) FILTER (
-                     WHERE template."id" IS NOT NULL
-                       AND template."config" IS NOT NULL
-                       AND template."config" <> 'null'::jsonb
-                   )::int AS "parentConfigAvailable",
-                   count(*) FILTER (
-                     WHERE template."id" IS NOT NULL
-                       AND (template."config" IS NULL OR template."config" = 'null'::jsonb)
-                   )::int AS "parentConfigMissing",
-                   count(*) FILTER (WHERE template."id" IS NULL)::int AS "missingParent"
+        : await prisma.$queryRaw<ExerciseTemplateVersionConfigRow[]>`
+            SELECT NULL::jsonb AS "versionConfig",
+                   template."config" AS "parentConfig",
+                   (template."id" IS NOT NULL) AS "parentExists",
+                   template."type"::text AS "templateType",
+                   version."status"::text AS "versionStatus"
             FROM "ExerciseTemplateVersion" AS version
             LEFT JOIN "ExerciseTemplate" AS template
               ON template."id" = version."templateId"
           `;
-
-      const counts = rows[0];
-      const total = counts?.total ?? 0;
-      const target = exerciseTemplateVersionConfigExists
-        ? (counts as { target: number }).target
-        : total;
-      const configured = exerciseTemplateVersionConfigExists
-        ? (counts as { configured: number }).configured
-        : 0;
-      const parentConfigAvailable = counts?.parentConfigAvailable ?? 0;
-      const parentConfigMissing = counts?.parentConfigMissing ?? 0;
-      const missingParent = counts?.missingParent ?? 0;
-      const safe = missingParent === 0 && parentConfigMissing === 0;
+      const classifications = targetRows.map((row) => classifyExerciseTemplateVersionConfig(row));
+      const configuredInvalidCount = classifications.filter(
+        (classification) => classification.kind === "CONFIGURED" && !classification.valid,
+      ).length;
+      const missingRows = targetRows.filter(
+        (row) => row.versionConfig === null || row.versionConfig === undefined,
+      );
+      const missingClassifications = classifications.filter((_classification, index) => {
+        const row = targetRows[index];
+        return row?.versionConfig === null || row?.versionConfig === undefined;
+      });
+      const canonicalPlacementExemptCount = missingClassifications.filter(
+        (classification) => classification.kind === "CANONICAL_PLACEMENT_EXEMPT",
+      ).length;
+      const backfillClassifications = missingClassifications.filter(
+        (classification) => classification.kind === "BACKFILL_REQUIRED",
+      );
+      const backfillTargetCount = backfillClassifications.length;
+      const parentConfigAvailable = backfillClassifications.filter(
+        (classification) =>
+          classification.parent === "VALID" || classification.parent === "INVALID",
+      ).length;
+      const parentConfigValid = backfillClassifications.filter(
+        (classification) => classification.parent === "VALID",
+      ).length;
+      const parentConfigInvalid = backfillClassifications.filter(
+        (classification) => classification.parent === "INVALID",
+      ).length;
+      const parentConfigMissing = backfillClassifications.filter(
+        (classification) => classification.parent === "MISSING",
+      ).length;
+      const missingParent = backfillClassifications.filter(
+        (classification) => classification.parent === "ABSENT",
+      ).length;
+      const safe =
+        configuredInvalidCount === 0 &&
+        (backfillTargetCount === 0 ||
+          (backfillTargetCount === parentConfigAvailable &&
+            parentConfigInvalid === 0 &&
+            parentConfigMissing === 0 &&
+            missingParent === 0));
 
       migration1DataPreflight = {
         status: safe ? "PASS" : "REVIEW_REQUIRED",
-        totalExerciseTemplateVersions: total,
-        backfillTargetCount: target,
-        alreadyConfigured: configured,
+        totalExerciseTemplateVersions: countSummary.total,
+        observedMissingConfigCount: missingRows.length,
+        configuredInvalidCount,
+        backfillTargetCount,
+        alreadyConfigured: countSummary.configured,
+        canonicalPlacementExemptCount,
         parentConfigAvailable,
+        parentConfigValid,
+        parentConfigInvalid,
         parentConfigMissing,
         missingParent,
-        deterministic: missingParent === 0 ? "YES" : "NO",
+        deterministic: safe ? "YES" : "NO",
         reason: safe
-          ? "every target has exactly one parent config source"
-          : "missing parent or null parent config requires review before backfill",
+          ? canonicalPlacementExemptCount > 0 && backfillTargetCount === 0
+            ? "canonical placement version config is intentionally exempt from training backfill"
+            : "every training version missing config has one valid parent version config source"
+          : configuredInvalidCount > 0
+            ? "configured version has invalid training config and requires review"
+            : "missing, invalid, or ambiguous parent config requires review before backfill",
       };
     }
 
@@ -719,13 +751,11 @@ async function main(): Promise<void> {
         (row) => row.table_name === "ExerciseTemplateVersion" && row.column_name === "config",
       )
     ) {
-      const rows = await prisma.$queryRaw<Array<{ total: number; configured: number }>>`
-        SELECT count(*)::int AS total,
-               count(*) FILTER (WHERE "config" IS NOT NULL)::int AS configured
-        FROM "ExerciseTemplateVersion"
-      `;
-      const counts = rows[0] ?? { total: 0, configured: 0 };
-      configDataState = counts.configured < counts.total ? "YES" : "NO";
+      configDataState =
+        migration1DataPreflight.backfillTargetCount! > 0 ||
+        migration1DataPreflight.configuredInvalidCount! > 0
+          ? "YES"
+          : "NO";
     }
 
     const partialSchema =

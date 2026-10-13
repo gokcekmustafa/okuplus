@@ -144,6 +144,14 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("parentConfigMissing");
     expect(script).toContain("missingParent");
     expect(script).toContain("backfillTargetCount");
+    expect(script).toContain("observedMissingConfigCount");
+    expect(script).toContain("configuredInvalidCount");
+    expect(script).toContain("canonicalPlacementExemptCount");
+    expect(script).toContain("parentConfigValid");
+    expect(script).toContain("parentConfigInvalid");
+    expect(script).toContain("classifyExerciseTemplateVersionConfig");
+    expect(script).toContain('version."config" IS NOT NULL');
+    expect(script).toContain("\"config\" <> 'null'::jsonb");
   });
 
   it("consumes the db fingerprint migration arrays using their actual output contract", () => {
