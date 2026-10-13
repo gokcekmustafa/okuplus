@@ -536,6 +536,55 @@ const exercises: ProgramExercise[] = [
   },
 ];
 
+/**
+ * Editorial construct map for the candidate package. This is intentionally
+ * explicit: a question is not considered evidence for an outcome merely
+ * because its exercise happens to use the same broad skill code.
+ *
+ * The map is an authoring contract, not psychometric validation. Expert
+ * review is still required before Cycle 3 can become canonical.
+ */
+export const CYCLE_3_EXERCISE_OUTCOME_KEYS = {
+  "p1a-v3-evidence-study": ["P1A_V3_EVIDENCE_STRENGTH"],
+  "p1a-v3-evidence-practice": ["P1A_V3_EVIDENCE_STRENGTH", "P1A_V3_CAUSE_CONSEQUENCE_TRANSFER"],
+  "p1a-v3-evidence-reinforcement": ["P1A_V3_EVIDENCE_STRENGTH"],
+  "p1a-v3-transfer-practice": ["P1A_V3_CAUSE_CONSEQUENCE_TRANSFER", "P1A_V3_GENRE_TRANSFER"],
+  "p1a-v3-assessment": [
+    "P1A_V3_EVIDENCE_STRENGTH",
+    "P1A_V3_CAUSE_CONSEQUENCE_TRANSFER",
+    "P1A_V3_GENRE_TRANSFER",
+  ],
+} as const;
+
+export const CYCLE_3_QUESTION_OUTCOME_KEYS = {
+  "p1a-v3-evidence-study": {
+    "p1a-v3-evidence-study-1": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-evidence-study-2": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-evidence-study-3": ["P1A_V3_EVIDENCE_STRENGTH"],
+  },
+  "p1a-v3-evidence-practice": {
+    "p1a-v3-evidence-practice-1": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-evidence-practice-2": ["P1A_V3_CAUSE_CONSEQUENCE_TRANSFER"],
+    "p1a-v3-evidence-practice-3": ["P1A_V3_EVIDENCE_STRENGTH"],
+  },
+  "p1a-v3-evidence-reinforcement": {
+    "p1a-v3-evidence-reinforcement-1": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-evidence-reinforcement-2": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-evidence-reinforcement-3": ["P1A_V3_EVIDENCE_STRENGTH"],
+  },
+  "p1a-v3-transfer-practice": {
+    "p1a-v3-transfer-practice-1": ["P1A_V3_CAUSE_CONSEQUENCE_TRANSFER"],
+    "p1a-v3-transfer-practice-2": ["P1A_V3_GENRE_TRANSFER"],
+    "p1a-v3-transfer-practice-3": ["P1A_V3_CAUSE_CONSEQUENCE_TRANSFER", "P1A_V3_GENRE_TRANSFER"],
+  },
+  "p1a-v3-assessment": {
+    "p1a-v3-assessment-1": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-assessment-2": ["P1A_V3_CAUSE_CONSEQUENCE_TRANSFER"],
+    "p1a-v3-assessment-3": ["P1A_V3_EVIDENCE_STRENGTH"],
+    "p1a-v3-assessment-4": ["P1A_V3_GENRE_TRANSFER"],
+  },
+} as const;
+
 const steps: P1APathStep[] = [
   {
     key: "evidence-teaching-v3",
@@ -765,7 +814,49 @@ export function validateP1ACycle3Program(candidate: P1AProgram = program): strin
       errors.push(`Exercise soru anahtarı tekrarlı: ${exercise.key}`);
     if ((usedExercises.get(exercise.key) ?? 0) !== 1)
       errors.push(`Exercise kullanım sayısı geçersiz: ${exercise.key}`);
+    const mappedExerciseOutcomeKeys = (
+      CYCLE_3_EXERCISE_OUTCOME_KEYS as Record<string, readonly string[]>
+    )[exercise.key];
+    if (!mappedExerciseOutcomeKeys?.length) {
+      errors.push(`Exercise kazanım eşlemesi eksik: ${exercise.key}`);
+    }
+    const linkedStep = pathSteps.find(
+      (step) =>
+        step.exerciseKey === exercise.key ||
+        (step.assessmentKey &&
+          assessmentByKey.get(step.assessmentKey)?.templateExerciseKey === exercise.key),
+    );
+    if (!linkedStep) errors.push(`Exercise öğrenme adımıyla eşleşmiyor: ${exercise.key}`);
+    for (const outcomeKey of mappedExerciseOutcomeKeys ?? []) {
+      if (!outcomeKeys.has(outcomeKey)) {
+        errors.push(`Bilinmeyen exercise kazanımı: ${exercise.key} -> ${outcomeKey}`);
+      } else if (linkedStep && !linkedStep.learningOutcomeKeys.includes(outcomeKey)) {
+        errors.push(`Exercise kazanımı adımla uyumsuz: ${exercise.key} -> ${outcomeKey}`);
+      }
+    }
+    const questionOutcomeMap = (
+      CYCLE_3_QUESTION_OUTCOME_KEYS as Record<string, Record<string, readonly string[]>>
+    )[exercise.key];
+    const mappedQuestionKeys = new Set(Object.keys(questionOutcomeMap ?? {}));
     for (const item of exercise.questions) {
+      if (
+        !questionOutcomeMap ||
+        !Object.prototype.hasOwnProperty.call(questionOutcomeMap, item.key)
+      ) {
+        errors.push(`Soru kazanım eşlemesi eksik: ${exercise.key} -> ${item.key}`);
+      }
+      const questionOutcomeKeys = questionOutcomeMap?.[item.key];
+      for (const outcomeKey of questionOutcomeKeys ?? []) {
+        if (!outcomeKeys.has(outcomeKey)) {
+          errors.push(`Bilinmeyen soru kazanımı: ${item.key} -> ${outcomeKey}`);
+        }
+        if (!mappedExerciseOutcomeKeys?.includes(outcomeKey)) {
+          errors.push(`Soru exercise kazanımıyla uyumsuz: ${item.key} -> ${outcomeKey}`);
+        }
+        if (linkedStep && !linkedStep.learningOutcomeKeys.includes(outcomeKey)) {
+          errors.push(`Soru adım kazanımıyla uyumsuz: ${item.key} -> ${outcomeKey}`);
+        }
+      }
       const optionIds = item.options.map((optionItem) => optionItem.id);
       if (
         optionIds.length !== 4 ||
@@ -773,6 +864,13 @@ export function validateP1ACycle3Program(candidate: P1AProgram = program): strin
         !optionIds.includes(item.correctOptionId)
       ) {
         errors.push(`Soru seçenek sözleşmesi geçersiz: ${item.key}`);
+      }
+    }
+    for (const mappedQuestionKey of mappedQuestionKeys) {
+      if (!exercise.questions.some((item) => item.key === mappedQuestionKey)) {
+        errors.push(
+          `Kazanım eşlemesi için soru bulunamadı: ${exercise.key} -> ${mappedQuestionKey}`,
+        );
       }
     }
   }

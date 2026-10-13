@@ -3497,7 +3497,7 @@ function renderTrainingActivities() {
     grid.innerHTML = "";
     return;
   }
-  if (state) state.textContent = "İstediğin beceriyi seçerek başlayabilirsin.";
+  if (state) state.textContent = "Bir beceri seç; kısa bir çalışmayla başlayabilirsin.";
   const skillLabels = {
     FAST_ATTENTION: "Dikkat",
     FAST_RECOGNITION: "Hızlı tanıma",
@@ -3589,6 +3589,7 @@ function renderTrainingActivities() {
         </div>
         <p id="${escapeHtml(activityDescriptionId)}">${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
         <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
+        <div class="training-activity-scope"><span aria-hidden="true">↳</span> Öğrenme Yolu'ndan ayrı çalışma</div>
         ${packageTrack}
         <p class="training-activity-package-hint">${escapeHtml(packageHint)}</p>
         <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>

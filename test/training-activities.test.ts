@@ -59,7 +59,8 @@ describe("independent training activities", () => {
     expect(index).toContain('id="training-activities-status"');
     expect(index).toContain('id="exercise-page-kicker"');
     expect(index).toContain('id="exercise-page-title"');
-    expect(index).toContain("Kısa çalışmalar · İstediğin zaman tekrar edebilirsin.");
+    expect(index).toContain("Kısa, isteğe bağlı çalışmalar · İstediğin zaman tekrar edebilirsin.");
+    expect(index).toContain("BAĞIMSIZ ANTRENMAN");
     expect(index).toContain("Buradaki sonuçlar resmi ölçüm veya seviye");
     expect(index).toContain("belirleme için kullanılmaz.");
     expect(app).toContain('authenticatedFetch("/student/training/activities"');
@@ -69,6 +70,8 @@ describe("independent training activities", () => {
     expect(activities).toContain("isIndependentTrainingSession");
     expect(activities).toContain("legacyProgress: currentSession");
     expect(app).toContain("Beceri");
+    expect(app).toContain("Öğrenme Yolu'ndan ayrı çalışma");
+    expect(app).toContain("Bir beceri seç; kısa bir çalışmayla başlayabilirsin.");
     expect(app).toContain("Tekrar çalış →");
     expect(app).toContain("Devam et →");
     expect(app).toContain("Antrenmanlara dön");

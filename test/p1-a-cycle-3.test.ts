@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CYCLE_3_LEARNING_OUTCOMES,
+  CYCLE_3_EXERCISE_OUTCOME_KEYS,
+  CYCLE_3_QUESTION_OUTCOME_KEYS,
   EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
   EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_3_STATUS,
@@ -47,6 +49,36 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
       );
       expect(assessment?.learningOutcomeKeys).toContain(outcome.key);
     }
+  });
+
+  it("keeps every question explicitly bound to the outcome it is intended to measure", () => {
+    const exercises = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.exercises;
+    const questionMap = CYCLE_3_QUESTION_OUTCOME_KEYS as Record<
+      string,
+      Record<string, readonly string[]>
+    >;
+
+    expect(Object.keys(CYCLE_3_EXERCISE_OUTCOME_KEYS).sort()).toEqual(
+      exercises.map((exercise) => exercise.key).sort(),
+    );
+    expect(
+      exercises.every((exercise) => {
+        const mapped = questionMap[exercise.key];
+        return (
+          mapped &&
+          Object.keys(mapped).sort().join("|") ===
+            exercise.questions
+              .map((question) => question.key)
+              .sort()
+              .join("|") &&
+          Object.values(mapped).every((outcomes) => outcomes.length > 0)
+        );
+      }),
+    ).toBe(true);
+    expect(
+      new Set(Object.values(questionMap).flatMap((mapping) => Object.keys(mapping))),
+    ).toHaveLength(16);
+    expect(validateP1ACycle3Program()).toEqual([]);
   });
 
   it("keeps every question complete, Turkish and option-id scored", () => {
@@ -146,6 +178,18 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     expect(errors).toContain("Kazanım içerikle uyumsuz: evidence-small-study-v3 -> RC_DETAIL");
     expect(errors).toContain(
       "Bilinmeyen cycle 3 prerequisite: evidence-small-study-v3 -> missing-step",
+    );
+  });
+
+  it("rejects a question that loses its explicit outcome binding", () => {
+    const candidate = structuredClone(EDUCATION_V2_P1_A_CYCLE_3_PROGRAM);
+    const question = candidate.exercises[0]?.questions[0];
+    if (!question) throw new Error("Cycle 3 sorusu eksik");
+
+    question.key = "cycle-3-unmapped-question";
+
+    expect(validateP1ACycle3Program(candidate)).toContain(
+      `Soru kazanım eşlemesi eksik: ${candidate.exercises[0]!.key} -> ${question.key}`,
     );
   });
 

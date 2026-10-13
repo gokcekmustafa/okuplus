@@ -7010,6 +7010,20 @@ textarea:focus-visible {
   font-size: 13px;
 }
 
+.student-shell .training-activity-scope {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid #dce4f2;
+  border-radius: 999px;
+  background: #f7f9fd;
+  color: var(--student-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .student-shell .training-activity-package-track {
   display: flex;
   flex-wrap: wrap;
@@ -7109,6 +7123,12 @@ textarea:focus-visible {
 :root[data-theme="dark"] .student-shell .training-activity-status.is-completed {
   background: #173a32;
   color: #8be4bb;
+}
+
+:root[data-theme="dark"] .student-shell .training-activity-scope {
+  border-color: #344663;
+  background: #202c40;
+  color: #b9c4d5;
 }
 
 @media (max-width: 600px) {
