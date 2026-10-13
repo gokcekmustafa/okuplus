@@ -1,4 +1,4 @@
-import { Prisma, type PlatformRole } from "@prisma/client";
+import { Prisma, type AssignmentStatus, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 
@@ -106,7 +106,7 @@ export async function resolveStudentAssignment(
 
 export async function listStudentAssignments(
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
-  opts: { page: number; pageSize: number; search?: string; status?: string },
+  opts: { page: number; pageSize: number; search?: string; status?: AssignmentStatus },
 ): Promise<StudentAssignmentListResult> {
   const { page, pageSize, search, status } = opts;
 
@@ -133,7 +133,7 @@ export async function listStudentAssignments(
       },
     ],
     ...(search ? { title: { contains: search, mode: "insensitive" } } : {}),
-    ...(status ? { status: status as "SCHEDULED" | "ACTIVE" | "CLOSED" } : {}),
+    ...(status ? { status } : {}),
   };
 
   const [rows, total] = await Promise.all([
@@ -251,25 +251,29 @@ export async function getStudentAssignment(
 
   const studentAssignment = await resolveStudentAssignment(id, row.class?.id ?? null, actor);
 
-  const inProgressSession = await prisma.exerciseSession.findFirst({
-    where: {
-      assignmentId: id,
-      studentId: actor.userId,
-      status: "IN_PROGRESS",
-    },
-    select: { id: true },
-  });
-
-  const session = await prisma.exerciseSession.findFirst({
-    where: { assignmentId: id, studentId: actor.userId },
-    orderBy: { createdAt: "desc" },
-    select: {
-      status: true,
-      scoreSummary: true,
-      templateVersion: { select: { _count: { select: { questions: true } } } },
-      _count: { select: { attempts: true } },
-    },
-  });
+  const [inProgressSession, session, sessionCount] = await Promise.all([
+    prisma.exerciseSession.findFirst({
+      where: {
+        assignmentId: id,
+        studentId: actor.userId,
+        status: "IN_PROGRESS",
+      },
+      select: { id: true },
+    }),
+    prisma.exerciseSession.findFirst({
+      where: { assignmentId: id, studentId: actor.userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        status: true,
+        scoreSummary: true,
+        templateVersion: { select: { _count: { select: { questions: true } } } },
+        _count: { select: { attempts: true } },
+      },
+    }),
+    prisma.exerciseSession.count({
+      where: { assignmentId: id, studentId: actor.userId },
+    }),
+  ]);
 
   return {
     id: row.id,
@@ -282,7 +286,7 @@ export async function getStudentAssignment(
     dueDate: studentAssignment?.dueAt ?? row.dueDate,
     status: row.status,
     assignedAt: row.assignedAt,
-    sessionCount: session ? 1 : 0,
+    sessionCount,
     hasInProgressSession: !!inProgressSession,
     inProgressSessionId: inProgressSession?.id ?? null,
     sessionStatus: session?.status ?? null,

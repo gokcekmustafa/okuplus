@@ -1,4 +1,4 @@
-import { Prisma, type AssignmentStatus } from "@prisma/client";
+import { Prisma, type AssignmentStatus, type VersionStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { notFoundError, validationError } from "../../lib/errors.js";
 import type {
@@ -83,6 +83,27 @@ export interface AssignmentListResult {
 }
 
 export type AssignmentDetail = AssignmentListItem;
+
+export function selectAssignmentTemplateVersion(input: {
+  templateId: string;
+  latestPublishedVersionId: string | null;
+  boundVersion?: { id: string; templateId: string; status: VersionStatus } | null;
+}): string {
+  if (input.boundVersion !== undefined) {
+    if (!input.boundVersion || input.boundVersion.templateId !== input.templateId) {
+      throw validationError("Ödev şablonu öğrenme adımıyla eşleşmiyor");
+    }
+    if (input.boundVersion.status !== "PUBLISHED") {
+      throw validationError("Öğrenme adımının şablon sürümü yayınlanmış olmalı");
+    }
+    return input.boundVersion.id;
+  }
+
+  if (!input.latestPublishedVersionId) {
+    throw validationError("Şablonun yayınlanmış sürümü bulunamadı");
+  }
+  return input.latestPublishedVersionId;
+}
 
 export async function listAssignments(query: ListAssignmentsQuery): Promise<AssignmentListResult> {
   const { search, classId, teacherId, templateId, status, page, pageSize } = query;
@@ -211,6 +232,8 @@ export async function createAssignment(
   });
   if (!templateVersion) throw validationError("Şablonun yayınlanmış sürümü bulunamadı");
 
+  let assignmentTemplateVersionId = templateVersion.id;
+
   if (input.learningStepId) {
     const step = await prisma.learningStep.findFirst({
       where: {
@@ -220,18 +243,18 @@ export async function createAssignment(
         isActive: true,
         unit: { path: { status: "PUBLISHED", deletedAt: null } },
       },
-      select: { id: true, exerciseTemplateVersionId: true },
+      select: {
+        id: true,
+        exerciseTemplateVersionId: true,
+        exerciseTemplateVersion: { select: { id: true, templateId: true, status: true } },
+      },
     });
     if (!step) throw validationError("Öğrenme adımı bu kurum için kullanılabilir değil");
-    if (step.exerciseTemplateVersionId) {
-      const version = await prisma.exerciseTemplateVersion.findUnique({
-        where: { id: step.exerciseTemplateVersionId },
-        select: { templateId: true },
-      });
-      if (version?.templateId !== input.templateId) {
-        throw validationError("Ödev şablonu öğrenme adımıyla eşleşmiyor");
-      }
-    }
+    assignmentTemplateVersionId = selectAssignmentTemplateVersion({
+      templateId: input.templateId,
+      latestPublishedVersionId: templateVersion.id,
+      boundVersion: step.exerciseTemplateVersionId ? step.exerciseTemplateVersion : undefined,
+    });
   }
 
   const created = await prisma.assignment.create({
@@ -239,7 +262,7 @@ export async function createAssignment(
       tenantId: cls.tenantId,
       classId: input.classId,
       templateId: input.templateId,
-      templateVersionId: templateVersion.id,
+      templateVersionId: assignmentTemplateVersionId,
       learningStepId: input.learningStepId ?? null,
       teacherId: input.teacherId,
       title: input.title,

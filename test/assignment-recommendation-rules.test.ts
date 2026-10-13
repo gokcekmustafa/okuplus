@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildRecommendationDecisions } from "../src/modules/assignments/recommendation-rules.js";
+import { selectAssignmentTemplateVersion } from "../src/modules/assignments/service.js";
+import { listStudentAssignmentsQuerySchema } from "../src/modules/assignments/schemas.js";
 
 describe("assignment recommendation rules", () => {
   it("creates a deterministic measurement-based recommendation with pinned version", () => {
@@ -63,5 +65,47 @@ describe("assignment recommendation rules", () => {
         [candidate],
       ),
     ).toHaveLength(0);
+  });
+
+  it("pins an assignment to the learning step's published template version", () => {
+    expect(
+      selectAssignmentTemplateVersion({
+        templateId: "template-1",
+        latestPublishedVersionId: "template-version-2",
+        boundVersion: { id: "template-version-1", templateId: "template-1", status: "PUBLISHED" },
+      }),
+    ).toBe("template-version-1");
+  });
+
+  it("rejects an unpublished or mismatched learning-step template version", () => {
+    expect(() =>
+      selectAssignmentTemplateVersion({
+        templateId: "template-1",
+        latestPublishedVersionId: "template-version-2",
+        boundVersion: { id: "template-version-1", templateId: "template-1", status: "DRAFT" },
+      }),
+    ).toThrow("yayınlanmış olmalı");
+
+    expect(() =>
+      selectAssignmentTemplateVersion({
+        templateId: "template-1",
+        latestPublishedVersionId: "template-version-2",
+        boundVersion: { id: "template-version-1", templateId: "template-2", status: "PUBLISHED" },
+      }),
+    ).toThrow("eşleşmiyor");
+  });
+
+  it("uses the latest published version only when the step has no template binding", () => {
+    expect(
+      selectAssignmentTemplateVersion({
+        templateId: "template-1",
+        latestPublishedVersionId: "template-version-2",
+      }),
+    ).toBe("template-version-2");
+  });
+
+  it("rejects invalid student assignment status filters at the API contract boundary", () => {
+    expect(() => listStudentAssignmentsQuerySchema.parse({ status: "IN_PROGRESS" })).toThrow();
+    expect(listStudentAssignmentsQuerySchema.parse({ status: "ACTIVE" }).status).toBe("ACTIVE");
   });
 });
