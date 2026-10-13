@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright-core";
 
 const BASE_URLS = ["https://www.okupratik.com", "https://okuplus.vercel.app"] as const;
@@ -15,6 +16,8 @@ const READ_PATHS = [
 type DomainReport = {
   baseUrl: string;
   login: "PASS" | "FAIL";
+  loginHttpStatus: number | null;
+  loginErrorCategory: LoginErrorCategory | null;
   authMe: "PASS" | "FAIL";
   dashboard: "PASS" | "FAIL";
   readPaths: "PASS" | "FAIL";
@@ -34,6 +37,51 @@ type SmokeReport = {
   domains: DomainReport[];
   productionStateChanged: "NO";
 };
+
+export type LoginErrorCategory =
+  | "AUTH_REJECTED"
+  | "BAD_REQUEST"
+  | "RATE_LIMITED"
+  | "SERVER_ERROR"
+  | "UNEXPECTED_STATUS"
+  | "UNKNOWN";
+
+export function classifyLoginHttpStatus(status: number): LoginErrorCategory {
+  if (status === 401 || status === 403) return "AUTH_REJECTED";
+  if (status === 400) return "BAD_REQUEST";
+  if (status === 429) return "RATE_LIMITED";
+  if (status >= 500 && status <= 599) return "SERVER_ERROR";
+  return "UNEXPECTED_STATUS";
+}
+
+export function buildSafeLoginDiagnostic(status: number): {
+  loginHttpStatus: number;
+  loginErrorCategory: LoginErrorCategory;
+} {
+  return {
+    loginHttpStatus: status,
+    loginErrorCategory: classifyLoginHttpStatus(status),
+  };
+}
+
+type JsonResponseLike = {
+  headers(): Record<string, string>;
+  json(): Promise<unknown>;
+};
+
+/** Consume JSON errors without copying their body into logs or reports. */
+export async function consumeJsonLoginErrorBody(response: JsonResponseLike): Promise<void> {
+  const contentType = Object.entries(response.headers()).find(
+    ([name]) => name.toLowerCase() === "content-type",
+  )?.[1];
+  const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  if (mediaType !== "application/json" && !mediaType.endsWith("+json")) return;
+  try {
+    await response.json();
+  } catch {
+    /* Malformed error bodies are intentionally treated as unavailable. */
+  }
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 240) : "Browser smoke failed";
@@ -76,6 +124,8 @@ async function runDomain(
   const report: DomainReport = {
     baseUrl,
     login: "FAIL",
+    loginHttpStatus: null,
+    loginErrorCategory: null,
     authMe: "FAIL",
     dashboard: "FAIL",
     readPaths: "FAIL",
@@ -148,7 +198,14 @@ async function runDomain(
     await page.fill("#login-email", credentials.email);
     await page.fill("#login-password", credentials.password);
     await page.click("#login-submit");
-    if ((await (await loginResponse).status()) !== 200) throw new Error("Production login failed");
+    const loginResponseResult = await loginResponse;
+    const loginStatus = loginResponseResult.status();
+    if (loginStatus !== 200) {
+      Object.assign(report, buildSafeLoginDiagnostic(loginStatus));
+      await consumeJsonLoginErrorBody(loginResponseResult);
+      throw new Error("Production login failed");
+    }
+    report.loginHttpStatus = loginStatus;
     report.login = "PASS";
     await page.waitForSelector("#view-app:not(.hidden)", {
       state: "visible",
@@ -191,6 +248,9 @@ async function runDomain(
       throw new Error("Production browser diagnostics reported an error");
     }
   } catch (error) {
+    if (report.login === "FAIL" && report.loginErrorCategory === null) {
+      report.loginErrorCategory = "UNKNOWN";
+    }
     report.error = errorMessage(error);
   } finally {
     await context.close().catch(() => undefined);
@@ -237,15 +297,21 @@ async function main(): Promise<void> {
   if (report.status === "FAIL") process.exitCode = 1;
 }
 
-try {
-  await main();
-} catch (error) {
-  console.log(
-    JSON.stringify(
-      { status: "FAIL", error: errorMessage(error), productionStateChanged: "NO" },
-      null,
-      2,
-    ),
-  );
-  process.exitCode = 1;
+function isMainModule(): boolean {
+  return process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
+}
+
+if (isMainModule()) {
+  try {
+    await main();
+  } catch (error) {
+    console.log(
+      JSON.stringify(
+        { status: "FAIL", error: errorMessage(error), productionStateChanged: "NO" },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 1;
+  }
 }
