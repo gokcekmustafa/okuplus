@@ -18,9 +18,9 @@ import type { P1AProgram, P1APathStep } from "./education-v2-p1-a-program.js";
 /**
  * P1-A cycle 2 authoring package.
  *
- * This is deliberately not part of the canonical production manifest list.
- * It is a versioned candidate for expert review and protected provisioning;
- * importing it must not publish or assign the cycle.
+ * This is a versioned production release package. Importing it only exposes
+ * the release contract; the protected provisioning script is still required
+ * to create the database graph.
  */
 export const EDUCATION_V2_P1_A_CYCLE_V2_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2";
 export const EDUCATION_V2_P1_A_CYCLE_V2_VERSION = 2;
@@ -29,18 +29,15 @@ export const EDUCATION_V2_P1_A_CYCLE_V2_PATH_CODE =
   "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
 export const EDUCATION_V2_P1_A_CYCLE_V2_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_V2_TECHNICAL_COMPLETION_SCORE = 0.75;
-export type EducationV2P1ACycleV2SourceStatus = "EXPERT_REVIEW_REQUIRED" | "PUBLISHED";
-export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus =
-  "EXPERT_REVIEW_REQUIRED";
-/** Independent source-review gate; this stays closed until expert approval is recorded. */
-export const EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED = false as const;
-/** Independent publication permission; database PUBLISHED rows must not imply this permission. */
-export const EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = false as const;
+export type EducationV2P1ACycleV2SourceStatus = "PUBLISHED";
+/** Product-owner publication decision for this immutable release package. */
+export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus = "PUBLISHED";
+/** Database PUBLISHED rows never substitute for this explicit release decision. */
+export const EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = true as const;
 
 export function isEducationV2P1ACycleV2ProductionAssignmentEnabled(): boolean {
   return (
     EDUCATION_V2_P1_A_CYCLE_V2_STATUS === "PUBLISHED" &&
-    EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED &&
     EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED
   );
 }
@@ -347,7 +344,7 @@ const exercises: ProgramExercise[] = [
           ["b", "Pazarın her hafta aynı gün yeniden kurulması"],
           ["c", "Mahallenin şehir merkezine yakın bir yerde bulunması"],
           ["d", "Bazı ürünlerin belirli mevsimlerde satılabilmesi"],
-          ["a", "Ürün gruplarının ayrı sıralara alınması, levhaların konması"],
+          ["a", "Ürünlerin ayrılması, levhaların eklenmesi"],
         ],
         "a",
         "Bu iki bilgi, pazarın düzenlenmesi düşüncesini doğrudan gösteren uygulamalardır.",
@@ -359,7 +356,7 @@ const exercises: ProgramExercise[] = [
         "Bir bilginin metin kanıtı sayılabilmesi için ne gerekir?",
         [
           ["a", "Okuyucunun kendi deneyimiyle de uyumlu olması"],
-          ["b", "Metindeki düşünceyi doğrudan açıklaması veya desteklemesi"],
+          ["b", "Metindeki düşünceyi desteklemesi"],
           ["c", "Diğer seçeneklerden daha ayrıntılı ve uzun yazılması"],
           ["d", "Metinde geçen herhangi bir kelimeyle bağlantı kurması"],
         ],
@@ -404,8 +401,8 @@ const exercises: ProgramExercise[] = [
         [
           ["b", "Metindeki bütün ayrıntıları yok saymak"],
           ["c", "Kendi fikrini ana düşünce yerine koymak"],
-          ["d", "Yalnızca ilk cümleyi tekrar etmek"],
-          ["a", "Onu destekleyen ayrıntıları metinde göstermek"],
+          ["d", "Yalnızca ilk cümledeki ayrıntıyı tekrar etmek"],
+          ["a", "Destekleyici ayrıntıları metinde bulmak"],
         ],
         "a",
         "Ana düşünce, metindeki destekleyici ayrıntılarla sınanmalıdır.",
@@ -488,7 +485,7 @@ const exercises: ProgramExercise[] = [
         "p1a-v2-relations-study-3",
         "Bir metindeki ilişkiyi bulurken ilk olarak ne yapılmalıdır?",
         [
-          ["a", "Bağlanan iki bilgiyi ayrı ayrı belirlemek"],
+          ["a", "İki bilgiyi ayrı ayrı bulmak"],
           ["b", "Yalnızca bağlaç kelimesini ezberlemek"],
           ["c", "Metnin son cümlesini cevap saymak"],
           ["d", "Metinde bulunmayan bir neden eklemek"],
@@ -520,7 +517,7 @@ const exercises: ProgramExercise[] = [
         [
           ["a", "Değirmenin yalnızca dış görünüşünün değişmesi"],
           ["b", "Panoların kasabada bulunması"],
-          ["c", "Değirmenin teknik ve kültürel yönleriyle tanıtılması"],
+          ["c", "Değirmenin işleyişi ve yerel öyküleri"],
           ["d", "Ziyaretçilerin değirmeni uzaktan görmesi"],
         ],
         "c",
@@ -533,7 +530,7 @@ const exercises: ProgramExercise[] = [
         "Aynı metinde bilgi panolarının eklenmesi neyi destekler?",
         [
           ["a", "Değirmenin bulunduğu yerden hemen başka bir kasabaya taşınmasını"],
-          ["b", "Ziyaretçilerin teknik işleyişle yerel öyküleri birlikte anlamasını"],
+          ["b", "İşleyişi ve yerel öyküleri birlikte anlamayı"],
           ["c", "Kasabada yaşayan insanların ve ziyaretçilerin sayısının artmasını"],
           ["d", "Değirmenin onarıldığı hâlde yeniden çalıştırılmamasını"],
         ],
@@ -576,7 +573,7 @@ const exercises: ProgramExercise[] = [
         "p1a-v2-relations-reinforcement-1",
         "Metin haritasında ana düşünce ile ayrıntılar arasındaki bağ nasıl kontrol edilir?",
         [
-          ["a", "Her ayrıntının ana düşünceyi nasıl açıkladığını göstererek"],
+          ["a", "Ayrıntıların ana düşünceye katkısını göstererek"],
           ["b", "Yalnızca ayrıntıların uzunluğunu karşılaştırarak"],
           ["c", "Ana düşünceyi metinden bağımsız yazarak"],
           ["d", "En çok kelime içeren ayrıntıyı seçerek"],
@@ -591,7 +588,7 @@ const exercises: ProgramExercise[] = [
         "Bir bilgi metinde geçiyor ancak ana düşünceyi desteklemiyorsa ne yapılmalıdır?",
         [
           ["a", "Sırf metinde geçiyor diye ana düşünce sayılmalıdır"],
-          ["b", "Bilginin metindeki görevi yeniden değerlendirilmelidir"],
+          ["b", "Bilginin işlevi yeniden değerlendirilmelidir"],
           ["c", "Metnin konusu değiştirilmelidir"],
           ["d", "Kişisel bir örnek eklenmelidir"],
         ],
@@ -634,7 +631,7 @@ const exercises: ProgramExercise[] = [
         "p1a-v2-assessment-1",
         "‘İlçe, kullanılmayan bir binayı öğrenci çalışma merkezine dönüştürdü. Merkezde sessiz odalar, danışma masası ve ortak proje alanı bulunuyor.’ Ana düşünce hangisidir?",
         [
-          ["a", "Binanın öğrenci çalışmaları için düzenlenmesi"],
+          ["a", "Binanın öğrenci çalışma alanına dönüşmesi"],
           ["b", "Danışma masasının hangi renkte olduğu"],
           ["c", "Öğrencilerin hangi gün buluştuğu"],
           ["d", "Proje alanında yapılan bütün işlerin listesi"],
@@ -679,7 +676,7 @@ const exercises: ProgramExercise[] = [
           ["a", "Kendi deneyimini tek başına kanıt saymak"],
           ["b", "En iddialı seçeneği gerekçesiz işaretlemek"],
           ["c", "Yalnızca ilk kelimeye bakarak karar vermek"],
-          ["d", "Sonucu metindeki bilgilerle ilişkilendirmek"],
+          ["d", "Sonucu metin kanıtına bağlamak"],
         ],
         "d",
         "Kanıtlı çıkarım, metindeki bilgilerin birlikte desteklediği sınırlı sonuca dayanır.",

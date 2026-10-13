@@ -6,7 +6,6 @@ import {
   P1_CYCLE_TRANSITION_POLICY_VERSION,
 } from "../src/modules/student-learning/p1-transition.js";
 import {
-  EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED,
   EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
   isEducationV2P1ACycleV2ProductionAssignmentEnabled,
@@ -83,7 +82,7 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain("p0LearningPathId: node.learningPathId");
   });
 
-  it("keeps the next-cycle transition explicit, versioned, and review-gated", async () => {
+  it("keeps the next-cycle transition explicit, versioned, and publication-gated", async () => {
     const transition = await readFile(
       new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
       "utf8",
@@ -107,16 +106,14 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("studentLearningPath.upsert");
     expect(transition).toContain('outcome: "ALREADY_ASSIGNED"');
     expect(cycleV2).toContain(
-      "EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus",
+      'EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus = "PUBLISHED"',
     );
-    expect(cycleV2).toContain('"EXPERT_REVIEW_REQUIRED"');
-    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED = false");
-    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = false");
+    expect(cycleV2).not.toContain("EXPERT_REVIEW_REQUIRED");
+    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = true");
     expect(cycleV2).toContain("isEducationV2P1ACycleV2ProductionAssignmentEnabled");
-    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("EXPERT_REVIEW_REQUIRED");
-    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED).toBe(false);
-    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(false);
-    expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(false);
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(true);
     expect(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).toContain(
       'exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY"',
     );

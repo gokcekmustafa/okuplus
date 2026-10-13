@@ -1125,8 +1125,9 @@ async function loadNextP1Cycle(
 /**
  * Completes the published P1-A cycle only after all of its server-side
  * evidence is complete, then atomically activates the next published cycle.
- * Authoring candidates (including Cycle 2/3 while expert review is pending)
- * never pass the published graph gate and therefore remain REVIEW_REQUIRED.
+ * A cycle only passes when its source release is explicitly published and its
+ * database graph is complete. A missing release decision or graph therefore
+ * remains REVIEW_REQUIRED.
  */
 export async function reconcileP1ToNextCycle(
   actor: StudentActor,

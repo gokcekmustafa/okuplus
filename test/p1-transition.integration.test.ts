@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
-const transitionTestState = vi.hoisted(() => ({ sourceApprovalRecorded: false }));
+const transitionTestState = vi.hoisted(() => ({ publicationApproved: false }));
 
 vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (importOriginal) => {
   const actual =
@@ -11,7 +11,7 @@ vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (import
   return {
     ...actual,
     isEducationV2P1ACycleV2ProductionAssignmentEnabled: () =>
-      transitionTestState.sourceApprovalRecorded,
+      transitionTestState.publicationApproved,
   };
 });
 
@@ -385,16 +385,16 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await prisma.$disconnect();
   });
 
-  async function withSourceApproval<T>(callback: () => Promise<T>): Promise<T> {
-    transitionTestState.sourceApprovalRecorded = true;
+  async function withPublicationApproval<T>(callback: () => Promise<T>): Promise<T> {
+    transitionTestState.publicationApproved = true;
     try {
       return await callback();
     } finally {
-      transitionTestState.sourceApprovalRecorded = false;
+      transitionTestState.publicationApproved = false;
     }
   }
 
-  it("does not assign a fully published next graph while source review is pending", async () => {
+  it("does not assign a fully published next graph while publication permission is closed", async () => {
     const beforeProgress = await prisma.studentLearningStepProgress.count({
       where: {
         tenantId: completeFixture.actor.tenantId,
@@ -455,7 +455,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     ).toEqual(beforeAssessmentResults);
   });
 
-  it("keeps repeated source-gated checks review-required without creating a duplicate", async () => {
+  it("keeps repeated publication-gated checks review-required without creating a duplicate", async () => {
     const result = await reconcileP1ToNextCycle(completeFixture.actor, {
       p1LearningPathId: completeFixture.enrollmentId,
     });
@@ -490,8 +490,8 @@ describe.sequential("P1 learning cycle transition integration", () => {
     ).toEqual({ routeStatus: "ACTIVE" });
   });
 
-  it("assigns one published next cycle when the source gate is explicitly approved in isolation", async () => {
-    const result = await withSourceApproval(() =>
+  it("assigns one published next cycle when publication is explicitly approved in isolation", async () => {
+    const result = await withPublicationApproval(() =>
       reconcileP1ToNextCycle(assignedFixture.actor, {
         p1LearningPathId: assignedFixture.enrollmentId,
       }),
@@ -534,7 +534,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
       }),
     ).toEqual({ routeStatus: "ACTIVE" });
 
-    const replay = await withSourceApproval(() =>
+    const replay = await withPublicationApproval(() =>
       reconcileP1ToNextCycle(assignedFixture.actor, {
         p1LearningPathId: assignedFixture.enrollmentId,
       }),
@@ -561,7 +561,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
         where: { id: blockedNextEnrollmentId },
         data: { routeStatus },
       });
-      const result = await withSourceApproval(() =>
+      const result = await withPublicationApproval(() =>
         reconcileP1ToNextCycle(blockedFixture.actor, {
           p1LearningPathId: blockedFixture.enrollmentId,
         }),
@@ -591,7 +591,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
   });
 
   it("keeps concurrent approved retries at one active route", async () => {
-    const results = await withSourceApproval(() =>
+    const results = await withPublicationApproval(() =>
       Promise.all([
         reconcileP1ToNextCycle(concurrentFixture.actor, {
           p1LearningPathId: concurrentFixture.enrollmentId,

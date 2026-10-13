@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
   EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
+  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
   buildEducationV2P1ACycleV2LearningCycleManifest,
   p1ACycleV2ContentVersionId,
   p1ACycleV2QuestionVersionId,
@@ -148,8 +150,24 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
     ).toHaveLength(0);
   });
 
-  it("keeps the cycle candidate closed until expert review", () => {
-    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("EXPERT_REVIEW_REQUIRED");
+  it("does not leave a correct option as the sole longest choice", () => {
+    const questions = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap(
+      (exercise) => exercise.questions,
+    );
+    // This is a text-length warning only; educational validity still requires
+    // separate editorial and measurement-quality review.
+    expect(
+      questions.filter((question) => {
+        const quality = assessOptionLengthQuality(question);
+        return quality?.correctIsLongest && quality.margin > 0;
+      }),
+    ).toHaveLength(0);
+  });
+
+  it("keeps the cycle release tied to explicit product-owner publication", () => {
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(true);
     expect(EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.completion.nextCycle).toBe("REVIEW_REQUIRED");
   });
 
