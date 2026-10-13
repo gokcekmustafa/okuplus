@@ -177,6 +177,7 @@ async function main(): Promise<void> {
               version: true,
               status: true,
               publishedAt: true,
+              config: true,
               contents: { select: { contentVersionId: true, position: true } },
               questions: {
                 select: { questionVersionId: true, questionId: true, position: true },
@@ -289,6 +290,7 @@ async function main(): Promise<void> {
       if (
         !templateVersion ||
         templateVersion.status !== "PUBLISHED" ||
+        templateVersion.config === null ||
         templateVersion.contents.length !== 1 ||
         templateVersion.contents[0]?.contentVersionId !== contentVersion.id
       )

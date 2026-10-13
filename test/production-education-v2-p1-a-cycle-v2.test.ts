@@ -48,4 +48,12 @@ describe("protected Cycle 2 production provision workflow", () => {
     expect(workflow).not.toContain("echo ${EDUCATION_V2_P1_A_CYCLE_V2_PRODUCTION_DATABASE_URL}");
     expect(workflow).not.toContain("echo ${DB_FINGERPRINT_DATABASE_URL}");
   });
+
+  it("preserves the read-only forensics report when the policy gate blocks the run", () => {
+    expect(workflow).toContain("cycle2-production-migration-forensics.json");
+    expect(workflow).toContain(
+      'cp "${migration_report_file}" cycle2-production-migration-forensics.json',
+    );
+    expect(workflow).toContain("path: cycle2-*.json");
+  });
 });

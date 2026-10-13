@@ -10,6 +10,7 @@ import {
   catalogFixtureReason,
   type CatalogRecordIdentity,
 } from "../src/curriculum/catalog-validation.js";
+import { snapshotLegacyParentConfig } from "../src/modules/training/exercise-contract.js";
 
 const WRITE_CONFIRMATION = "I_HAVE_VERIFIED_8G8_TARGET";
 const TEST_WRITE_CONFIRMATION = "I_HAVE_VERIFIED_8G8_TEST_TARGET";
@@ -745,7 +746,16 @@ async function createPack(
       select: { id: true },
     });
     const templateVersion = await tx.exerciseTemplateVersion.create({
-      data: { id: plan.templateVersionId, templateId: template.id, version: 1, status: "DRAFT" },
+      data: {
+        id: plan.templateVersionId,
+        templateId: template.id,
+        version: 1,
+        // This pack predates the TRAINING version contract and remains on the
+        // explicit legacy path. Persist the immutable parent snapshot so a
+        // newly created published version is never left with NULL config.
+        config: asJson(snapshotLegacyParentConfig(plan.templateConfig)),
+        status: "DRAFT",
+      },
       select: { id: true },
     });
     await tx.exerciseTemplateVersionContent.create({

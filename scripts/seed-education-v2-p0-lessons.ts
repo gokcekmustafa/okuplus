@@ -396,12 +396,15 @@ async function ensureAcademicTemplateVersion(
     orderBy: { version: "desc" },
     select: { version: true },
   });
+  if (base.config === null) {
+    fail(`academic practice template version config eksik: ${plan.exercise.key}`);
+  }
   await tx.exerciseTemplateVersion.create({
     data: {
       id: plan.templateVersionId,
       templateId: base.templateId,
       version: (latest?.version ?? 0) + 1,
-      config: base.config ?? undefined,
+      config: base.config,
       status: "DRAFT",
     },
   });

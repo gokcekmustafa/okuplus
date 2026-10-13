@@ -39,6 +39,7 @@ type Plan = {
   slug: string;
   templateId: string;
   currentTemplateVersionId: string;
+  currentTemplateVersionConfig: Prisma.JsonValue;
   newTemplateVersionId: string;
   templateVersion: number;
   questions: PlannedQuestion[];
@@ -191,6 +192,7 @@ async function main(): Promise<void> {
           select: {
             id: true,
             version: true,
+            config: true,
             status: true,
             publishedAt: true,
             questions: {
@@ -235,6 +237,9 @@ async function main(): Promise<void> {
       const current = publishedVersions[0];
       if (!current || !current.publishedAt)
         fail(`published template version eksik: ${content.slug}`);
+      if (current?.config === null || current?.config === undefined) {
+        fail(`published template version config eksik: ${content.slug}`);
+      }
       if (current.version > 2)
         fail(`desteklenmeyen template version: ${content.slug}/v${current.version}`);
       if (current.version === 2 && publishedVersions.length !== 2) {
@@ -299,6 +304,7 @@ async function main(): Promise<void> {
         slug: content.slug,
         templateId,
         currentTemplateVersionId: current.id,
+        currentTemplateVersionConfig: current.config,
         newTemplateVersionId: stableId("template-version", content.slug, "v2"),
         templateVersion: current.version,
         questions,
@@ -416,6 +422,7 @@ async function main(): Promise<void> {
             id: plan.newTemplateVersionId,
             templateId: plan.templateId,
             version: 2,
+            config: plan.currentTemplateVersionConfig as Prisma.InputJsonValue,
             status: "DRAFT",
           },
         });
