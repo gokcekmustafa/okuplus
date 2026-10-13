@@ -51,11 +51,23 @@ async function cleanup() {
   }
   await prisma.learningPath.deleteMany({ where: { id: { in: Object.values(PATH_IDS) } } });
   await prisma.assessment.deleteMany({ where: { id: { in: createdAssessmentIds } } });
-  await prisma.exerciseTemplateVersion.deleteMany({
-    where: { id: { in: createdTemplateVersionIds } },
+  await prisma.$transaction(async (tx) => {
+    // These fixtures intentionally use PUBLISHED versions to exercise the
+    // student gate. The production immutability trigger remains enabled in
+    // real databases; only this isolated test cleanup bypasses it.
+    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
+    await tx.exerciseTemplateVersion.deleteMany({
+      where: { id: { in: createdTemplateVersionIds } },
+    });
+    await tx.content.updateMany({
+      where: { id: { in: createdContentIds } },
+      data: { currentVersionId: null },
+    });
+    await tx.contentVersion.deleteMany({
+      where: { id: { in: createdContentVersionIds } },
+    });
   });
   await prisma.exerciseTemplate.deleteMany({ where: { id: { in: createdTemplateIds } } });
-  await prisma.contentVersion.deleteMany({ where: { id: { in: createdContentVersionIds } } });
   await prisma.content.deleteMany({ where: { id: { in: createdContentIds } } });
   await prisma.membership.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.authSession.deleteMany({ where: { userId: { in: userIds } } });
