@@ -5,6 +5,26 @@ type SessionOption = {
   [key: string]: unknown;
 };
 
+export type StudentVisibleSessionContext = "INDIVIDUAL" | "ASSIGNMENT" | "ASSESSMENT";
+
+/**
+ * Option order is a presentation concern for student sessions only.  The
+ * server still scores the immutable optionId, so teacher/admin views keep
+ * their editorial order while every student-facing context gets a stable
+ * per-session permutation.
+ */
+export function shouldReorderStudentOptions(
+  platformRole: string | null,
+  context: string,
+  questionType: string,
+): context is StudentVisibleSessionContext {
+  return (
+    platformRole === null &&
+    questionType === "MULTIPLE_CHOICE" &&
+    (context === "INDIVIDUAL" || context === "ASSIGNMENT" || context === "ASSESSMENT")
+  );
+}
+
 function hashSeed(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {

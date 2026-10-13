@@ -28,7 +28,10 @@ import {
   isIndependentTrainingSession,
   isLearningPathReplaySession,
 } from "../training/session-origin.js";
-import { reorderJsonOptionsForSession } from "../questions/session-option-order.js";
+import {
+  reorderJsonOptionsForSession,
+  shouldReorderStudentOptions,
+} from "../questions/session-option-order.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
 import {
   completeLearningStepForSession,
@@ -39,6 +42,7 @@ import {
   completeLearningStepForAssessment,
   completeLearningStepForTemplate,
 } from "../student-learning/persistent-path.js";
+import { reconcileP1ToNextCycle } from "../student-learning/p1-transition.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -77,6 +81,16 @@ export interface ExerciseSessionDetail {
     templateVersionId: string | null;
     contentVersionId: string | null;
     assessmentId: string | null;
+  } | null;
+  nextLearningCycle?: {
+    outcome: "ASSIGNED" | "ALREADY_ASSIGNED" | "REVIEW_REQUIRED";
+    currentLearningPathId: string;
+    nextLearningPathId: string | null;
+    readiness: {
+      status: string;
+      currentCycleCompleted: boolean;
+      nextCycleAvailable: boolean;
+    };
   } | null;
 }
 
@@ -417,6 +431,11 @@ export async function listQuestionsForSession(
       templateVersionId: true,
       assessmentId: true,
       learningStepId: true,
+      learningStep: {
+        select: {
+          unit: { select: { path: { select: { id: true, code: true } } } },
+        },
+      },
       context: true,
       status: true,
       templateVersion: {
@@ -521,15 +540,12 @@ export async function listQuestionsForSession(
         contentVersionId: question.contentVersionId,
         prompt: question.prompt,
         type: question.type,
-        options:
-          actor.platformRole === null &&
-          session.context === "INDIVIDUAL" &&
-          question.type === "MULTIPLE_CHOICE"
-            ? reorderJsonOptionsForSession(
-                question.options,
-                `${session.id}:${question.questionVersionId}`,
-              )
-            : question.options,
+        options: shouldReorderStudentOptions(actor.platformRole, session.context, question.type)
+          ? reorderJsonOptionsForSession(
+              question.options,
+              `${session.id}:${question.questionVersionId}`,
+            )
+          : question.options,
         allowMultiple: question.allowMultiple,
         explanation: question.explanation,
         hint: question.hint,
@@ -556,15 +572,16 @@ export async function listQuestionsForSession(
       contentVersionId: contentVersionByContentId.get(q.questionVersion.question.contentId) ?? null,
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
-      options:
-        actor.platformRole === null &&
-        session.context === "INDIVIDUAL" &&
-        q.questionVersion.question.type === "MULTIPLE_CHOICE"
-          ? reorderJsonOptionsForSession(
-              q.questionVersion.options,
-              `${session.id}:${q.questionVersion.id}`,
-            )
-          : q.questionVersion.options,
+      options: shouldReorderStudentOptions(
+        actor.platformRole,
+        session.context,
+        q.questionVersion.question.type,
+      )
+        ? reorderJsonOptionsForSession(
+            q.questionVersion.options,
+            `${session.id}:${q.questionVersion.id}`,
+          )
+        : q.questionVersion.options,
       allowMultiple:
         q.questionVersion.question.type === "MULTIPLE_CHOICE" &&
         correctAnswer?.allowMultiple === true,
@@ -595,6 +612,11 @@ export async function completeExerciseSession(
       assignmentId: true,
       assessmentId: true,
       learningStepId: true,
+      learningStep: {
+        select: {
+          unit: { select: { path: { select: { id: true, code: true } } } },
+        },
+      },
       deviceInfo: true,
       status: true,
       templateVersionId: true,
@@ -939,6 +961,21 @@ export async function completeExerciseSession(
     ).catch(() => {});
   }
 
+  let nextLearningCycle: ExerciseSessionDetail["nextLearningCycle"] = null;
+  if (
+    session.tenantId &&
+    session.learningStepId &&
+    session.learningStep?.unit.path &&
+    session.learningStep.unit.path.code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12" &&
+    actor.userId === session.studentId &&
+    shouldSyncLearningPath
+  ) {
+    nextLearningCycle = await reconcileP1ToNextCycle(
+      { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
+      { p1LearningPathId: session.learningStep.unit.path.id },
+    ).catch(() => null);
+  }
+
   // Progress aggregation session transaction'ı dışında kalır; ancak completion
   // cevabı dönmeden önce tamamlanır. Hata, tamamlanmış oturumu geri almaz.
   await aggregateSessionProgress(id).catch(() => {});
@@ -958,7 +995,7 @@ export async function completeExerciseSession(
     ).catch(() => null);
   }
 
-  return { ...toSessionDetail(updated as any), nextLearningStep };
+  return { ...toSessionDetail(updated as any), nextLearningStep, nextLearningCycle };
 }
 
 function toSessionDetail(row: any): ExerciseSessionDetail {

@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { isReadyP1CandidateStep } from "../src/modules/student-learning/p1-transition.js";
+import {
+  isReadyP1CandidateStep,
+  nextP1CyclePathCode,
+  P1_CYCLE_TRANSITION_POLICY_VERSION,
+} from "../src/modules/student-learning/p1-transition.js";
 
 const publishedContent = {
   status: "PUBLISHED",
@@ -71,6 +75,32 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain('"/student/learning-path/p1/reconcile"');
     expect(app).toContain('startsWith("EDUCATION_V2_P0_")');
     expect(app).toContain("p0LearningPathId: node.learningPathId");
+  });
+
+  it("keeps the next-cycle transition explicit, versioned, and review-gated", async () => {
+    const transition = await readFile(
+      new URL("../src/modules/student-learning/p1-transition.ts", import.meta.url),
+      "utf8",
+    );
+    const cycleV2 = await readFile(
+      new URL("../src/curriculum/education-v2-p1-a-cycle-v2-program.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12")).toBe(
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+    );
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12")).toBeNull();
+    expect(P1_CYCLE_TRANSITION_POLICY_VERSION).toBe("P1_CYCLE_TRANSITION_V1");
+    expect(transition).toContain('"NEXT_CYCLE_UNAVAILABLE"');
+    expect(transition).toContain('enrollment.routeStatus !== "ACTIVE"');
+    expect(transition).toContain('status: "PUBLISHED"');
+    expect(transition).toContain("studentLearningPath.upsert");
+    expect(transition).toContain('outcome: "ALREADY_ASSIGNED"');
+    expect(cycleV2).toContain('EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED"');
+    expect(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).toContain(
+      'exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY"',
+    );
   });
 
   it("refreshes the path and opens the first assigned P1 station without a manual reload", async () => {

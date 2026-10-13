@@ -4268,6 +4268,26 @@ async function reconcileP0ToP1(p0LearningPathId) {
   );
 }
 
+async function reconcileP1ToNextCycle(p1LearningPathId) {
+  return parseResponse(
+    await authenticatedFetch("/student/learning-path/p1/cycle/reconcile", {
+      method: "POST",
+      body: JSON.stringify({ p1LearningPathId }),
+    }),
+  );
+}
+
+function p1CycleTransitionReviewMessage(result) {
+  switch (result?.readiness?.status) {
+    case "CURRENT_CYCLE_NOT_COMPLETED":
+      return "Bu öğrenme döngüsünün tüm adımları henüz tamamlanmadı. İlerlemen korunuyor; eksik adımlar tamamlandığında yeniden kontrol edilecek.";
+    case "NEXT_CYCLE_UNAVAILABLE":
+      return "Bu öğrenme döngüsü tamamlandı. Sonraki döngü uzman incelemesi ve yayın hazırlığı tamamlandığında açılacak; ilerlemen korunuyor.";
+    default:
+      return "Bu öğrenme döngüsünün sonraki adımı şu anda hazır değil. İlerlemen korunuyor; daha sonra yeniden kontrol edilecek.";
+  }
+}
+
 function p1TransitionReviewMessage(result) {
   switch (result?.readiness?.status) {
     case "P0_GRAPH_NOT_READY":
@@ -13392,6 +13412,23 @@ async function handleExerciseComplete() {
       $("exercise-completion-title")?.focus();
       return;
     }
+    let nextCycleTransition = exerciseSession.nextLearningCycle || null;
+    if (
+      student &&
+      learningPathEntryMode &&
+      exerciseSession.learningStepId &&
+      !exerciseSession.nextLearningStep &&
+      exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY" &&
+      String(activeLearningStepNode?.learningPathCode || "") ===
+        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
+    ) {
+      try {
+        nextCycleTransition ||= await reconcileP1ToNextCycle(activeLearningStepNode.learningPathId);
+      } catch {
+        // The completed session remains authoritative. The student can retry
+        // the explicit cycle reconciliation without losing progress.
+      }
+    }
     if (student && learningPathEntryMode && exerciseSession.learningStepId) {
       const completedStep = {
         ...(activeLearningStepNode || {}),
@@ -13412,6 +13449,11 @@ async function handleExerciseComplete() {
       // second training-style completion screen.
       exerciseBusy = false;
       returnToExercisePath();
+      if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
+        setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
+          error: true,
+        });
+      }
       return;
     }
     renderExerciseSession();

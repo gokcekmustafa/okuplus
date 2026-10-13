@@ -4,6 +4,10 @@ import {
   ACADEMIC_P0_COMMON_FLOW,
   ACADEMIC_P0_LESSONS,
 } from "../../curriculum/academic-reading-p0.js";
+import {
+  EDUCATION_V2_P1_A_LEVEL_CODE,
+  EDUCATION_V2_P1_A_PATH_CODE_PREFIX,
+} from "../../curriculum/education-v2-p1-a-program.js";
 import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
 import {
   assertTeacherClassAccess,
@@ -27,6 +31,9 @@ const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
 const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-";
 const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
+const P1_A_INITIAL_PATH_CODE = `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`;
+const P1_A_NEXT_CYCLE_PATH_CODE = "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
+export const P1_CYCLE_TRANSITION_POLICY_VERSION = "P1_CYCLE_TRANSITION_V1" as const;
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
 const P0_CANONICAL_STEP_COUNT =
   ACADEMIC_P0_LESSONS.length * 3 + ACADEMIC_P0_COMMON_FLOW.stages.length;
@@ -101,6 +108,22 @@ export type P1TransitionResult = {
   enrollmentId: string | null;
   selection: RouteSelectionResult;
   readiness: P1TransitionReadiness;
+};
+
+export type P1CycleTransitionResult = {
+  outcome: "ASSIGNED" | "ALREADY_ASSIGNED" | "REVIEW_REQUIRED";
+  currentLearningPathId: string;
+  nextLearningPathId: string | null;
+  readiness: {
+    status:
+      | "CURRENT_CYCLE_NOT_COMPLETED"
+      | "NEXT_CYCLE_UNAVAILABLE"
+      | "NOT_APPLICABLE"
+      | "ASSIGNED"
+      | "ALREADY_ASSIGNED";
+    currentCycleCompleted: boolean;
+    nextCycleAvailable: boolean;
+  };
 };
 
 export type P1TeacherOverrideInput = P1TransitionInput & {
@@ -277,6 +300,24 @@ function selectionMetadata(selection: RouteSelectionResult): Prisma.InputJsonVal
 
 function isP2002(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
+export function nextP1CyclePathCode(pathCode: string): string | null {
+  return pathCode === P1_A_INITIAL_PATH_CODE ? P1_A_NEXT_CYCLE_PATH_CODE : null;
+}
+
+function p1CycleReviewResult(
+  currentLearningPathId: string,
+  status: "CURRENT_CYCLE_NOT_COMPLETED" | "NEXT_CYCLE_UNAVAILABLE" | "NOT_APPLICABLE",
+  currentCycleCompleted: boolean,
+  nextCycleAvailable = false,
+): P1CycleTransitionResult {
+  return {
+    outcome: "REVIEW_REQUIRED",
+    currentLearningPathId,
+    nextLearningPathId: null,
+    readiness: { status, currentCycleCompleted, nextCycleAvailable },
+  };
 }
 
 function routeCandidateAvailable(
@@ -828,6 +869,375 @@ export async function reconcileP0ToP1(
         },
       };
     });
+  }
+}
+
+type P1CycleStep = P1CandidateStepReadinessInput & {
+  id: string;
+  completionRule: Prisma.JsonValue;
+};
+
+function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
+  return minimumScore(rule);
+}
+
+async function isP1CycleComplete(
+  tx: Prisma.TransactionClient,
+  actor: P1StudentActor,
+  path: {
+    units: Array<{ steps: P1CycleStep[] }>;
+  },
+): Promise<boolean> {
+  const steps = path.units.flatMap((unit) => unit.steps);
+  if (!steps.length) return false;
+  const stepIds = steps.map((step) => step.id);
+  const templateIds = steps
+    .map((step) => step.exerciseTemplateVersionId)
+    .filter((id): id is string => Boolean(id));
+  const contentIds = steps
+    .map((step) => step.contentVersionId)
+    .filter((id): id is string => Boolean(id));
+  const assessmentIds = steps
+    .map((step) => step.assessmentId)
+    .filter((id): id is string => Boolean(id));
+
+  const [progress, sessions, lessons, assessmentResults] = await Promise.all([
+    tx.studentLearningStepProgress.findMany({
+      where: {
+        tenantId: actor.tenantId,
+        studentId: actor.userId,
+        learningStepId: { in: stepIds },
+        status: "COMPLETED",
+      },
+      select: { learningStepId: true },
+    }),
+    templateIds.length
+      ? tx.exerciseSession.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            templateVersionId: { in: templateIds },
+            status: "COMPLETED",
+            assignmentId: null,
+            assessmentId: null,
+            context: "INDIVIDUAL",
+            sessionType: "PRACTICE",
+            trainingSessionItem: { is: null },
+          },
+          select: { learningStepId: true, templateVersionId: true },
+        })
+      : Promise.resolve([]),
+    contentIds.length
+      ? tx.studentLessonProgress.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            contentVersionId: { in: contentIds },
+          },
+          select: { contentVersionId: true },
+        })
+      : Promise.resolve([]),
+    assessmentIds.length
+      ? tx.assessmentResult.findMany({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            assessmentId: { in: assessmentIds },
+          },
+          orderBy: { completedAt: "desc" },
+          select: { assessmentId: true, score: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const evidenceCompleted = new Set(progress.map((item) => item.learningStepId));
+  const evidence = resolveLearningPathStepEvidence(
+    steps.map((step) => ({
+      id: step.id,
+      exerciseTemplateVersionId: step.exerciseTemplateVersionId,
+      contentVersionId: step.contentVersionId,
+    })),
+    sessions,
+    new Set(lessons.map((lesson) => lesson.contentVersionId)),
+  );
+  for (const [stepId, item] of evidence) {
+    if (item.completed) evidenceCompleted.add(stepId);
+  }
+
+  const latestResults = new Map<string, number | null>();
+  for (const result of assessmentResults) {
+    if (!latestResults.has(result.assessmentId))
+      latestResults.set(result.assessmentId, result.score);
+  }
+  for (const step of steps) {
+    if (!step.assessmentId || !latestResults.has(step.assessmentId)) continue;
+    const score = latestResults.get(step.assessmentId) ?? null;
+    const threshold = cycleMinimumScore(step.completionRule);
+    if (threshold === null || (score !== null && score >= threshold)) {
+      evidenceCompleted.add(step.id);
+    }
+  }
+  return steps.every((step) => evidenceCompleted.has(step.id));
+}
+
+async function loadNextP1Cycle(
+  tx: Prisma.TransactionClient,
+  actor: P1StudentActor,
+  current: { area: string; levelId: string | null },
+) {
+  return tx.learningPath.findFirst({
+    where: {
+      code: P1_A_NEXT_CYCLE_PATH_CODE,
+      area: current.area as "READING_COMPREHENSION",
+      status: "PUBLISHED",
+      deletedAt: null,
+      OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+      ...(current.levelId
+        ? { AND: [{ OR: [{ levelId: null }, { levelId: current.levelId }] }] }
+        : {}),
+    },
+    select: {
+      id: true,
+      code: true,
+      units: {
+        where: { status: "PUBLISHED" },
+        orderBy: { position: "asc" },
+        select: {
+          steps: {
+            where: { status: "PUBLISHED", isActive: true },
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              type: true,
+              contentVersionId: true,
+              exerciseTemplateVersionId: true,
+              assessmentId: true,
+              completionRule: true,
+              contentVersion: {
+                select: { status: true, content: { select: { status: true, deletedAt: true } } },
+              },
+              exerciseTemplateVersion: {
+                select: {
+                  status: true,
+                  template: { select: { status: true, deletedAt: true } },
+                },
+              },
+              assessment: { select: { status: true, deletedAt: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Completes the published P1-A cycle only after all of its server-side
+ * evidence is complete, then atomically activates the next published cycle.
+ * Authoring candidates (including Cycle 2/3 while expert review is pending)
+ * never pass the published graph gate and therefore remain REVIEW_REQUIRED.
+ */
+export async function reconcileP1ToNextCycle(
+  actor: StudentActor,
+  input: { p1LearningPathId: string },
+): Promise<P1CycleTransitionResult> {
+  assertStudentActor(actor);
+  try {
+    return await withTenantContext(actor, async (tx) => {
+      const enrollment = await tx.studentLearningPath.findFirst({
+        where: {
+          id: input.p1LearningPathId,
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          learningPath: { status: "PUBLISHED", deletedAt: null },
+        },
+        select: {
+          id: true,
+          routeStatus: true,
+          measurementResultId: true,
+          learningPath: {
+            select: {
+              id: true,
+              code: true,
+              area: true,
+              levelId: true,
+              units: {
+                where: { status: "PUBLISHED" },
+                orderBy: { position: "asc" },
+                select: {
+                  steps: {
+                    where: { status: "PUBLISHED", isActive: true },
+                    orderBy: { position: "asc" },
+                    select: {
+                      id: true,
+                      type: true,
+                      contentVersionId: true,
+                      exerciseTemplateVersionId: true,
+                      assessmentId: true,
+                      completionRule: true,
+                      contentVersion: {
+                        select: {
+                          status: true,
+                          content: { select: { status: true, deletedAt: true } },
+                        },
+                      },
+                      exerciseTemplateVersion: {
+                        select: {
+                          status: true,
+                          template: { select: { status: true, deletedAt: true } },
+                        },
+                      },
+                      assessment: { select: { status: true, deletedAt: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!enrollment) {
+        return p1CycleReviewResult(input.p1LearningPathId, "NOT_APPLICABLE", false);
+      }
+
+      const nextCode = nextP1CyclePathCode(enrollment.learningPath.code);
+      if (!nextCode) {
+        return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
+      }
+      // A completed/reassigned enrollment is historical state. Replays or
+      // stale client requests must never be able to reactivate a later cycle.
+      if (enrollment.routeStatus !== "ACTIVE") {
+        return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
+      }
+
+      const currentCompleted = await isP1CycleComplete(tx, actor, enrollment.learningPath);
+      if (!currentCompleted) {
+        return p1CycleReviewResult(enrollment.id, "CURRENT_CYCLE_NOT_COMPLETED", false);
+      }
+
+      const nextPath = await loadNextP1Cycle(tx, actor, enrollment.learningPath);
+      if (
+        !nextPath ||
+        nextPath.code !== nextCode ||
+        nextPath.units.length === 0 ||
+        nextPath.units.some((unit) => unit.steps.length === 0) ||
+        nextPath.units.flatMap((unit) => unit.steps).some((step) => !isReadyP1CandidateStep(step))
+      ) {
+        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true);
+      }
+
+      const existingNext = await tx.studentLearningPath.findUnique({
+        where: {
+          tenantId_studentId_learningPathId: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            learningPathId: nextPath.id,
+          },
+        },
+        select: { id: true, routeStatus: true },
+      });
+      if (existingNext?.routeStatus === "ACTIVE" || existingNext?.routeStatus === "COMPLETED") {
+        return {
+          outcome: "ALREADY_ASSIGNED",
+          currentLearningPathId: enrollment.id,
+          nextLearningPathId: nextPath.id,
+          readiness: {
+            status: "ALREADY_ASSIGNED",
+            currentCycleCompleted: true,
+            nextCycleAvailable: true,
+          },
+        };
+      }
+
+      const now = new Date();
+      await tx.studentLearningPath.updateMany({
+        where: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          routeStatus: "ACTIVE",
+          learningPath: { code: { startsWith: P1_PATH_PREFIX } },
+          id: { not: enrollment.id },
+        },
+        data: { routeStatus: "REASSIGNED" },
+      });
+      await tx.studentLearningPath.update({
+        where: { id: enrollment.id },
+        data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
+      });
+      await tx.studentLearningPath.upsert({
+        where: {
+          tenantId_studentId_learningPathId: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            learningPathId: nextPath.id,
+          },
+        },
+        update: {
+          routeStatus: "ACTIVE",
+          assignedAt: now,
+          recommendedPathId: nextPath.id,
+          measurementResultId: enrollment.measurementResultId,
+          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
+          selectionReason: {
+            source: "P1_CYCLE_CONTINUATION",
+            fromLearningPathId: enrollment.learningPath.id,
+            fromPathCode: enrollment.learningPath.code,
+            toPathCode: nextPath.code,
+          },
+        },
+        create: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          learningPathId: nextPath.id,
+          routeStatus: "ACTIVE",
+          assignedAt: now,
+          recommendedPathId: nextPath.id,
+          measurementResultId: enrollment.measurementResultId,
+          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
+          selectionReason: {
+            source: "P1_CYCLE_CONTINUATION",
+            fromLearningPathId: enrollment.learningPath.id,
+            fromPathCode: enrollment.learningPath.code,
+            toPathCode: nextPath.code,
+          },
+        },
+        select: { id: true },
+      });
+      return {
+        outcome: "ASSIGNED",
+        currentLearningPathId: enrollment.id,
+        nextLearningPathId: nextPath.id,
+        readiness: {
+          status: "ASSIGNED",
+          currentCycleCompleted: true,
+          nextCycleAvailable: true,
+        },
+      };
+    });
+  } catch (error) {
+    if (!isP2002(error)) throw error;
+    const active = await withTenantContext(actor, (tx) =>
+      tx.studentLearningPath.findFirst({
+        where: {
+          tenantId: actor.tenantId,
+          studentId: actor.userId,
+          routeStatus: "ACTIVE",
+          learningPath: { code: P1_A_NEXT_CYCLE_PATH_CODE },
+        },
+        select: { id: true, learningPathId: true },
+      }),
+    );
+    if (!active) throw error;
+    return {
+      outcome: "ALREADY_ASSIGNED",
+      currentLearningPathId: input.p1LearningPathId,
+      nextLearningPathId: active.learningPathId,
+      readiness: {
+        status: "ALREADY_ASSIGNED",
+        currentCycleCompleted: true,
+        nextCycleAvailable: true,
+      },
+    };
   }
 }
 

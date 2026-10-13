@@ -261,7 +261,7 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
             { routeStatus: null },
           ],
         },
-        select: { id: true },
+        select: { id: true, routeStatus: true },
       },
     },
   });
@@ -297,6 +297,7 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     return {
       ...row,
       enrolled: row.enrollments.length > 0,
+      activeEnrollment: row.enrollments.some((enrollment) => enrollment.routeStatus === "ACTIVE"),
       progressCount: progress.total,
       completedProgressCount: progress.completed,
     } as PublishedPath;
@@ -311,6 +312,7 @@ export function shouldReplacePublishedPath(
         tenantId: string | null;
         version?: number;
         enrolled?: boolean;
+        activeEnrollment?: boolean;
         progressCount?: number;
         completedProgressCount?: number;
       }
@@ -320,6 +322,7 @@ export function shouldReplacePublishedPath(
     tenantId: string | null;
     version?: number;
     enrolled?: boolean;
+    activeEnrollment?: boolean;
     progressCount?: number;
     completedProgressCount?: number;
   },
@@ -330,6 +333,12 @@ export function shouldReplacePublishedPath(
   const candidateIsAssignedP1 = candidate.code.startsWith(P1_PATH_PREFIX);
   const currentIsAssignedP1 = current.code.startsWith(P1_PATH_PREFIX);
   if (candidateIsAssignedP1 !== currentIsAssignedP1) return candidateIsAssignedP1;
+
+  if (candidateIsAssignedP1 && currentIsAssignedP1) {
+    const candidateIsActive = Boolean(candidate.activeEnrollment);
+    const currentIsActive = Boolean(current.activeEnrollment);
+    if (candidateIsActive !== currentIsActive) return candidateIsActive;
+  }
 
   const candidateIsEnrolled = Boolean(candidate.enrolled);
   const currentIsEnrolled = Boolean(current.enrolled);
@@ -391,6 +400,7 @@ type PublishedPathSelectionCandidate = {
   tenantId: string | null;
   version?: number;
   enrolled?: boolean;
+  activeEnrollment?: boolean;
   progressCount?: number;
   completedProgressCount?: number;
 };

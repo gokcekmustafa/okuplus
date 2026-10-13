@@ -25,6 +25,26 @@ describe("published learning-path selection", () => {
     ).toBe(true);
   });
 
+  it("prefers the active P1 cycle over a completed historical P1 cycle", () => {
+    expect(
+      shouldReplacePublishedPath(
+        {
+          code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+          tenantId: null,
+          enrolled: true,
+          activeEnrollment: false,
+        },
+        {
+          code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+          tenantId: null,
+          enrolled: true,
+          activeEnrollment: true,
+        },
+        "tenant-1",
+      ),
+    ).toBe(true);
+  });
+
   it("keeps canonical P0 ahead of a tenant-specific legacy path", () => {
     expect(
       shouldReplacePublishedPath(
