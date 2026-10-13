@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright-core";
 
-const BASE_URLS = ["https://www.okupratik.com", "https://okuplus.vercel.app"] as const;
+const BASE_URLS = ["https://www.okupratik.com"] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
 const READ_PATHS = [
   "/auth/me",
