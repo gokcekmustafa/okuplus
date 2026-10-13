@@ -23,6 +23,9 @@ type DomainReport = {
   dashboard: "PASS" | "FAIL";
   readPaths: "PASS" | "FAIL";
   assignments: "PASS" | "FAIL";
+  assignmentUi: "PASS" | "FAIL";
+  assignmentErrorCategory: AssignmentErrorCategory | null;
+  assignmentError: string | null;
   assignmentHttpStatus: number | null;
   assignmentCount: number | null;
   assignmentDetail: "PASS" | "FAIL" | "SKIPPED_NO_EXISTING_ASSIGNMENT";
@@ -85,6 +88,8 @@ export type SafeMutationDiagnostic = {
 
 export type ConsoleErrorCategory = "LEARNING_PATH" | "NETWORK" | "AUTH" | "OTHER";
 
+export type AssignmentErrorCategory = "API_ERROR" | "UI_ERROR" | "TEST_CODE_ERROR";
+
 export const NO_EXISTING_ASSIGNMENT_DETAIL = "SKIPPED_NO_EXISTING_ASSIGNMENT" as const;
 
 type StudentAssignmentSnapshot = {
@@ -122,6 +127,16 @@ type ApiJsonResult = {
   status: number;
   payload: unknown | null;
 };
+
+class AssignmentSmokeError extends Error {
+  constructor(
+    readonly category: AssignmentErrorCategory,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AssignmentSmokeError";
+  }
+}
 
 const MAX_SAFE_DIAGNOSTICS = 5;
 
@@ -523,6 +538,9 @@ async function runDomain(
     dashboard: "FAIL",
     readPaths: "FAIL",
     assignments: "FAIL",
+    assignmentUi: "FAIL",
+    assignmentErrorCategory: null,
+    assignmentError: null,
     assignmentHttpStatus: null,
     assignmentCount: null,
     assignmentDetail: "FAIL",
@@ -675,19 +693,10 @@ async function runDomain(
     if (statuses.some((status) => status !== 200)) throw new Error("Production read path failed");
     report.readPaths = "PASS";
 
-    const assignmentListPath = "/student/assignments?page=1&pageSize=20";
-    const assignmentListResponse = await apiJson(page, assignmentListPath);
-    report.assignmentHttpStatus = assignmentListResponse.status;
-    const assignmentList =
-      assignmentListResponse.status === 200
-        ? parseStudentAssignmentListPayload(assignmentListResponse.payload)
-        : null;
-    if (!assignmentList) throw new Error("Student assignment list schema failed");
-    report.assignmentCount = assignmentList.items.length;
-    report.assignments = "PASS";
-
-    const progressNav = page.locator('[data-page="progress"]');
-    if ((await progressNav.count()) !== 1) throw new Error("Progress navigation missing");
+    const progressNav = page.locator('.nav-item[data-page="progress"]');
+    if ((await progressNav.count()) !== 1 || !(await progressNav.isVisible())) {
+      throw new Error("Progress navigation missing or not visible");
+    }
     await progressNav.click();
     await page.waitForSelector("#page-progress:not(.hidden)", {
       state: "visible",
@@ -695,105 +704,137 @@ async function runDomain(
     });
     report.navigation = "PASS";
 
-    const assignmentsNav = page.locator('[data-page="assignments"]');
-    if ((await assignmentsNav.count()) !== 1) throw new Error("Assignments navigation missing");
-    await assignmentsNav.click();
-    await page.waitForSelector("#page-assignments:not(.hidden)", {
-      state: "visible",
-      timeout: REQUEST_TIMEOUT_MS,
-    });
-    await page.waitForSelector("#student-assignment-view:not(.hidden)", {
-      state: "visible",
-      timeout: REQUEST_TIMEOUT_MS,
-    });
-
-    await page.waitForFunction(
-      (expectedCount) => {
-        const container = document.querySelector("#student-assignment-cards");
-        if (!container) return false;
-        const cards = container.querySelectorAll("article.assignment-student-card");
-        return expectedCount === 0
-          ? container.querySelector(".empty-learning-state") !== null
-          : cards.length === expectedCount;
-      },
-      assignmentList.items.length,
-      { timeout: REQUEST_TIMEOUT_MS },
-    );
-    const renderedAssignments = await page
-      .locator("#student-assignment-cards")
-      .evaluate((container) =>
-        Array.from(container.querySelectorAll("article.assignment-student-card")).map((card) => ({
-          id: card.querySelector<HTMLElement>("[data-assignment-detail-id]")?.dataset
-            .assignmentDetailId,
-          title: card.querySelector("h3")?.textContent?.trim(),
-        })),
-      );
-    if (renderedAssignments.length !== assignmentList.items.length) {
-      throw new Error("Student assignment list does not match the interface");
-    }
-    const renderedById = new Map(renderedAssignments.map((item) => [item.id, item.title] as const));
-    if (assignmentList.items.some((item) => renderedById.get(item.id) !== item.title)) {
-      throw new Error("Student assignment interface data does not match the API");
-    }
-
-    if (assignmentList.items.length === 0) {
-      await page.locator("#student-assignment-cards .empty-learning-state").waitFor({
-        state: "visible",
-        timeout: REQUEST_TIMEOUT_MS,
-      });
-      report.assignmentDetail = NO_EXISTING_ASSIGNMENT_DETAIL;
-    } else {
-      const expectedAssignment = assignmentList.items[0];
-      const detailPath = `/student/assignments/${encodeURIComponent(expectedAssignment.id)}`;
-      const detailResponse = await apiJson(page, detailPath);
-      report.assignmentDetailHttpStatus = detailResponse.status;
-      const detail =
-        detailResponse.status === 200
-          ? parseStudentAssignmentDetailPayload(
-              detailResponse.payload,
-              expectedAssignment.id,
-              expectedAssignment.title,
-            )
-          : null;
-      if (!detail) throw new Error("Student assignment detail schema failed");
-
-      const detailButtons = page.locator("#student-assignment-cards [data-assignment-detail-id]");
-      const detailButtonIndex = await detailButtons.evaluateAll(
-        (buttons, expectedId) =>
-          buttons.findIndex(
-            (button) => (button as HTMLElement).dataset.assignmentDetailId === expectedId,
-          ),
-        expectedAssignment.id,
-      );
-      if (detailButtonIndex < 0) throw new Error("Student assignment detail action missing");
-      const expectedDetailPath = new URL(detailPath, baseUrl).pathname;
-      const detailUiResponse = page.waitForResponse(
-        (response) =>
-          response.request().method() === "GET" &&
-          new URL(response.url()).pathname === expectedDetailPath,
-        { timeout: REQUEST_TIMEOUT_MS },
-      );
-      await detailButtons.nth(detailButtonIndex).click();
-      const detailUiResponseResult = await detailUiResponse;
-      if (detailUiResponseResult.status() !== 200) {
-        throw new Error("Student assignment detail interface request failed");
+    try {
+      const fail = (category: AssignmentErrorCategory, message: string): never => {
+        throw new AssignmentSmokeError(category, message);
+      };
+      const assignmentListPath = "/student/assignments?page=1&pageSize=20";
+      let assignmentListResponse: ApiJsonResult;
+      try {
+        assignmentListResponse = await apiJson(page, assignmentListPath);
+      } catch {
+        fail("API_ERROR", "Student assignment list request failed");
       }
-      await page.waitForSelector("#assignment-detail-modal:not(.hidden)", {
+      report.assignmentHttpStatus = assignmentListResponse.status;
+      if (assignmentListResponse.status !== 200) {
+        fail("API_ERROR", "Student assignment list request failed");
+      }
+      const assignmentList = parseStudentAssignmentListPayload(assignmentListResponse.payload);
+      if (!assignmentList) fail("API_ERROR", "Student assignment list schema failed");
+      report.assignmentCount = assignmentList.items.length;
+      report.assignments = "PASS";
+
+      const assignmentsNav = page.locator('.nav-item[data-page="assignments"]');
+      if ((await assignmentsNav.count()) !== 1 || !(await assignmentsNav.isVisible())) {
+        fail("UI_ERROR", "Assignments navigation item missing or not visible");
+      }
+      await assignmentsNav.click();
+      await page.waitForSelector("#page-assignments:not(.hidden)", {
         state: "visible",
         timeout: REQUEST_TIMEOUT_MS,
       });
+      await page.waitForSelector("#student-assignment-view:not(.hidden)", {
+        state: "visible",
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+
       await page.waitForFunction(
-        (expectedTitle) =>
-          document.querySelector("#assignment-detail-title")?.textContent?.trim() === expectedTitle,
-        detail.title,
+        (expectedCount) => {
+          const container = document.querySelector("#student-assignment-cards");
+          if (!container) return false;
+          const cards = container.querySelectorAll("article.assignment-student-card");
+          return expectedCount === 0
+            ? container.querySelector(".empty-learning-state") !== null
+            : cards.length === expectedCount;
+        },
+        assignmentList.items.length,
         { timeout: REQUEST_TIMEOUT_MS },
       );
-      const detailTitle = await page.locator("#assignment-detail-title").textContent();
-      if (detailTitle?.trim() !== detail.title) {
-        throw new Error("Student assignment detail title does not match the API");
+      const renderedAssignments = await page
+        .locator("#student-assignment-cards")
+        .evaluate((container) =>
+          Array.from(container.querySelectorAll("article.assignment-student-card")).map((card) => ({
+            id: card.querySelector<HTMLElement>("[data-assignment-detail-id]")?.dataset
+              .assignmentDetailId,
+            title: card.querySelector("h3")?.textContent?.trim(),
+          })),
+        );
+      if (renderedAssignments.length !== assignmentList.items.length) {
+        fail("UI_ERROR", "Student assignment list does not match the interface");
       }
-      report.assignmentDetail = "PASS";
-      report.assignmentDetailVerified = true;
+      const renderedById = new Map(
+        renderedAssignments.map((item) => [item.id, item.title] as const),
+      );
+      if (assignmentList.items.some((item) => renderedById.get(item.id) !== item.title)) {
+        fail("UI_ERROR", "Student assignment interface data does not match the API");
+      }
+      report.assignmentUi = "PASS";
+
+      if (assignmentList.items.length === 0) {
+        report.assignmentDetail = NO_EXISTING_ASSIGNMENT_DETAIL;
+      } else {
+        const expectedAssignment = assignmentList.items[0];
+        const detailPath = `/student/assignments/${encodeURIComponent(expectedAssignment.id)}`;
+        let detailResponse: ApiJsonResult;
+        try {
+          detailResponse = await apiJson(page, detailPath);
+        } catch {
+          fail("API_ERROR", "Student assignment detail request failed");
+        }
+        report.assignmentDetailHttpStatus = detailResponse.status;
+        if (detailResponse.status !== 200) {
+          fail("API_ERROR", "Student assignment detail request failed");
+        }
+        const detail = parseStudentAssignmentDetailPayload(
+          detailResponse.payload,
+          expectedAssignment.id,
+          expectedAssignment.title,
+        );
+        if (!detail) fail("API_ERROR", "Student assignment detail schema failed");
+
+        const detailButtons = page.locator("#student-assignment-cards [data-assignment-detail-id]");
+        const detailButtonIndex = await detailButtons.evaluateAll(
+          (buttons, expectedId) =>
+            buttons.findIndex(
+              (button) => (button as HTMLElement).dataset.assignmentDetailId === expectedId,
+            ),
+          expectedAssignment.id,
+        );
+        if (detailButtonIndex < 0) fail("UI_ERROR", "Student assignment detail action missing");
+        const expectedDetailPath = new URL(detailPath, baseUrl).pathname;
+        const detailUiResponse = page.waitForResponse(
+          (response) =>
+            response.request().method() === "GET" &&
+            new URL(response.url()).pathname === expectedDetailPath,
+          { timeout: REQUEST_TIMEOUT_MS },
+        );
+        await detailButtons.nth(detailButtonIndex).click();
+        const detailUiResponseResult = await detailUiResponse;
+        if (detailUiResponseResult.status() !== 200) {
+          fail("API_ERROR", "Student assignment detail interface request failed");
+        }
+        await page.waitForSelector("#assignment-detail-modal:not(.hidden)", {
+          state: "visible",
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        await page.waitForFunction(
+          (expectedTitle) =>
+            document.querySelector("#assignment-detail-title")?.textContent?.trim() ===
+            expectedTitle,
+          detail.title,
+          { timeout: REQUEST_TIMEOUT_MS },
+        );
+        const detailTitle = await page.locator("#assignment-detail-title").textContent();
+        if (detailTitle?.trim() !== detail.title) {
+          fail("UI_ERROR", "Student assignment detail title does not match the API");
+        }
+        report.assignmentDetail = "PASS";
+        report.assignmentDetailVerified = true;
+      }
+    } catch (error) {
+      report.assignmentErrorCategory =
+        error instanceof AssignmentSmokeError ? error.category : "TEST_CODE_ERROR";
+      report.assignmentError = errorMessage(error);
     }
 
     const userMenuToggle = page.locator("#user-menu-toggle");
