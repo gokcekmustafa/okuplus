@@ -29,7 +29,21 @@ export const EDUCATION_V2_P1_A_CYCLE_V2_PATH_CODE =
   "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
 export const EDUCATION_V2_P1_A_CYCLE_V2_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_V2_TECHNICAL_COMPLETION_SCORE = 0.75;
-export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED" as const;
+export type EducationV2P1ACycleV2SourceStatus = "EXPERT_REVIEW_REQUIRED" | "PUBLISHED";
+export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus =
+  "EXPERT_REVIEW_REQUIRED";
+/** Independent source-review gate; this stays closed until expert approval is recorded. */
+export const EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED = false as const;
+/** Independent publication permission; database PUBLISHED rows must not imply this permission. */
+export const EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = false as const;
+
+export function isEducationV2P1ACycleV2ProductionAssignmentEnabled(): boolean {
+  return (
+    EDUCATION_V2_P1_A_CYCLE_V2_STATUS === "PUBLISHED" &&
+    EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED &&
+    EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED
+  );
+}
 
 export const CYCLE_V2_LEARNING_OUTCOMES = [
   {

@@ -14,6 +14,7 @@ import {
   EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
   EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
 } from "../../curriculum/education-v2-p1-a-cycle-v2-program.js";
 import { buildEducationV2P1ALearningCycleManifest } from "../../curriculum/learning-cycle-manifest.js";
 import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
@@ -1256,12 +1257,13 @@ export async function reconcileP1ToNextCycle(
 
       const nextPath = await loadNextP1Cycle(tx, actor, enrollment.learningPath);
       if (
+        !isEducationV2P1ACycleV2ProductionAssignmentEnabled() ||
         !nextPath ||
         nextPath.code !== nextCode ||
         !hasExpectedP1CycleGraph(nextPath) ||
         nextPath.units.flatMap((unit) => unit.steps).some((step) => !isReadyP1CandidateStep(step))
       ) {
-        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true);
+        return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true, false);
       }
 
       const existingNext =

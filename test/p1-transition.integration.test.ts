@@ -328,32 +328,38 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await prisma.$disconnect();
   });
 
-  it("assigns the next cycle from real progress and AssessmentResult evidence", async () => {
+  it("does not assign a fully published next graph while source review is pending", async () => {
+    const beforeProgress = await prisma.studentLearningStepProgress.count({
+      where: {
+        tenantId: completeFixture.actor.tenantId,
+        studentId: completeFixture.actor.userId,
+      },
+    });
+    const beforeAssessmentResults = await prisma.assessmentResult.findMany({
+      where: {
+        tenantId: completeFixture.actor.tenantId,
+        studentId: completeFixture.actor.userId,
+      },
+      select: { id: true, score: true },
+      orderBy: { id: "asc" },
+    });
     const result = await reconcileP1ToNextCycle(completeFixture.actor, {
       p1LearningPathId: completeFixture.enrollmentId,
     });
     expect(result).toMatchObject({
-      outcome: "ASSIGNED",
-      nextLearningPathId: PATH_IDS.next,
-      readiness: { status: "ASSIGNED", currentCycleCompleted: true, nextCycleAvailable: true },
+      outcome: "REVIEW_REQUIRED",
+      nextLearningPathId: null,
+      readiness: {
+        status: "NEXT_CYCLE_UNAVAILABLE",
+        currentCycleCompleted: true,
+        nextCycleAvailable: false,
+      },
     });
     const enrollments = await prisma.studentLearningPath.findMany({
       where: { tenantId: completeFixture.actor.tenantId, studentId: completeFixture.actor.userId },
       select: { learningPathId: true, routeStatus: true },
     });
-    expect(enrollments).toEqual(
-      expect.arrayContaining([
-        { learningPathId: PATH_IDS.initial, routeStatus: "COMPLETED" },
-        { learningPathId: PATH_IDS.next, routeStatus: "ACTIVE" },
-      ]),
-    );
-  });
-
-  it("returns ALREADY_ASSIGNED on a replay without duplicating or reactivating the old cycle", async () => {
-    const result = await reconcileP1ToNextCycle(completeFixture.actor, {
-      p1LearningPathId: completeFixture.enrollmentId,
-    });
-    expect(result.outcome).toBe("ALREADY_ASSIGNED");
+    expect(enrollments).toEqual([{ learningPathId: PATH_IDS.initial, routeStatus: "ACTIVE" }]);
     expect(
       await prisma.studentLearningPath.count({
         where: {
@@ -362,7 +368,44 @@ describe.sequential("P1 learning cycle transition integration", () => {
           learningPathId: PATH_IDS.next,
         },
       }),
-    ).toBe(1);
+    ).toBe(0);
+    expect(
+      await prisma.studentLearningStepProgress.count({
+        where: {
+          tenantId: completeFixture.actor.tenantId,
+          studentId: completeFixture.actor.userId,
+        },
+      }),
+    ).toBe(beforeProgress);
+    expect(
+      await prisma.assessmentResult.findMany({
+        where: {
+          tenantId: completeFixture.actor.tenantId,
+          studentId: completeFixture.actor.userId,
+        },
+        select: { id: true, score: true },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(beforeAssessmentResults);
+  });
+
+  it("keeps repeated source-gated checks review-required without creating a duplicate", async () => {
+    const result = await reconcileP1ToNextCycle(completeFixture.actor, {
+      p1LearningPathId: completeFixture.enrollmentId,
+    });
+    expect(result).toMatchObject({
+      outcome: "REVIEW_REQUIRED",
+      readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
+    });
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: completeFixture.actor.tenantId,
+          studentId: completeFixture.actor.userId,
+          learningPathId: PATH_IDS.next,
+        },
+      }),
+    ).toBe(0);
     expect(
       await prisma.studentLearningPath.count({
         where: {
@@ -373,6 +416,12 @@ describe.sequential("P1 learning cycle transition integration", () => {
         },
       }),
     ).toBe(1);
+    expect(
+      await prisma.studentLearningPath.findUnique({
+        where: { id: completeFixture.enrollmentId },
+        select: { routeStatus: true },
+      }),
+    ).toEqual({ routeStatus: "ACTIVE" });
   });
 
   it("keeps an incomplete cycle in review and preserves existing progress", async () => {

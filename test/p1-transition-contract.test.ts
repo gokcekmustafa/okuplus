@@ -5,6 +5,12 @@ import {
   nextP1CyclePathCode,
   P1_CYCLE_TRANSITION_POLICY_VERSION,
 } from "../src/modules/student-learning/p1-transition.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED,
+  EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
+  EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
+  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
+} from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
 
 const publishedContent = {
   status: "PUBLISHED",
@@ -100,7 +106,17 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain("prerequisiteStepId");
     expect(transition).toContain("studentLearningPath.upsert");
     expect(transition).toContain('outcome: "ALREADY_ASSIGNED"');
-    expect(cycleV2).toContain('EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED"');
+    expect(cycleV2).toContain(
+      "EDUCATION_V2_P1_A_CYCLE_V2_STATUS: EducationV2P1ACycleV2SourceStatus",
+    );
+    expect(cycleV2).toContain('"EXPERT_REVIEW_REQUIRED"');
+    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED = false");
+    expect(cycleV2).toContain("EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED = false");
+    expect(cycleV2).toContain("isEducationV2P1ACycleV2ProductionAssignmentEnabled");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_STATUS).toBe("EXPERT_REVIEW_REQUIRED");
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPERT_APPROVAL_RECORDED).toBe(false);
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(false);
+    expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(false);
     expect(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).toContain(
       'exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY"',
     );
