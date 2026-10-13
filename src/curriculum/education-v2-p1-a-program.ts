@@ -25,6 +25,24 @@ export const EDUCATION_V2_P1_A_LEVEL_CODE = "G8_12";
 export const EDUCATION_V2_P1_A_PATH_VERSION = 1;
 export const EDUCATION_V2_P1_A_ASSESSMENT_MINIMUM_SCORE = 0.75;
 
+export const EDUCATION_V2_P1_A_LEARNING_OUTCOMES = [
+  {
+    key: "P1A_STRUCTURE_FOUNDATION",
+    statement: "Konu, ana düşünce ve destekleyici ayrıntı arasındaki metin yapısını kurar.",
+    targetSkillCodes: ["RC_MAIN_IDEA", "RC_DETAIL"],
+  },
+  {
+    key: "P1A_MEANING_RELATIONS",
+    statement: "Neden-sonuç, karşılaştırma ve zıtlık ilişkilerini metin kanıtıyla ayırt eder.",
+    targetSkillCodes: ["RC_DETAIL"],
+  },
+  {
+    key: "P1A_TRANSFER",
+    statement: "Yeni bir metinde ana düşünce, kanıt ve ilişki zincirini aktarır.",
+    targetSkillCodes: ["RC_INFERENCE"],
+  },
+] as const;
+
 export type P1APathStep = {
   key: string;
   title: string;
@@ -32,6 +50,7 @@ export type P1APathStep = {
   contentKey?: string;
   exerciseKey?: string;
   assessmentKey?: string;
+  learningOutcomeKeys: string[];
   prerequisiteStepKeys?: string[];
   completionRule?: { minimumScore?: number };
 };
@@ -689,12 +708,14 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Metnin omurgasını gör",
             type: "TEACHING",
             contentKey: "p1a-structure-teach",
+            learningOutcomeKeys: ["P1A_STRUCTURE_FOUNDATION"],
           },
           {
             key: "structure-small-study",
             title: "Metnin temel parçalarını ayır",
             type: "SMALL_STUDY",
             exerciseKey: "p1a-structure-study",
+            learningOutcomeKeys: ["P1A_STRUCTURE_FOUNDATION"],
             prerequisiteStepKeys: ["structure-teaching"],
           },
           {
@@ -702,6 +723,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Ana düşünceyi kanıtla eşleştir",
             type: "PRACTICE",
             exerciseKey: "p1a-evidence-practice",
+            learningOutcomeKeys: ["P1A_STRUCTURE_FOUNDATION"],
             prerequisiteStepKeys: ["structure-small-study"],
           },
           {
@@ -709,6 +731,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Metin omurgasını pekiştir",
             type: "REINFORCEMENT",
             exerciseKey: "p1a-structure-reinforcement",
+            learningOutcomeKeys: ["P1A_STRUCTURE_FOUNDATION"],
             prerequisiteStepKeys: ["evidence-practice"],
           },
         ],
@@ -724,6 +747,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Bilgiler arasındaki ilişkiyi izle",
             type: "TEACHING",
             contentKey: "p1a-relations-teach",
+            learningOutcomeKeys: ["P1A_MEANING_RELATIONS"],
             prerequisiteStepKeys: ["structure-reinforcement"],
           },
           {
@@ -731,6 +755,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Neden, sonuç ve karşılaştırmayı eşleştir",
             type: "SMALL_STUDY",
             exerciseKey: "p1a-relations-study",
+            learningOutcomeKeys: ["P1A_MEANING_RELATIONS"],
             prerequisiteStepKeys: ["relations-teaching"],
           },
           {
@@ -738,6 +763,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Yeni metinde yapıyı çöz",
             type: "PRACTICE",
             exerciseKey: "p1a-structure-practice",
+            learningOutcomeKeys: ["P1A_TRANSFER"],
             prerequisiteStepKeys: ["relations-small-study"],
           },
           {
@@ -745,6 +771,7 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Metin haritasını tamamla",
             type: "REINFORCEMENT",
             exerciseKey: "p1a-relations-reinforcement",
+            learningOutcomeKeys: ["P1A_MEANING_RELATIONS", "P1A_TRANSFER"],
             prerequisiteStepKeys: ["structure-practice"],
           },
           {
@@ -752,6 +779,11 @@ export const EDUCATION_V2_P1_A_PROGRAM: P1AProgram = {
             title: "Anlam ve metin yapısı kontrolü",
             type: "ASSESSMENT",
             assessmentKey: "p1a-assessment",
+            learningOutcomeKeys: [
+              "P1A_STRUCTURE_FOUNDATION",
+              "P1A_MEANING_RELATIONS",
+              "P1A_TRANSFER",
+            ],
             prerequisiteStepKeys: ["relations-reinforcement"],
             completionRule: { minimumScore: EDUCATION_V2_P1_A_ASSESSMENT_MINIMUM_SCORE },
           },
@@ -813,12 +845,22 @@ export function p1AStepId(stepKey: string): string {
 export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGRAM): string[] {
   const errors: string[] = [];
   const contentKeys = new Set(program.content.map((content) => content.key));
+  const contentByKey = new Map(program.content.map((content) => [content.key, content]));
   const exerciseByKey = new Map(program.exercises.map((exercise) => [exercise.key, exercise]));
   const assessmentByKey = new Map(
     program.assessments.map((assessment) => [assessment.key, assessment]),
   );
   const stepKeys = new Set<string>();
   const referencedPrerequisites = new Set<string>();
+  const outcomeKeys = new Set<string>(
+    EDUCATION_V2_P1_A_LEARNING_OUTCOMES.map((outcome) => outcome.key),
+  );
+  const outcomeByKey = new Map<string, (typeof EDUCATION_V2_P1_A_LEARNING_OUTCOMES)[number]>(
+    EDUCATION_V2_P1_A_LEARNING_OUTCOMES.map((outcome) => [outcome.key, outcome]),
+  );
+  const mappedOutcomeKeys = new Set<string>();
+  const instructionalStepTypes = new Set(["TEACHING", "SMALL_STUDY", "PRACTICE", "REINFORCEMENT"]);
+  const instructionalOutcomes = new Set<string>();
   const pathSteps = program.path.units.flatMap((unit) => unit.steps);
   const contentUsage = new Map<string, number>();
   const exerciseUsage = new Map<string, number>();
@@ -847,6 +889,37 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
       }
       if (step.type === "ASSESSMENT" && !step.assessmentKey)
         errors.push(`Assessment bağlantısı eksik: ${step.key}`);
+      if (step.learningOutcomeKeys.length === 0)
+        errors.push(`Öğrenme kazanımı bağlantısı eksik: ${step.key}`);
+      const stepOutcomes = new Set<string>();
+      for (const outcomeKey of step.learningOutcomeKeys) {
+        if (stepOutcomes.has(outcomeKey))
+          errors.push(`Tekrarlı öğrenme kazanımı: ${step.key} -> ${outcomeKey}`);
+        else if (!outcomeKeys.has(outcomeKey))
+          errors.push(`Bilinmeyen öğrenme kazanımı: ${step.key} -> ${outcomeKey}`);
+        else {
+          mappedOutcomeKeys.add(outcomeKey);
+          if (instructionalStepTypes.has(step.type)) instructionalOutcomes.add(outcomeKey);
+        }
+        stepOutcomes.add(outcomeKey);
+      }
+      if (step.type !== "ASSESSMENT") {
+        const sourceSkillCode = step.contentKey
+          ? contentByKey.get(step.contentKey)?.skillCode
+          : step.exerciseKey
+            ? exerciseByKey.get(step.exerciseKey)?.skillCode
+            : undefined;
+        if (
+          sourceSkillCode &&
+          !step.learningOutcomeKeys.some((key) =>
+            outcomeByKey
+              .get(key)
+              ?.targetSkillCodes.some((skillCode) => skillCode === sourceSkillCode),
+          )
+        ) {
+          errors.push(`Kazanım içerikle uyumsuz: ${step.key} -> ${sourceSkillCode}`);
+        }
+      }
       if (step.type === "TEACHING" && (step.exerciseKey || step.assessmentKey))
         errors.push(`Teach adımı exercise/assessment taşıyamaz: ${step.key}`);
       if (step.type === "ASSESSMENT" && (step.contentKey || step.exerciseKey))
@@ -880,6 +953,17 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
         errors.push(`P1-A linear prerequisite zinciri geçersiz: ${step.key}`);
       }
     }
+  }
+  for (const outcome of EDUCATION_V2_P1_A_LEARNING_OUTCOMES) {
+    if (!mappedOutcomeKeys.has(outcome.key))
+      errors.push(`Öğrenme kazanımı hiçbir adıma bağlanmamış: ${outcome.key}`);
+    if (!instructionalOutcomes.has(outcome.key))
+      errors.push(`Öğrenme kazanımı öğretim/uygulama adımı taşımıyor: ${outcome.key}`);
+  }
+  const assessmentSteps = pathSteps.filter((step) => step.type === "ASSESSMENT");
+  for (const outcome of EDUCATION_V2_P1_A_LEARNING_OUTCOMES) {
+    if (!assessmentSteps.some((step) => step.learningOutcomeKeys.includes(outcome.key)))
+      errors.push(`Öğrenme kazanımı değerlendirmede ölçülmüyor: ${outcome.key}`);
   }
   for (const step of pathSteps) {
     if (step.contentKey && !contentKeys.has(step.contentKey))

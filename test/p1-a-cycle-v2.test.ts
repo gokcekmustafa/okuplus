@@ -38,6 +38,33 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
     ]);
   });
 
+  it("her adımı içeriğiyle uyumlu açık bir kazanıma bağlar", () => {
+    const steps = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.flatMap((unit) => unit.steps);
+
+    expect(steps.map((step) => step.learningOutcomeKeys)).toEqual([
+      ["P1A_V2_STRUCTURE_FOUNDATION"],
+      ["P1A_V2_STRUCTURE_FOUNDATION"],
+      ["P1A_V2_STRUCTURE_FOUNDATION"],
+      ["P1A_V2_STRUCTURE_FOUNDATION"],
+      ["P1A_V2_MEANING_RELATIONS"],
+      ["P1A_V2_MEANING_RELATIONS"],
+      ["P1A_V2_TRANSFER"],
+      ["P1A_V2_MEANING_RELATIONS", "P1A_V2_TRANSFER"],
+      ["P1A_V2_STRUCTURE_FOUNDATION", "P1A_V2_MEANING_RELATIONS", "P1A_V2_TRANSFER"],
+    ]);
+  });
+
+  it("içerikle ilgisiz kazanım eşlemesini reddeder", () => {
+    const candidate = structuredClone(EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM);
+    const firstStep = candidate.path.units[0]?.steps[0];
+    if (!firstStep) throw new Error("Cycle v2 ilk adımı eksik");
+    firstStep.learningOutcomeKeys = ["P1A_V2_TRANSFER"];
+
+    expect(validateP1ACycleV2Program(candidate)).toContain(
+      "Kazanım içerikle uyumsuz: structure-teaching-v2 -> RC_MAIN_IDEA",
+    );
+  });
+
   it("passes the shared manifest validator without changing canonical v1", () => {
     expect(validateEducationV2P1ACycleV2Manifest()).toEqual([]);
     expect(validateLearningCycleManifest(EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST).valid).toBe(true);

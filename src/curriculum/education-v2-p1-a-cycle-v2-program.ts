@@ -31,10 +31,22 @@ export const EDUCATION_V2_P1_A_CYCLE_V2_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_V2_TECHNICAL_COMPLETION_SCORE = 0.75;
 export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED" as const;
 
-const CYCLE_V2_LEARNING_OUTCOMES = [
-  "Konu, ana düşünce ve destekleyici ayrıntıyı birbirinden ayırır.",
-  "Neden-sonuç, karşılaştırma ve zıtlık ilişkilerini metin kanıtıyla açıklar.",
-  "Yeni metinlerde ana düşünce ile kanıt arasındaki ilişkiyi aktarır.",
+export const CYCLE_V2_LEARNING_OUTCOMES = [
+  {
+    key: "P1A_V2_STRUCTURE_FOUNDATION",
+    statement: "Konu, ana düşünce ve destekleyici ayrıntı arasındaki metin yapısını kurar.",
+    targetSkillCodes: ["RC_MAIN_IDEA", "RC_DETAIL"],
+  },
+  {
+    key: "P1A_V2_MEANING_RELATIONS",
+    statement: "Neden-sonuç, karşılaştırma ve zıtlık ilişkilerini metin kanıtıyla ayırt eder.",
+    targetSkillCodes: ["RC_DETAIL"],
+  },
+  {
+    key: "P1A_V2_TRANSFER",
+    statement: "Yeni bir metinde ana düşünce, kanıt ve ilişki zincirini aktarır.",
+    targetSkillCodes: ["RC_INFERENCE"],
+  },
 ] as const;
 
 const V2_PREFIX = "edu-v2-p1-a-cycle-2";
@@ -670,12 +682,14 @@ const steps: P1APathStep[] = [
     title: "Metnin omurgasını kur",
     type: "TEACHING",
     contentKey: structureTeaching.key,
+    learningOutcomeKeys: ["P1A_V2_STRUCTURE_FOUNDATION"],
   },
   {
     key: "structure-small-study-v2",
     title: "Bilgilerin görevini ayır",
     type: "SMALL_STUDY",
     exerciseKey: "p1a-v2-structure-study",
+    learningOutcomeKeys: ["P1A_V2_STRUCTURE_FOUNDATION"],
     prerequisiteStepKeys: ["structure-teaching-v2"],
   },
   {
@@ -683,6 +697,7 @@ const steps: P1APathStep[] = [
     title: "Ana düşünceyi kanıtla bağla",
     type: "PRACTICE",
     exerciseKey: "p1a-v2-evidence-practice",
+    learningOutcomeKeys: ["P1A_V2_STRUCTURE_FOUNDATION"],
     prerequisiteStepKeys: ["structure-small-study-v2"],
   },
   {
@@ -690,6 +705,7 @@ const steps: P1APathStep[] = [
     title: "Metin omurgasını geri çağır",
     type: "REINFORCEMENT",
     exerciseKey: "p1a-v2-structure-reinforcement",
+    learningOutcomeKeys: ["P1A_V2_STRUCTURE_FOUNDATION"],
     prerequisiteStepKeys: ["evidence-practice-v2"],
   },
   {
@@ -697,6 +713,7 @@ const steps: P1APathStep[] = [
     title: "Bilgiler arasındaki ilişkiyi gör",
     type: "TEACHING",
     contentKey: relationsTeaching.key,
+    learningOutcomeKeys: ["P1A_V2_MEANING_RELATIONS"],
     prerequisiteStepKeys: ["structure-reinforcement-v2"],
   },
   {
@@ -704,6 +721,7 @@ const steps: P1APathStep[] = [
     title: "İlişkiyi ve kanıtını bul",
     type: "SMALL_STUDY",
     exerciseKey: "p1a-v2-relations-study",
+    learningOutcomeKeys: ["P1A_V2_MEANING_RELATIONS"],
     prerequisiteStepKeys: ["relations-teaching-v2"],
   },
   {
@@ -711,6 +729,7 @@ const steps: P1APathStep[] = [
     title: "Yeni metinde yapıyı çöz",
     type: "PRACTICE",
     exerciseKey: "p1a-v2-transfer-practice",
+    learningOutcomeKeys: ["P1A_V2_TRANSFER"],
     prerequisiteStepKeys: ["relations-small-study-v2"],
   },
   {
@@ -718,6 +737,7 @@ const steps: P1APathStep[] = [
     title: "Metin haritasını tamamla",
     type: "REINFORCEMENT",
     exerciseKey: "p1a-v2-relations-reinforcement",
+    learningOutcomeKeys: ["P1A_V2_MEANING_RELATIONS", "P1A_V2_TRANSFER"],
     prerequisiteStepKeys: ["transfer-practice-v2"],
   },
   {
@@ -725,6 +745,11 @@ const steps: P1APathStep[] = [
     title: "Anlam ve metin yapısı kontrolü",
     type: "ASSESSMENT",
     assessmentKey: "p1a-v2-assessment",
+    learningOutcomeKeys: [
+      "P1A_V2_STRUCTURE_FOUNDATION",
+      "P1A_V2_MEANING_RELATIONS",
+      "P1A_V2_TRANSFER",
+    ],
     prerequisiteStepKeys: ["relations-reinforcement-v2"],
     completionRule: { minimumScore: EDUCATION_V2_P1_A_CYCLE_V2_TECHNICAL_COMPLETION_SCORE },
   },
@@ -787,10 +812,19 @@ export const EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM = program;
 export function validateP1ACycleV2Program(candidate: P1AProgram = program): string[] {
   const errors: string[] = [];
   const contentKeys = new Set(candidate.content.map((item) => item.key));
+  const contentByKey = new Map(candidate.content.map((item) => [item.key, item]));
   const assessmentByKey = new Map(candidate.assessments.map((item) => [item.key, item]));
+  const exerciseByKey = new Map(candidate.exercises.map((item) => [item.key, item]));
   const pathSteps = candidate.path.units.flatMap((unit) => unit.steps);
   const usedContent = new Map<string, number>();
   const usedExercises = new Map<string, number>();
+  const outcomeKeys = new Set<string>(CYCLE_V2_LEARNING_OUTCOMES.map((outcome) => outcome.key));
+  const outcomeByKey = new Map<string, (typeof CYCLE_V2_LEARNING_OUTCOMES)[number]>(
+    CYCLE_V2_LEARNING_OUTCOMES.map((outcome) => [outcome.key, outcome]),
+  );
+  const mappedOutcomeKeys = new Set<string>();
+  const instructionalOutcomeKeys = new Set<string>();
+  const instructionalStepTypes = new Set(["TEACHING", "SMALL_STUDY", "PRACTICE", "REINFORCEMENT"]);
 
   if (candidate.programId !== EDUCATION_V2_P1_A_CYCLE_V2_ID)
     errors.push("Cycle v2 program ID uyuşmuyor.");
@@ -813,10 +847,55 @@ export function validateP1ACycleV2Program(candidate: P1AProgram = program): stri
           (usedExercises.get(assessment.templateExerciseKey) ?? 0) + 1,
         );
     }
+    if (step.learningOutcomeKeys.length === 0) {
+      errors.push(`Öğrenme kazanımı bağlantısı eksik: ${step.key}`);
+    }
+    const stepOutcomeKeys = new Set<string>();
+    for (const outcomeKey of step.learningOutcomeKeys) {
+      if (stepOutcomeKeys.has(outcomeKey)) {
+        errors.push(`Tekrarlı öğrenme kazanımı: ${step.key} -> ${outcomeKey}`);
+      } else if (!outcomeKeys.has(outcomeKey)) {
+        errors.push(`Bilinmeyen öğrenme kazanımı: ${step.key} -> ${outcomeKey}`);
+      } else {
+        mappedOutcomeKeys.add(outcomeKey);
+        if (instructionalStepTypes.has(step.type)) instructionalOutcomeKeys.add(outcomeKey);
+      }
+      stepOutcomeKeys.add(outcomeKey);
+    }
+    if (step.type !== "ASSESSMENT") {
+      const sourceSkillCode = step.contentKey
+        ? contentByKey.get(step.contentKey)?.skillCode
+        : step.exerciseKey
+          ? exerciseByKey.get(step.exerciseKey)?.skillCode
+          : undefined;
+      if (
+        sourceSkillCode &&
+        !step.learningOutcomeKeys.some((key) =>
+          outcomeByKey
+            .get(key)
+            ?.targetSkillCodes.some((skillCode) => skillCode === sourceSkillCode),
+        )
+      ) {
+        errors.push(`Kazanım içerikle uyumsuz: ${step.key} -> ${sourceSkillCode}`);
+      }
+    }
     for (const prerequisite of step.prerequisiteStepKeys ?? []) {
       if (!pathSteps.some((candidateStep) => candidateStep.key === prerequisite)) {
         errors.push(`Bilinmeyen cycle v2 prerequisite: ${step.key} -> ${prerequisite}`);
       }
+    }
+  }
+
+  const assessmentSteps = pathSteps.filter((step) => step.type === "ASSESSMENT");
+  for (const outcome of CYCLE_V2_LEARNING_OUTCOMES) {
+    if (!mappedOutcomeKeys.has(outcome.key)) {
+      errors.push(`Öğrenme kazanımı hiçbir adıma bağlanmamış: ${outcome.key}`);
+    }
+    if (!instructionalOutcomeKeys.has(outcome.key)) {
+      errors.push(`Öğrenme kazanımı öğretim/uygulama adımı taşımıyor: ${outcome.key}`);
+    }
+    if (!assessmentSteps.some((step) => step.learningOutcomeKeys.includes(outcome.key))) {
+      errors.push(`Öğrenme kazanımı değerlendirmede ölçülmüyor: ${outcome.key}`);
     }
   }
 
@@ -853,14 +932,6 @@ function questionVersionIds(exercise: ProgramExercise): string[] {
   return exercise.questions.map((item) => p1ACycleV2QuestionVersionId(exercise.key, item.key));
 }
 
-function cycleV2OutcomeKeysForStep(stepKey: string, type: string): readonly string[] {
-  if (type === "ASSESSMENT") return CYCLE_V2_LEARNING_OUTCOMES;
-  if (stepKey.includes("relations") || stepKey === "structure-practice-v2") {
-    return [CYCLE_V2_LEARNING_OUTCOMES[1]];
-  }
-  return [CYCLE_V2_LEARNING_OUTCOMES[0]];
-}
-
 function buildCycleV2Manifest(): LearningCycleManifest {
   const contentVersions = program.content.map((item) => ({
     key: item.key,
@@ -890,7 +961,11 @@ function buildCycleV2Manifest(): LearningCycleManifest {
     sequence: EDUCATION_V2_P1_A_CYCLE_V2_SEQUENCE,
     routeFamily: "A",
     targetSkillCodes: ["RC_MAIN_IDEA", "RC_DETAIL", "RC_INFERENCE"],
-    learningOutcomes: [...CYCLE_V2_LEARNING_OUTCOMES],
+    learningOutcomes: CYCLE_V2_LEARNING_OUTCOMES.map((outcome) => ({
+      key: outcome.key,
+      statement: outcome.statement,
+      targetSkillCodes: [...outcome.targetSkillCodes],
+    })),
     resourceCatalog: {
       contentKeys: program.content.map((item) => item.key),
       exerciseKeys: program.exercises.map((item) => item.key),
@@ -918,7 +993,7 @@ function buildCycleV2Manifest(): LearningCycleManifest {
         stableKey: step.key,
         order: index + 1,
         type: step.type,
-        learningOutcomeKeys: cycleV2OutcomeKeysForStep(step.key, step.type),
+        learningOutcomeKeys: step.learningOutcomeKeys,
         taskKind:
           step.type === "REINFORCEMENT"
             ? "RETRIEVAL"

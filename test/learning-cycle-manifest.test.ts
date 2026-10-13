@@ -31,6 +31,9 @@ describe("versioned learning cycle manifest", () => {
         order: index + 1,
       }));
       manifest.steps = steps;
+      manifest.learningOutcomes = manifest.learningOutcomes.filter((outcome) =>
+        steps.some((step) => step.learningOutcomeKeys.includes(outcome.key)),
+      );
       manifest.completion = {
         ...manifest.completion,
         requiredStepKeys: steps.map((step) => step.stableKey),
@@ -142,7 +145,7 @@ describe("versioned learning cycle manifest", () => {
     const practice = manifest.steps[practiceIndex];
     if (!practice?.exercise) throw new Error("P1-A practice bağlantısı eksik");
     manifest.targetSkillCodes = [""];
-    manifest.learningOutcomes = [""];
+    manifest.learningOutcomes = [{ key: "", statement: "", targetSkillCodes: [] }];
     manifest.steps = manifest.steps.map((step, index) =>
       index === practiceIndex
         ? {
@@ -170,7 +173,7 @@ describe("versioned learning cycle manifest", () => {
     if (!firstOutcome) throw new Error("P1-A öğrenme kazanımı eksik");
     manifest.steps = manifest.steps.map((step) => ({
       ...step,
-      learningOutcomeKeys: [firstOutcome],
+      learningOutcomeKeys: [firstOutcome.key],
     }));
 
     const result = validateLearningCycleManifest(manifest);

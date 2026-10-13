@@ -15,10 +15,29 @@ import type {
  */
 export type P1BCDRouteFamily = "B" | "C" | "D";
 
+export const EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES = {
+  B: {
+    key: "P1B_FLUENCY_MEANING",
+    statement: "Anlam gruplarını izleyerek okuma akışını ve metin anlamını birlikte korur.",
+    targetSkillCodes: ["FAST_RECOGNITION", "FAST_CHUNKING", "RC_DETAIL"],
+  },
+  C: {
+    key: "P1C_INFERENCE_EVIDENCE",
+    statement: "Çıkarımı, metinsel kanıtı ve kanıt ile sonuç arasındaki ilişkiyi ayırt eder.",
+    targetSkillCodes: ["RC_DETAIL", "RC_INFERENCE"],
+  },
+  D: {
+    key: "P1D_VOCABULARY_CONTEXT",
+    statement: "Bir sözcüğün anlamını bağlam, sözcük ilişkisi ve alan bilgisiyle açıklar.",
+    targetSkillCodes: ["RC_DETAIL"],
+  },
+} as const;
+
 export type P1BCDPathStep = {
   key: string;
   title: string;
   type: "TEACHING" | "SMALL_STUDY" | "PRACTICE" | "REINFORCEMENT" | "ASSESSMENT";
+  learningOutcomeKeys: string[];
   contentKey?: string;
   exerciseKey?: string;
   assessmentKey?: string;
@@ -162,6 +181,7 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
   const studyKey = `${spec.family.toLowerCase()}-study`;
   const practiceKey = `${spec.family.toLowerCase()}-practice`;
   const reinforcementKey = `${spec.family.toLowerCase()}-reinforcement`;
+  const learningOutcomeKey = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family].key;
   return {
     programId: spec.programId,
     routeFamily: spec.family,
@@ -196,12 +216,14 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
               key: teachKey,
               title: spec.teach.title,
               type: "TEACHING",
+              learningOutcomeKeys: [learningOutcomeKey],
               contentKey: spec.teach.key,
             },
             {
               key: studyKey,
               title: spec.study.title,
               type: "SMALL_STUDY",
+              learningOutcomeKeys: [learningOutcomeKey],
               contentKey: spec.study.key,
               exerciseKey: spec.studyExercise.key,
               prerequisiteStepKeys: [teachKey],
@@ -210,6 +232,7 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
               key: practiceKey,
               title: spec.practice.title,
               type: "PRACTICE",
+              learningOutcomeKeys: [learningOutcomeKey],
               contentKey: spec.practice.key,
               exerciseKey: spec.practiceExercise.key,
               prerequisiteStepKeys: [studyKey],
@@ -218,6 +241,7 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
               key: reinforcementKey,
               title: spec.reinforcement.title,
               type: "REINFORCEMENT",
+              learningOutcomeKeys: [learningOutcomeKey],
               contentKey: spec.reinforcement.key,
               exerciseKey: spec.reinforcementExercise.key,
               prerequisiteStepKeys: [practiceKey],
@@ -226,6 +250,7 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
               key: `${spec.family.toLowerCase()}-assessment-step`,
               title: spec.assessment.title,
               type: "ASSESSMENT",
+              learningOutcomeKeys: [learningOutcomeKey],
               assessmentKey,
               prerequisiteStepKeys: [reinforcementKey],
             },
@@ -1160,10 +1185,14 @@ export function p1BCDTemplateVersionId(program: P1BCDProgram, key: string): stri
 export function validateP1BCDProgram(program: P1BCDProgram): string[] {
   const errors: string[] = [];
   const contentKeys = new Set(program.content.map((item) => item.key));
+  const contentByKey = new Map(program.content.map((item) => [item.key, item]));
   const exercises = new Map(program.exercises.map((item) => [item.key, item]));
   const steps = program.path.units.flatMap((unit) => unit.steps);
   const contentUsage = new Map<string, number>();
   const exerciseUsage = new Map<string, number>();
+  const expectedOutcomeKey = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily].key;
+  const expectedOutcome = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily];
+  const mappedOutcomeKeys = new Set<string>();
   const recordUsage = (usage: Map<string, number>, key: string | undefined) => {
     if (key) usage.set(key, (usage.get(key) ?? 0) + 1);
   };
@@ -1181,6 +1210,26 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
     }
     if (step.type === "ASSESSMENT" && !step.assessmentKey)
       errors.push(`assessment bağlantısı eksik: ${step.key}`);
+    if (step.learningOutcomeKeys.length === 0)
+      errors.push(`öğrenme kazanımı bağlantısı eksik: ${step.key}`);
+    for (const outcomeKey of step.learningOutcomeKeys) {
+      if (outcomeKey !== expectedOutcomeKey)
+        errors.push(`yanlış öğrenme kazanımı: ${step.key} -> ${outcomeKey}`);
+      mappedOutcomeKeys.add(outcomeKey);
+    }
+    if (step.type !== "ASSESSMENT") {
+      const sourceSkillCode = step.contentKey
+        ? contentByKey.get(step.contentKey)?.skillCode
+        : step.exerciseKey
+          ? exercises.get(step.exerciseKey)?.skillCode
+          : undefined;
+      if (
+        sourceSkillCode &&
+        !expectedOutcome.targetSkillCodes.some((skillCode) => skillCode === sourceSkillCode)
+      ) {
+        errors.push(`kazanım içerikle uyumsuz: ${step.key} -> ${sourceSkillCode}`);
+      }
+    }
     if (step.contentKey && !contentKeys.has(step.contentKey))
       errors.push(`bilinmeyen content: ${step.contentKey}`);
     if (step.exerciseKey && !exercises.has(step.exerciseKey))
@@ -1206,6 +1255,8 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
       errors.push(`Linear prerequisite zinciri geçersiz: ${step.key}`);
     }
   }
+  if (!mappedOutcomeKeys.has(expectedOutcomeKey))
+    errors.push(`rota öğrenme kazanımıyla eşleşmiyor: ${expectedOutcomeKey}`);
   const stepExerciseKeys = new Set(
     steps.map((step) => step.exerciseKey).filter((key): key is string => Boolean(key)),
   );
