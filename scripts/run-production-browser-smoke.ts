@@ -766,11 +766,28 @@ async function runDomain(
         expectedAssignment.id,
       );
       if (detailButtonIndex < 0) throw new Error("Student assignment detail action missing");
+      const expectedDetailPath = new URL(detailPath, baseUrl).pathname;
+      const detailUiResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          new URL(response.url()).pathname === expectedDetailPath,
+        { timeout: REQUEST_TIMEOUT_MS },
+      );
       await detailButtons.nth(detailButtonIndex).click();
+      const detailUiResponseResult = await detailUiResponse;
+      if (detailUiResponseResult.status() !== 200) {
+        throw new Error("Student assignment detail interface request failed");
+      }
       await page.waitForSelector("#assignment-detail-modal:not(.hidden)", {
         state: "visible",
         timeout: REQUEST_TIMEOUT_MS,
       });
+      await page.waitForFunction(
+        (expectedTitle) =>
+          document.querySelector("#assignment-detail-title")?.textContent?.trim() === expectedTitle,
+        detail.title,
+        { timeout: REQUEST_TIMEOUT_MS },
+      );
       const detailTitle = await page.locator("#assignment-detail-title").textContent();
       if (detailTitle?.trim() !== detail.title) {
         throw new Error("Student assignment detail title does not match the API");
