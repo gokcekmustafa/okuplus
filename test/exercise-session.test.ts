@@ -503,11 +503,14 @@ describe("exercise session", () => {
 
   it("öğrenci session API'si MC seçeneklerini üç öğrenci bağlamında sabit ve session-bazlı sıralar", async () => {
     const contexts = ["INDIVIDUAL", "ASSIGNMENT", "ASSESSMENT"] as const;
-    for (const context of contexts) {
+    for (const [contextIndex, context] of contexts.entries()) {
       const sessionIds: string[] = [];
       for (let index = 0; index < 8; index += 1) {
         const session = await prisma.exerciseSession.create({
           data: {
+            // Keep the fixture deterministic; UUIDv7 randomness must not make
+            // this distribution assertion flaky in CI.
+            id: `99999981-0000-7000-8000-${String(101 + contextIndex * 8 + index).padStart(12, "0")}`,
             tenantId: TENANT_A,
             studentId: STUDENT_A,
             templateVersionId: TEMPLATE_VERSION_A,
