@@ -24,6 +24,7 @@ import {
 } from "../assignments/teacher-service.js";
 import { resolveLearningPathStepEvidence } from "../learning-path/service.js";
 import { readSkillResults } from "../measurements/service.js";
+import { resolveTrainingRuntimeConfig } from "../training/exercise-contract.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor, type StudentActor } from "./policy.js";
 import {
@@ -214,6 +215,7 @@ export type P1CandidateStepReadinessInput = {
   exerciseTemplateVersionId: string | null;
   exerciseTemplateVersion: {
     status: string;
+    config: Prisma.JsonValue | null;
     template: { status: string; deletedAt: Date | null };
   } | null;
   assessmentId: string | null;
@@ -230,11 +232,15 @@ function hasPublishedContentArtifact(step: P1CandidateStepReadinessInput): boole
 }
 
 function hasPublishedTemplateArtifact(step: P1CandidateStepReadinessInput): boolean {
+  const runtimeConfig = step.exerciseTemplateVersion
+    ? resolveTrainingRuntimeConfig("TRAINING", step.exerciseTemplateVersion.config)
+    : null;
   return Boolean(
     step.exerciseTemplateVersionId &&
     step.exerciseTemplateVersion?.status === "PUBLISHED" &&
     step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
-    step.exerciseTemplateVersion.template.deletedAt === null,
+    step.exerciseTemplateVersion.template.deletedAt === null &&
+    runtimeConfig?.status === "READY",
   );
 }
 
@@ -666,6 +672,7 @@ async function loadCandidates(
               exerciseTemplateVersion: {
                 select: {
                   status: true,
+                  config: true,
                   template: { select: { status: true, deletedAt: true } },
                 },
               },
@@ -1110,6 +1117,7 @@ async function loadNextP1Cycle(
               exerciseTemplateVersion: {
                 select: {
                   status: true,
+                  config: true,
                   template: { select: { status: true, deletedAt: true } },
                 },
               },
@@ -1182,6 +1190,7 @@ export async function reconcileP1ToNextCycle(
                       exerciseTemplateVersion: {
                         select: {
                           status: true,
+                          config: true,
                           template: { select: { status: true, deletedAt: true } },
                         },
                       },
