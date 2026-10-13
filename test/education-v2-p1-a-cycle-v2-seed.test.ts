@@ -53,4 +53,10 @@ describe("P1-A Cycle 2 provisioning contract", () => {
     expect(source).toContain("prisma.$transaction");
     expect(source).toContain("dbChanged: true");
   });
+
+  it("persists the immutable runtime version config, not the authoring contract", async () => {
+    const source = await seedSource();
+    expect(source).toContain("toTrainingExerciseVersionConfig(plan.exercise.contract)");
+    expect(source).not.toContain("config: asJson(plan.exercise.contract)");
+  });
 });

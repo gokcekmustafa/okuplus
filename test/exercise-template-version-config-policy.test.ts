@@ -75,6 +75,19 @@ describe("ExerciseTemplateVersion config policy", () => {
     ).toEqual({ kind: "CANONICAL_PLACEMENT_EXEMPT" });
   });
 
+  it("exempts canonical placement versions even when their placement config is present", () => {
+    expect(
+      classifyExerciseTemplateVersionConfig(
+        row({
+          versionConfig: { canonicalManifestId: "OKU-READING-PLACEMENT-V1" },
+          parentConfig: { canonicalManifestId: "OKU-READING-PLACEMENT-V1" },
+          templateType: "MIXED",
+          versionStatus: "PUBLISHED",
+        }),
+      ),
+    ).toEqual({ kind: "CANONICAL_PLACEMENT_EXEMPT" });
+  });
+
   it("does not exempt a similarly shaped non-placement template", () => {
     expect(
       classifyExerciseTemplateVersionConfig(

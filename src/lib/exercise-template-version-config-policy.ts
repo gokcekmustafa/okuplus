@@ -31,15 +31,19 @@ export function isCanonicalPlacementVersion(row: ExerciseTemplateVersionConfigRo
 export function classifyExerciseTemplateVersionConfig(
   row: ExerciseTemplateVersionConfigRow,
 ): ExerciseTemplateVersionConfigClassification {
+  // Canonical placement versions intentionally use the parent template
+  // metadata contract, not the student-training runtime config contract.
+  // Classify this narrow, published placement shape before inspecting the
+  // version config so it cannot be mistaken for invalid training data.
+  if (isCanonicalPlacementVersion(row)) {
+    return { kind: "CANONICAL_PLACEMENT_EXEMPT" };
+  }
+
   if (row.versionConfig !== null && row.versionConfig !== undefined) {
     return {
       kind: "CONFIGURED",
       valid: safeParseTrainingExerciseVersionConfig(row.versionConfig).success,
     };
-  }
-
-  if (isCanonicalPlacementVersion(row)) {
-    return { kind: "CANONICAL_PLACEMENT_EXEMPT" };
   }
 
   if (!row.parentExists) return { kind: "BACKFILL_REQUIRED", parent: "ABSENT" };
