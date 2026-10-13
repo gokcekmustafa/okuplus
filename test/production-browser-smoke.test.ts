@@ -14,6 +14,9 @@ import {
   isSmokeLocalMutationPath,
   isMutationMethod,
   markSmokeRequestHandled,
+  NO_EXISTING_ASSIGNMENT_DETAIL,
+  parseStudentAssignmentDetailPayload,
+  parseStudentAssignmentListPayload,
   safeRequestPath,
   sanitizeSmokeDiagnostic,
   shouldCountFailedRequest,
@@ -32,6 +35,68 @@ const script = readFileSync(
 const indexHtml = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
 describe("production browser smoke safety contract", () => {
+  const assignmentItem = {
+    id: "assignment-001",
+    title: "Ana fikir çalışması",
+    className: "8-A",
+    teacherName: "OkuPratik",
+    templateTitle: "Metin anlama",
+    templateType: "MULTIPLE_CHOICE",
+    learningStepId: null,
+    dueDate: null,
+    status: "ACTIVE",
+    assignedAt: "2026-10-13T09:00:00.000Z",
+    sessionCount: 0,
+    hasInProgressSession: false,
+    inProgressSessionId: null,
+    sessionStatus: null,
+    questionCount: null,
+    attemptedCount: 0,
+    scoreSummary: null,
+    organizationName: "OkuPratik",
+    studentAssignmentId: "recipient-001",
+    studentAssignmentStatus: "ASSIGNED",
+    assignmentSource: "MANUAL",
+  };
+
+  it("validates the read-only student assignment list contract", () => {
+    const payload = {
+      data: { items: [assignmentItem], total: 1, page: 1, pageSize: 20 },
+    };
+    expect(parseStudentAssignmentListPayload(payload)).toEqual(payload.data);
+    expect(
+      parseStudentAssignmentListPayload({
+        data: {
+          items: [{ ...assignmentItem, attemptedCount: -1 }],
+          total: 1,
+          page: 1,
+          pageSize: 20,
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("requires assignment detail identity to match the list item", () => {
+    const payload = { data: assignmentItem };
+    expect(
+      parseStudentAssignmentDetailPayload(payload, assignmentItem.id, assignmentItem.title),
+    ).toEqual(assignmentItem);
+    expect(
+      parseStudentAssignmentDetailPayload(payload, "another-assignment", assignmentItem.title),
+    ).toBeNull();
+    expect(
+      parseStudentAssignmentDetailPayload(payload, assignmentItem.id, "Başka ödev"),
+    ).toBeNull();
+  });
+
+  it("keeps the no-existing-assignment detail outcome explicit", () => {
+    expect(NO_EXISTING_ASSIGNMENT_DETAIL).toBe("SKIPPED_NO_EXISTING_ASSIGNMENT");
+    const empty = parseStudentAssignmentListPayload({
+      data: { items: [], total: 0, page: 1, pageSize: 20 },
+    });
+    expect(empty?.items).toEqual([]);
+  });
+
   it("classifies browser launch failures without exposing runner details", () => {
     expect(
       classifyBrowserLaunchFailure(new Error("browserType.launch: Timeout 30000ms exceeded")),
@@ -61,6 +126,16 @@ describe("production browser smoke safety contract", () => {
     );
     expect(isAllowedMutationPath(`https://evil.example/auth/login`, origin)).toBe(false);
     expect(isSmokeLocalMutationPath(`${origin}/student/pilot/events`, origin)).toBe(true);
+    expect(
+      isSmokeLocalMutationPath(`${origin}/student/assignment-recommendations/refresh`, origin),
+    ).toBe(true);
+    expect(
+      isSmokeLocalMutationPath(
+        `${origin}/student/assignment-recommendations/refresh`,
+        origin,
+        "PUT",
+      ),
+    ).toBe(false);
     expect(isSmokeLocalMutationPath(`${origin}/student/pilot/events`, origin, "PUT")).toBe(false);
     expect(
       isSmokeLocalMutationPath(`${origin}/student/learning-path/client-diagnostic`, origin),
@@ -68,6 +143,12 @@ describe("production browser smoke safety contract", () => {
     expect(isSmokeLocalMutationPath(`https://evil.example/student/pilot/events`, origin)).toBe(
       false,
     );
+    expect(
+      isSmokeLocalMutationPath(
+        "https://evil.example/student/assignment-recommendations/refresh",
+        origin,
+      ),
+    ).toBe(false);
   });
 
   it("keeps HTTP and console diagnostics safe and bounded", () => {
@@ -206,6 +287,7 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('route.abort("blockedbyclient")');
     expect(script).toContain("preventedMutations");
     expect(script).toContain("isSmokeLocalMutationPath");
+    expect(script).toContain('"/student/assignment-recommendations/refresh"');
     expect(script).toContain("locallyFulfilledMutationRequests");
     expect(script).toContain("route.fulfill({ status: 204 })");
     expect(script).toContain("markSmokeRequestHandled(request, intentionallyPreventedRequests)");
@@ -219,6 +301,14 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('page.locator("#guest-login-btn")');
     expect(script).toContain('loginUrl.searchParams.set("auth", "google-error")');
     expect(script).toContain('"/student/today"');
+    expect(script).toContain('"/student/assignments?page=1&pageSize=20"');
+    expect(script).toContain('"#student-assignment-cards"');
+    expect(script).toContain('"#assignment-detail-modal:not(.hidden)"');
+    expect(script).toContain("SKIPPED_NO_EXISTING_ASSIGNMENT");
+    expect(script).toContain(
+      "const detailPath = `/student/assignments/${encodeURIComponent(expectedAssignment.id)}`",
+    );
+    expect(script).not.toContain('data-assignment-start-id="${expectedAssignment.id}"');
     expect(script).toContain('"/student/progress"');
     expect(script).toContain('"/student/history?page=1&pageSize=5"');
     expect(script).toContain("loginHttpStatus");
