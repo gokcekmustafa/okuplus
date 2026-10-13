@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { toTrainingExerciseVersionConfig } from "../src/modules/training/exercise-contract.js";
 import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
@@ -401,7 +402,7 @@ async function createContentGraph(
           id: plan.exerciseTemplateVersionId,
           templateId: template.id,
           version: 1,
-          config: asJson(plan.exercise.contract),
+          config: asJson(toTrainingExerciseVersionConfig(plan.exercise.contract)),
           status: "DRAFT",
         },
       });
