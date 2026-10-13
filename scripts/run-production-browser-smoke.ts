@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { chromium, type Browser, type Page } from "playwright-core";
+import { chromium, type Browser, type Page, type Request } from "playwright-core";
 
 const BASE_URLS = ["https://www.okupratik.com"] as const;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -27,11 +27,16 @@ type DomainReport = {
   logoutHttpStatus: number | null;
   logoutFailureReason: LogoutFailureReason | null;
   consoleErrors: number;
+  consoleErrorCategories: ConsoleErrorCategory[];
   pageErrors: number;
   pageErrorMessages: string[];
   failedRequests: number;
   httpErrors: number;
+  httpErrorRequests: SafeHttpErrorDiagnostic[];
+  preventedMutations: number;
+  preventedMutationRequests: SafeMutationDiagnostic[];
   blockedMutations: number;
+  blockedMutationRequests: SafeMutationDiagnostic[];
   error: string | null;
 };
 
@@ -56,6 +61,89 @@ export type LogoutFailureReason =
 
 export type BrowserLaunchFailureReason =
   "EXECUTABLE_NOT_FOUND" | "LAUNCH_TIMEOUT" | "LAUNCH_FAILED";
+
+export type StatusClass = "2xx" | "3xx" | "4xx" | "5xx" | "other";
+
+export type SafeHttpErrorDiagnostic = {
+  method: string;
+  path: string;
+  statusClass: StatusClass;
+};
+
+export type SafeMutationDiagnostic = {
+  method: string;
+  path: string;
+};
+
+export type ConsoleErrorCategory = "LEARNING_PATH" | "NETWORK" | "AUTH" | "OTHER";
+
+const MAX_SAFE_DIAGNOSTICS = 5;
+
+export function statusClass(status: number): StatusClass {
+  if (status >= 200 && status <= 299) return "2xx";
+  if (status >= 300 && status <= 399) return "3xx";
+  if (status >= 400 && status <= 499) return "4xx";
+  if (status >= 500 && status <= 599) return "5xx";
+  return "other";
+}
+
+function isSensitivePathSegment(segment: string): boolean {
+  let decodedSegment = segment;
+  try {
+    decodedSegment = decodeURIComponent(segment);
+  } catch {
+    // Keep the encoded segment for the conservative pattern checks below.
+  }
+  return (
+    decodedSegment.includes("@") ||
+    /^[0-9a-f]{8}-[0-9a-f-]{27,}$/iu.test(decodedSegment) ||
+    /^[A-Za-z0-9_-]{20,}$/u.test(decodedSegment)
+  );
+}
+
+export function safeRequestPath(rawUrl: string): string {
+  try {
+    const pathname = new URL(rawUrl).pathname;
+    return pathname
+      .split("/")
+      .map((segment) => (isSensitivePathSegment(segment) ? "[redacted]" : segment))
+      .join("/");
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+export function isMutationMethod(method: string): boolean {
+  return !["GET", "HEAD"].includes(method.toUpperCase());
+}
+
+export function shouldCountFailedRequest(intentionallyPrevented: boolean): boolean {
+  return !intentionallyPrevented;
+}
+
+export function isAllowedMutationPath(
+  rawUrl: string,
+  canonicalOrigin: string,
+  method = "POST",
+): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      method.toUpperCase() === "POST" &&
+      url.origin === canonicalOrigin &&
+      (url.pathname === "/auth/login" || url.pathname === "/auth/logout")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function classifyConsoleError(message: string): ConsoleErrorCategory {
+  if (/learning[- ]path|learning-path|öğrenme yolu/iu.test(message)) return "LEARNING_PATH";
+  if (/network|fetch|request|timeout| bağlantı/iu.test(message)) return "NETWORK";
+  if (/auth|login|logout|csrf|cookie|origin/iu.test(message)) return "AUTH";
+  return "OTHER";
+}
 
 export function classifyBrowserLaunchFailure(error: unknown): BrowserLaunchFailureReason {
   const message = error instanceof Error ? error.message : "";
@@ -202,16 +290,23 @@ export async function consumeJsonLoginErrorBody(
   }
 }
 
+export function sanitizeSmokeDiagnostic(message: string): string {
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/giu, "[url]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[email]")
+    .replace(
+      /\b(bearer|token|password|secret|cookie)\b(?:\s*(?::|=)\s*|\s+)[^\s,;]+/giu,
+      "$1=[redacted]",
+    )
+    .slice(0, 240);
+}
+
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 240) : "Browser smoke failed";
+  return error instanceof Error ? sanitizeSmokeDiagnostic(error.message) : "Browser smoke failed";
 }
 
 function sanitizePageError(error: Error): string {
-  return `${error.name}: ${error.message}`
-    .replace(/https?:\/\/[^\s"'<>]+/giu, "[url]")
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[email]")
-    .replace(/\b(?:bearer|token|password|secret|cookie)\s*[:=]?\s+[^\s,;]+/giu, "$1=[redacted]")
-    .slice(0, 240);
+  return sanitizeSmokeDiagnostic(`${error.name}: ${error.message}`);
 }
 
 function requireCredentials(): { email: string; password: string } {
@@ -221,8 +316,8 @@ function requireCredentials(): { email: string; password: string } {
   return { email, password };
 }
 
-function isAllowedMutation(url: URL): boolean {
-  return url.pathname === "/auth/login" || url.pathname === "/auth/logout";
+function pushSafeDiagnostic<T>(items: T[], item: T): void {
+  if (items.length < MAX_SAFE_DIAGNOSTICS) items.push(item);
 }
 
 async function apiStatus(page: Page, path: string): Promise<number> {
@@ -254,18 +349,61 @@ async function runDomain(
     logoutHttpStatus: null,
     logoutFailureReason: null,
     consoleErrors: 0,
+    consoleErrorCategories: [],
     pageErrors: 0,
     pageErrorMessages: [],
     failedRequests: 0,
     httpErrors: 0,
+    httpErrorRequests: [],
+    preventedMutations: 0,
+    preventedMutationRequests: [],
     blockedMutations: 0,
+    blockedMutationRequests: [],
     error: null,
   };
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
+  const intentionallyPreventedRequests = new WeakSet<Request>();
   try {
+    const canonicalOrigin = new URL(baseUrl).origin;
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      if (!isMutationMethod(request.method())) {
+        await route.continue();
+        return;
+      }
+
+      const diagnostic = {
+        method: request.method().toUpperCase(),
+        path: safeRequestPath(request.url()),
+      } satisfies SafeMutationDiagnostic;
+      if (isAllowedMutationPath(request.url(), canonicalOrigin, request.method())) {
+        await route.continue();
+        return;
+      }
+
+      // Keep telemetry and client diagnostics out of production. A prevented
+      // request is reported separately from a guard failure so the smoke can
+      // prove that no unexpected mutation reached the server.
+      report.preventedMutations += 1;
+      pushSafeDiagnostic(report.preventedMutationRequests, diagnostic);
+      try {
+        intentionallyPreventedRequests.add(request);
+        await route.abort("blockedbyclient");
+      } catch {
+        intentionallyPreventedRequests.delete(request);
+        report.blockedMutations += 1;
+        pushSafeDiagnostic(report.blockedMutationRequests, diagnostic);
+      }
+    });
     page.on("console", (message) => {
-      if (message.type() === "error") report.consoleErrors += 1;
+      if (message.type() === "error") {
+        report.consoleErrors += 1;
+        const category = classifyConsoleError(message.text());
+        if (!report.consoleErrorCategories.includes(category)) {
+          pushSafeDiagnostic(report.consoleErrorCategories, category);
+        }
+      }
     });
     page.on("pageerror", (error) => {
       report.pageErrors += 1;
@@ -273,22 +411,19 @@ async function runDomain(
         report.pageErrorMessages.push(sanitizePageError(error));
       }
     });
-    page.on("requestfailed", () => {
+    page.on("requestfailed", (request) => {
+      if (!shouldCountFailedRequest(intentionallyPreventedRequests.has(request))) return;
       report.failedRequests += 1;
     });
-    page.on("request", (request) => {
-      if (request.method() === "GET" || request.method() === "HEAD") return;
-      let url: URL;
-      try {
-        url = new URL(request.url());
-      } catch {
-        report.blockedMutations += 1;
-        return;
-      }
-      if (!isAllowedMutation(url)) report.blockedMutations += 1;
-    });
     page.on("response", (response) => {
-      if (response.status() >= 400) report.httpErrors += 1;
+      if (response.status() >= 400) {
+        report.httpErrors += 1;
+        pushSafeDiagnostic(report.httpErrorRequests, {
+          method: response.request().method().toUpperCase(),
+          path: safeRequestPath(response.url()),
+          statusClass: statusClass(response.status()),
+        });
+      }
     });
 
     // The app's social-login error return path intentionally opens the normal

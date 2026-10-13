@@ -4,10 +4,17 @@ import {
   buildSafeLoginDiagnostic,
   buildSafeLoginDiagnosticWithCode,
   classifyBrowserLaunchFailure,
+  classifyConsoleError,
   classifyLoginFailureReason,
   classifyLoginHttpStatus,
   classifyLogoutResponse,
   consumeJsonLoginErrorBody,
+  isAllowedMutationPath,
+  isMutationMethod,
+  safeRequestPath,
+  sanitizeSmokeDiagnostic,
+  shouldCountFailedRequest,
+  statusClass,
 } from "../scripts/run-production-browser-smoke.js";
 
 const workflow = readFileSync(
@@ -35,6 +42,50 @@ describe("production browser smoke safety contract", () => {
     expect(classifyLogoutResponse(null)).toBe("RESPONSE_TIMEOUT");
     expect(classifyLogoutResponse(401)).toBe("UNEXPECTED_STATUS");
     expect(classifyLogoutResponse(200)).toBe("SUCCESS");
+  });
+
+  it("blocks non-auth mutations without expanding the production allowlist", () => {
+    const origin = "https://www.okupratik.com";
+    expect(isMutationMethod("POST")).toBe(true);
+    expect(isMutationMethod("GET")).toBe(false);
+    expect(isAllowedMutationPath(`${origin}/auth/login`, origin)).toBe(true);
+    expect(isAllowedMutationPath(`${origin}/auth/logout?token=secret`, origin)).toBe(true);
+    expect(isAllowedMutationPath(`${origin}/auth/login`, origin, "PUT")).toBe(false);
+    expect(isAllowedMutationPath(`${origin}/student/pilot/events`, origin)).toBe(false);
+    expect(isAllowedMutationPath(`${origin}/student/learning-path/client-diagnostic`, origin)).toBe(
+      false,
+    );
+    expect(isAllowedMutationPath(`https://evil.example/auth/login`, origin)).toBe(false);
+  });
+
+  it("keeps HTTP and console diagnostics safe and bounded", () => {
+    expect(statusClass(403)).toBe("4xx");
+    expect(statusClass(503)).toBe("5xx");
+    expect(statusClass(200)).toBe("2xx");
+    expect(
+      safeRequestPath(
+        "https://www.okupratik.com/student/sessions/session-secret-1234567890?q=token",
+      ),
+    ).toBe("/student/sessions/[redacted]");
+    expect(safeRequestPath("https://www.okupratik.com/auth/login?email=student@example.com")).toBe(
+      "/auth/login",
+    );
+    expect(safeRequestPath("https://www.okupratik.com/student/student%40example.com")).toBe(
+      "/student/[redacted]",
+    );
+    expect(classifyConsoleError("learning-path-render-failed token=secret")).toBe("LEARNING_PATH");
+    expect(classifyConsoleError("Failed to fetch /student/today")).toBe("NETWORK");
+    expect(classifyConsoleError("unknown browser error")).toBe("OTHER");
+    expect(
+      sanitizeSmokeDiagnostic(
+        "token=secret-token password: secret-password https://example.test/?email=a@example.com",
+      ),
+    ).toBe("token=[redacted] password=[redacted] [url]");
+  });
+
+  it("does not turn intentionally prevented mutations into smoke failures", () => {
+    expect(shouldCountFailedRequest(true)).toBe(false);
+    expect(shouldCountFailedRequest(false)).toBe(true);
   });
 
   it.each([
@@ -126,7 +177,17 @@ describe("production browser smoke safety contract", () => {
   it("allows only login/logout writes and canonical production hosts", () => {
     expect(script).toContain('"https://www.okupratik.com"');
     expect(script).not.toContain('"https://okuplus.vercel.app"');
+    expect(script).toContain("url.origin === canonicalOrigin");
     expect(script).toContain('url.pathname === "/auth/login" || url.pathname === "/auth/logout"');
+    expect(script).toContain('page.route("**/*"');
+    expect(script).toContain('route.abort("blockedbyclient")');
+    expect(script).toContain("preventedMutations");
+    expect(script).toContain("intentionallyPreventedRequests");
+    expect(script).toContain('page.on("requestfailed", (request)');
+    expect(script).toContain("shouldCountFailedRequest");
+    expect(script).toContain("blockedMutationRequests");
+    expect(script).toContain("httpErrorRequests");
+    expect(script).toContain("consoleErrorCategories");
     expect(script).toContain('page.locator("#guest-login-btn")');
     expect(script).toContain('loginUrl.searchParams.set("auth", "google-error")');
     expect(script).toContain('"/student/today"');
@@ -152,5 +213,6 @@ describe("production browser smoke safety contract", () => {
     expect(script).not.toContain("prisma");
     expect(script).not.toContain("DATABASE_URL");
     expect(script).not.toContain("secret-password");
+    expect(script).not.toContain("request.postData");
   });
 });
