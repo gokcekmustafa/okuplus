@@ -139,10 +139,18 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(2);
   });
 
-  it("keeps v2 options free of clear correct-answer length cues", () => {
+  it("keeps v2 correct options from being the sole longest choice", () => {
     const questions = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap(
       (exercise) => exercise.questions,
     );
+    // This is a text-length warning only; it does not establish educational
+    // validity, which still requires separate editorial and expert review.
+    expect(
+      questions.filter((question) => {
+        const quality = assessOptionLengthQuality(question);
+        return quality?.correctIsLongest && quality.margin > 0;
+      }),
+    ).toHaveLength(0);
     expect(
       questions.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
     ).toHaveLength(0);
