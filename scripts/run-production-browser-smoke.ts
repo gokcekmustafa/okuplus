@@ -123,6 +123,17 @@ export function shouldCountFailedRequest(intentionallyPrevented: boolean): boole
   return !intentionallyPrevented;
 }
 
+export function markSmokeRequestHandled(request: Request, handledRequests: WeakSet<Request>): void {
+  handledRequests.add(request);
+}
+
+export function unmarkSmokeRequestHandled(
+  request: Request,
+  handledRequests: WeakSet<Request>,
+): void {
+  handledRequests.delete(request);
+}
+
 export function isAllowedMutationPath(
   rawUrl: string,
   canonicalOrigin: string,
@@ -409,21 +420,23 @@ async function runDomain(
       report.preventedMutations += 1;
       pushSafeDiagnostic(report.preventedMutationRequests, diagnostic);
       if (isSmokeLocalMutationPath(request.url(), canonicalOrigin, request.method())) {
+        markSmokeRequestHandled(request, intentionallyPreventedRequests);
         try {
           await route.fulfill({ status: 204 });
           report.locallyFulfilledMutations += 1;
           pushSafeDiagnostic(report.locallyFulfilledMutationRequests, diagnostic);
         } catch {
+          unmarkSmokeRequestHandled(request, intentionallyPreventedRequests);
           report.blockedMutations += 1;
           pushSafeDiagnostic(report.blockedMutationRequests, diagnostic);
         }
         return;
       }
       try {
-        intentionallyPreventedRequests.add(request);
+        markSmokeRequestHandled(request, intentionallyPreventedRequests);
         await route.abort("blockedbyclient");
       } catch {
-        intentionallyPreventedRequests.delete(request);
+        unmarkSmokeRequestHandled(request, intentionallyPreventedRequests);
         report.blockedMutations += 1;
         pushSafeDiagnostic(report.blockedMutationRequests, diagnostic);
       }

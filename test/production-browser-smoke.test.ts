@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { Request } from "playwright-core";
 import {
   buildSafeLoginDiagnostic,
   buildSafeLoginDiagnosticWithCode,
@@ -12,10 +13,12 @@ import {
   isAllowedMutationPath,
   isSmokeLocalMutationPath,
   isMutationMethod,
+  markSmokeRequestHandled,
   safeRequestPath,
   sanitizeSmokeDiagnostic,
   shouldCountFailedRequest,
   statusClass,
+  unmarkSmokeRequestHandled,
 } from "../scripts/run-production-browser-smoke.js";
 
 const workflow = readFileSync(
@@ -95,6 +98,17 @@ describe("production browser smoke safety contract", () => {
   it("does not turn intentionally prevented mutations into smoke failures", () => {
     expect(shouldCountFailedRequest(true)).toBe(false);
     expect(shouldCountFailedRequest(false)).toBe(true);
+  });
+
+  it("does not count a locally fulfilled request as failed, but restores real failure accounting if fulfillment fails", () => {
+    const request = {} as Request;
+    const handledRequests = new WeakSet<Request>();
+
+    markSmokeRequestHandled(request, handledRequests);
+    expect(shouldCountFailedRequest(handledRequests.has(request))).toBe(false);
+
+    unmarkSmokeRequestHandled(request, handledRequests);
+    expect(shouldCountFailedRequest(handledRequests.has(request))).toBe(true);
   });
 
   it.each([
@@ -194,6 +208,8 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain("isSmokeLocalMutationPath");
     expect(script).toContain("locallyFulfilledMutationRequests");
     expect(script).toContain("route.fulfill({ status: 204 })");
+    expect(script).toContain("markSmokeRequestHandled(request, intentionallyPreventedRequests)");
+    expect(script).toContain("unmarkSmokeRequestHandled(request, intentionallyPreventedRequests)");
     expect(script).toContain("intentionallyPreventedRequests");
     expect(script).toContain('page.on("requestfailed", (request)');
     expect(script).toContain("shouldCountFailedRequest");
