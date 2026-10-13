@@ -35,6 +35,8 @@ type DomainReport = {
   httpErrorRequests: SafeHttpErrorDiagnostic[];
   preventedMutations: number;
   preventedMutationRequests: SafeMutationDiagnostic[];
+  locallyFulfilledMutations: number;
+  locallyFulfilledMutationRequests: SafeMutationDiagnostic[];
   blockedMutations: number;
   blockedMutationRequests: SafeMutationDiagnostic[];
   error: string | null;
@@ -132,6 +134,23 @@ export function isAllowedMutationPath(
       method.toUpperCase() === "POST" &&
       url.origin === canonicalOrigin &&
       (url.pathname === "/auth/login" || url.pathname === "/auth/logout")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function isSmokeLocalMutationPath(
+  rawUrl: string,
+  canonicalOrigin: string,
+  method = "POST",
+): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return (
+      method.toUpperCase() === "POST" &&
+      url.origin === canonicalOrigin &&
+      url.pathname === "/student/pilot/events"
     );
   } catch {
     return false;
@@ -357,6 +376,8 @@ async function runDomain(
     httpErrorRequests: [],
     preventedMutations: 0,
     preventedMutationRequests: [],
+    locallyFulfilledMutations: 0,
+    locallyFulfilledMutationRequests: [],
     blockedMutations: 0,
     blockedMutationRequests: [],
     error: null,
@@ -387,6 +408,17 @@ async function runDomain(
       // prove that no unexpected mutation reached the server.
       report.preventedMutations += 1;
       pushSafeDiagnostic(report.preventedMutationRequests, diagnostic);
+      if (isSmokeLocalMutationPath(request.url(), canonicalOrigin, request.method())) {
+        try {
+          await route.fulfill({ status: 204 });
+          report.locallyFulfilledMutations += 1;
+          pushSafeDiagnostic(report.locallyFulfilledMutationRequests, diagnostic);
+        } catch {
+          report.blockedMutations += 1;
+          pushSafeDiagnostic(report.blockedMutationRequests, diagnostic);
+        }
+        return;
+      }
       try {
         intentionallyPreventedRequests.add(request);
         await route.abort("blockedbyclient");

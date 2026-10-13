@@ -10,6 +10,7 @@ import {
   classifyLogoutResponse,
   consumeJsonLoginErrorBody,
   isAllowedMutationPath,
+  isSmokeLocalMutationPath,
   isMutationMethod,
   safeRequestPath,
   sanitizeSmokeDiagnostic,
@@ -56,6 +57,14 @@ describe("production browser smoke safety contract", () => {
       false,
     );
     expect(isAllowedMutationPath(`https://evil.example/auth/login`, origin)).toBe(false);
+    expect(isSmokeLocalMutationPath(`${origin}/student/pilot/events`, origin)).toBe(true);
+    expect(isSmokeLocalMutationPath(`${origin}/student/pilot/events`, origin, "PUT")).toBe(false);
+    expect(
+      isSmokeLocalMutationPath(`${origin}/student/learning-path/client-diagnostic`, origin),
+    ).toBe(false);
+    expect(isSmokeLocalMutationPath(`https://evil.example/student/pilot/events`, origin)).toBe(
+      false,
+    );
   });
 
   it("keeps HTTP and console diagnostics safe and bounded", () => {
@@ -182,6 +191,9 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('page.route("**/*"');
     expect(script).toContain('route.abort("blockedbyclient")');
     expect(script).toContain("preventedMutations");
+    expect(script).toContain("isSmokeLocalMutationPath");
+    expect(script).toContain("locallyFulfilledMutationRequests");
+    expect(script).toContain("route.fulfill({ status: 204 })");
     expect(script).toContain("intentionallyPreventedRequests");
     expect(script).toContain('page.on("requestfailed", (request)');
     expect(script).toContain("shouldCountFailedRequest");
