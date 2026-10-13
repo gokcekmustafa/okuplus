@@ -22,6 +22,27 @@ describe("versioned learning cycle manifest", () => {
     );
   });
 
+  it.each([5, 7, 9])(
+    "%i adımlı bir döngüyü, hedefleri ve yapısı geçerliyse kabul eder",
+    (stepCount) => {
+      const manifest = copyManifest(buildEducationV2P1ALearningCycleManifest());
+      const steps = manifest.steps.slice(0, stepCount).map((step, index) => ({
+        ...step,
+        order: index + 1,
+      }));
+      manifest.steps = steps;
+      manifest.completion = {
+        ...manifest.completion,
+        requiredStepKeys: steps.map((step) => step.stableKey),
+        checkpointStepKeys: steps
+          .filter((step) => step.taskKind === "CHECKPOINT")
+          .map((step) => step.stableKey),
+      };
+
+      expect(validateLearningCycleManifest(manifest)).toEqual({ valid: true, errors: [] });
+    },
+  );
+
   it("SMALL_STUDY için P0 içerik tabanlı, P1-A şablon tabanlı bağı korur", () => {
     const manifests = buildCanonicalEducationV2LearningCycleManifests();
     const p0SmallStudy = manifests[0]?.steps.find((step) => step.type === "SMALL_STUDY");
@@ -141,5 +162,20 @@ describe("versioned learning cycle manifest", () => {
     expect(result.errors.some((item) => item.code === "MANIFEST_FIELD")).toBe(true);
     expect(result.errors.some((item) => item.code === "VERSION_MISMATCH")).toBe(true);
     expect(result.errors.some((item) => item.code === "INVALID_VERSION_REFERENCE")).toBe(true);
+  });
+
+  it("her öğrenme kazanımının en az bir adıma bağlandığını doğrular", () => {
+    const manifest = copyManifest(buildEducationV2P1ALearningCycleManifest());
+    const firstOutcome = manifest.learningOutcomes[0];
+    if (!firstOutcome) throw new Error("P1-A öğrenme kazanımı eksik");
+    manifest.steps = manifest.steps.map((step) => ({
+      ...step,
+      learningOutcomeKeys: [firstOutcome],
+    }));
+
+    const result = validateLearningCycleManifest(manifest);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((item) => item.code === "UNMAPPED_LEARNING_OUTCOME")).toBe(true);
   });
 });

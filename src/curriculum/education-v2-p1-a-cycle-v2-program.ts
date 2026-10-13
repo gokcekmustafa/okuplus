@@ -8,6 +8,7 @@ import type {
   ProgramQuestion,
 } from "./education-v2-p0-program.js";
 import {
+  LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
   validateLearningCycleManifest,
   type LearningCycleManifest,
   type LearningCycleValidationError,
@@ -29,6 +30,12 @@ export const EDUCATION_V2_P1_A_CYCLE_V2_PATH_CODE =
 export const EDUCATION_V2_P1_A_CYCLE_V2_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_V2_TECHNICAL_COMPLETION_SCORE = 0.75;
 export const EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED" as const;
+
+const CYCLE_V2_LEARNING_OUTCOMES = [
+  "Konu, ana düşünce ve destekleyici ayrıntıyı birbirinden ayırır.",
+  "Neden-sonuç, karşılaştırma ve zıtlık ilişkilerini metin kanıtıyla açıklar.",
+  "Yeni metinlerde ana düşünce ile kanıt arasındaki ilişkiyi aktarır.",
+] as const;
 
 const V2_PREFIX = "edu-v2-p1-a-cycle-2";
 
@@ -790,7 +797,7 @@ export function validateP1ACycleV2Program(candidate: P1AProgram = program): stri
   if (candidate.path.code !== EDUCATION_V2_P1_A_CYCLE_V2_PATH_CODE)
     errors.push("Cycle v2 path kodu uyuşmuyor.");
   if (candidate.path.units.length !== 2) errors.push("Cycle v2 iki unit içermeli.");
-  if (pathSteps.length !== 9) errors.push("Cycle v2 dokuz adım içermeli.");
+  if (pathSteps.length === 0) errors.push("Cycle v2 en az bir öğrenme adımı içermeli.");
 
   for (const step of pathSteps) {
     if (step.contentKey)
@@ -846,6 +853,14 @@ function questionVersionIds(exercise: ProgramExercise): string[] {
   return exercise.questions.map((item) => p1ACycleV2QuestionVersionId(exercise.key, item.key));
 }
 
+function cycleV2OutcomeKeysForStep(stepKey: string, type: string): readonly string[] {
+  if (type === "ASSESSMENT") return CYCLE_V2_LEARNING_OUTCOMES;
+  if (stepKey.includes("relations") || stepKey === "structure-practice-v2") {
+    return [CYCLE_V2_LEARNING_OUTCOMES[1]];
+  }
+  return [CYCLE_V2_LEARNING_OUTCOMES[0]];
+}
+
 function buildCycleV2Manifest(): LearningCycleManifest {
   const contentVersions = program.content.map((item) => ({
     key: item.key,
@@ -869,17 +884,13 @@ function buildCycleV2Manifest(): LearningCycleManifest {
   const pathSteps = program.path.units.flatMap((unit) => unit.steps);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
     cycleId: EDUCATION_V2_P1_A_CYCLE_V2_PATH_CODE,
     cycleVersion: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
     sequence: EDUCATION_V2_P1_A_CYCLE_V2_SEQUENCE,
     routeFamily: "A",
     targetSkillCodes: ["RC_MAIN_IDEA", "RC_DETAIL", "RC_INFERENCE"],
-    learningOutcomes: [
-      "Konu, ana düşünce ve destekleyici ayrıntıyı birbirinden ayırır.",
-      "Neden-sonuç, karşılaştırma ve zıtlık ilişkilerini metin kanıtıyla açıklar.",
-      "Yeni metinlerde ana düşünce ile kanıt arasındaki ilişkiyi aktarır.",
-    ],
+    learningOutcomes: [...CYCLE_V2_LEARNING_OUTCOMES],
     resourceCatalog: {
       contentKeys: program.content.map((item) => item.key),
       exerciseKeys: program.exercises.map((item) => item.key),
@@ -907,6 +918,7 @@ function buildCycleV2Manifest(): LearningCycleManifest {
         stableKey: step.key,
         order: index + 1,
         type: step.type,
+        learningOutcomeKeys: cycleV2OutcomeKeysForStep(step.key, step.type),
         taskKind:
           step.type === "REINFORCEMENT"
             ? "RETRIEVAL"

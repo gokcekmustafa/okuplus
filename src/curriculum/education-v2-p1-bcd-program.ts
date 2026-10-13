@@ -1168,7 +1168,7 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
     if (key) usage.set(key, (usage.get(key) ?? 0) + 1);
   };
   if (program.path.units.length !== 1) errors.push("tek pedagojik unit gerekli");
-  if (steps.length !== 5) errors.push("beş adımlı minimum route akışı gerekli");
+  if (steps.length === 0) errors.push("route en az bir öğrenme adımı içermeli");
   for (const [index, step] of steps.entries()) {
     if (step.type === "TEACHING" && !step.contentKey)
       errors.push(`teach içeriği eksik: ${step.key}`);

@@ -833,7 +833,7 @@ export function validateP1AProgram(program: P1AProgram = EDUCATION_V2_P1_A_PROGR
     errors.push("P1-A path kodu canonical değil");
   }
   if (program.path.units.length !== 2) errors.push("P1-A iki pedagojik unit içermeli");
-  if (pathSteps.length !== 9) errors.push("P1-A dokuz adımlı akış içermeli");
+  if (pathSteps.length === 0) errors.push("P1-A en az bir öğrenme adımı içermeli");
   for (const [index, unit] of program.path.units.entries()) {
     if (unit.position !== index + 1) errors.push(`Unit sırası geçersiz: ${unit.code}`);
     if (unit.steps.length === 0) errors.push(`Boş unit: ${unit.code}`);

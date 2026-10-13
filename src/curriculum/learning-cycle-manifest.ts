@@ -36,7 +36,7 @@ import {
  * or published in any environment. Production availability is still checked
  * by the existing graph/provisioning validators.
  */
-export const LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION = 2 as const;
 
 export const LEARNING_CYCLE_TASK_KINDS = ["NEW", "RETRIEVAL", "TRANSFER", "CHECKPOINT"] as const;
 export type LearningCycleTaskKind = (typeof LEARNING_CYCLE_TASK_KINDS)[number];
@@ -85,6 +85,8 @@ export type LearningCycleStepManifest = {
   order: number;
   type: LearningCycleStepType;
   taskKind: LearningCycleTaskKind;
+  /** Exact stable key from manifest.learningOutcomes. */
+  learningOutcomeKeys: readonly string[];
   prerequisiteKeys: readonly string[];
   required: boolean;
   content?: LearningCycleVersionedReference;
@@ -125,7 +127,10 @@ export type LearningCycleValidationError = {
     | "VERSION_MISMATCH"
     | "SOURCE_CATALOG_INVALID"
     | "INVALID_COMPLETION_REFERENCE"
-    | "MISSING_FINAL_MEASUREMENT";
+    | "MISSING_FINAL_MEASUREMENT"
+    | "MISSING_LEARNING_OUTCOME"
+    | "UNKNOWN_LEARNING_OUTCOME"
+    | "UNMAPPED_LEARNING_OUTCOME";
   path: string;
   message: string;
 };
@@ -394,6 +399,9 @@ export function validateLearningCycleManifest(
     }
     outcomes.add(outcome);
   }
+  if (manifest.steps.length === 0) {
+    errors.push(error("MANIFEST_FIELD", "steps", "En az bir öğrenme adımı gerekir."));
+  }
 
   const contentKeys = new Set(manifest.resourceCatalog.contentKeys);
   const exerciseKeys = new Set(manifest.resourceCatalog.exerciseKeys);
@@ -483,6 +491,7 @@ export function validateLearningCycleManifest(
     manifest.resourceCatalog.assessmentVersions.map((entry) => [entry.key, entry]),
   );
   const stepByKey = new Map<string, LearningCycleStepManifest>();
+  const mappedOutcomes = new Set<string>();
 
   for (const [index, step] of manifest.steps.entries()) {
     const path = `steps[${index}].stableKey`;
@@ -515,6 +524,34 @@ export function validateLearningCycleManifest(
     }
     if (step.required !== true && step.required !== false) {
       errors.push(error("MANIFEST_FIELD", `${path}.required`, "required boolean olmalıdır."));
+    }
+    const learningOutcomeKeys = step.learningOutcomeKeys ?? [];
+    if (learningOutcomeKeys.length === 0) {
+      errors.push(
+        error(
+          "MISSING_LEARNING_OUTCOME",
+          `${path}.learningOutcomeKeys`,
+          "Her adım en az bir öğrenme kazanımına bağlanmalıdır.",
+        ),
+      );
+    }
+    const stepOutcomeKeys = new Set<string>();
+    for (const [outcomeIndex, outcomeKey] of learningOutcomeKeys.entries()) {
+      const outcomePath = `${path}.learningOutcomeKeys[${outcomeIndex}]`;
+      if (!isNonEmpty(outcomeKey)) {
+        errors.push(
+          error("UNKNOWN_LEARNING_OUTCOME", outcomePath, "Öğrenme kazanımı anahtarı boş olamaz."),
+        );
+      } else if (stepOutcomeKeys.has(outcomeKey)) {
+        errors.push(error("UNKNOWN_LEARNING_OUTCOME", outcomePath, "Öğrenme kazanımı tekrarlı."));
+      } else if (!outcomes.has(outcomeKey)) {
+        errors.push(
+          error("UNKNOWN_LEARNING_OUTCOME", outcomePath, "Manifestte bulunmayan öğrenme kazanımı."),
+        );
+      } else {
+        mappedOutcomes.add(outcomeKey);
+      }
+      stepOutcomeKeys.add(outcomeKey);
     }
     const prerequisites = new Set<string>();
     for (const [prerequisiteIndex, prerequisiteKey] of step.prerequisiteKeys.entries()) {
@@ -636,6 +673,18 @@ export function validateLearningCycleManifest(
           );
         }
         break;
+    }
+  }
+
+  for (const [index, outcome] of manifest.learningOutcomes.entries()) {
+    if (!isNonEmpty(outcome) || !mappedOutcomes.has(outcome)) {
+      errors.push(
+        error(
+          "UNMAPPED_LEARNING_OUTCOME",
+          `learningOutcomes[${index}]`,
+          "Öğrenme kazanımı hiçbir adıma bağlanmamış.",
+        ),
+      );
     }
   }
 
@@ -797,6 +846,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
         order: steps.length + 1,
         type: stage.stage,
         taskKind: mapTaskKind(stage.stage),
+        learningOutcomeKeys: [lesson.objective],
         prerequisiteKeys: previousKey ? [previousKey] : [],
         required: true,
         ...(stage.stage === "PRACTICE"
@@ -834,6 +884,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
     order: steps.length + 1,
     type: "REINFORCEMENT",
     taskKind: "RETRIEVAL",
+    learningOutcomeKeys: ACADEMIC_P0_LESSONS.map((lesson) => lesson.objective),
     prerequisiteKeys: practiceKeys,
     required: true,
     exercise: p0ExerciseReference(reinforcementExercise, false),
@@ -843,6 +894,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
     order: steps.length + 1,
     type: "ASSESSMENT",
     taskKind: "CHECKPOINT",
+    learningOutcomeKeys: ACADEMIC_P0_LESSONS.map((lesson) => lesson.objective),
     prerequisiteKeys: ["COMMON_REINFORCEMENT"],
     required: true,
     assessment: {
@@ -858,6 +910,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
     order: steps.length + 1,
     type: "MEASUREMENT",
     taskKind: "CHECKPOINT",
+    learningOutcomeKeys: ACADEMIC_P0_LESSONS.map((lesson) => lesson.objective),
     prerequisiteKeys: ["COMMON_ASSESSMENT"],
     required: true,
   });
@@ -866,6 +919,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
     order: steps.length + 1,
     type: "NEXT_LEARNING",
     taskKind: "CHECKPOINT",
+    learningOutcomeKeys: ACADEMIC_P0_LESSONS.map((lesson) => lesson.objective),
     prerequisiteKeys: ["COMMON_MEASUREMENT"],
     required: false,
   });
@@ -904,7 +958,17 @@ function outcomesFromContent(content: readonly { lesson?: { objective: string } 
   return [...new Set(content.flatMap((item) => (item.lesson ? [item.lesson.objective] : [])))];
 }
 
-function p1AStepManifest(): LearningCycleStepManifest[] {
+function p1AOutcomeKeysForStep(
+  step: { key: string; type: string },
+  outcomes: readonly string[],
+): readonly string[] {
+  if (outcomes.length === 0) return [];
+  if (step.type === "ASSESSMENT") return outcomes;
+  const structureStep = step.key.startsWith("structure-") || step.key === "evidence-practice";
+  return [structureStep ? outcomes[0]! : outcomes[outcomes.length - 1]!];
+}
+
+function p1AStepManifest(outcomes: readonly string[]): LearningCycleStepManifest[] {
   const steps = EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps);
   return steps.map((step, index) => {
     const exercise = step.exerciseKey
@@ -920,6 +984,7 @@ function p1AStepManifest(): LearningCycleStepManifest[] {
       order: index + 1,
       type: step.type,
       taskKind: mapTaskKind(step.type),
+      learningOutcomeKeys: p1AOutcomeKeysForStep(step, outcomes),
       prerequisiteKeys: step.prerequisiteStepKeys ?? [],
       required: true,
       ...(step.contentKey
@@ -954,7 +1019,8 @@ function p1AStepManifest(): LearningCycleStepManifest[] {
 export function buildEducationV2P1ALearningCycleManifest(): LearningCycleManifest {
   const sourceErrors = validateP1AProgram();
   if (sourceErrors.length > 0) throw new Error(sourceErrors.join("; "));
-  const steps = p1AStepManifest();
+  const learningOutcomes = outcomesFromContent(EDUCATION_V2_P1_A_PROGRAM.content);
+  const steps = p1AStepManifest(learningOutcomes);
   return {
     schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
     cycleId: EDUCATION_V2_P1_A_PROGRAM.path.code,
@@ -962,7 +1028,7 @@ export function buildEducationV2P1ALearningCycleManifest(): LearningCycleManifes
     sequence: 1,
     routeFamily: "A",
     targetSkillCodes: [...new Set(EDUCATION_V2_P1_A_PROGRAM.content.map((item) => item.skillCode))],
-    learningOutcomes: outcomesFromContent(EDUCATION_V2_P1_A_PROGRAM.content),
+    learningOutcomes,
     resourceCatalog: {
       contentKeys: EDUCATION_V2_P1_A_PROGRAM.content.map((item) => item.key),
       exerciseKeys: EDUCATION_V2_P1_A_PROGRAM.exercises.map((item) => item.key),
@@ -999,7 +1065,10 @@ export function buildEducationV2P1ALearningCycleManifest(): LearningCycleManifes
   };
 }
 
-function p1BCDStepManifest(program: P1BCDProgram): LearningCycleStepManifest[] {
+function p1BCDStepManifest(
+  program: P1BCDProgram,
+  learningOutcomes: readonly string[],
+): LearningCycleStepManifest[] {
   const steps = program.path.units.flatMap((unit) => unit.steps);
   return steps.map((step, index) => {
     const exercise = step.exerciseKey
@@ -1013,6 +1082,7 @@ function p1BCDStepManifest(program: P1BCDProgram): LearningCycleStepManifest[] {
       order: index + 1,
       type: step.type,
       taskKind: mapTaskKind(step.type),
+      learningOutcomeKeys: learningOutcomes,
       prerequisiteKeys: step.prerequisiteStepKeys ?? [],
       required: true,
       ...(step.contentKey
@@ -1057,7 +1127,8 @@ export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleMani
   return EDUCATION_V2_P1_BCD_PROGRAMS.map((program) => {
     const sourceErrors = validateP1BCDProgram(program);
     if (sourceErrors.length > 0) throw new Error(sourceErrors.join("; "));
-    const steps = p1BCDStepManifest(program);
+    const learningOutcomes = outcomesFromContent(program.content);
+    const steps = p1BCDStepManifest(program, learningOutcomes);
     return {
       schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
       cycleId: program.path.code,
@@ -1065,7 +1136,7 @@ export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleMani
       sequence: 1,
       routeFamily: program.routeFamily,
       targetSkillCodes: [...new Set(program.content.map((item) => item.skillCode))],
-      learningOutcomes: outcomesFromContent(program.content),
+      learningOutcomes,
       resourceCatalog: {
         contentKeys: program.content.map((item) => item.key),
         exerciseKeys: program.exercises.map((item) => item.key),
