@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   buildSafeLoginDiagnostic,
+  buildSafeLoginDiagnosticWithCode,
+  classifyLoginFailureReason,
   classifyLoginHttpStatus,
   consumeJsonLoginErrorBody,
 } from "../scripts/run-production-browser-smoke.js";
@@ -29,22 +31,38 @@ describe("production browser smoke safety contract", () => {
     expect(buildSafeLoginDiagnostic(status)).toEqual({
       loginHttpStatus: status,
       loginErrorCategory: category,
+      loginFailureReason:
+        status === 401 ? "AUTH_REJECTED" : status === 403 ? "FORBIDDEN" : category,
+    });
+  });
+
+  it("maps only known API error codes to fixed failure reasons", () => {
+    expect(classifyLoginFailureReason(403, "FORBIDDEN")).toBe("FORBIDDEN");
+    expect(classifyLoginFailureReason(403, "UNAUTHORIZED")).toBe("AUTH_REJECTED");
+    expect(classifyLoginFailureReason(403)).toBe("FORBIDDEN");
+    expect(buildSafeLoginDiagnosticWithCode(403, "FORBIDDEN")).toEqual({
+      loginHttpStatus: 403,
+      loginErrorCategory: "AUTH_REJECTED",
+      loginFailureReason: "FORBIDDEN",
     });
   });
 
   it("consumes JSON error bodies without exposing their fields", async () => {
     let jsonCalls = 0;
-    await consumeJsonLoginErrorBody({
-      headers: () => ({ "content-type": "application/json; charset=utf-8" }),
-      json: async () => {
-        jsonCalls += 1;
-        return {
-          email: "student@example.com",
-          token: "secret-token",
-          password: "secret-password",
-        };
-      },
-    });
+    await expect(
+      consumeJsonLoginErrorBody({
+        headers: () => ({ "content-type": "application/json; charset=utf-8" }),
+        json: async () => {
+          jsonCalls += 1;
+          return {
+            error: { code: "FORBIDDEN", message: "do not report this" },
+            email: "student@example.com",
+            token: "secret-token",
+            password: "secret-password",
+          };
+        },
+      }),
+    ).resolves.toBe("FORBIDDEN");
     expect(jsonCalls).toBe(1);
 
     let textJsonCalls = 0;
@@ -61,6 +79,15 @@ describe("production browser smoke safety contract", () => {
     expect(report).not.toContain("student@example.com");
     expect(report).not.toContain("secret-token");
     expect(report).not.toContain("secret-password");
+
+    const unknownCode = await consumeJsonLoginErrorBody({
+      headers: () => ({ "content-type": "application/json" }),
+      json: async () => ({ error: { code: "ORIGIN_REJECTED", email: "student@example.com" } }),
+    });
+    expect(unknownCode).toBeNull();
+    expect(JSON.stringify(buildSafeLoginDiagnosticWithCode(403, unknownCode))).not.toContain(
+      "ORIGIN_REJECTED",
+    );
   });
 
   it("is manually triggered and protected by production-smoke", () => {
@@ -85,6 +112,7 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain('"/student/history?page=1&pageSize=5"');
     expect(script).toContain("loginHttpStatus");
     expect(script).toContain("loginErrorCategory");
+    expect(script).toContain("loginFailureReason");
     expect(script).toContain("consumeJsonLoginErrorBody");
     expect(script).toContain('productionStateChanged: "NO"');
     expect(script).toContain("pageErrorMessages");

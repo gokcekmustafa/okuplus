@@ -18,6 +18,7 @@ type DomainReport = {
   login: "PASS" | "FAIL";
   loginHttpStatus: number | null;
   loginErrorCategory: LoginErrorCategory | null;
+  loginFailureReason: LoginFailureReason | null;
   authMe: "PASS" | "FAIL";
   dashboard: "PASS" | "FAIL";
   readPaths: "PASS" | "FAIL";
@@ -46,6 +47,25 @@ export type LoginErrorCategory =
   | "UNEXPECTED_STATUS"
   | "UNKNOWN";
 
+export type LoginFailureReason =
+  | "AUTH_REJECTED"
+  | "FORBIDDEN"
+  | "BAD_REQUEST"
+  | "RATE_LIMITED"
+  | "SERVER_ERROR"
+  | "UNEXPECTED_STATUS"
+  | "UNKNOWN";
+
+export type SafeLoginErrorCode =
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "VALIDATION_ERROR"
+  | "RATE_LIMITED"
+  | "SERVICE_UNAVAILABLE"
+  | "INTERNAL_ERROR"
+  | "REQUEST_ERROR"
+  | "PAYLOAD_TOO_LARGE";
+
 export function classifyLoginHttpStatus(status: number): LoginErrorCategory {
   if (status === 401 || status === 403) return "AUTH_REJECTED";
   if (status === 400) return "BAD_REQUEST";
@@ -57,10 +77,77 @@ export function classifyLoginHttpStatus(status: number): LoginErrorCategory {
 export function buildSafeLoginDiagnostic(status: number): {
   loginHttpStatus: number;
   loginErrorCategory: LoginErrorCategory;
+  loginFailureReason: LoginFailureReason;
 } {
   return {
     loginHttpStatus: status,
     loginErrorCategory: classifyLoginHttpStatus(status),
+    loginFailureReason: classifyLoginFailureReason(status),
+  };
+}
+
+export function classifyLoginFailureReason(
+  status: number,
+  safeErrorCode?: SafeLoginErrorCode | null,
+): LoginFailureReason {
+  switch (safeErrorCode) {
+    case "UNAUTHORIZED":
+      return "AUTH_REJECTED";
+    case "FORBIDDEN":
+      return "FORBIDDEN";
+    case "VALIDATION_ERROR":
+    case "REQUEST_ERROR":
+    case "PAYLOAD_TOO_LARGE":
+      return "BAD_REQUEST";
+    case "RATE_LIMITED":
+      return "RATE_LIMITED";
+    case "SERVICE_UNAVAILABLE":
+    case "INTERNAL_ERROR":
+      return "SERVER_ERROR";
+  }
+
+  if (status === 401) return "AUTH_REJECTED";
+  if (status === 403) return "FORBIDDEN";
+  if (status === 400) return "BAD_REQUEST";
+  if (status === 429) return "RATE_LIMITED";
+  if (status >= 500 && status <= 599) return "SERVER_ERROR";
+  if (status > 0) return "UNEXPECTED_STATUS";
+  return "UNKNOWN";
+}
+
+function isSafeLoginErrorCode(value: unknown): value is SafeLoginErrorCode {
+  return (
+    value === "UNAUTHORIZED" ||
+    value === "FORBIDDEN" ||
+    value === "VALIDATION_ERROR" ||
+    value === "RATE_LIMITED" ||
+    value === "SERVICE_UNAVAILABLE" ||
+    value === "INTERNAL_ERROR" ||
+    value === "REQUEST_ERROR" ||
+    value === "PAYLOAD_TOO_LARGE"
+  );
+}
+
+function readSafeLoginErrorCode(payload: unknown): SafeLoginErrorCode | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+  const error = (payload as { error?: unknown }).error;
+  if (typeof error !== "object" || error === null || Array.isArray(error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return isSafeLoginErrorCode(code) ? code : null;
+}
+
+export function buildSafeLoginDiagnosticWithCode(
+  status: number,
+  safeErrorCode?: SafeLoginErrorCode | null,
+): {
+  loginHttpStatus: number;
+  loginErrorCategory: LoginErrorCategory;
+  loginFailureReason: LoginFailureReason;
+} {
+  return {
+    loginHttpStatus: status,
+    loginErrorCategory: classifyLoginHttpStatus(status),
+    loginFailureReason: classifyLoginFailureReason(status, safeErrorCode),
   };
 }
 
@@ -70,16 +157,19 @@ type JsonResponseLike = {
 };
 
 /** Consume JSON errors without copying their body into logs or reports. */
-export async function consumeJsonLoginErrorBody(response: JsonResponseLike): Promise<void> {
+export async function consumeJsonLoginErrorBody(
+  response: JsonResponseLike,
+): Promise<SafeLoginErrorCode | null> {
   const contentType = Object.entries(response.headers()).find(
     ([name]) => name.toLowerCase() === "content-type",
   )?.[1];
   const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  if (mediaType !== "application/json" && !mediaType.endsWith("+json")) return;
+  if (mediaType !== "application/json" && !mediaType.endsWith("+json")) return null;
   try {
-    await response.json();
+    return readSafeLoginErrorCode(await response.json());
   } catch {
     /* Malformed error bodies are intentionally treated as unavailable. */
+    return null;
   }
 }
 
@@ -126,6 +216,7 @@ async function runDomain(
     login: "FAIL",
     loginHttpStatus: null,
     loginErrorCategory: null,
+    loginFailureReason: null,
     authMe: "FAIL",
     dashboard: "FAIL",
     readPaths: "FAIL",
@@ -201,8 +292,8 @@ async function runDomain(
     const loginResponseResult = await loginResponse;
     const loginStatus = loginResponseResult.status();
     if (loginStatus !== 200) {
-      Object.assign(report, buildSafeLoginDiagnostic(loginStatus));
-      await consumeJsonLoginErrorBody(loginResponseResult);
+      const safeErrorCode = await consumeJsonLoginErrorBody(loginResponseResult);
+      Object.assign(report, buildSafeLoginDiagnosticWithCode(loginStatus, safeErrorCode));
       throw new Error("Production login failed");
     }
     report.loginHttpStatus = loginStatus;
@@ -250,6 +341,9 @@ async function runDomain(
   } catch (error) {
     if (report.login === "FAIL" && report.loginErrorCategory === null) {
       report.loginErrorCategory = "UNKNOWN";
+    }
+    if (report.login === "FAIL" && report.loginFailureReason === null) {
+      report.loginFailureReason = "UNKNOWN";
     }
     report.error = errorMessage(error);
   } finally {
