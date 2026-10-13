@@ -2,7 +2,7 @@ import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import type { CreateTeacherAssignmentInput, ListAssignmentsQuery } from "./schemas.js";
-import { getAssignment } from "./service.js";
+import { getAssignment, selectAssignmentTemplateVersion } from "./service.js";
 
 export interface TeacherAssignmentActor {
   userId: string;
@@ -287,6 +287,8 @@ export async function createTeacherAssignment(
     });
     if (!templateVersion) throw validationError("Şablonun yayınlanmış sürümü bulunamadı");
 
+    let assignmentTemplateVersionId = templateVersion.id;
+
     if (input.learningStepId) {
       const step = await tx.learningStep.findFirst({
         where: {
@@ -296,18 +298,18 @@ export async function createTeacherAssignment(
           isActive: true,
           unit: { path: { status: "PUBLISHED", deletedAt: null } },
         },
-        select: { id: true, exerciseTemplateVersionId: true },
+        select: {
+          id: true,
+          exerciseTemplateVersionId: true,
+          exerciseTemplateVersion: { select: { id: true, templateId: true, status: true } },
+        },
       });
       if (!step) throw validationError("Öğrenme adımı bu kurum için kullanılabilir değil");
-      if (step.exerciseTemplateVersionId) {
-        const version = await tx.exerciseTemplateVersion.findUnique({
-          where: { id: step.exerciseTemplateVersionId },
-          select: { templateId: true },
-        });
-        if (version?.templateId !== input.templateId) {
-          throw validationError("Ödev şablonu öğrenme adımıyla eşleşmiyor");
-        }
-      }
+      assignmentTemplateVersionId = selectAssignmentTemplateVersion({
+        templateId: input.templateId,
+        latestPublishedVersionId: templateVersion.id,
+        boundVersion: step.exerciseTemplateVersionId ? step.exerciseTemplateVersion : undefined,
+      });
     }
 
     const assignment = await tx.assignment.create({
@@ -315,7 +317,7 @@ export async function createTeacherAssignment(
         tenantId: cls.tenantId,
         classId: cls.id,
         templateId: input.templateId,
-        templateVersionId: templateVersion.id,
+        templateVersionId: assignmentTemplateVersionId,
         learningStepId: input.learningStepId ?? null,
         teacherId: actor.userId,
         title: input.title,

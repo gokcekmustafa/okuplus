@@ -15,7 +15,10 @@ import {
   listStudentRecommendations,
   persistStudentRecommendations,
 } from "./recommendation-service.js";
-import { refreshAssignmentRecommendationsSchema } from "./schemas.js";
+import {
+  listStudentAssignmentsQuerySchema,
+  refreshAssignmentRecommendationsSchema,
+} from "./schemas.js";
 
 function readParamId(request: FastifyRequest, label: string, key = "id"): string {
   const id = (request.params as Record<string, string | undefined>)[key];
@@ -106,12 +109,8 @@ export async function assignmentStudentRoutes(
       tenantId: request.tenantContext?.tenantId ?? null,
       platformRole: request.authUser!.platformRole ?? null,
     };
-    const query = (request.query as Record<string, string>) ?? {};
-    const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? "20", 10) || 20));
-    const search = query.search ?? undefined;
-    const status = query.status ?? undefined;
-    return ok(await listStudentAssignments(actor, { page, pageSize, search, status }));
+    const query = listStudentAssignmentsQuerySchema.parse(request.query);
+    return ok(await listStudentAssignments(actor, query));
   });
 
   app.get("/student/assignments/:id", { preHandler: requireStudentAuth }, async (request) => {
