@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildSafeLoginDiagnostic,
   buildSafeLoginDiagnosticWithCode,
+  classifyBrowserLaunchFailure,
   classifyLoginFailureReason,
   classifyLoginHttpStatus,
+  classifyLogoutResponse,
   consumeJsonLoginErrorBody,
 } from "../scripts/run-production-browser-smoke.js";
 
@@ -16,8 +18,25 @@ const script = readFileSync(
   new URL("../scripts/run-production-browser-smoke.ts", import.meta.url),
   "utf8",
 );
+const indexHtml = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
 describe("production browser smoke safety contract", () => {
+  it("classifies browser launch failures without exposing runner details", () => {
+    expect(
+      classifyBrowserLaunchFailure(new Error("browserType.launch: Timeout 30000ms exceeded")),
+    ).toBe("LAUNCH_TIMEOUT");
+    expect(
+      classifyBrowserLaunchFailure(new Error("executable doesn't exist at /runner/secret")),
+    ).toBe("EXECUTABLE_NOT_FOUND");
+    expect(classifyBrowserLaunchFailure(new Error("browser process exited"))).toBe("LAUNCH_FAILED");
+  });
+
+  it("classifies missing and unexpected logout responses without inventing a status", () => {
+    expect(classifyLogoutResponse(null)).toBe("RESPONSE_TIMEOUT");
+    expect(classifyLogoutResponse(401)).toBe("UNEXPECTED_STATUS");
+    expect(classifyLogoutResponse(200)).toBe("SUCCESS");
+  });
+
   it.each([
     [401, "AUTH_REJECTED"],
     [403, "AUTH_REJECTED"],
@@ -99,6 +118,9 @@ describe("production browser smoke safety contract", () => {
     expect(workflow).toContain(
       "PRODUCTION_SMOKE_PASSWORD: ${{ secrets.PRODUCTION_SMOKE_PASSWORD }}",
     );
+    expect(workflow).toContain("command -v google-chrome");
+    expect(workflow).toContain("Verify headless browser launch");
+    expect(workflow).toContain("--disable-dev-shm-usage");
   });
 
   it("allows only login/logout writes and canonical production hosts", () => {
@@ -113,6 +135,14 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain("loginHttpStatus");
     expect(script).toContain("loginErrorCategory");
     expect(script).toContain("loginFailureReason");
+    expect(script).toContain("browserLaunchFailureReason");
+    expect(script).toContain("logoutHttpStatus");
+    expect(script).toContain("logoutFailureReason");
+    expect(script).toContain('[data-user-menu-action="logout"]');
+    expect(script).toContain('page.locator("#user-menu-toggle")');
+    expect(script).not.toContain('page.click("#logout-btn")');
+    expect(indexHtml).toContain('data-user-menu-action="logout"');
+    expect(indexHtml).not.toContain('id="logout-btn"');
     expect(script).toContain("consumeJsonLoginErrorBody");
     expect(script).toContain('productionStateChanged: "NO"');
     expect(script).toContain("pageErrorMessages");

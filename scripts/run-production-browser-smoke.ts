@@ -24,6 +24,8 @@ type DomainReport = {
   readPaths: "PASS" | "FAIL";
   navigation: "PASS" | "FAIL";
   logout: "PASS" | "FAIL";
+  logoutHttpStatus: number | null;
+  logoutFailureReason: LogoutFailureReason | null;
   consoleErrors: number;
   pageErrors: number;
   pageErrorMessages: string[];
@@ -35,6 +37,8 @@ type DomainReport = {
 
 type SmokeReport = {
   status: "PASS" | "FAIL";
+  browserLaunch: "PASS" | "FAIL";
+  browserLaunchFailureReason: BrowserLaunchFailureReason | null;
   domains: DomainReport[];
   productionStateChanged: "NO";
 };
@@ -46,6 +50,19 @@ export type LoginErrorCategory =
   | "SERVER_ERROR"
   | "UNEXPECTED_STATUS"
   | "UNKNOWN";
+
+export type LogoutFailureReason =
+  "BUTTON_UNAVAILABLE" | "RESPONSE_TIMEOUT" | "RESPONSE_UNAVAILABLE" | "UNEXPECTED_STATUS";
+
+export type BrowserLaunchFailureReason =
+  "EXECUTABLE_NOT_FOUND" | "LAUNCH_TIMEOUT" | "LAUNCH_FAILED";
+
+export function classifyBrowserLaunchFailure(error: unknown): BrowserLaunchFailureReason {
+  const message = error instanceof Error ? error.message : "";
+  if (/executable|enoent|not found/iu.test(message)) return "EXECUTABLE_NOT_FOUND";
+  if (/timeout|timed out/iu.test(message)) return "LAUNCH_TIMEOUT";
+  return "LAUNCH_FAILED";
+}
 
 export type LoginFailureReason =
   | "AUTH_REJECTED"
@@ -65,6 +82,18 @@ export type SafeLoginErrorCode =
   | "INTERNAL_ERROR"
   | "REQUEST_ERROR"
   | "PAYLOAD_TOO_LARGE";
+
+export function classifyLogoutResponse(
+  status: number | null,
+): "SUCCESS" | "RESPONSE_TIMEOUT" | "UNEXPECTED_STATUS" {
+  if (status === 200) return "SUCCESS";
+  if (status === null) return "RESPONSE_TIMEOUT";
+  return "UNEXPECTED_STATUS";
+}
+
+function isPlaywrightResponseTimeout(error: unknown): boolean {
+  return error instanceof Error && /waiting for event ["']response["']/iu.test(error.message);
+}
 
 export function classifyLoginHttpStatus(status: number): LoginErrorCategory {
   if (status === 401 || status === 403) return "AUTH_REJECTED";
@@ -222,6 +251,8 @@ async function runDomain(
     readPaths: "FAIL",
     navigation: "FAIL",
     logout: "FAIL",
+    logoutHttpStatus: null,
+    logoutFailureReason: null,
     consoleErrors: 0,
     pageErrors: 0,
     pageErrorMessages: [],
@@ -319,15 +350,55 @@ async function runDomain(
     });
     report.navigation = "PASS";
 
-    const logoutResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/auth/logout" &&
-        response.request().method() === "POST",
-      { timeout: REQUEST_TIMEOUT_MS },
-    );
-    await page.click("#logout-btn");
-    if ((await (await logoutResponse).status()) !== 200)
-      throw new Error("Production logout failed");
+    const userMenuToggle = page.locator("#user-menu-toggle");
+    const logoutButton = page.locator('[data-user-menu-action="logout"]');
+    try {
+      await userMenuToggle.click();
+      await logoutButton.waitFor({ state: "visible", timeout: REQUEST_TIMEOUT_MS });
+    } catch {
+      report.logoutFailureReason = "BUTTON_UNAVAILABLE";
+      report.error = "Production logout button unavailable";
+      return report;
+    }
+
+    const logoutResponse = page
+      .waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/auth/logout" &&
+          response.request().method() === "POST",
+        { timeout: REQUEST_TIMEOUT_MS },
+      )
+      .then((response) => ({ response, failureReason: null as LogoutFailureReason | null }))
+      .catch((error: unknown) => ({
+        response: null,
+        failureReason: isPlaywrightResponseTimeout(error)
+          ? ("RESPONSE_TIMEOUT" as const)
+          : ("RESPONSE_UNAVAILABLE" as const),
+      }));
+
+    try {
+      await logoutButton.click();
+    } catch {
+      // Always consume the response promise so a failed click cannot leave an
+      // unhandled timeout that obscures the actual smoke failure.
+      await logoutResponse;
+      report.logoutFailureReason = "BUTTON_UNAVAILABLE";
+      report.error = "Production logout button unavailable";
+      return report;
+    }
+
+    const logoutResponseResult = await logoutResponse;
+    if (!logoutResponseResult.response) {
+      report.logoutFailureReason = logoutResponseResult.failureReason;
+      report.error = "Production logout response unavailable";
+      return report;
+    }
+    report.logoutHttpStatus = logoutResponseResult.response.status();
+    if (classifyLogoutResponse(report.logoutHttpStatus) !== "SUCCESS") {
+      report.logoutFailureReason = "UNEXPECTED_STATUS";
+      report.error = "Production logout failed";
+      return report;
+    }
     await page.waitForSelector("#view-login:not(.hidden)", {
       state: "visible",
       timeout: REQUEST_TIMEOUT_MS,
@@ -354,11 +425,31 @@ async function runDomain(
 
 async function main(): Promise<void> {
   const credentials = requireCredentials();
-  const browser = await chromium.launch({
-    executablePath: process.env.CHROME_PATH ?? "/usr/bin/chromium",
-    headless: true,
-    timeout: REQUEST_TIMEOUT_MS,
-  });
+  let browser: Browser;
+  try {
+    browser = await chromium.launch({
+      executablePath: process.env.CHROME_PATH ?? "/usr/bin/chromium",
+      headless: true,
+      timeout: REQUEST_TIMEOUT_MS,
+    });
+  } catch (error) {
+    const browserLaunchFailureReason = classifyBrowserLaunchFailure(error);
+    console.log(
+      JSON.stringify(
+        {
+          status: "FAIL",
+          browserLaunch: "FAIL",
+          browserLaunchFailureReason,
+          domains: [],
+          productionStateChanged: "NO",
+        },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 1;
+    return;
+  }
   let domains: DomainReport[] = [];
   try {
     domains = await Promise.all(
@@ -384,6 +475,8 @@ async function main(): Promise<void> {
     )
       ? "PASS"
       : "FAIL",
+    browserLaunch: "PASS",
+    browserLaunchFailureReason: null,
     domains,
     productionStateChanged: "NO",
   };
@@ -401,7 +494,11 @@ if (isMainModule()) {
   } catch (error) {
     console.log(
       JSON.stringify(
-        { status: "FAIL", error: errorMessage(error), productionStateChanged: "NO" },
+        {
+          status: "FAIL",
+          error: errorMessage(error),
+          productionStateChanged: "NO",
+        },
         null,
         2,
       ),

@@ -36,13 +36,25 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
 
-      - name: Locate Chromium
+      - name: Locate supported Chrome
         shell: bash
         run: |
           set -euo pipefail
-          browser="$(command -v chromium || command -v google-chrome || command -v chromium-browser || true)"
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
           test -n "$browser"
+          "$browser" --version
           printf 'CHROME_PATH=%s\n' "$browser" >> "$GITHUB_ENV"
+
+      - name: Verify headless browser launch
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 15s "$CHROME_PATH" \
+            --headless \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --dump-dom about:blank >/dev/null
 
       - name: Run read-only production browser smoke
         shell: bash
