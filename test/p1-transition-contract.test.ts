@@ -95,6 +95,9 @@ describe("P1 transition foundation contracts", () => {
     expect(transition).toContain('"NEXT_CYCLE_UNAVAILABLE"');
     expect(transition).toContain('enrollment.routeStatus !== "ACTIVE"');
     expect(transition).toContain('status: "PUBLISHED"');
+    expect(transition).toContain("hasExpectedP1CycleGraph");
+    expect(transition).toContain("stableKey");
+    expect(transition).toContain("prerequisiteStepId");
     expect(transition).toContain("studentLearningPath.upsert");
     expect(transition).toContain('outcome: "ALREADY_ASSIGNED"');
     expect(cycleV2).toContain('EDUCATION_V2_P1_A_CYCLE_V2_STATUS = "EXPERT_REVIEW_REQUIRED"');
@@ -118,6 +121,9 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain("learningPathEntryMode = true");
     expect(app).toContain('result?.outcome === "REVIEW_REQUIRED"');
     expect(app).toContain("pendingP1Reconcile");
+    expect(app).toContain("pendingP1CycleReconcile");
+    expect(app).toContain("retryPendingP1CycleReconcile");
+    expect(app).toContain("retryPendingLearningPathReconcile");
     expect(index).toContain('id="learning-path-transition-status"');
     expect(index).toContain('id="learning-path-transition-retry"');
   });

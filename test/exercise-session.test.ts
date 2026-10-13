@@ -501,6 +501,63 @@ describe("exercise session", () => {
     expect(qs.map((q: any) => q.questionVersionId).sort()).toEqual([QV_A, QV_OE].sort());
   });
 
+  it("öğrenci session API'si MC seçeneklerini üç öğrenci bağlamında sabit ve session-bazlı sıralar", async () => {
+    const contexts = ["INDIVIDUAL", "ASSIGNMENT", "ASSESSMENT"] as const;
+    for (const context of contexts) {
+      const sessionIds: string[] = [];
+      for (let index = 0; index < 8; index += 1) {
+        const session = await prisma.exerciseSession.create({
+          data: {
+            tenantId: TENANT_A,
+            studentId: STUDENT_A,
+            templateVersionId: TEMPLATE_VERSION_A,
+            context,
+            sessionType: "PRACTICE",
+          },
+          select: { id: true },
+        });
+        sessionIds.push(session.id);
+      }
+
+      const displayedOrders = [] as string[][];
+      for (const sessionId of sessionIds) {
+        const first = await app.inject({
+          method: "GET",
+          url: `/admin/exercise-sessions/${sessionId}/questions`,
+          headers: await auth("session-student-a@example.com"),
+        });
+        const second = await app.inject({
+          method: "GET",
+          url: `/admin/exercise-sessions/${sessionId}/questions`,
+          headers: await auth("session-student-a@example.com"),
+        });
+        expect(first.statusCode).toBe(200);
+        expect(second.statusCode).toBe(200);
+        const firstQuestion = first
+          .json()
+          .data.questions.find((question: any) => question.questionVersionId === QV_A);
+        const secondQuestion = second
+          .json()
+          .data.questions.find((question: any) => question.questionVersionId === QV_A);
+        const firstOrder = firstQuestion.options.map((option: { id: string }) => option.id);
+        const secondOrder = secondQuestion.options.map((option: { id: string }) => option.id);
+        expect(secondOrder).toEqual(firstOrder);
+        displayedOrders.push(firstOrder);
+      }
+
+      expect(new Set(displayedOrders.map((order) => order.join("|"))).size).toBeGreaterThan(1);
+      const nonMultipleChoice = await app.inject({
+        method: "GET",
+        url: `/admin/exercise-sessions/${sessionIds[0]}/questions`,
+        headers: await auth("session-student-a@example.com"),
+      });
+      const openEnded = nonMultipleChoice
+        .json()
+        .data.questions.find((question: any) => question.questionVersionId === QV_OE);
+      expect(openEnded.options).toEqual([]);
+    }
+  });
+
   it("session dışındaki questionVersion'a Attempt → reddedilir", async () => {
     const res = await app.inject({
       method: "POST",

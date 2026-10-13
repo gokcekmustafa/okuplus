@@ -6,8 +6,16 @@ import {
 } from "../../curriculum/academic-reading-p0.js";
 import {
   EDUCATION_V2_P1_A_LEVEL_CODE,
+  EDUCATION_V2_P1_A_PATH_VERSION,
+  EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PATH_CODE_PREFIX,
 } from "../../curriculum/education-v2-p1-a-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
+  EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+} from "../../curriculum/education-v2-p1-a-cycle-v2-program.js";
+import { buildEducationV2P1ALearningCycleManifest } from "../../curriculum/learning-cycle-manifest.js";
 import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
 import {
   assertTeacherClassAccess,
@@ -874,8 +882,84 @@ export async function reconcileP0ToP1(
 
 type P1CycleStep = P1CandidateStepReadinessInput & {
   id: string;
+  stableKey: string;
+  position: number;
+  prerequisiteStepId: string | null;
+  status: string;
+  isActive: boolean;
   completionRule: Prisma.JsonValue;
 };
+
+type P1CycleGraph = {
+  code: string;
+  version: number;
+  units: Array<{
+    code: string;
+    status: string;
+    steps: P1CycleStep[];
+  }>;
+};
+
+function p1CycleShape(pathCode: string): {
+  version: number;
+  unitCodes: readonly string[];
+  steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[];
+} | null {
+  if (pathCode === P1_A_INITIAL_PATH_CODE) {
+    const manifest = buildEducationV2P1ALearningCycleManifest();
+    return {
+      version: EDUCATION_V2_P1_A_PATH_VERSION,
+      unitCodes: EDUCATION_V2_P1_A_PROGRAM.path.units.map((unit) => unit.code),
+      steps: manifest.steps,
+    };
+  }
+  if (pathCode === P1_A_NEXT_CYCLE_PATH_CODE) {
+    return {
+      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+      unitCodes: EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.map((unit) => unit.code),
+      steps: EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.steps,
+    };
+  }
+  return null;
+}
+
+function hasExpectedP1CycleGraph(path: P1CycleGraph): boolean {
+  const shape = p1CycleShape(path.code);
+  if (!shape || path.version !== shape.version || path.units.length !== shape.unitCodes.length) {
+    return false;
+  }
+  const actualUnitCodes = path.units.map((unit) => unit.code);
+  if (
+    actualUnitCodes.some((code, index) => code !== shape.unitCodes[index]) ||
+    path.units.some((unit) => unit.status !== "PUBLISHED")
+  ) {
+    return false;
+  }
+
+  const steps = path.units.flatMap((unit) => unit.steps);
+  const expectedSteps = new Map(shape.steps.map((step) => [step.stableKey, step]));
+  const actualKeys = steps.map((step) => step.stableKey);
+  if (
+    steps.length !== expectedSteps.size ||
+    actualKeys.some((key) => !expectedSteps.has(key)) ||
+    new Set(actualKeys).size !== actualKeys.length ||
+    steps.some((step) => step.status !== "PUBLISHED" || !step.isActive)
+  ) {
+    return false;
+  }
+
+  const actualByKey = new Map(steps.map((step) => [step.stableKey, step]));
+  return shape.steps.every((expected) => {
+    const actual = actualByKey.get(expected.stableKey);
+    if (!actual || actual.type !== expected.type || expected.prerequisiteKeys.length > 1) {
+      return false;
+    }
+    const expectedPrerequisiteId = expected.prerequisiteKeys[0]
+      ? (actualByKey.get(expected.prerequisiteKeys[0])?.id ?? null)
+      : null;
+    return actual.prerequisiteStepId === expectedPrerequisiteId;
+  });
+}
 
 function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
   return minimumScore(rule);
@@ -884,10 +968,9 @@ function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
 async function isP1CycleComplete(
   tx: Prisma.TransactionClient,
   actor: P1StudentActor,
-  path: {
-    units: Array<{ steps: P1CycleStep[] }>;
-  },
+  path: P1CycleGraph,
 ): Promise<boolean> {
+  if (!hasExpectedP1CycleGraph(path)) return false;
   const steps = path.units.flatMap((unit) => unit.steps);
   if (!steps.length) return false;
   const stepIds = steps.map((step) => step.id);
@@ -988,6 +1071,7 @@ async function loadNextP1Cycle(
   return tx.learningPath.findFirst({
     where: {
       code: P1_A_NEXT_CYCLE_PATH_CODE,
+      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
       area: current.area as "READING_COMPREHENSION",
       status: "PUBLISHED",
       deletedAt: null,
@@ -999,15 +1083,21 @@ async function loadNextP1Cycle(
     select: {
       id: true,
       code: true,
+      version: true,
       units: {
-        where: { status: "PUBLISHED" },
         orderBy: { position: "asc" },
         select: {
+          code: true,
+          status: true,
           steps: {
-            where: { status: "PUBLISHED", isActive: true },
             orderBy: { position: "asc" },
             select: {
               id: true,
+              stableKey: true,
+              position: true,
+              prerequisiteStepId: true,
+              status: true,
+              isActive: true,
               type: true,
               contentVersionId: true,
               exerciseTemplateVersionId: true,
@@ -1059,17 +1149,23 @@ export async function reconcileP1ToNextCycle(
             select: {
               id: true,
               code: true,
+              version: true,
               area: true,
               levelId: true,
               units: {
-                where: { status: "PUBLISHED" },
                 orderBy: { position: "asc" },
                 select: {
+                  code: true,
+                  status: true,
                   steps: {
-                    where: { status: "PUBLISHED", isActive: true },
                     orderBy: { position: "asc" },
                     select: {
                       id: true,
+                      stableKey: true,
+                      position: true,
+                      prerequisiteStepId: true,
+                      status: true,
+                      isActive: true,
                       type: true,
                       contentVersionId: true,
                       exerciseTemplateVersionId: true,
@@ -1104,9 +1200,52 @@ export async function reconcileP1ToNextCycle(
       if (!nextCode) {
         return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
       }
+
+      // A completed or reassigned enrollment is historical state. Before
+      // returning, look up the associated next-cycle enrollment so a replay
+      // of the final request is idempotent without ever reactivating the old
+      // cycle. This check intentionally stays tenant- and student-scoped.
+      const associatedNextPath = await tx.learningPath.findFirst({
+        where: {
+          code: nextCode,
+          version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+          deletedAt: null,
+          OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+        },
+        select: { id: true, status: true },
+      });
+      const existingAssociatedNext = associatedNextPath
+        ? await tx.studentLearningPath.findUnique({
+            where: {
+              tenantId_studentId_learningPathId: {
+                tenantId: actor.tenantId,
+                studentId: actor.userId,
+                learningPathId: associatedNextPath.id,
+              },
+            },
+            select: { id: true, routeStatus: true },
+          })
+        : null;
+
       // A completed/reassigned enrollment is historical state. Replays or
       // stale client requests must never be able to reactivate a later cycle.
       if (enrollment.routeStatus !== "ACTIVE") {
+        if (
+          existingAssociatedNext &&
+          (existingAssociatedNext.routeStatus === "ACTIVE" ||
+            existingAssociatedNext.routeStatus === "COMPLETED")
+        ) {
+          return {
+            outcome: "ALREADY_ASSIGNED",
+            currentLearningPathId: enrollment.id,
+            nextLearningPathId: associatedNextPath?.id ?? null,
+            readiness: {
+              status: "ALREADY_ASSIGNED",
+              currentCycleCompleted: true,
+              nextCycleAvailable: associatedNextPath?.status === "PUBLISHED",
+            },
+          };
+        }
         return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
       }
 
@@ -1119,23 +1258,25 @@ export async function reconcileP1ToNextCycle(
       if (
         !nextPath ||
         nextPath.code !== nextCode ||
-        nextPath.units.length === 0 ||
-        nextPath.units.some((unit) => unit.steps.length === 0) ||
+        !hasExpectedP1CycleGraph(nextPath) ||
         nextPath.units.flatMap((unit) => unit.steps).some((step) => !isReadyP1CandidateStep(step))
       ) {
         return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true);
       }
 
-      const existingNext = await tx.studentLearningPath.findUnique({
-        where: {
-          tenantId_studentId_learningPathId: {
-            tenantId: actor.tenantId,
-            studentId: actor.userId,
-            learningPathId: nextPath.id,
-          },
-        },
-        select: { id: true, routeStatus: true },
-      });
+      const existingNext =
+        existingAssociatedNext && associatedNextPath?.id === nextPath.id
+          ? existingAssociatedNext
+          : await tx.studentLearningPath.findUnique({
+              where: {
+                tenantId_studentId_learningPathId: {
+                  tenantId: actor.tenantId,
+                  studentId: actor.userId,
+                  learningPathId: nextPath.id,
+                },
+              },
+              select: { id: true, routeStatus: true },
+            });
       if (existingNext?.routeStatus === "ACTIVE" || existingNext?.routeStatus === "COMPLETED") {
         return {
           outcome: "ALREADY_ASSIGNED",
