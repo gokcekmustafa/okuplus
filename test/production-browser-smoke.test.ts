@@ -4,12 +4,14 @@ import type { Request } from "playwright-core";
 import {
   buildSafeLoginDiagnostic,
   buildSafeLoginDiagnosticWithCode,
+  buildSmokeStepSummary,
   classifyBrowserLaunchFailure,
   classifyConsoleError,
   classifyLoginFailureReason,
   classifyLoginHttpStatus,
   classifyLogoutResponse,
   consumeJsonLoginErrorBody,
+  deriveSmokeStatus,
   isAllowedMutationPath,
   isSmokeLocalMutationPath,
   isMutationMethod,
@@ -19,9 +21,11 @@ import {
   parseStudentAssignmentListPayload,
   safeRequestPath,
   sanitizeSmokeDiagnostic,
+  smokeExitCode,
   shouldCountFailedRequest,
   statusClass,
   unmarkSmokeRequestHandled,
+  type SmokeDomainStatuses,
 } from "../scripts/run-production-browser-smoke.js";
 
 const workflow = readFileSync(
@@ -35,6 +39,25 @@ const script = readFileSync(
 const indexHtml = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 
 describe("production browser smoke safety contract", () => {
+  const validDomainStatuses = (
+    assignmentDetail: SmokeDomainStatuses["assignmentDetail"] = "PASS",
+  ): SmokeDomainStatuses => ({
+    login: "PASS",
+    authMe: "PASS",
+    dashboard: "PASS",
+    readPaths: "PASS",
+    assignments: "PASS",
+    assignmentUi: "PASS",
+    assignmentDetail,
+    navigation: "PASS",
+    logout: "PASS",
+    consoleErrors: 0,
+    pageErrors: 0,
+    failedRequests: 0,
+    httpErrors: 0,
+    blockedMutations: 0,
+  });
+
   const assignmentItem = {
     id: "assignment-001",
     title: "Ana fikir çalışması",
@@ -114,6 +137,38 @@ describe("production browser smoke safety contract", () => {
     expect(script).toContain("report.assignmentDetail = NO_EXISTING_ASSIGNMENT_DETAIL");
     expect(script).toContain('domain.assignmentDetail === "PASS"');
     expect(NO_EXISTING_ASSIGNMENT_DETAIL).toBe("SKIPPED_NO_EXISTING_ASSIGNMENT");
+  });
+
+  it("derives PASS when all required checks and assignment detail pass", () => {
+    expect(deriveSmokeStatus([validDomainStatuses()])).toBe("PASS");
+  });
+
+  it("derives PARTIAL when the empty assignment list skips detail only", () => {
+    expect(deriveSmokeStatus([validDomainStatuses(NO_EXISTING_ASSIGNMENT_DETAIL)])).toBe("PARTIAL");
+    expect(smokeExitCode("PARTIAL")).toBe(0);
+    expect(
+      buildSmokeStepSummary({
+        status: "PARTIAL",
+        domains: [{ assignmentDetail: NO_EXISTING_ASSIGNMENT_DETAIL, assignmentCount: 0 }],
+      }),
+    ).toContain("Ödev detayı: SKIPPED_NO_EXISTING_ASSIGNMENT");
+  });
+
+  it("derives FAIL for assignment list API or interface failures", () => {
+    expect(deriveSmokeStatus([{ ...validDomainStatuses(), assignments: "FAIL" }])).toBe("FAIL");
+    expect(deriveSmokeStatus([{ ...validDomainStatuses(), assignmentUi: "FAIL" }])).toBe("FAIL");
+  });
+
+  it("derives FAIL for assignment detail failures", () => {
+    expect(deriveSmokeStatus([{ ...validDomainStatuses(), assignmentDetail: "FAIL" }])).toBe(
+      "FAIL",
+    );
+    expect(smokeExitCode("FAIL")).toBe(1);
+  });
+
+  it("derives FAIL for logout failures and unexpected blocked mutations", () => {
+    expect(deriveSmokeStatus([{ ...validDomainStatuses(), logout: "FAIL" }])).toBe("FAIL");
+    expect(deriveSmokeStatus([{ ...validDomainStatuses(), blockedMutations: 1 }])).toBe("FAIL");
   });
 
   it("runs logout after assignment checks through a separate result path", () => {

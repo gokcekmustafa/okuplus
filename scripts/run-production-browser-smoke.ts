@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page, type Request } from "playwright-core";
 
@@ -13,7 +14,7 @@ const READ_PATHS = [
   "/account/entitlements",
 ] as const;
 
-type DomainReport = {
+export type DomainReport = {
   baseUrl: string;
   login: "PASS" | "FAIL";
   loginHttpStatus: number | null;
@@ -52,12 +53,32 @@ type DomainReport = {
 };
 
 type SmokeReport = {
-  status: "PASS" | "FAIL";
+  status: SmokeStatus;
   browserLaunch: "PASS" | "FAIL";
   browserLaunchFailureReason: BrowserLaunchFailureReason | null;
   domains: DomainReport[];
   productionStateChanged: "NO";
 };
+
+export type SmokeStatus = "PASS" | "PARTIAL" | "FAIL";
+
+export type SmokeDomainStatuses = Pick<
+  DomainReport,
+  | "login"
+  | "authMe"
+  | "dashboard"
+  | "readPaths"
+  | "assignments"
+  | "assignmentUi"
+  | "assignmentDetail"
+  | "navigation"
+  | "logout"
+  | "consoleErrors"
+  | "pageErrors"
+  | "failedRequests"
+  | "httpErrors"
+  | "blockedMutations"
+>;
 
 export type LoginErrorCategory =
   | "AUTH_REJECTED"
@@ -91,6 +112,66 @@ export type ConsoleErrorCategory = "LEARNING_PATH" | "NETWORK" | "AUTH" | "OTHER
 export type AssignmentErrorCategory = "API_ERROR" | "UI_ERROR" | "TEST_CODE_ERROR";
 
 export const NO_EXISTING_ASSIGNMENT_DETAIL = "SKIPPED_NO_EXISTING_ASSIGNMENT" as const;
+
+export function deriveSmokeStatus(domains: readonly SmokeDomainStatuses[]): SmokeStatus {
+  if (domains.length === 0) return "FAIL";
+
+  const requiredChecksPass = domains.every(
+    (domain) =>
+      domain.login === "PASS" &&
+      domain.authMe === "PASS" &&
+      domain.dashboard === "PASS" &&
+      domain.readPaths === "PASS" &&
+      domain.assignments === "PASS" &&
+      domain.assignmentUi === "PASS" &&
+      domain.navigation === "PASS" &&
+      domain.logout === "PASS" &&
+      domain.consoleErrors === 0 &&
+      domain.pageErrors === 0 &&
+      domain.failedRequests === 0 &&
+      domain.httpErrors === 0 &&
+      domain.blockedMutations === 0,
+  );
+  if (!requiredChecksPass) return "FAIL";
+  if (domains.some((domain) => domain.assignmentDetail === "FAIL")) return "FAIL";
+  if (domains.every((domain) => domain.assignmentDetail === "PASS")) return "PASS";
+  return "PARTIAL";
+}
+
+export function smokeExitCode(status: SmokeStatus): 0 | 1 {
+  return status === "FAIL" ? 1 : 0;
+}
+
+export function buildSmokeStepSummary(report: {
+  status: SmokeStatus;
+  domains: readonly Pick<DomainReport, "assignmentDetail" | "assignmentCount">[];
+}): string {
+  if (report.status !== "PARTIAL") {
+    return `## Production browser smoke\n\n- Sonuç: ${report.status}\n- Canlı veride değişiklik: NO`;
+  }
+
+  const domain =
+    report.domains.find(
+      (candidate) => candidate.assignmentDetail === NO_EXISTING_ASSIGNMENT_DETAIL,
+    ) ?? report.domains[0];
+  const assignmentCount = domain?.assignmentCount ?? "Bilinmiyor";
+  return [
+    "## Production browser smoke",
+    "",
+    "- Sonuç: PARTIAL",
+    "- Ödev API’si ve liste arayüzü: başarılı",
+    `- Ödev sayısı: ${assignmentCount}`,
+    `- Ödev detayı: ${NO_EXISTING_ASSIGNMENT_DETAIL}`,
+    "- Canlı veride değişiklik: NO",
+    "- Açık sınırlama: canlı tarayıcıda mevcut bir ödevin detay ekranı doğrulanmadı.",
+  ].join("\n");
+}
+
+function writeSmokeStepSummary(report: SmokeReport): void {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+  if (!summaryPath) return;
+  appendFileSync(summaryPath, `${buildSmokeStepSummary(report)}\n`, "utf8");
+}
 
 type StudentAssignmentSnapshot = {
   id: string;
@@ -946,31 +1027,15 @@ async function main(): Promise<void> {
     await browser.close().catch(() => undefined);
   }
   const report: SmokeReport = {
-    status: domains.every(
-      (domain) =>
-        domain.login === "PASS" &&
-        domain.authMe === "PASS" &&
-        domain.dashboard === "PASS" &&
-        domain.readPaths === "PASS" &&
-        domain.assignments === "PASS" &&
-        domain.assignmentDetail === "PASS" &&
-        domain.navigation === "PASS" &&
-        domain.logout === "PASS" &&
-        domain.consoleErrors === 0 &&
-        domain.pageErrors === 0 &&
-        domain.failedRequests === 0 &&
-        domain.httpErrors === 0 &&
-        domain.blockedMutations === 0,
-    )
-      ? "PASS"
-      : "FAIL",
+    status: deriveSmokeStatus(domains),
     browserLaunch: "PASS",
     browserLaunchFailureReason: null,
     domains,
     productionStateChanged: "NO",
   };
   console.log(JSON.stringify(report, null, 2));
-  if (report.status === "FAIL") process.exitCode = 1;
+  writeSmokeStepSummary(report);
+  if (smokeExitCode(report.status) === 1) process.exitCode = 1;
 }
 
 function isMainModule(): boolean {
