@@ -19,6 +19,7 @@ import {
   assignmentStudentRoutes,
   assignmentTeacherRoutes,
 } from "./modules/assignments/index.js";
+import { analyticsAdminRoutes } from "./modules/analytics/index.js";
 import { branchAdminRoutes } from "./modules/branches/index.js";
 import { classAdminRoutes } from "./modules/classes/index.js";
 import { contentAdminRoutes } from "./modules/contents/index.js";
@@ -137,6 +138,7 @@ export async function buildApp(
   await app.register(assignmentAdminRoutes, { authProvider });
   await app.register(assignmentStudentRoutes, { authProvider });
   await app.register(assignmentTeacherRoutes, { authProvider });
+  await app.register(analyticsAdminRoutes, { authProvider });
   await app.register(assessmentAdminRoutes, { authProvider });
   await app.register(assessmentStudentRoutes, { authProvider });
   await app.register(progressStudentRoutes, { authProvider });
