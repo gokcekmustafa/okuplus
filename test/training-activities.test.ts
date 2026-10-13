@@ -78,6 +78,8 @@ describe("independent training activities", () => {
     expect(app).toContain("Tekrar oyna");
     expect(app).toContain('trainingActivitiesState = "loading"');
     expect(app).toContain('trainingActivitiesState === "error"');
+    expect(app).toContain("data-training-activities-retry");
+    expect(app).toContain("void loadTrainingActivities()");
     expect(app).toContain("Aktiviteleri yeniden yükle");
     expect(app).toContain("data-training-empty-learning-path");
     expect(app).toContain("data-training-action-label");

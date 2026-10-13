@@ -3484,6 +3484,14 @@ function renderTrainingActivities() {
   if (state) {
     state.className = `training-activities-status is-${trainingActivitiesState}`;
     state.textContent = trainingActivitiesStateMessage;
+    if (trainingActivitiesState === "error") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "btn btn-ghost btn-sm";
+      retry.dataset.trainingActivitiesRetry = "true";
+      retry.textContent = "Tekrar dene";
+      state.append(" ", retry);
+    }
   }
   if (trainingActivitiesState === "loading" || trainingActivitiesState === "error") {
     grid.innerHTML = "";
@@ -13477,6 +13485,13 @@ function setupExerciseEvents() {
         ? event.target.closest("[data-training-empty-learning-path]")
         : null;
     if (target) returnToLearningPathFromTrainingEmpty();
+  });
+  $("training-activities-status")?.addEventListener("click", (event) => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest("[data-training-activities-retry]")
+        : null;
+    if (target) void loadTrainingActivities();
   });
   $("exercise-back-btn").addEventListener("click", returnToExercisePath);
   $("exercise-retry-load").addEventListener("click", () => void loadExercisePage());
