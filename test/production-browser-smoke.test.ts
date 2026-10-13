@@ -97,6 +97,40 @@ describe("production browser smoke safety contract", () => {
     expect(empty?.items).toEqual([]);
   });
 
+  it("keeps assignment navigation separate from dashboard links and preserves logout after check failures", () => {
+    expect(script).toContain('.nav-item[data-page="assignments"]');
+    expect(script).toContain("assignmentErrorCategory");
+    expect(script).toContain("AssignmentSmokeError");
+    expect(script).toContain('"API_ERROR"');
+    expect(script).toContain('"UI_ERROR"');
+    expect(script).toContain('"TEST_CODE_ERROR"');
+    expect(script).toContain('const userMenuToggle = page.locator("#user-menu-toggle")');
+    expect(script).toContain('response.request().method() === "POST"');
+    expect(script).toContain('domain.assignmentDetail === "PASS"');
+  });
+
+  it("keeps empty assignment lists explicit and does not treat detail as passed", () => {
+    expect(script).toContain('container.querySelector(".empty-learning-state") !== null');
+    expect(script).toContain("report.assignmentDetail = NO_EXISTING_ASSIGNMENT_DETAIL");
+    expect(script).toContain('domain.assignmentDetail === "PASS"');
+    expect(NO_EXISTING_ASSIGNMENT_DETAIL).toBe("SKIPPED_NO_EXISTING_ASSIGNMENT");
+  });
+
+  it("runs logout after assignment checks through a separate result path", () => {
+    const assignmentStart = script.indexOf(
+      'const assignmentListPath = "/student/assignments?page=1&pageSize=20"',
+    );
+    const assignmentCatch = script.indexOf("report.assignmentError = errorMessage(error)");
+    const logoutStart = script.indexOf('const userMenuToggle = page.locator("#user-menu-toggle")');
+    expect(assignmentStart).toBeGreaterThan(-1);
+    expect(assignmentCatch).toBeGreaterThan(assignmentStart);
+    expect(logoutStart).toBeGreaterThan(assignmentCatch);
+    expect(script.slice(assignmentStart, logoutStart)).toContain("catch (error)");
+    expect(script.slice(logoutStart)).toContain(
+      'report.logoutFailureReason = "BUTTON_UNAVAILABLE"',
+    );
+  });
+
   it("classifies browser launch failures without exposing runner details", () => {
     expect(
       classifyBrowserLaunchFailure(new Error("browserType.launch: Timeout 30000ms exceeded")),
@@ -309,6 +343,7 @@ describe("production browser smoke safety contract", () => {
       "const detailPath = `/student/assignments/${encodeURIComponent(expectedAssignment.id)}`",
     );
     expect(script).not.toContain('data-assignment-start-id="${expectedAssignment.id}"');
+    expect(script).not.toContain("page.locator('[data-page=\"assignments\"]')");
     expect(script).toContain('"/student/progress"');
     expect(script).toContain('"/student/history?page=1&pageSize=5"');
     expect(script).toContain("loginHttpStatus");
