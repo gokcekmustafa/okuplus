@@ -33,8 +33,10 @@ const PRODUCTION_DATABASE_HOST_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_PRODUCTION_DATA
 const PRODUCTION_RELEASE_ID_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_PRODUCTION_RELEASE_ID";
 const PRODUCTION_APPROVAL_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_PRODUCTION_APPROVAL";
 const APPROVED_FINGERPRINT_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_APPROVED_TARGET_FINGERPRINT";
+const PRODUCTION_BACKUP_CONFIRMATION_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_BACKUP_CONFIRMATION";
 const PRODUCTION_CONFIRMATION =
   "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_V2_PRODUCTION_EDITORIAL_RELEASE";
+const BACKUP_CONFIRMATION = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK";
 
 type TargetEnvironment = "TEST" | "PRODUCTION";
 type Target = CatalogTarget & { approvedTarget: CatalogTarget; approvedFingerprint: string };
@@ -106,6 +108,9 @@ function readTarget(): Target | null {
     }
     if (!dryRun && process.env[PRODUCTION_APPROVAL_ENV] !== PRODUCTION_CONFIRMATION) {
       fail(`production editorial approval=${PRODUCTION_CONFIRMATION} gerekli`);
+    }
+    if (!dryRun && process.env[PRODUCTION_BACKUP_CONFIRMATION_ENV] !== BACKUP_CONFIRMATION) {
+      fail(`production backup/rollback confirmation=${BACKUP_CONFIRMATION} gerekli`);
     }
   }
   return { ...target, approvedTarget, approvedFingerprint };
@@ -761,6 +766,10 @@ function summary(target: Target | null, identity: Identity | null): Record<strin
   return {
     environment: target?.environment ?? "MANIFEST_ONLY",
     database: identity?.database ?? target?.database ?? "NOT_CONNECTED",
+    productionReleaseId:
+      target?.environment === "PRODUCTION"
+        ? (process.env[PRODUCTION_RELEASE_ID_ENV] ?? "NOT_PROVIDED")
+        : "NOT_APPLICABLE",
     programId: EDUCATION_V2_P1_A_CYCLE_V2_ID,
     pathCode: EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.code,
     cycleVersion: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,

@@ -41,6 +41,15 @@ describe("P1-A Cycle 2 provisioning contract", () => {
     expect(source).toContain(
       "if (!dryRun && process.env[PRODUCTION_APPROVAL_ENV] !== PRODUCTION_CONFIRMATION)",
     );
+    expect(source).toContain(
+      'const PRODUCTION_BACKUP_CONFIRMATION_ENV = "EDUCATION_V2_P1_A_CYCLE_V2_BACKUP_CONFIRMATION"',
+    );
+    expect(source).toContain(
+      'const BACKUP_CONFIRMATION = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK"',
+    );
+    expect(source).toContain(
+      "if (!dryRun && process.env[PRODUCTION_BACKUP_CONFIRMATION_ENV] !== BACKUP_CONFIRMATION)",
+    );
     expect(source).toContain("prisma.$transaction");
     expect(source).toContain("dbChanged: true");
   });
