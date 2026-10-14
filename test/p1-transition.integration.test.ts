@@ -208,6 +208,7 @@ async function createPath(
 
   let artifactIndex = pathId === PATH_IDS.initial ? 0 : 50;
   let previousStepId: string | null = null;
+  const stepIdByKey = new Map<string, string>();
   for (const [unitIndex, unit] of program.path.units.entries()) {
     const unitId = id(600 + artifactIndex + unitIndex);
     await prisma.learningUnit.create({
@@ -222,6 +223,11 @@ async function createPath(
     });
     for (const [stepIndex, sourceStep] of unit.steps.entries()) {
       const stepId = id(700 + artifactIndex + unitIndex * 20 + stepIndex);
+      const configuredPrerequisiteIds = (sourceStep.prerequisiteStepKeys ?? []).map((key) => {
+        const prerequisiteId = stepIdByKey.get(key);
+        if (!prerequisiteId) throw new Error(`Missing fixture prerequisite: ${key}`);
+        return prerequisiteId;
+      });
       const artifact =
         sourceStep.type === "TEACHING"
           ? await createPublishedArtifact("CONTENT", artifactIndex++)
@@ -239,10 +245,16 @@ async function createPath(
           status: "PUBLISHED",
           isActive: true,
           prerequisiteStepId: previousStepId,
-          completionRule: sourceStep.type === "ASSESSMENT" ? { minimumScore: 0.75 } : {},
+          completionRule: {
+            ...(sourceStep.type === "ASSESSMENT" ? { minimumScore: 0.75 } : {}),
+            ...(configuredPrerequisiteIds.length
+              ? { prerequisiteStepIds: configuredPrerequisiteIds }
+              : {}),
+          },
           ...artifact,
         },
       });
+      stepIdByKey.set(sourceStep.key, stepId);
       previousStepId = stepId;
     }
   }

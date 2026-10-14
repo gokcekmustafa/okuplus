@@ -1046,7 +1046,20 @@ function hasExpectedP1CycleGraph(path: P1CycleGraph): boolean {
     const expectedPrerequisiteId = expected.prerequisiteKeys[0]
       ? (actualByKey.get(expected.prerequisiteKeys[0])?.id ?? null)
       : null;
-    return actual.prerequisiteStepId === expectedPrerequisiteId;
+    // P1-A's published seed stores the cross-unit prerequisite in the
+    // immutable completion-rule contract while the legacy column is reset at
+    // each unit boundary. Validate the union of both persisted contracts so
+    // existing published graphs remain usable without weakening the graph
+    // check or rewriting production rows.
+    const actualPrerequisiteIds = new Set([
+      ...(actual.prerequisiteStepId ? [actual.prerequisiteStepId] : []),
+      ...prerequisiteIds(actual.completionRule),
+    ]);
+    const expectedPrerequisiteIds = expectedPrerequisiteId ? [expectedPrerequisiteId] : [];
+    return (
+      actualPrerequisiteIds.size === expectedPrerequisiteIds.length &&
+      expectedPrerequisiteIds.every((id) => actualPrerequisiteIds.has(id))
+    );
   });
 }
 
