@@ -32,7 +32,9 @@ export const lessonMetadataSchema = z
     // are optional so older P0 lesson versions remain valid, but they are
     // still validated instead of being silently accepted as arbitrary data.
     programId: z.string().trim().min(1).max(120).optional(),
-    routeFamily: z.literal("P1-A").optional(),
+    // Versioned P1-A cycles keep their route family in the lesson envelope so
+    // the published content can be resolved without weakening the contract.
+    routeFamily: z.enum(["P1-A", "P1-A-CYCLE-2"]).optional(),
     skillCode: z.string().trim().min(1).max(80),
     objective: z.string().trim().min(1).max(500),
     explanation: z.string().trim().min(1).max(5000),

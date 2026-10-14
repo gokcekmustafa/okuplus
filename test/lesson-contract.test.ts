@@ -68,4 +68,24 @@ describe("published learning lesson contract", () => {
       exerciseTemplateVersionId: null,
     });
   });
+
+  it("accepts the versioned Cycle 2 P1-A lesson envelope", () => {
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        contractVersion: 2,
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+        routeFamily: "P1-A-CYCLE-2",
+        exerciseTemplateVersionId: null,
+      }),
+    ).toMatchObject({
+      contractVersion: 2,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+      routeFamily: "P1-A-CYCLE-2",
+    });
+  });
+
+  it("rejects an unknown versioned route family", () => {
+    expect(parseLessonMetadata({ ...validLesson(), routeFamily: "P1-A-CYCLE-99" })).toBeNull();
+  });
 });
