@@ -20,6 +20,8 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
   it("contains nine original, ordered steps across two units", () => {
     expect(validateP1ACycleV2Program()).toEqual([]);
     expect(EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units).toHaveLength(2);
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.content).toHaveLength(9);
+    expect(EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises).toHaveLength(7);
     expect(
       EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.flatMap((unit) => unit.steps),
     ).toHaveLength(9);

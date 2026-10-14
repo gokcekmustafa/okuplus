@@ -1,6 +1,9 @@
 import "dotenv/config";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { toTrainingExerciseVersionConfig } from "../src/modules/training/exercise-contract.js";
+import {
+  parseTrainingExerciseVersionConfig,
+  type TrainingExerciseVersionConfig,
+} from "../src/modules/training/exercise-contract.js";
 import {
   assertApprovedTargetFingerprint,
   assertCatalogEnvironmentSafety,
@@ -190,13 +193,24 @@ function answerFor(question: Plan["questions"][number]["question"]): Prisma.Inpu
   };
 }
 
+function runtimeVersionConfig(
+  exercise: NonNullable<Plan["exercise"]>,
+): TrainingExerciseVersionConfig {
+  try {
+    return parseTrainingExerciseVersionConfig(exercise.contract);
+  } catch {
+    fail(`Cycle 2 exercise version config geçersiz veya renderer tanımı eksik: ${exercise.key}`);
+  }
+}
+
 function templateConfig(exercise: NonNullable<Plan["exercise"]>): Prisma.InputJsonValue {
+  const config = runtimeVersionConfig(exercise);
   return {
     programId: EDUCATION_V2_P1_A_CYCLE_V2_ID,
     stableKey: `EDU-V2-P1-A-CYCLE-2-${exercise.key.toUpperCase().replaceAll("-", "_")}`,
     version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
-    competency: exercise.contract.competency,
-    rendererKey: exercise.contract.rendererKey,
+    competency: config.competency,
+    rendererKey: config.rendererKey,
     contentKey: exercise.contentKey,
   };
 }
@@ -577,7 +591,7 @@ async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): 
           id: plan.exerciseTemplateVersionId,
           templateId: template.id,
           version: 1,
-          config: asJson(toTrainingExerciseVersionConfig(plan.exercise.contract)),
+          config: asJson(runtimeVersionConfig(plan.exercise)),
           status: "DRAFT",
         },
       });

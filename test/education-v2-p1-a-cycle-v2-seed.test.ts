@@ -54,9 +54,11 @@ describe("P1-A Cycle 2 provisioning contract", () => {
     expect(source).toContain("dbChanged: true");
   });
 
-  it("persists the immutable runtime version config, not the authoring contract", async () => {
+  it("validates and persists the immutable runtime version config", async () => {
     const source = await seedSource();
-    expect(source).toContain("toTrainingExerciseVersionConfig(plan.exercise.contract)");
-    expect(source).not.toContain("config: asJson(plan.exercise.contract)");
+    expect(source).toContain("parseTrainingExerciseVersionConfig(exercise.contract)");
+    expect(source).toContain("runtimeVersionConfig(plan.exercise)");
+    expect(source).toContain("renderer tanımı eksik");
+    expect(source).not.toContain("toTrainingExerciseVersionConfig");
   });
 });
