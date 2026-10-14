@@ -1207,65 +1207,80 @@ export async function reconcileP1ToNextCycle(
   assertStudentActor(actor);
   try {
     return await withTenantContext(actor, async (tx) => {
-      const enrollment = await tx.studentLearningPath.findFirst({
-        where: {
-          id: input.p1LearningPathId,
-          tenantId: actor.tenantId,
-          studentId: actor.userId,
-          learningPath: { status: "PUBLISHED", deletedAt: null },
-        },
-        select: {
-          id: true,
-          routeStatus: true,
-          measurementResultId: true,
-          learningPath: {
-            select: {
-              id: true,
-              code: true,
-              version: true,
-              area: true,
-              levelId: true,
-              units: {
-                orderBy: { position: "asc" },
-                select: {
-                  code: true,
-                  status: true,
-                  steps: {
-                    orderBy: { position: "asc" },
-                    select: {
-                      id: true,
-                      stableKey: true,
-                      position: true,
-                      prerequisiteStepId: true,
-                      status: true,
-                      isActive: true,
-                      type: true,
-                      contentVersionId: true,
-                      exerciseTemplateVersionId: true,
-                      assessmentId: true,
-                      completionRule: true,
-                      contentVersion: {
-                        select: {
-                          status: true,
-                          content: { select: { status: true, deletedAt: true } },
-                        },
+      const enrollmentSelect = {
+        id: true,
+        routeStatus: true,
+        measurementResultId: true,
+        learningPath: {
+          select: {
+            id: true,
+            code: true,
+            version: true,
+            area: true,
+            levelId: true,
+            units: {
+              orderBy: { position: "asc" as const },
+              select: {
+                code: true,
+                status: true,
+                steps: {
+                  orderBy: { position: "asc" as const },
+                  select: {
+                    id: true,
+                    stableKey: true,
+                    position: true,
+                    prerequisiteStepId: true,
+                    status: true,
+                    isActive: true,
+                    type: true,
+                    contentVersionId: true,
+                    exerciseTemplateVersionId: true,
+                    assessmentId: true,
+                    completionRule: true,
+                    contentVersion: {
+                      select: {
+                        status: true,
+                        content: { select: { status: true, deletedAt: true } },
                       },
-                      exerciseTemplateVersion: {
-                        select: {
-                          status: true,
-                          config: true,
-                          template: { select: { status: true, deletedAt: true } },
-                        },
-                      },
-                      assessment: { select: { status: true, deletedAt: true } },
                     },
+                    exerciseTemplateVersion: {
+                      select: {
+                        status: true,
+                        config: true,
+                        template: { select: { status: true, deletedAt: true } },
+                      },
+                    },
+                    assessment: { select: { status: true, deletedAt: true } },
                   },
                 },
               },
             },
           },
         },
+      } as const;
+      const enrollmentScope = {
+        tenantId: actor.tenantId,
+        studentId: actor.userId,
+        learningPath: { status: "PUBLISHED" as const, deletedAt: null },
+      };
+      // The client learning-path projection carries LearningPath.id, while
+      // older callers and direct transition retries carry
+      // StudentLearningPath.id. Accept either only inside this student's
+      // tenant-scoped enrollment so the recovery remains idempotent and
+      // cannot resolve another student's route.
+      const enrollmentById = await tx.studentLearningPath.findFirst({
+        where: {
+          id: input.p1LearningPathId,
+          ...enrollmentScope,
+        },
+        select: enrollmentSelect,
       });
+      const enrollment =
+        enrollmentById ??
+        (await tx.studentLearningPath.findFirst({
+          where: { learningPathId: input.p1LearningPathId, ...enrollmentScope },
+          select: enrollmentSelect,
+        }));
       if (!enrollment) {
         return p1CycleReviewResult(input.p1LearningPathId, "NOT_APPLICABLE", false);
       }

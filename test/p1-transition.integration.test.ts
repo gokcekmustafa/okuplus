@@ -618,7 +618,9 @@ describe.sequential("P1 learning cycle transition integration", () => {
 
     const result = await withPublicationApproval(() =>
       reconcileP1ToNextCycle(recoveryFixture.actor, {
-        p1LearningPathId: recoveryFixture.enrollmentId,
+        // The browser learning-path projection sends LearningPath.id. The
+        // service must resolve that to this student's enrollment safely.
+        p1LearningPathId: PATH_IDS.initial,
       }),
     );
 
@@ -645,7 +647,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
 
     const replay = await withPublicationApproval(() =>
       reconcileP1ToNextCycle(recoveryFixture.actor, {
-        p1LearningPathId: recoveryFixture.enrollmentId,
+        p1LearningPathId: PATH_IDS.initial,
       }),
     );
     expect(replay).toMatchObject({

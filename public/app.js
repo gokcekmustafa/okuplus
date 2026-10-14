@@ -3231,6 +3231,7 @@ async function loadLearningPath() {
   container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolun yükleniyor…</p>';
   try {
     var data = await insightApi("learning-path");
+    data = await recoverCompletedP1CycleOnLearningPathLoad(data);
     if (scope !== insightScope()) return;
     container.setAttribute("aria-busy", "false");
     learningPathPhase = "home-insights";
@@ -4285,6 +4286,50 @@ async function reconcileP1ToNextCycle(p1LearningPathId) {
       body: JSON.stringify({ p1LearningPathId }),
     }),
   );
+}
+
+async function recoverCompletedP1CycleOnLearningPathLoad(data) {
+  const groups =
+    Array.isArray(data?.paths) && data.paths.length
+      ? data.paths
+      : data?.path
+        ? [{ path: data.path, nodes: data.nodes || [] }]
+        : [];
+  const hasAssignedNextCycle = groups.some(function (group) {
+    const code = String(group?.path?.code || "");
+    return code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
+  });
+  if (hasAssignedNextCycle) return data;
+
+  const completedInitialCycle = groups.find(function (group) {
+    const code = String(group?.path?.code || "");
+    const nodes = Array.isArray(group?.nodes) ? group.nodes : [];
+    return (
+      code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12" &&
+      group?.path?.id &&
+      nodes.length > 0 &&
+      nodes.every(function (node) {
+        return node?.status === "completed";
+      })
+    );
+  });
+  if (!completedInitialCycle) return data;
+
+  try {
+    const result = await reconcileP1ToNextCycle(completedInitialCycle.path.id);
+    if (result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED") {
+      return await insightApi("learning-path");
+    }
+    if (result?.outcome === "REVIEW_REQUIRED") {
+      setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(result), { error: true });
+    }
+  } catch {
+    setLearningPathTransitionStatus(
+      "Öğrenme döngüsünün sonraki adımı şu anda kontrol edilemedi. İlerlemen korunuyor; tekrar deneyebilirsin.",
+      { retry: true, error: true },
+    );
+  }
+  return data;
 }
 
 function p1CycleTransitionReviewMessage(result) {

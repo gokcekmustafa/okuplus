@@ -178,6 +178,8 @@ describe("P1 transition foundation contracts", () => {
     expect(app).toContain('String(node.learningPathCode || "").startsWith("EDUCATION_V2_P1_")');
     expect(app).toContain('return node.type !== "NEXT_LEARNING"');
     expect(app).toContain('const path = await insightApi("learning-path")');
+    expect(app).toContain("recoverCompletedP1CycleOnLearningPathLoad");
+    expect(app).toContain('code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12"');
     expect(app).toContain("activeLearningPathNodeFromData(path)");
     expect(app).toContain("learningPathEntryMode = true");
     expect(app).toContain('result?.outcome === "REVIEW_REQUIRED"');
