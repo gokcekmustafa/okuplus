@@ -605,6 +605,30 @@ describe.sequential("P1 learning cycle transition integration", () => {
   });
 
   it("recovers a completed current cycle when the next enrollment was not created", async () => {
+    await prisma.studentLearningStepProgress.deleteMany({
+      where: {
+        tenantId: recoveryFixture.actor.tenantId,
+        studentId: recoveryFixture.actor.userId,
+      },
+    });
+    await prisma.studentLessonProgress.deleteMany({
+      where: {
+        tenantId: recoveryFixture.actor.tenantId,
+        studentId: recoveryFixture.actor.userId,
+      },
+    });
+    await prisma.exerciseSession.deleteMany({
+      where: {
+        tenantId: recoveryFixture.actor.tenantId,
+        studentId: recoveryFixture.actor.userId,
+      },
+    });
+    await prisma.assessmentResult.deleteMany({
+      where: {
+        tenantId: recoveryFixture.actor.tenantId,
+        studentId: recoveryFixture.actor.userId,
+      },
+    });
     await prisma.studentLearningPath.update({
       where: { id: recoveryFixture.enrollmentId },
       data: { routeStatus: "COMPLETED", completedAt: new Date() },

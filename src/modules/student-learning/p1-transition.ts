@@ -1360,7 +1360,13 @@ export async function reconcileP1ToNextCycle(
         }
       }
 
-      const currentCompleted = await isP1CycleComplete(tx, actor, enrollment.learningPath);
+      // A legacy completion may predate step-scoped evidence persistence. The
+      // enrollment is already an authoritative, tenant-scoped COMPLETED
+      // record; use it only to replay a missing next-cycle assignment. Active
+      // enrollments still require the full evidence check below.
+      const currentCompleted =
+        enrollment.routeStatus === "COMPLETED" ||
+        (await isP1CycleComplete(tx, actor, enrollment.learningPath));
       if (!currentCompleted) {
         return p1CycleReviewResult(enrollment.id, "CURRENT_CYCLE_NOT_COMPLETED", false);
       }
