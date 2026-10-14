@@ -85,6 +85,38 @@ describe("published learning lesson contract", () => {
     });
   });
 
+  it("reads the already-published Cycle 2 content-only teaching envelope safely", () => {
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        lessonType: "LEARNING_EXERCISE",
+        contractVersion: 2,
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+        routeFamily: "P1-A-CYCLE-2",
+        exerciseTemplateVersionId: null,
+      }),
+    ).toMatchObject({
+      lessonType: "LEARNING_LESSON",
+      contractVersion: 2,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+      routeFamily: "P1-A-CYCLE-2",
+      exerciseTemplateVersionId: null,
+    });
+  });
+
+  it("does not promote a non-content Cycle 2 exercise to a lesson", () => {
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        lessonType: "LEARNING_EXERCISE",
+        contractVersion: 2,
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+        routeFamily: "P1-A-CYCLE-2",
+        exerciseTemplateVersionId: "cycle-2-template-version",
+      }),
+    ).toBeNull();
+  });
+
   it("rejects an unknown versioned route family", () => {
     expect(parseLessonMetadata({ ...validLesson(), routeFamily: "P1-A-CYCLE-99" })).toBeNull();
   });

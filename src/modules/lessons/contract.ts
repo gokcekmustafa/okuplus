@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const LESSON_METADATA_TYPE = "LEARNING_LESSON" as const;
 const LEGACY_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE" as const;
+const CYCLE_2_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2" as const;
+const CYCLE_2_P1_A_ROUTE_FAMILY = "P1-A-CYCLE-2" as const;
 
 const academicSourceSchema = z
   .object({
@@ -96,6 +98,28 @@ export function parseLessonMetadata(value: unknown): LessonMetadata | null {
       contractVersion: 1,
     });
     return legacyParsed.success ? legacyParsed.data : null;
+  }
+
+  // Cycle 2 was published before its two content-only teaching records were
+  // emitted with the lesson discriminator. Keep those immutable versions
+  // readable, but scope the compatibility path to the exact versioned
+  // program, route family, contract version, and content-only binding. New
+  // provisioning must emit LEARNING_LESSON directly.
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { lessonType?: unknown }).lessonType === "LEARNING_EXERCISE" &&
+    (value as { contractVersion?: unknown }).contractVersion === 2 &&
+    (value as { programId?: unknown }).programId === CYCLE_2_P1_A_PROGRAM_ID &&
+    (value as { routeFamily?: unknown }).routeFamily === CYCLE_2_P1_A_ROUTE_FAMILY &&
+    (value as { exerciseTemplateVersionId?: unknown }).exerciseTemplateVersionId === null
+  ) {
+    const compatibilityParsed = lessonMetadataSchema.safeParse({
+      ...(value as Record<string, unknown>),
+      lessonType: LESSON_METADATA_TYPE,
+    });
+    return compatibilityParsed.success ? compatibilityParsed.data : null;
   }
 
   return null;

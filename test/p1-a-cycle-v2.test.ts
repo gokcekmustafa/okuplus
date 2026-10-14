@@ -118,6 +118,16 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
     ).toBe(true);
   });
 
+  it("publishes explicit lesson metadata for both Cycle 2 teaching contents", () => {
+    expect(
+      EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.content
+        .filter((content) =>
+          ["p1a-v2-structure-teach", "p1a-v2-relations-teach"].includes(content.key),
+        )
+        .map((content) => content.lesson?.nextExerciseKey),
+    ).toEqual(["p1a-v2-structure-study", "p1a-v2-relations-study"]);
+  });
+
   it("keeps correct-option positions balanced without forcing equal lengths", () => {
     const counts = new Map<string, number>();
     for (const question of EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap(

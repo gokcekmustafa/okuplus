@@ -184,17 +184,29 @@ const content = (
   skillCode: string,
 ): ProgramContent => ({ key, title, body, difficulty, skillCode });
 
-const structureTeaching = content(
-  "p1a-v2-structure-teach",
-  "Metnin omurgasını kur",
-  [
-    "Bir metnin omurgasını kurarken üç soruyu sırayla sor: Metin ne hakkında? Yazar bu konuda ne söylüyor? Hangi bilgiler bu düşünceyi destekliyor?",
-    "Konu, metnin üzerinde durduğu genel alandır. Ana düşünce, yazarın bu konu hakkındaki temel mesajıdır. Destekleyici ayrıntı ise bu mesajı açıklayan, örnekleyen veya kanıtlayan bilgidir.",
-    "Bir ayrıntı ilginç olabilir; fakat bütün metnin mesajını açıklamıyorsa ana düşünce değildir. Ana düşünceyi seçmeden önce seçeneğin birden fazla cümleyi açıklayıp açıklamadığını kontrol et.",
-  ].join("\n\n"),
-  3,
-  "RC_MAIN_IDEA",
-);
+const structureTeaching: ProgramContent = {
+  ...content(
+    "p1a-v2-structure-teach",
+    "Metnin omurgasını kur",
+    [
+      "Bir metnin omurgasını kurarken üç soruyu sırayla sor: Metin ne hakkında? Yazar bu konuda ne söylüyor? Hangi bilgiler bu düşünceyi destekliyor?",
+      "Konu, metnin üzerinde durduğu genel alandır. Ana düşünce, yazarın bu konu hakkındaki temel mesajıdır. Destekleyici ayrıntı ise bu mesajı açıklayan, örnekleyen veya kanıtlayan bilgidir.",
+      "Bir ayrıntı ilginç olabilir; fakat bütün metnin mesajını açıklamıyorsa ana düşünce değildir. Ana düşünceyi seçmeden önce seçeneğin birden fazla cümleyi açıklayıp açıklamadığını kontrol et.",
+    ].join("\n\n"),
+    3,
+    "RC_MAIN_IDEA",
+  ),
+  lesson: {
+    objective: "Konu, ana düşünce ve destekleyici ayrıntıyı ayırt etmek",
+    explanation:
+      "Metnin omurgası konu, ana düşünce ve bu düşünceyi destekleyen ayrıntılardan oluşur.",
+    workedExample:
+      "Önce metnin tamamında tekrar eden mesajı bul, sonra bu mesajı açıklayan ayrıntıyı seç.",
+    guidedPractice:
+      "Kısa metinde konuyu, ana düşünceyi ve onu destekleyen ayrıntıyı sırayla işaretle.",
+    nextExerciseKey: "p1a-v2-structure-study",
+  },
+};
 
 const structureStudy = content(
   "p1a-v2-structure-study",
@@ -220,17 +232,29 @@ const structureReinforcement = content(
   "RC_MAIN_IDEA",
 );
 
-const relationsTeaching = content(
-  "p1a-v2-relations-teach",
-  "Bilgiler arasındaki ilişkiyi gör",
-  [
-    "Cümleler yalnızca art arda dizilmez; aralarında neden-sonuç, karşılaştırma, zıtlık, sıralama veya örnekleme ilişkisi kurulabilir.",
-    "‘Çünkü’ ve ‘nedeniyle’ nedeni, ‘bu nedenle’ ve ‘böylece’ sonucu, ‘oysa’ ve ‘buna karşılık’ karşılaştırma veya zıtlığı, ‘örneğin’ ise açıklayıcı örneği işaret edebilir.",
-    "Önce bağlanan iki bilgiyi belirle, sonra aralarındaki ilişkiyi adlandır. Sadece bağlaç kelimesini bulmak, ilişkinin anlamını tek başına kanıtlamaz.",
-  ].join("\n\n"),
-  3,
-  "RC_DETAIL",
-);
+const relationsTeaching: ProgramContent = {
+  ...content(
+    "p1a-v2-relations-teach",
+    "Bilgiler arasındaki ilişkiyi gör",
+    [
+      "Cümleler yalnızca art arda dizilmez; aralarında neden-sonuç, karşılaştırma, zıtlık, sıralama veya örnekleme ilişkisi kurulabilir.",
+      "‘Çünkü’ ve ‘nedeniyle’ nedeni, ‘bu nedenle’ ve ‘böylece’ sonucu, ‘oysa’ ve ‘buna karşılık’ karşılaştırma veya zıtlığı, ‘örneğin’ ise açıklayıcı örneği işaret edebilir.",
+      "Önce bağlanan iki bilgiyi belirle, sonra aralarındaki ilişkiyi adlandır. Sadece bağlaç kelimesini bulmak, ilişkinin anlamını tek başına kanıtlamaz.",
+    ].join("\n\n"),
+    3,
+    "RC_DETAIL",
+  ),
+  lesson: {
+    objective: "Metindeki cümleler arasındaki anlam ilişkisini belirlemek",
+    explanation:
+      "Cümleler neden-sonuç, karşılaştırma, zıtlık veya örnekleme gibi ilişkilerle birbirine bağlanır.",
+    workedExample:
+      "Önce iki bilgiyi ayır, ardından aralarındaki ilişkiyi taşıyan ifadeyi ve anlamı birlikte kontrol et.",
+    guidedPractice:
+      "Kısa metindeki iki cümleyi eşleştir ve aralarındaki ilişkiyi metin kanıtıyla adlandır.",
+    nextExerciseKey: "p1a-v2-relations-study",
+  },
+};
 
 const relationsStudy = content(
   "p1a-v2-relations-study",
