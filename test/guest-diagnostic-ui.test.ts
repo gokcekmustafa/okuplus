@@ -87,4 +87,14 @@ describe("guest-first diagnostic frontend", () => {
     expect(styles).toContain("height: 100dvh");
     expect(styles).toContain("overflow: auto");
   });
+
+  it("keeps student practice focused and compresses mobile answer choices without visible scrollbars", () => {
+    expect(app).toContain('$("page-lessons")?.classList.toggle("is-focused-lesson", focused);');
+    expect(app).not.toContain('<p class="insight-eyebrow">ŞİMDİKİ DURAĞIN</p>');
+    expect(app).not.toContain('class="lesson-flow"');
+    expect(styles).toContain(".student-shell #page-exercise > .page-head");
+    expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(styles).toContain("#exercise-questions-card::-webkit-scrollbar");
+    expect(styles).toContain("scrollbar-width: none");
+  });
 });

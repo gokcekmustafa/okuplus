@@ -9068,3 +9068,132 @@ textarea:focus-visible {
     overflow: auto;
   }
 }
+
+/* Student focus mode: keep the current path context, remove repeated chrome,
+   and let compact answer layouts fit without exposing nested scrollbars. */
+.student-shell #page-exercise > .page-head,
+.student-shell #page-exercise .exercise-method {
+  display: none !important;
+}
+
+.student-shell #page-lessons.is-focused-lesson .learning-path-course-header > div:first-child {
+  display: none;
+}
+
+.student-shell #page-lessons.is-focused-lesson .learning-path-course-header {
+  min-height: 0;
+  margin-bottom: 8px;
+}
+
+.student-shell #page-lessons.is-focused-lesson .lesson-layout.is-learning-path .lesson-detail {
+  padding-top: 14px;
+}
+
+.student-shell
+  #page-lessons.is-focused-lesson
+  .lesson-layout.is-learning-path
+  .lesson-detail
+  > section {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.student-shell #page-lessons.is-focused-lesson .lesson-layout.is-learning-path .lesson-objective {
+  margin: 8px 0 0;
+}
+
+.student-shell #page-exercise #student-reading-card,
+.student-shell #page-exercise #exercise-questions-card,
+.student-shell #page-exercise #exercise-result-card,
+.student-shell #page-lessons.is-focused-lesson #lesson-detail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.student-shell #page-exercise #student-reading-card::-webkit-scrollbar,
+.student-shell #page-exercise #exercise-questions-card::-webkit-scrollbar,
+.student-shell #page-exercise #exercise-result-card::-webkit-scrollbar,
+.student-shell #page-lessons.is-focused-lesson #lesson-detail::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@media (max-width: 720px) {
+  .student-shell #page-exercise:not(.hidden) > .page-head,
+  .student-shell #page-exercise:not(.hidden) .exercise-method {
+    display: none !important;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-exercise-header {
+    margin-bottom: 6px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-card,
+  .student-shell #page-exercise:not(.hidden) #exercise-questions-card,
+  .student-shell #page-exercise:not(.hidden) #exercise-result-card {
+    max-height: min(54dvh, 430px);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-card {
+    margin-bottom: 6px;
+    padding: 10px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-heading {
+    margin: 2px 0 5px !important;
+    font-size: 1rem;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-body {
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-questions-card {
+    padding: 10px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-questions-card > div:first-child {
+    display: none !important;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-current-question {
+    gap: 6px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-mc-options {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px !important;
+  }
+
+  .student-shell #page-exercise:not(.hidden) .answer-card {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.25;
+  }
+
+  .student-shell #page-exercise:not(.hidden) .exercise-actions {
+    margin-top: 6px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-submit-attempt {
+    min-height: 42px;
+  }
+
+  .student-shell #page-lessons.is-focused-lesson:not(.hidden) .lesson-layout.is-learning-path {
+    max-height: calc(100dvh - 128px);
+  }
+
+  .student-shell
+    #page-lessons.is-focused-lesson:not(.hidden)
+    .lesson-layout.is-learning-path
+    #lesson-detail {
+    max-height: calc(100dvh - 128px);
+    overflow: auto;
+  }
+}

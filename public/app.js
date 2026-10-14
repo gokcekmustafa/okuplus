@@ -4116,6 +4116,7 @@ function learningPathTargetWithProgress(current, target, direction) {
 }
 
 function setLessonPageMode(focused) {
+  $("page-lessons")?.classList.toggle("is-focused-lesson", focused);
   $("lesson-layout")?.classList.toggle("is-learning-path", focused);
   $("lesson-list-panel")?.classList.toggle("hidden", focused);
   $("lessons-refresh")?.classList.toggle("hidden", focused);
@@ -4181,17 +4182,11 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
       <span class="muted">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
       ${progressLabel ? `<span class="learning-path-step-progress" aria-label="Öğrenme yolu ilerlemesi">Öğrenme Yolu · ${escapeHtml(progressLabel)}</span>` : ""}
     </div>
-    <p class="insight-eyebrow">ŞİMDİKİ DURAĞIN</p>
     <h3>${escapeHtml(lesson.title)}</h3>
-    <p class="lesson-objective"><strong>Bugünkü amacın:</strong> ${escapeHtml(lesson.objective)}</p>
+    <p class="lesson-objective">${escapeHtml(lesson.objective)}</p>
     <section><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
     <section><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
     <section><h4>Şimdi sen düşün</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
-    <div class="lesson-flow" aria-label="Öğrenme yolu akışı">
-      <span class="badge badge-info">Bu ders</span><span aria-hidden="true">→</span>
-      <span class="badge badge-success">Tamamla</span><span aria-hidden="true">→</span>
-      <span class="badge badge-neutral">Sonraki durak</span>
-    </div>
     <div class="lesson-actions">
       <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
       ${completed ? '<span class="lesson-completed-state" role="status">✓ Bu adım tamamlandı</span>' : '<button type="button" class="btn btn-primary" data-learning-step-complete>Dersi tamamla <span aria-hidden="true">→</span></button>'}
