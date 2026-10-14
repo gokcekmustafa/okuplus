@@ -116,8 +116,10 @@ async function findLessonForContentVersion(contentVersionId: string, actor: Less
       },
     },
   })) as LessonRow | null;
+  if (!row) throw notFoundError("Yayınlanmış ders içeriği bulunamadı");
   const version = row?.versions[0];
-  if (!row || !version || !metadataFor(version)) throw notFoundError("Ders bulunamadı");
+  if (!version) throw notFoundError("İstenen ders sürümü yayınlanmış değil");
+  if (!metadataFor(version)) throw notFoundError("Yayınlanmış ders sözleşmesi geçersiz");
   const progress = await withTenantContext(actor, (tx) =>
     tx.studentLessonProgress.findUnique({
       where: {

@@ -42,7 +42,13 @@ export async function lessonStudentRoutes(
             reason:
               error.message === "Bu öğrenme adımının yayınlanmış dersi yok"
                 ? "MISSING_CONTENT_VERSION"
-                : "CONTENT_OR_LESSON_UNAVAILABLE",
+                : error.message === "Yayınlanmış ders içeriği bulunamadı"
+                  ? "CONTENT_NOT_VISIBLE_OR_MISSING"
+                  : error.message === "İstenen ders sürümü yayınlanmış değil"
+                    ? "CONTENT_VERSION_NOT_PUBLISHED"
+                    : error.message === "Yayınlanmış ders sözleşmesi geçersiz"
+                      ? "LESSON_METADATA_INVALID"
+                      : "CONTENT_OR_LESSON_UNAVAILABLE",
           },
           "Learning step lesson unavailable",
         );
