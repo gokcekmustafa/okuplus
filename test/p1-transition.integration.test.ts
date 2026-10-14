@@ -232,7 +232,7 @@ async function createPath(
         data: {
           id: stepId,
           unitId,
-          stableKey: sourceStep.key,
+          stableKey: `${programId}:${sourceStep.key}`,
           title: sourceStep.title,
           position: stepIndex + 1,
           type: sourceStep.type,

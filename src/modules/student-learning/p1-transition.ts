@@ -6,11 +6,13 @@ import {
 } from "../../curriculum/academic-reading-p0.js";
 import {
   EDUCATION_V2_P1_A_LEVEL_CODE,
+  EDUCATION_V2_P1_A_PROGRAM_ID,
   EDUCATION_V2_P1_A_PATH_VERSION,
   EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PATH_CODE_PREFIX,
 } from "../../curriculum/education-v2-p1-a-program.js";
 import {
+  EDUCATION_V2_P1_A_CYCLE_V2_ID,
   EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
   EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
@@ -976,19 +978,35 @@ function p1CycleShape(pathCode: string): {
   unitCodes: readonly string[];
   steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[];
 } | null {
+  const persistedStepShape = (
+    programId: string,
+    steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[],
+  ) =>
+    steps.map((step) => ({
+      ...step,
+      stableKey: `${programId}:${step.stableKey}`,
+      prerequisiteKeys: step.prerequisiteKeys.map((key) => `${programId}:${key}`),
+    }));
+
   if (pathCode === P1_A_INITIAL_PATH_CODE) {
     const manifest = buildEducationV2P1ALearningCycleManifest();
     return {
       version: EDUCATION_V2_P1_A_PATH_VERSION,
       unitCodes: EDUCATION_V2_P1_A_PROGRAM.path.units.map((unit) => unit.code),
-      steps: manifest.steps,
+      // P1-A provisioning persists stable keys as `${programId}:${stepKey}`.
+      // The runtime graph check must validate that immutable storage contract,
+      // not the authoring-only manifest key.
+      steps: persistedStepShape(EDUCATION_V2_P1_A_PROGRAM_ID, manifest.steps),
     };
   }
   if (pathCode === P1_A_NEXT_CYCLE_PATH_CODE) {
     return {
       version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
       unitCodes: EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.map((unit) => unit.code),
-      steps: EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.steps,
+      steps: persistedStepShape(
+        EDUCATION_V2_P1_A_CYCLE_V2_ID,
+        EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.steps,
+      ),
     };
   }
   return null;
