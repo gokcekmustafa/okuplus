@@ -105,6 +105,26 @@ describe("published learning lesson contract", () => {
     });
   });
 
+  it("reads the first Cycle 2 teaching envelope when its objective is the full passage", () => {
+    const legacyObjective = "x".repeat(501);
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        lessonType: "LEARNING_EXERCISE",
+        contractVersion: 2,
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+        routeFamily: "P1-A-CYCLE-2",
+        exerciseTemplateVersionId: null,
+        objective: legacyObjective,
+      }),
+    ).toMatchObject({
+      lessonType: "LEARNING_LESSON",
+      contractVersion: 2,
+      objective: legacyObjective,
+      routeFamily: "P1-A-CYCLE-2",
+    });
+  });
+
   it("normalizes an older Cycle 2 envelope without a route family", () => {
     expect(
       parseLessonMetadata({

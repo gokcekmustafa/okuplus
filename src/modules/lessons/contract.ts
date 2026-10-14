@@ -104,6 +104,13 @@ export const lessonMetadataSchema = z
   })
   .strict();
 
+// The first immutable Cycle 2 teaching versions used the full passage as the
+// objective fallback. Keep that already-published shape readable without
+// widening the contract for newly-authored lesson metadata.
+const legacyCycle2LessonMetadataSchema = lessonMetadataSchema.extend({
+  objective: z.string().trim().min(1).max(5000),
+});
+
 export type LessonMetadata = z.infer<typeof lessonMetadataSchema>;
 
 export function parseLessonMetadata(value: unknown): LessonMetadata | null {
@@ -149,7 +156,7 @@ export function parseLessonMetadata(value: unknown): LessonMetadata | null {
     const normalized = Object.fromEntries(
       lessonMetadataKeys.filter((key) => key in raw).map((key) => [key, raw[key]]),
     );
-    const compatibilityParsed = lessonMetadataSchema.safeParse({
+    const compatibilityParsed = legacyCycle2LessonMetadataSchema.safeParse({
       ...normalized,
       lessonType: LESSON_METADATA_TYPE,
       routeFamily: CYCLE_2_P1_A_ROUTE_FAMILY,
