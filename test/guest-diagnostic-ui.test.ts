@@ -66,9 +66,12 @@ describe("guest-first diagnostic frontend", () => {
   });
 
   it("communicates fast reading and comprehension goals before the diagnostic starts", () => {
-    expect(index).toContain("Daha hızlı oku, daha iyi anla");
+    expect(index).toContain("Daha hızlı oku");
+    expect(index).toContain("daha iyi anla");
     expect(index).toContain("HIZLI OKUMA + OKUDUĞUNU ANLAMA");
     expect(index).toContain('id="guest-skill-grid"');
+    expect(index).toContain('class="guest-nav"');
+    expect(index).toContain('class="guest-phone-frame"');
     expect(index).toContain("Ana fikri yakala");
     expect(index).toContain("Ayrıntıları seç");
     expect(index).toContain("Çıkarım yap");

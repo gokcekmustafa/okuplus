@@ -166,10 +166,20 @@
     <main id="view-guest" class="guest-shell hidden">
       <div id="guest-diagnostic-card" class="guest-card card">
         <div class="guest-topbar">
-          <div class="guest-brand-mark" aria-label="OkuPratik">
-            <span class="guest-brand-icon" aria-hidden="true">↗</span>
+          <a
+            class="guest-brand-mark"
+            href="#guest-diagnostic-card"
+            aria-label="OkuPratik ana sayfa"
+          >
+            <span class="guest-brand-icon" aria-hidden="true"></span>
             <span>OkuPratik</span>
-          </div>
+          </a>
+          <nav class="guest-nav" aria-label="Tanıtım menüsü">
+            <a href="#guest-skill-grid">Neden?</a>
+            <a href="#guest-intro">Nasıl çalışır?</a>
+            <a href="#guest-skill-grid">Keşfet</a>
+            <a href="#guest-result-view">Sık sorulanlar</a>
+          </nav>
           <button id="guest-header-login-btn" type="button" class="btn btn-secondary btn-sm">
             Giriş yap
           </button>
@@ -178,7 +188,7 @@
           <div class="guest-landing-copy">
             <header class="guest-header">
               <p class="guest-eyebrow">HIZLI OKUMA + OKUDUĞUNU ANLAMA</p>
-              <h1>Daha hızlı oku, daha iyi anla</h1>
+              <h1><span>Daha hızlı oku</span><strong>daha iyi anla</strong></h1>
               <p>
                 Okuma maceran burada başlıyor. Ana fikri daha hızlı yakala ve metindeki önemli
                 ipuçlarını daha iyi anla. Kısa tanı, sana uygun başlangıç noktasını birlikte
@@ -231,6 +241,31 @@
               </div>
             </div>
             <div class="guest-art-quote">Her cevap yeni bir ipucu ✦</div>
+            <div class="guest-phone-frame">
+              <div class="guest-phone-speaker"></div>
+              <div class="guest-phone-screen">
+                <div class="guest-phone-status"><span>9:41</span><span>● ◒ ▰</span></div>
+                <div class="guest-phone-step">
+                  <span>‹</span><strong>Adım 3 / 6</strong><span>▣</span>
+                </div>
+                <div class="guest-phone-progress"><i></i></div>
+                <h3>Bir metni anlamana<br />en çok ne yardımcı olur?</h3>
+                <div class="guest-phone-option is-correct">
+                  <b>▤</b><span>Önemli yerleri<br />vurgulamak</span><i>●</i>
+                </div>
+                <div class="guest-phone-option">
+                  <b>◌</b><span>Metni parçalara<br />bölerek okumak</span><i>○</i>
+                </div>
+                <div class="guest-phone-option">
+                  <b>✧</b><span>Zihnimde<br />canlandırmak</span><i>○</i>
+                </div>
+                <div class="guest-phone-option">
+                  <b>♧</b><span>Örneklerle<br />ilişkilendirmek</span><i>○</i>
+                </div>
+                <div class="guest-phone-submit">Seç ve devam et <span>→</span></div>
+                <small>✦ Her cevap yeni bir ipucu</small>
+              </div>
+            </div>
           </div>
         </div>
 
