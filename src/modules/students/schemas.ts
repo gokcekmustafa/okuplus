@@ -11,6 +11,7 @@ import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-da
  */
 
 const userStatusSchema = z.enum(["ACTIVE", "INVITED", "SUSPENDED", "CLOSED"]);
+const tenantTypeSchema = z.enum(["ORGANIZATION", "INDIVIDUAL"]);
 
 const emailSchema = z
   .string()
@@ -39,6 +40,7 @@ const levelIdSchema = z.string().trim().min(1, "Seviye kimliği gerekli").nullab
 export const listStudentsQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
   tenantId: z.string().trim().min(1).optional(),
+  tenantType: tenantTypeSchema.optional(),
   status: userStatusSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

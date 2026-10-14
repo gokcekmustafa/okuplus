@@ -319,7 +319,7 @@
             <span class="nav-icon" aria-hidden="true">🧑‍🤝‍🧑</span>
             <span class="nav-label">Kullanıcılar</span>
           </button>
-          <button class="nav-item" data-page="students" data-admin data-organization type="button">
+          <button class="nav-item" data-page="students" data-admin data-management type="button">
             <span class="nav-icon" aria-hidden="true">👥</span>
             <span class="nav-label">Öğrenciler</span>
           </button>
@@ -376,7 +376,7 @@
             <span class="nav-icon" aria-hidden="true">▦</span>
             <span class="nav-label">Kurum Paneli</span>
           </button>
-          <button class="nav-item" data-page="analytics" data-organization type="button">
+          <button class="nav-item" data-page="analytics" data-management type="button">
             <span class="nav-icon" aria-hidden="true">📊</span>
             <span class="nav-label">Öğrenci Analitiği</span>
           </button>
@@ -1342,7 +1342,7 @@
               <div>
                 <span class="eyebrow">YÖNETİM VE ÖĞRENME ANALİTİĞİ</span>
                 <h2>Öğrenci Analitiği</h2>
-                <p class="muted">
+                <p id="analytics-scope-copy" class="muted">
                   Kurumunuzun yetkili öğrenci kapsamındaki gerçek sunucu kayıtlarını inceleyin.
                 </p>
               </div>
@@ -1354,6 +1354,25 @@
                   ><span>Bitiş</span><input id="analytics-to" type="date"
                 /></label>
                 <button id="analytics-refresh" type="button" class="btn btn-primary">Yenile</button>
+              </div>
+              <div class="analytics-filter-controls" role="group" aria-label="Öğrenci filtreleri">
+                <label class="field inline-field">
+                  <span class="visually-hidden">Öğrenci ara</span>
+                  <input
+                    id="analytics-student-search"
+                    type="search"
+                    placeholder="Öğrenci ara…"
+                    autocomplete="off"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Kapsam filtresi</span>
+                  <select id="analytics-tenant-type-filter">
+                    <option value="">Tüm öğrenci kapsamı</option>
+                    <option value="ORGANIZATION">Kurumsal öğrenciler</option>
+                    <option value="INDIVIDUAL">Bireysel öğrenciler</option>
+                  </select>
+                </label>
               </div>
             </div>
             <div id="analytics-error" class="error-banner hidden" role="alert"></div>
@@ -1453,13 +1472,14 @@
                       <tr>
                         <th>Öğrenci</th>
                         <th>Sınıf</th>
+                        <th>Kurum bağlantısı</th>
                         <th>Son etkinlik</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody id="analytics-student-body">
                       <tr>
-                        <td colspan="4" class="empty-cell">Öğrenciler yükleniyor…</td>
+                        <td colspan="5" class="empty-cell">Öğrenciler yükleniyor…</td>
                       </tr>
                     </tbody>
                   </table>
@@ -2038,6 +2058,14 @@
                     <option value="INVITED">Davetli</option>
                     <option value="SUSPENDED">Askıda</option>
                     <option value="CLOSED">Kapatıldı</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Öğrenci türü filtresi</span>
+                  <select id="student-tenant-type-filter">
+                    <option value="">Tüm öğrenci türleri</option>
+                    <option value="ORGANIZATION">Kurumsal öğrenciler</option>
+                    <option value="INDIVIDUAL">Bireysel öğrenciler</option>
                   </select>
                 </label>
               </div>

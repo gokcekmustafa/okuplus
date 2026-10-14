@@ -6,8 +6,9 @@ Bu panel yalnızca kurum yönetimi bağlamında, sunucuda zaten tutulmuş kayıt
 
 - `OWNER`, `ORG_ADMIN` ve `BRANCH_MANAGER` rolleri erişebilir.
 - `BRANCH_MANAGER` yalnızca yönettiği şubelerde aktif kaydı bulunan öğrencileri görür.
-- Platform kullanıcısı için tenant seçilmeden analitik açılmaz; böylece tenant kapsamı belirsiz bir global rapor oluşmaz.
-- Tüm sorgular `tenantId` ve gerektiğinde şube/sınıf ilişkisiyle sınırlandırılır.
+- `SUPER_ADMIN` için platform kapsamı vardır; aktif kurumsal ve bireysel tenant'lardaki aynı `studentId` tek bir öğrenci olarak sayılır ve tenant bağlantıları ayrı gösterilir.
+- `OWNER`, `ORG_ADMIN` ve `BRANCH_MANAGER` için tüm sorgular seçili `tenantId` ve gerektiğinde şube/sınıf ilişkisiyle sınırlandırılır.
+- Platform toplamları benzersiz öğrenci sayısını kullanır; oturum, etkinlik ve teknik hata kayıtları kaynak tenant kayıtlarının toplamıdır. Kurum toplamları yalnızca yetkili kurum kapsamını temsil eder.
 
 ## Veri kaynakları
 
@@ -30,6 +31,12 @@ Bu panel yalnızca kurum yönetimi bağlamında, sunucuda zaten tutulmuş kayıt
 ## Tarih ve eksik veri davranışı
 
 Tarih aralığı UTC gün başlangıçlarıyla yorumlanır ve en fazla 366 gün olabilir. Geçmişte event olarak tutulmamış bir ekran veya etkileşim sonradan üretilemez; ilgili yerde `Veri mevcut değil` gösterilir. Panel veriyi Öğrenme Yolu, Bağımsız Antrenman, Ödevler ve Ölçme-Değerlendirme metrikleriyle birleştirmez.
+
+## Yönetim ekranı
+
+- Super Admin, `Öğrenciler` ve `Öğrenci Analitiği` menülerinden platform kapsamına erişir.
+- Öğrenci listesi arama, hesap durumu, kurum türü ve tenant filtresi sunar; aynı öğrenci farklı tenant bağlantılarında listede çoğaltılmaz.
+- Öğrenci ayrıntısı öğrenme yolu adımlarını ve durumlarını salt okunur gösterir. Bu görünüm 31 → 32 gibi geçiş incelemelerine yardımcı olur; ilerleme yazmaz.
 
 ## Performans ve güvenlik
 

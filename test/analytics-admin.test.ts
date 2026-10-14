@@ -11,36 +11,48 @@ const PASSWORD = "analytics-test-123!";
 const ADMIN_ID = "99999993-0000-7000-8000-000000000001";
 const STUDENT_A_ID = "99999993-0000-7000-8000-000000000002";
 const STUDENT_B_ID = "99999993-0000-7000-8000-000000000003";
+const PLATFORM_ADMIN_ID = "99999993-0000-7000-8000-000000000004";
 const TENANT_A = "99999993-0000-7000-8000-0000000000a1";
 const TENANT_B = "99999993-0000-7000-8000-0000000000b1";
+const TENANT_INDIVIDUAL = "99999993-0000-7000-8000-0000000000c1";
 const ADMIN_EMAIL = "analytics-admin@example.com";
 const STUDENT_A_EMAIL = "analytics-student-a@example.com";
 const STUDENT_B_EMAIL = "analytics-student-b@example.com";
+const PLATFORM_ADMIN_EMAIL = "analytics-platform-admin@example.com";
 
 describe.skipIf(!process.env.DATABASE_URL)("admin student analytics", () => {
   let app: FastifyInstance;
   let accessToken: string;
+  let platformAccessToken: string;
 
   beforeAll(async () => {
     await prisma.$connect();
     await prisma.studentLearningStepProgress.deleteMany({
-      where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
     });
     await prisma.studentLearningPath.deleteMany({
-      where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
     });
-    await prisma.studentProfile.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
-    await prisma.enrollment.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
+    await prisma.studentProfile.deleteMany({
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
+    await prisma.enrollment.deleteMany({
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
     await prisma.membership.deleteMany({
       where: {
         OR: [
-          { tenantId: { in: [TENANT_A, TENANT_B] } },
-          { userId: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID] } },
+          { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+          { userId: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID, PLATFORM_ADMIN_ID] } },
         ],
       },
     });
-    await prisma.user.deleteMany({ where: { id: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID] } } });
-    await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID, PLATFORM_ADMIN_ID] } },
+    });
+    await prisma.tenant.deleteMany({
+      where: { id: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
 
     const passwordHash = await hasher.hash(PASSWORD);
     await prisma.user.createMany({
@@ -58,12 +70,20 @@ describe.skipIf(!process.env.DATABASE_URL)("admin student analytics", () => {
           displayName: "Diğer Kurum Öğrencisi",
           passwordHash,
         },
+        {
+          id: PLATFORM_ADMIN_ID,
+          email: PLATFORM_ADMIN_EMAIL,
+          displayName: "Platform Analitik Yöneticisi",
+          passwordHash,
+          platformRole: "SUPER_ADMIN",
+        },
       ],
     });
     await prisma.tenant.createMany({
       data: [
         { id: TENANT_A, type: "ORGANIZATION", name: "Analitik Kurumu" },
         { id: TENANT_B, type: "ORGANIZATION", name: "Diğer Kurum" },
+        { id: TENANT_INDIVIDUAL, type: "INDIVIDUAL", name: "Bireysel Alan" },
       ],
     });
     await prisma.membership.createMany({
@@ -71,12 +91,14 @@ describe.skipIf(!process.env.DATABASE_URL)("admin student analytics", () => {
         { tenantId: TENANT_A, userId: ADMIN_ID, role: "ORG_ADMIN", status: "ACTIVE" },
         { tenantId: TENANT_A, userId: STUDENT_A_ID, role: "STUDENT", status: "ACTIVE" },
         { tenantId: TENANT_B, userId: STUDENT_B_ID, role: "STUDENT", status: "ACTIVE" },
+        { tenantId: TENANT_INDIVIDUAL, userId: STUDENT_A_ID, role: "STUDENT", status: "ACTIVE" },
       ],
     });
     await prisma.studentProfile.createMany({
       data: [
         { tenantId: TENANT_A, studentId: STUDENT_A_ID },
         { tenantId: TENANT_B, studentId: STUDENT_B_ID },
+        { tenantId: TENANT_INDIVIDUAL, studentId: STUDENT_A_ID },
       ],
     });
     app = await buildApp(loadEnv());
@@ -88,33 +110,52 @@ describe.skipIf(!process.env.DATABASE_URL)("admin student analytics", () => {
     });
     expect(login.statusCode).toBe(200);
     accessToken = login.json().data.tokens.accessToken;
+    const platformLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: PLATFORM_ADMIN_EMAIL, password: PASSWORD },
+    });
+    expect(platformLogin.statusCode).toBe(200);
+    platformAccessToken = platformLogin.json().data.tokens.accessToken;
   });
 
   afterAll(async () => {
     await app?.close();
     await prisma.studentLearningStepProgress.deleteMany({
-      where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
     });
     await prisma.studentLearningPath.deleteMany({
-      where: { tenantId: { in: [TENANT_A, TENANT_B] } },
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
     });
-    await prisma.studentProfile.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
-    await prisma.enrollment.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
+    await prisma.studentProfile.deleteMany({
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
+    await prisma.enrollment.deleteMany({
+      where: { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
     await prisma.membership.deleteMany({
       where: {
         OR: [
-          { tenantId: { in: [TENANT_A, TENANT_B] } },
-          { userId: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID] } },
+          { tenantId: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+          { userId: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID, PLATFORM_ADMIN_ID] } },
         ],
       },
     });
-    await prisma.user.deleteMany({ where: { id: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID] } } });
-    await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
+    await prisma.user.deleteMany({
+      where: { id: { in: [ADMIN_ID, STUDENT_A_ID, STUDENT_B_ID, PLATFORM_ADMIN_ID] } },
+    });
+    await prisma.tenant.deleteMany({
+      where: { id: { in: [TENANT_A, TENANT_B, TENANT_INDIVIDUAL] } },
+    });
     await prisma.$disconnect();
   });
 
   function headers() {
     return { authorization: `Bearer ${accessToken}`, "x-tenant-id": TENANT_A };
+  }
+
+  function platformHeaders() {
+    return { authorization: `Bearer ${platformAccessToken}` };
   }
 
   it("kimlik doğrulaması olmayan isteği reddeder", async () => {
@@ -159,6 +200,47 @@ describe.skipIf(!process.env.DATABASE_URL)("admin student analytics", () => {
       headers: headers(),
     });
     expect(response.statusCode).toBe(403);
+  });
+
+  it("SUPER_ADMIN platform genelinde öğrencileri tenant bağlantılarını tekilleştirerek görür", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/analytics/students?tenantType=INDIVIDUAL",
+      headers: platformHeaders(),
+    });
+    expect(response.statusCode).toBe(200);
+    const items = response.json().data.items as Array<{
+      studentId: string;
+      tenantConnections: Array<{ id: string }>;
+    }>;
+    expect(items.map((item) => item.studentId)).toContain(STUDENT_A_ID);
+    expect(items.filter((item) => item.studentId === STUDENT_A_ID)).toHaveLength(1);
+    expect(items.find((item) => item.studentId === STUDENT_A_ID)?.tenantConnections).toEqual([
+      { id: TENANT_INDIVIDUAL, name: "Bireysel Alan", type: "INDIVIDUAL" },
+    ]);
+  });
+
+  it("SUPER_ADMIN özeti benzersiz öğrenci sayar ve detayda tenant bağlantılarını gösterir", async () => {
+    const overview = await app.inject({
+      method: "GET",
+      url: "/admin/analytics/overview",
+      headers: platformHeaders(),
+    });
+    expect(overview.statusCode).toBe(200);
+    expect(overview.json().data.overview.registeredStudents).toBeGreaterThanOrEqual(2);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/admin/analytics/students/${STUDENT_A_ID}`,
+      headers: platformHeaders(),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.student.tenantConnections).toEqual(
+      expect.arrayContaining([
+        { id: TENANT_A, name: "Analitik Kurumu", type: "ORGANIZATION" },
+        { id: TENANT_INDIVIDUAL, name: "Bireysel Alan", type: "INDIVIDUAL" },
+      ]),
+    );
   });
 });
 

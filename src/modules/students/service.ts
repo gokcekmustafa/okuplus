@@ -38,6 +38,7 @@ export interface StudentListItem {
   tenantName: string;
   tenantType: string;
   className: string | null;
+  tenantConnections?: Array<{ id: string; name: string; type: string }>;
   status: UserStatus;
   createdAt: Date;
 }
@@ -96,46 +97,43 @@ export interface EnrollmentSummary {
 }
 
 export async function listStudents(query: ListStudentsQuery): Promise<StudentListResult> {
-  const { search, tenantId, status, page, pageSize } = query;
-
-  const where: Prisma.StudentProfileWhereInput = {
-    student: { deletedAt: null },
-    tenant: { deletedAt: null },
-    ...(tenantId ? { tenantId } : {}),
-    ...(status ? { student: { status } } : {}),
+  const { search, tenantId, tenantType, status, page, pageSize } = query;
+  const studentWhere: Prisma.UserWhereInput = {
+    deletedAt: null,
+    ...(status ? { status } : {}),
     ...(search
       ? {
-          student: {
-            OR: [
-              { displayName: { contains: search, mode: "insensitive" } },
-              { email: { contains: search, mode: "insensitive" } },
-            ],
-          },
+          OR: [
+            { displayName: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+          ],
         }
       : {}),
   };
 
-  const [rows, total] = await Promise.all([
-    prisma.studentProfile.findMany({
-      where,
-      select: {
-        id: true,
-        studentId: true,
-        tenantId: true,
-        student: {
-          select: { id: true, displayName: true, email: true, status: true, createdAt: true },
-        },
-        tenant: { select: { id: true, name: true, type: true } },
+  const where: Prisma.StudentProfileWhereInput = {
+    student: studentWhere,
+    tenant: { deletedAt: null, ...(tenantType ? { type: tenantType } : {}) },
+    ...(tenantId ? { tenantId } : {}),
+  };
+
+  const rows = await prisma.studentProfile.findMany({
+    where,
+    select: {
+      id: true,
+      studentId: true,
+      tenantId: true,
+      startedAt: true,
+      student: {
+        select: { id: true, displayName: true, email: true, status: true, createdAt: true },
       },
-      orderBy: { startedAt: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.studentProfile.count({ where }),
-  ]);
+      tenant: { select: { id: true, name: true, type: true } },
+    },
+    orderBy: { startedAt: "desc" },
+  });
 
   // Aktif sınıf: satır bazında tenant'a göre tek sorguyla çekilir.
-  const studentIds = rows.map((r) => r.studentId);
+  const studentIds = [...new Set(rows.map((r) => r.studentId))];
   const activeEnrollments =
     studentIds.length === 0
       ? []
@@ -152,19 +150,41 @@ export async function listStudents(query: ListStudentsQuery): Promise<StudentLis
     activeEnrollments.map((e) => [`${e.studentId}:${e.tenantId}`, e.class.name]),
   );
 
+  const grouped = new Map<string, StudentListItem>();
+  for (const row of rows) {
+    const current = grouped.get(row.studentId);
+    const connection = { id: row.tenant.id, name: row.tenant.name, type: row.tenant.type };
+    if (current) {
+      const connections = (current.tenantConnections ??= []);
+      if (!connections.some((item) => item.id === connection.id)) {
+        connections.push(connection);
+      }
+      if (!current.className) {
+        current.className =
+          classNameByStudentTenant.get(`${row.studentId}:${row.tenantId}`) ?? null;
+      }
+      continue;
+    }
+    grouped.set(row.studentId, {
+      id: row.id,
+      studentId: row.student.id,
+      displayName: row.student.displayName,
+      email: row.student.email,
+      tenantId: row.tenant.id,
+      tenantName: row.tenant.name,
+      tenantType: row.tenant.type,
+      className: classNameByStudentTenant.get(`${row.studentId}:${row.tenantId}`) ?? null,
+      status: row.student.status,
+      createdAt: row.student.createdAt,
+      tenantConnections: [connection],
+    });
+  }
+  const uniqueItems = [...grouped.values()];
+  const total = uniqueItems.length;
+  const items = uniqueItems.slice((page - 1) * pageSize, page * pageSize);
+
   return {
-    items: rows.map(({ id, student, tenant }) => ({
-      id,
-      studentId: student.id,
-      displayName: student.displayName,
-      email: student.email,
-      tenantId: tenant.id,
-      tenantName: tenant.name,
-      tenantType: tenant.type,
-      className: classNameByStudentTenant.get(`${student.id}:${tenant.id}`) ?? null,
-      status: student.status,
-      createdAt: student.createdAt,
-    })),
+    items,
     total,
     page,
     pageSize,

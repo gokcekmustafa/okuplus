@@ -8,6 +8,8 @@ export const analyticsRangeSchema = z.object({
 });
 
 export const analyticsListQuerySchema = analyticsRangeSchema.extend({
+  search: z.string().trim().max(120).optional(),
+  tenantType: z.enum(["ORGANIZATION", "INDIVIDUAL"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

@@ -1265,6 +1265,12 @@ function showDashboard(me) {
     !isPlatform && currentTenantType === "INDIVIDUAL" && (isStudentUser || isParentUser);
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
+  const analyticsScopeCopy = $("analytics-scope-copy");
+  if (analyticsScopeCopy) {
+    analyticsScopeCopy.textContent = isPlatform
+      ? "Platform kapsamındaki bireysel ve kurumsal öğrencilerin, tenant bağlantıları tekilleştirilerek sunucu kayıtlarını inceleyin."
+      : "Kurumunuzun yetkili öğrenci kapsamındaki gerçek sunucu kayıtlarını inceleyin.";
+  }
 
   const billingMenuItem = $("user-menu-billing-item");
   const canViewBilling = isPersonalBillingUser || isOrganizationAdminUser;
@@ -1290,6 +1296,9 @@ function showDashboard(me) {
       "hidden",
       item.hasAttribute("data-organization") ? !isOrganizationUser : !isPlatform,
     );
+  }
+  for (const item of document.querySelectorAll("[data-management]")) {
+    item.classList.toggle("hidden", !isPlatformUser && !isOrganizationUser);
   }
   for (const item of document.querySelectorAll("[data-organization]")) {
     item.classList.toggle("hidden", !isOrganizationUser);
@@ -4648,6 +4657,8 @@ const PLATFORM_PAGES = new Set([
   "templates",
   "skills",
   "levels",
+  "students",
+  "analytics",
   "settings",
 ]);
 const ORGANIZATION_ADMIN_PAGES = new Set([
@@ -5510,6 +5521,14 @@ for (const item of document.querySelectorAll("[data-page].dashboard-link-card"))
 }
 
 $("analytics-refresh")?.addEventListener("click", () => {
+  analyticsStudentPage = 1;
+  void loadAnalyticsPage();
+});
+$("analytics-student-search")?.addEventListener("input", () => {
+  analyticsStudentPage = 1;
+  void loadAnalyticsPage();
+});
+$("analytics-tenant-type-filter")?.addEventListener("change", () => {
   analyticsStudentPage = 1;
   void loadAnalyticsPage();
 });
@@ -6510,6 +6529,7 @@ async function loadStudents() {
 
   const search = $("student-search").value.trim();
   const tenantId = $("student-tenant-filter").value;
+  const tenantType = $("student-tenant-type-filter").value;
   const status = $("student-status-filter").value;
   const params = new URLSearchParams({
     page: studentPage,
@@ -6517,6 +6537,7 @@ async function loadStudents() {
   });
   if (search) params.set("search", search);
   if (tenantId) params.set("tenantId", tenantId);
+  if (tenantType) params.set("tenantType", tenantType);
   if (status) params.set("status", status);
 
   try {
@@ -6548,7 +6569,7 @@ function renderStudentList() {
           </button>
         </td>
         <td>${s.email ? escapeHtml(s.email) : "—"}</td>
-        <td>${escapeHtml(s.tenantName)}</td>
+        <td>${escapeHtml(s.tenantName)} (${tenantTypeLabel(s.tenantType)})${s.tenantConnections?.length > 1 ? `<span class="muted analytics-secondary-line">${s.tenantConnections.length} tenant bağlantısı</span>` : ""}</td>
         <td>${s.className ? escapeHtml(s.className) : "—"}</td>
         <td>${userStatusBadge(s.status)}</td>
         <td class="text-right">
@@ -7101,6 +7122,10 @@ function setupStudentEvents() {
     void loadStudents();
   });
   $("student-tenant-filter").addEventListener("change", () => {
+    studentPage = 1;
+    void loadStudents();
+  });
+  $("student-tenant-type-filter").addEventListener("change", () => {
     studentPage = 1;
     void loadStudents();
   });
@@ -8760,6 +8785,10 @@ function analyticsQuery() {
   const to = $("analytics-to")?.value;
   if (from) params.set("from", from);
   if (to) params.set("to", to);
+  const search = $("analytics-student-search")?.value.trim();
+  const tenantType = $("analytics-tenant-type-filter")?.value;
+  if (search) params.set("search", search);
+  if (tenantType) params.set("tenantType", tenantType);
   return params;
 }
 
@@ -8819,10 +8848,10 @@ async function loadAnalyticsStudents(requestId = analyticsRequest) {
     ? students.items
         .map(
           (student) =>
-            `<tr><td><strong>${escapeHtml(student.displayName)}</strong><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntılar</button></td></tr>`,
+            `<tr><td><strong>${escapeHtml(student.displayName)}</strong><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntılar</button></td></tr>`,
         )
         .join("")
-    : '<tr><td colspan="4" class="empty-cell">Bu tarih aralığında öğrenci etkinliği bulunamadı.</td></tr>';
+    : '<tr><td colspan="5" class="empty-cell">Bu tarih aralığında öğrenci etkinliği bulunamadı.</td></tr>';
   $("analytics-student-pagination").innerHTML =
     `<span class="muted">${students.total} öğrenci</span><div><button type="button" class="btn btn-ghost btn-sm" data-analytics-page="prev" ${students.page <= 1 ? "disabled" : ""}>Önceki</button><button type="button" class="btn btn-ghost btn-sm" data-analytics-page="next" ${students.page * students.pageSize >= students.total ? "disabled" : ""}>Sonraki</button></div>`;
 }
@@ -8905,7 +8934,7 @@ async function loadAnalyticsStudentDetail(studentId, requestId = analyticsReques
 }
 
 async function loadAnalyticsPage() {
-  if (!isOrganizationUser) return;
+  if (!isPlatformUser && !isOrganizationUser) return;
   const requestId = ++analyticsRequest;
   const status = $("analytics-status");
   const error = $("analytics-error");

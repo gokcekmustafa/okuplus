@@ -13,6 +13,23 @@ export interface AnalyticsRange {
   toExclusive: Date;
 }
 
+export interface PlatformAnalyticsScope {
+  kind: "PLATFORM";
+  userId: string;
+}
+
+export interface OrganizationAnalyticsScope {
+  kind: "ORGANIZATION";
+  organization: OrganizationScope;
+}
+
+export type AnalyticsScope = PlatformAnalyticsScope | OrganizationAnalyticsScope;
+
+export interface AnalyticsStudentFilters {
+  search?: string;
+  tenantType?: "ORGANIZATION" | "INDIVIDUAL";
+}
+
 export function normalizeAnalyticsRange(
   input: AnalyticsRangeInput,
   now = new Date(),
@@ -49,14 +66,26 @@ function average(values: Array<number | null | undefined>): number | null {
 function studentWhere(
   scope: OrganizationScope,
   studentId?: string,
+  filters: AnalyticsStudentFilters = {},
 ): Prisma.StudentProfileWhereInput {
   return {
     tenantId: scope.tenantId,
     ...(studentId ? { studentId } : {}),
-    tenant: { deletedAt: null },
+    tenant: {
+      deletedAt: null,
+      ...(filters.tenantType ? { type: filters.tenantType } : {}),
+    },
     student: {
       deletedAt: null,
       status: { not: "CLOSED" },
+      ...(filters.search
+        ? {
+            OR: [
+              { displayName: { contains: filters.search, mode: "insensitive" } },
+              { email: { contains: filters.search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
       ...(scope.role === "BRANCH_MANAGER"
         ? {
             enrollments: {
@@ -79,6 +108,7 @@ type StudentRow = {
   displayName: string;
   status: string;
   classNames: string[];
+  tenantConnections: Array<{ id: string; name: string; type: string }>;
 };
 
 type StudentPagination = { skip: number; take: number };
@@ -87,12 +117,14 @@ async function loadScopedStudents(
   scope: OrganizationScope,
   studentId?: string,
   pagination?: StudentPagination,
+  filters: AnalyticsStudentFilters = {},
 ): Promise<StudentRow[]> {
   const rows = await prisma.studentProfile.findMany({
-    where: studentWhere(scope, studentId),
+    where: studentWhere(scope, studentId, filters),
     select: {
       id: true,
       studentId: true,
+      tenant: { select: { id: true, name: true, type: true } },
       student: {
         select: {
           displayName: true,
@@ -120,7 +152,91 @@ async function loadScopedStudents(
     displayName: row.student.displayName,
     status: row.student.status,
     classNames: [...new Set(row.student.enrollments.map((enrollment) => enrollment.class.name))],
+    tenantConnections: [{ id: row.tenant.id, name: row.tenant.name, type: row.tenant.type }],
   }));
+}
+
+async function activePlatformTenantIds(): Promise<string[]> {
+  const tenants = await prisma.tenant.findMany({
+    where: { status: "ACTIVE", deletedAt: null },
+    select: { id: true },
+  });
+  return tenants.map((tenant) => tenant.id);
+}
+
+async function loadPlatformStudents(filters: AnalyticsStudentFilters = {}): Promise<StudentRow[]> {
+  const rows = await prisma.studentProfile.findMany({
+    where: {
+      tenant: {
+        status: "ACTIVE",
+        deletedAt: null,
+        ...(filters.tenantType ? { type: filters.tenantType } : {}),
+      },
+      student: {
+        deletedAt: null,
+        status: { not: "CLOSED" },
+        ...(filters.search
+          ? {
+              OR: [
+                { displayName: { contains: filters.search, mode: "insensitive" } },
+                { email: { contains: filters.search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      startedAt: true,
+      tenant: { select: { id: true, name: true, type: true } },
+      student: { select: { displayName: true, status: true, createdAt: true } },
+    },
+    orderBy: { startedAt: "desc" },
+  });
+  const studentIds = [...new Set(rows.map((row) => row.studentId))];
+  const enrollments =
+    studentIds.length === 0
+      ? []
+      : await prisma.enrollment.findMany({
+          where: {
+            studentId: { in: studentIds },
+            status: "ACTIVE",
+            deletedAt: null,
+            tenant: { status: "ACTIVE", deletedAt: null },
+          },
+          select: {
+            studentId: true,
+            tenantId: true,
+            class: { select: { name: true } },
+          },
+        });
+  const classNames = new Map<string, Set<string>>();
+  for (const enrollment of enrollments) {
+    const names = classNames.get(enrollment.studentId) ?? new Set<string>();
+    names.add(enrollment.class.name);
+    classNames.set(enrollment.studentId, names);
+  }
+  const grouped = new Map<string, StudentRow>();
+  for (const row of rows) {
+    const connection = { id: row.tenant.id, name: row.tenant.name, type: row.tenant.type };
+    const current = grouped.get(row.studentId);
+    if (current) {
+      if (!current.tenantConnections.some((item) => item.id === connection.id)) {
+        current.tenantConnections.push(connection);
+      }
+      continue;
+    }
+    grouped.set(row.studentId, {
+      id: row.id,
+      studentId: row.studentId,
+      displayName: row.student.displayName,
+      status: row.student.status,
+      classNames: [...(classNames.get(row.studentId) ?? [])],
+      tenantConnections: [connection],
+    });
+  }
+  return [...grouped.values()];
 }
 
 function featureForSession(session: {
@@ -202,15 +318,16 @@ export interface AnalyticsStudentListResponse {
   pageSize: number;
 }
 
-export async function listAnalyticsStudents(
+async function listOrganizationAnalyticsStudents(
   scope: OrganizationScope,
   range: AnalyticsRange,
   page: number,
   pageSize: number,
+  filters: AnalyticsStudentFilters = {},
 ): Promise<AnalyticsStudentListResponse> {
   const [pageRows, total] = await Promise.all([
-    loadScopedStudents(scope, undefined, { skip: (page - 1) * pageSize, take: pageSize }),
-    prisma.studentProfile.count({ where: studentWhere(scope) }),
+    loadScopedStudents(scope, undefined, { skip: (page - 1) * pageSize, take: pageSize }, filters),
+    prisma.studentProfile.count({ where: studentWhere(scope, undefined, filters) }),
   ]);
   if (pageRows.length === 0) return { items: [], total, page, pageSize };
   const ids = pageRows.map((row) => row.studentId);
@@ -291,7 +408,7 @@ export interface AnalyticsOverviewResponse {
   };
 }
 
-export async function getAnalyticsOverview(
+async function getOrganizationAnalyticsOverview(
   scope: OrganizationScope,
   range: AnalyticsRange,
 ): Promise<AnalyticsOverviewResponse> {
@@ -459,6 +576,7 @@ export interface AnalyticsStudentDetailResponse {
     classNames: string[];
     currentLevel: { id: string; code: string; name: string } | null;
     targetLevel: { id: string; code: string; name: string } | null;
+    tenantConnections: Array<{ id: string; name: string; type: string }>;
   };
   period: { from: Date; to: Date };
   journey: {
@@ -508,7 +626,7 @@ export interface AnalyticsStudentDetailResponse {
   activity: { items: ActivityItem[]; total: number; truncated: boolean; limitations: string[] };
 }
 
-export async function getAnalyticsStudentDetail(
+async function getOrganizationAnalyticsStudentDetail(
   scope: OrganizationScope,
   studentId: string,
   range: AnalyticsRange,
@@ -769,6 +887,7 @@ export async function getAnalyticsStudentDetail(
       classNames: studentInfo?.classNames ?? [],
       currentLevel: profileLevels?.currentLevel ?? null,
       targetLevel: profileLevels?.targetLevel ?? null,
+      tenantConnections: studentInfo?.tenantConnections ?? [],
     },
     period: { from: range.from, to: new Date(range.toExclusive.getTime() - 1) },
     journey: {
@@ -823,4 +942,388 @@ export async function getAnalyticsStudentDetail(
       ],
     },
   };
+}
+
+function emptyOverview(range: AnalyticsRange): AnalyticsOverviewResponse {
+  return {
+    period: { from: range.from, to: new Date(range.toExclusive.getTime() - 1) },
+    definitions: {
+      activeStudent:
+        "Seçilen dönemde sunucuya kaydedilmiş en az bir öğrenci etkinliği olan benzersiz öğrenci",
+      duration: "Tamamlanan ExerciseSession kayıtlarındaki server-side timeSpentMs ortalaması",
+      startedNotContinued:
+        "Dönemde başlayıp tamamlanma durumu olmayan ExerciseSession/TrainingSession öğrencisi",
+    },
+    overview: {
+      registeredStudents: 0,
+      activeStudents: 0,
+      exerciseSessions: 0,
+      trainingSessions: 0,
+      averageExerciseDurationMs: null,
+      startedNotContinuedStudents: 0,
+      technicalErrors: 0,
+      featureUsage: [],
+      usageByDay: [],
+      usageByWeek: [],
+      usageByMonth: [],
+    },
+    dataAvailability: {
+      pilotEvents: false,
+      exerciseDurations: false,
+      historicalEventStream: false,
+    },
+  };
+}
+
+async function getPlatformAnalyticsOverview(
+  range: AnalyticsRange,
+): Promise<AnalyticsOverviewResponse> {
+  const students = await loadPlatformStudents();
+  const ids = students.map((student) => student.studentId);
+  if (ids.length === 0) return emptyOverview(range);
+  const tenantIds = await activePlatformTenantIds();
+  const base = emptyOverview(range);
+  base.definitions.activeStudent =
+    "Seçilen dönemde sunucuya kaydedilmiş en az bir öğrenci etkinliği olan benzersiz öğrenci";
+  const [sessions, training, events, progress] = await Promise.all([
+    prisma.exerciseSession.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        startedAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: {
+        studentId: true,
+        context: true,
+        assignmentId: true,
+        assessmentId: true,
+        learningStepId: true,
+        status: true,
+        startedAt: true,
+        timeSpentMs: true,
+      },
+    }),
+    prisma.trainingSession.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        createdAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, status: true, createdAt: true },
+    }),
+    prisma.pilotEvent.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        occurredAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, eventType: true, occurredAt: true },
+    }),
+    prisma.studentLearningStepProgress.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        lastActivityAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, lastActivityAt: true },
+    }),
+  ]);
+  const activeIds = new Set<string>();
+  const usageDates: Array<{ studentId: string; at: Date }> = [];
+  for (const row of sessions) {
+    activeIds.add(row.studentId);
+    usageDates.push({ studentId: row.studentId, at: row.startedAt });
+  }
+  for (const row of training) {
+    activeIds.add(row.studentId);
+    usageDates.push({ studentId: row.studentId, at: row.createdAt });
+  }
+  for (const row of events) {
+    activeIds.add(row.studentId);
+    usageDates.push({ studentId: row.studentId, at: row.occurredAt });
+  }
+  for (const row of progress) {
+    if (row.lastActivityAt) {
+      activeIds.add(row.studentId);
+      usageDates.push({ studentId: row.studentId, at: row.lastActivityAt });
+    }
+  }
+  const featureMap = new Map<string, { sessions: number; students: Set<string> }>();
+  for (const session of sessions) {
+    const feature = featureForSession(session);
+    const item = featureMap.get(feature) ?? { sessions: 0, students: new Set<string>() };
+    item.sessions += 1;
+    item.students.add(session.studentId);
+    featureMap.set(feature, item);
+  }
+  if (training.length > 0) {
+    const item = featureMap.get("Bağımsız Antrenman") ?? {
+      sessions: 0,
+      students: new Set<string>(),
+    };
+    item.sessions += training.length;
+    for (const row of training) item.students.add(row.studentId);
+    featureMap.set("Bağımsız Antrenman", item);
+  }
+  const durations = sessions
+    .filter((session) => session.status === "COMPLETED")
+    .map((session) => session.timeSpentMs);
+  const unfinishedIds = new Set([
+    ...sessions
+      .filter((session) => session.status !== "COMPLETED")
+      .map((session) => session.studentId),
+    ...training
+      .filter((session) => session.status !== "COMPLETED")
+      .map((session) => session.studentId),
+  ]);
+  return {
+    ...base,
+    overview: {
+      registeredStudents: students.length,
+      activeStudents: activeIds.size,
+      exerciseSessions: sessions.length,
+      trainingSessions: training.length,
+      averageExerciseDurationMs: average(durations),
+      startedNotContinuedStudents: unfinishedIds.size,
+      technicalErrors: events.filter((event) => event.eventType === "TECHNICAL_ERROR").length,
+      featureUsage: [...featureMap.entries()]
+        .map(([feature, item]) => ({
+          feature,
+          sessions: item.sessions,
+          students: item.students.size,
+        }))
+        .sort((a, b) => b.sessions - a.sessions),
+      usageByDay: usageBuckets(usageDates, "day"),
+      usageByWeek: usageBuckets(usageDates, "week"),
+      usageByMonth: usageBuckets(usageDates, "month"),
+    },
+    dataAvailability: {
+      pilotEvents: events.length > 0,
+      exerciseDurations: durations.some((value) => value !== null),
+      historicalEventStream: events.length > 0,
+    },
+  };
+}
+
+async function listPlatformAnalyticsStudents(
+  range: AnalyticsRange,
+  page: number,
+  pageSize: number,
+  filters: AnalyticsStudentFilters,
+): Promise<AnalyticsStudentListResponse> {
+  const students = await loadPlatformStudents(filters);
+  const tenantIds = [
+    ...new Set(students.flatMap((student) => student.tenantConnections.map((t) => t.id))),
+  ];
+  const pageRows = students.slice((page - 1) * pageSize, page * pageSize);
+  if (pageRows.length === 0) return { items: [], total: students.length, page, pageSize };
+  const ids = pageRows.map((row) => row.studentId);
+  const [sessions, training, events, progress] = await Promise.all([
+    prisma.exerciseSession.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        startedAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, startedAt: true },
+    }),
+    prisma.trainingSession.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        createdAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, createdAt: true },
+    }),
+    prisma.pilotEvent.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        occurredAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, occurredAt: true },
+    }),
+    prisma.studentLearningStepProgress.findMany({
+      where: {
+        tenantId: { in: tenantIds },
+        studentId: { in: ids },
+        lastActivityAt: { gte: range.from, lt: range.toExclusive },
+      },
+      select: { studentId: true, lastActivityAt: true },
+    }),
+  ]);
+  const last = new Map<string, Date>();
+  for (const row of [
+    ...sessions.map((x) => ({ id: x.studentId, at: x.startedAt })),
+    ...training.map((x) => ({ id: x.studentId, at: x.createdAt })),
+    ...events.map((x) => ({ id: x.studentId, at: x.occurredAt })),
+    ...progress.flatMap((x) =>
+      x.lastActivityAt ? [{ id: x.studentId, at: x.lastActivityAt }] : [],
+    ),
+  ]) {
+    const current = last.get(row.id);
+    if (!current || row.at > current) last.set(row.id, row.at);
+  }
+  return {
+    items: pageRows.map((row) => ({ ...row, lastActivityAt: last.get(row.studentId) ?? null })),
+    total: students.length,
+    page,
+    pageSize,
+  };
+}
+
+async function getPlatformAnalyticsStudentDetail(
+  scope: PlatformAnalyticsScope,
+  studentId: string,
+  range: AnalyticsRange,
+): Promise<AnalyticsStudentDetailResponse> {
+  const students = await loadPlatformStudents();
+  const student = students.find((item) => item.studentId === studentId);
+  if (!student) throw forbiddenError("Bu öğrenci analitiği için yetkiniz yok");
+  const details = await Promise.all(
+    student.tenantConnections.map((tenant) =>
+      getOrganizationAnalyticsStudentDetail(
+        { userId: scope.userId, tenantId: tenant.id, role: "OWNER", branchIds: [] },
+        studentId,
+        range,
+      ),
+    ),
+  );
+  const first = details[0];
+  if (!first) throw forbiddenError("Bu öğrenci analitiği için yetkiniz yok");
+  const paths = new Map<string, (typeof first.journey.paths)[number]>();
+  for (const detail of details) {
+    for (const path of detail.journey.paths) {
+      if (!paths.has(path.id)) paths.set(path.id, path);
+    }
+  }
+  const mergedPaths = [...paths.values()];
+  const areaMap = new Map<
+    LearningAreaCode,
+    { total: number; completed: number; inProgress: number; locked: number }
+  >();
+  for (const path of mergedPaths) {
+    const area = areaMap.get(path.area) ?? { total: 0, completed: 0, inProgress: 0, locked: 0 };
+    area.total += path.steps.length;
+    for (const step of path.steps) {
+      if (step.status === "COMPLETED") area.completed += 1;
+      else if (["ACTIVE", "IN_PROGRESS"].includes(step.status)) area.inProgress += 1;
+      else if (step.status === "LOCKED") area.locked += 1;
+    }
+    areaMap.set(path.area, area);
+  }
+  const performance = {
+    exerciseSessions: details.reduce((sum, detail) => sum + detail.performance.exerciseSessions, 0),
+    completedExercises: details.reduce(
+      (sum, detail) => sum + detail.performance.completedExercises,
+      0,
+    ),
+    abandonedExercises: details.reduce(
+      (sum, detail) => sum + detail.performance.abandonedExercises,
+      0,
+    ),
+    attempts: details.reduce((sum, detail) => sum + detail.performance.attempts, 0),
+    correct: details.reduce((sum, detail) => sum + detail.performance.correct, 0),
+    wrong: details.reduce((sum, detail) => sum + detail.performance.wrong, 0),
+    correctRatio: percentage(
+      details.reduce((sum, detail) => sum + detail.performance.correct, 0),
+      details.reduce(
+        (sum, detail) => sum + detail.performance.correct + detail.performance.wrong,
+        0,
+      ),
+    ),
+    baselineScore:
+      details.find((detail) => detail.performance.baselineScore !== null)?.performance
+        .baselineScore ?? null,
+    latestMeasurementScore:
+      details.find((detail) => detail.performance.latestMeasurementScore !== null)?.performance
+        .latestMeasurementScore ?? null,
+    improvementFromBaseline: null as number | null,
+    readingSpeed: {
+      available: true,
+      points: details
+        .flatMap((detail) => detail.performance.readingSpeed.points)
+        .sort((a, b) => b.at.getTime() - a.at.getTime()),
+    },
+    readingComprehension: {
+      available: true,
+      points: details
+        .flatMap((detail) => detail.performance.readingComprehension.points)
+        .sort((a, b) => b.at.getTime() - a.at.getTime()),
+    },
+    skillsNeedingReview: details.flatMap((detail) => detail.performance.skillsNeedingReview),
+  };
+  performance.readingSpeed.available = performance.readingSpeed.points.length > 0;
+  performance.readingComprehension.available = performance.readingComprehension.points.length > 0;
+  if (performance.baselineScore !== null && performance.latestMeasurementScore !== null) {
+    performance.improvementFromBaseline =
+      performance.latestMeasurementScore - performance.baselineScore;
+  }
+  const activityItems = details
+    .flatMap((detail) => detail.activity.items)
+    .sort((a, b) => b.at.getTime() - a.at.getTime());
+  const lastActivityCandidates = [
+    ...details.flatMap((detail) =>
+      detail.journey.lastActivityAt ? [detail.journey.lastActivityAt] : [],
+    ),
+    ...activityItems.map((item) => item.at),
+  ];
+  const lastActivityAt =
+    lastActivityCandidates.sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  return {
+    student: {
+      ...first.student,
+      tenantConnections: student.tenantConnections,
+    },
+    period: first.period,
+    journey: {
+      paths: mergedPaths,
+      areas: [...areaMap.entries()].map(([area, value]) => ({
+        ...value,
+        area,
+        percentage: percentage(value.completed, value.total),
+      })),
+      lastActivityAt,
+    },
+    performance,
+    activity: {
+      items: activityItems.slice(0, MAX_ACTIVITY_ROWS),
+      total: activityItems.length,
+      truncated:
+        activityItems.length > MAX_ACTIVITY_ROWS ||
+        details.some((detail) => detail.activity.truncated),
+      limitations: [...new Set(details.flatMap((detail) => detail.activity.limitations))],
+    },
+  };
+}
+
+export async function listAnalyticsStudents(
+  scope: AnalyticsScope,
+  range: AnalyticsRange,
+  page: number,
+  pageSize: number,
+  filters: AnalyticsStudentFilters = {},
+): Promise<AnalyticsStudentListResponse> {
+  return scope.kind === "PLATFORM"
+    ? listPlatformAnalyticsStudents(range, page, pageSize, filters)
+    : listOrganizationAnalyticsStudents(scope.organization, range, page, pageSize, filters);
+}
+
+export async function getAnalyticsOverview(
+  scope: AnalyticsScope,
+  range: AnalyticsRange,
+): Promise<AnalyticsOverviewResponse> {
+  return scope.kind === "PLATFORM"
+    ? getPlatformAnalyticsOverview(range)
+    : getOrganizationAnalyticsOverview(scope.organization, range);
+}
+
+export async function getAnalyticsStudentDetail(
+  scope: AnalyticsScope,
+  studentId: string,
+  range: AnalyticsRange,
+): Promise<AnalyticsStudentDetailResponse> {
+  return scope.kind === "PLATFORM"
+    ? getPlatformAnalyticsStudentDetail(scope, studentId, range)
+    : getOrganizationAnalyticsStudentDetail(scope.organization, studentId, range);
 }
