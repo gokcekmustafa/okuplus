@@ -2693,6 +2693,10 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
   learningPathEntryMode = true;
+  // A Learning Path station must never inherit the independent Training
+  // return target from a previous activity session.
+  exerciseMode = null;
+  activeTrainingActivityId = null;
   if (type === "TEACHING") {
     if (!node?.contentVersionId) {
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
@@ -12744,6 +12748,22 @@ function returnToExercisePath() {
   navigate("dashboard");
   $("learning-path")?.scrollIntoView({ block: "start" });
 }
+function returnToLearningPathAfterGuidedExercise() {
+  if (exerciseBusy) return;
+  exerciseReviewMode = false;
+  learningPathEntryMode = false;
+  exerciseMode = null;
+  activeTrainingActivityId = null;
+  activeLearningStepNode = null;
+  activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = null;
+  rememberExerciseSession(null);
+  resetDailyTrainingState();
+  resetExerciseState();
+  renderExerciseSession();
+  navigate("dashboard");
+  $("learning-path")?.scrollIntoView({ block: "start" });
+}
 function renderDailyTrainingResult() {
   const resultCard = $("exercise-result-card");
   const body = $("exercise-result-body");
@@ -13790,7 +13810,7 @@ async function handleExerciseComplete() {
       // station is visible immediately instead of leaving the student on a
       // second training-style completion screen.
       exerciseBusy = false;
-      returnToExercisePath();
+      returnToLearningPathAfterGuidedExercise();
       if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
         setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
           error: true,

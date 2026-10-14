@@ -99,6 +99,14 @@ describe("independent training activities", () => {
     expect(app).toContain("learningPathEntryMode && Boolean(exerciseSession?.learningStepId)");
   });
 
+  it("clears an independent Training return target when opening a Learning Path station", () => {
+    const start = app.indexOf("async function startLearningPathNode(");
+    const end = app.indexOf("window.startTodayLearningStep", start);
+    const startLearningPathNode = app.slice(start, end);
+    expect(startLearningPathNode).toContain("exerciseMode = null");
+    expect(startLearningPathNode).toContain("activeTrainingActivityId = null");
+  });
+
   it("marks independent sessions and blocks academic progress/path sync", () => {
     expect(isIndependentTrainingSession({ source: "INDEPENDENT_TRAINING" })).toBe(true);
     expect(isIndependentTrainingSession({ source: "LEARNING_PATH" })).toBe(false);

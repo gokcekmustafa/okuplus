@@ -237,7 +237,9 @@ describe("exercise UX state from production frontend", () => {
     };
     h.context.activeLearningStepNode = { id: "step-20", status: "active" };
     h.context.activeLearningStepNavigation = null;
-    h.context.exerciseMode = null;
+    // A previous independent Training activity must not change the return
+    // destination of a Learning Path exercise.
+    h.context.exerciseMode = "activity";
     h.context.insightNewAwards = new Map();
     h.context.insightsIdentity = "test";
     h.context.normalizeLearningPathNavigation = (navigation: unknown) => navigation;
