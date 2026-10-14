@@ -106,7 +106,11 @@ async function cleanup() {
   if (tenantIds.length) await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
 }
 
-async function createPublishedArtifact(kind: "CONTENT" | "TEMPLATE" | "ASSESSMENT", index: number) {
+async function createPublishedArtifact(
+  kind: "CONTENT" | "TEMPLATE" | "ASSESSMENT",
+  index: number,
+  templateConfig = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises[0]!.contract,
+) {
   if (kind === "CONTENT") {
     const contentId = id(100 + index);
     const versionId = id(200 + index);
@@ -156,6 +160,7 @@ async function createPublishedArtifact(kind: "CONTENT" | "TEMPLATE" | "ASSESSMEN
         id: versionId,
         templateId,
         version: 1,
+        config: templateConfig,
         status: "PUBLISHED",
         publishedAt: new Date(),
       },
@@ -705,5 +710,51 @@ describe.sequential("P1 learning cycle transition integration", () => {
     });
     expect(crossTenant.outcome).toBe("REVIEW_REQUIRED");
     expect(crossTenant.readiness.status).toBe("NOT_APPLICABLE");
+  });
+
+  it("fails closed when a published next template has no valid runtime config", async () => {
+    const nextStep = await prisma.learningStep.findFirstOrThrow({
+      where: {
+        unit: { pathId: PATH_IDS.next },
+        exerciseTemplateVersionId: { not: null },
+      },
+      select: {
+        id: true,
+        exerciseTemplateVersionId: true,
+      },
+    });
+    const invalidArtifact = await createPublishedArtifact("TEMPLATE", 99, {
+      schemaVersion: 1,
+    });
+    await prisma.learningStep.update({
+      where: { id: nextStep.id },
+      data: { exerciseTemplateVersionId: invalidArtifact.exerciseTemplateVersionId },
+    });
+
+    try {
+      const result = await withPublicationApproval(() =>
+        reconcileP1ToNextCycle(unavailableFixture.actor, {
+          p1LearningPathId: unavailableFixture.enrollmentId,
+        }),
+      );
+      expect(result).toMatchObject({
+        outcome: "REVIEW_REQUIRED",
+        readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
+      });
+      expect(
+        await prisma.studentLearningPath.count({
+          where: {
+            tenantId: unavailableFixture.actor.tenantId,
+            studentId: unavailableFixture.actor.userId,
+            learningPathId: PATH_IDS.next,
+          },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.learningStep.update({
+        where: { id: nextStep.id },
+        data: { exerciseTemplateVersionId: nextStep.exerciseTemplateVersionId },
+      });
+    }
   });
 });

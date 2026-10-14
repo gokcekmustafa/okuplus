@@ -15,8 +15,43 @@ const publishedContent = {
   status: "PUBLISHED",
   content: { status: "PUBLISHED", deletedAt: null },
 } as const;
+const validTrainingConfig = {
+  schemaVersion: 1,
+  family: "MAIN_IDEA",
+  competency: "RC_MAIN_IDEA",
+  difficulty: "FOUNDATION",
+  estimatedDurationSeconds: 120,
+  instructions: "Metni oku ve ana düşünceyi seç.",
+  interactionType: "MULTIPLE_CHOICE",
+  contentRequirement: "REQUIRED",
+  questionRequirement: "REQUIRED",
+  scoring: {
+    mode: "DETERMINISTIC",
+    primarySignal: "ACCURACY",
+    timeRole: "NONE",
+    maxScore: 1,
+    openEnded: false,
+  },
+  feedback: {
+    types: ["POSITIVE"],
+    showExplanation: true,
+    retryEnabled: false,
+    maxMessageLength: 80,
+  },
+  xp: { completionPoints: 10, correctAnswerBonus: 2, dailyCap: 40 },
+  eligibility: {
+    usage: "TRAINING_ONLY",
+    requiresPublishedContent: true,
+    requiresPublishedQuestions: true,
+    minimumDifficulty: "FOUNDATION",
+    maximumDifficulty: "CHALLENGING",
+  },
+  rendererKey: "QUESTION_MULTIPLE_CHOICE",
+  settings: { optionCount: 4 },
+} as const;
 const publishedTemplate = {
   status: "PUBLISHED",
+  config: validTrainingConfig,
   template: { status: "PUBLISHED", deletedAt: null },
 } as const;
 
@@ -266,6 +301,30 @@ describe("P1 transition foundation contracts", () => {
           exerciseTemplateVersion: {
             status: "PUBLISHED",
             template: { status: "DRAFT", deletedAt: null },
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("PRACTICE", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: {
+            status: "PUBLISHED",
+            config: { schemaVersion: 1 },
+            template: { status: "PUBLISHED", deletedAt: null },
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isReadyP1CandidateStep(
+        candidateStep("PRACTICE", {
+          exerciseTemplateVersionId: "template-version-1",
+          exerciseTemplateVersion: {
+            status: "PUBLISHED",
+            config: null,
+            template: { status: "PUBLISHED", deletedAt: null },
           },
         }),
       ),
