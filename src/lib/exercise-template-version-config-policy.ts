@@ -15,6 +15,95 @@ export type ExerciseTemplateVersionConfigClassification =
   | { kind: "CANONICAL_PLACEMENT_EXEMPT" }
   | { kind: "BACKFILL_REQUIRED"; parent: "VALID" | "INVALID" | "MISSING" | "ABSENT" };
 
+export type SanitizedTrainingConfigIssue = {
+  code: string;
+  path: string[];
+  reason: string;
+};
+
+const SAFE_ZOD_ISSUE_CODES = new Set([
+  "invalid_type",
+  "invalid_value",
+  "invalid_enum_value",
+  "invalid_string",
+  "invalid_date",
+  "invalid_arguments",
+  "invalid_return_type",
+  "invalid_intersection_types",
+  "invalid_union_discriminator",
+  "unrecognized_keys",
+  "invalid_union",
+  "invalid_literal",
+  "too_small",
+  "too_big",
+  "invalid_format",
+  "not_multiple_of",
+  "custom",
+]);
+
+function sanitizeIssuePath(path: PropertyKey[]): string[] {
+  return path.slice(0, 8).map((segment) => {
+    if (typeof segment === "number" && Number.isSafeInteger(segment)) return `[${segment}]`;
+    if (typeof segment !== "string") return "[redacted]";
+    return /^[A-Za-z0-9_.-]{1,64}$/u.test(segment) ? segment : "[redacted]";
+  });
+}
+
+function sanitizeIssueReason(code: string): string {
+  switch (code) {
+    case "invalid_type":
+      return "invalid_type";
+    case "invalid_value":
+      return "invalid_value";
+    case "invalid_enum_value":
+      return "invalid_enum_value";
+    case "invalid_string":
+      return "invalid_string";
+    case "invalid_date":
+      return "invalid_date";
+    case "invalid_arguments":
+      return "invalid_arguments";
+    case "invalid_return_type":
+      return "invalid_return_type";
+    case "invalid_intersection_types":
+      return "invalid_intersection_types";
+    case "invalid_union_discriminator":
+      return "invalid_union_discriminator";
+    case "unrecognized_keys":
+      return "unrecognized_keys";
+    case "invalid_union":
+      return "invalid_union";
+    case "invalid_literal":
+      return "invalid_literal";
+    case "too_small":
+      return "too_small";
+    case "too_big":
+      return "too_big";
+    case "invalid_format":
+      return "invalid_format";
+    case "not_multiple_of":
+      return "not_multiple_of";
+    case "custom":
+      return "custom_validation";
+    default:
+      return "schema_validation_failed";
+  }
+}
+
+export function sanitizedTrainingConfigIssues(input: unknown): SanitizedTrainingConfigIssue[] {
+  const parsed = safeParseTrainingExerciseVersionConfig(input);
+  if (parsed.success) return [];
+
+  return parsed.error.issues.slice(0, 20).map((issue) => {
+    const code = SAFE_ZOD_ISSUE_CODES.has(issue.code) ? issue.code : "unknown";
+    return {
+      code,
+      path: sanitizeIssuePath(issue.path),
+      reason: sanitizeIssueReason(code),
+    };
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

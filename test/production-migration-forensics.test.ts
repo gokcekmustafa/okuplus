@@ -147,6 +147,13 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("observedMissingConfigCount");
     expect(script).toContain("configuredInvalidCount");
     expect(script).toContain("canonicalPlacementExemptCount");
+    expect(workflow).toContain("INVALID_CONFIG_DIAGNOSTICS");
+    expect(script).toContain("invalidConfigDiagnostics");
+    expect(script).toContain("versionId");
+    expect(script).toContain("templateId");
+    expect(script).toContain("versionNumber");
+    expect(script).toContain("sanitizedTrainingConfigIssues");
+    expect(script).not.toContain("JSON.stringify(row.versionConfig)");
     expect(script).toContain("parentConfigValid");
     expect(script).toContain("parentConfigInvalid");
     expect(script).toContain("classifyExerciseTemplateVersionConfig");

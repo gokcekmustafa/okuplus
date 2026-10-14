@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyExerciseTemplateVersionConfig,
+  sanitizedTrainingConfigIssues,
   type ExerciseTemplateVersionConfigRow,
 } from "../src/lib/exercise-template-version-config-policy.js";
 
@@ -122,5 +123,23 @@ describe("ExerciseTemplateVersion config policy", () => {
     expect(
       classifyExerciseTemplateVersionConfig(row({ versionConfig: { unsupported: true } })),
     ).toEqual({ kind: "CONFIGURED", valid: false });
+  });
+
+  it("reports bounded Zod categories without exposing config values", () => {
+    const sensitive = "student@example.com secret-token";
+    const issues = sanitizedTrainingConfigIssues({
+      ...validConfig,
+      instructions: 42,
+      "student@example.com": sensitive,
+    });
+
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "invalid_type", path: ["instructions"] }),
+        expect.objectContaining({ code: "unrecognized_keys", path: [] }),
+      ]),
+    );
+    expect(JSON.stringify(issues)).not.toContain(sensitive);
+    expect(JSON.stringify(issues)).not.toContain("student@example.com");
   });
 });

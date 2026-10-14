@@ -342,6 +342,7 @@ jobs:
             `**PARENT_CONFIG_INVALID:** ${safe.releaseMigration1.dataPreflight.parentConfigInvalid}`,
             `**MISSING_PARENT:** ${safe.releaseMigration1.dataPreflight.missingParent}`,
             `**PARENT_CONFIG_MISSING:** ${safe.releaseMigration1.dataPreflight.parentConfigMissing}`,
+            `**INVALID_CONFIG_DIAGNOSTICS:** ${JSON.stringify(safe.releaseMigration1.dataPreflight.invalidConfigDiagnostics)}`,
             `**DATA_PRECHECK:** ${safe.releaseMigration1.dataPreflight.status}`,
             `**PARTIAL_SCHEMA_STATE:** ${safe.partialSchemaState}`,
             `**PARTIAL_DATA_STATE:** ${safe.partialDataState}`,

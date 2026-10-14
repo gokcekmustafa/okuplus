@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { providerForHost, targetIdentityFingerprint } from "./db-fingerprint-contract.js";
 import {
   classifyExerciseTemplateVersionConfig,
+  sanitizedTrainingConfigIssues,
   type ExerciseTemplateVersionConfigRow,
 } from "../src/lib/exercise-template-version-config-policy.js";
 
@@ -92,6 +93,18 @@ type Migration1DataPreflight = {
   missingParent: number | null;
   deterministic: "YES" | "NO" | "UNKNOWN";
   reason: string;
+  invalidConfigDiagnostics: Array<{
+    exerciseTemplateVersionId: string;
+    templateId: string;
+    version: number;
+    issues: ReturnType<typeof sanitizedTrainingConfigIssues>;
+  }> | null;
+};
+
+type ForensicConfigRow = ExerciseTemplateVersionConfigRow & {
+  versionId: string;
+  templateId: string;
+  versionNumber: number;
 };
 
 function sha256(value: string): string {
@@ -633,6 +646,7 @@ async function main(): Promise<void> {
       missingParent: null,
       deterministic: "UNKNOWN",
       reason: "required ExerciseTemplateVersion schema is unavailable",
+      invalidConfigDiagnostics: null,
     };
 
     const exerciseTemplateVersionTableExists = columns.some(
@@ -659,9 +673,12 @@ async function main(): Promise<void> {
             FROM "ExerciseTemplateVersion" AS version
           `;
       const countSummary = counts[0] ?? { total: 0, configured: 0 };
-      const targetRows: ExerciseTemplateVersionConfigRow[] = exerciseTemplateVersionConfigExists
-        ? await prisma.$queryRaw<ExerciseTemplateVersionConfigRow[]>`
-            SELECT version."config" AS "versionConfig",
+      const targetRows: ForensicConfigRow[] = exerciseTemplateVersionConfigExists
+        ? await prisma.$queryRaw<ForensicConfigRow[]>`
+            SELECT version."id" AS "versionId",
+                   version."templateId" AS "templateId",
+                   version."version" AS "versionNumber",
+                   version."config" AS "versionConfig",
                    template."config" AS "parentConfig",
                    (template."id" IS NOT NULL) AS "parentExists",
                    template."type"::text AS "templateType",
@@ -669,9 +686,13 @@ async function main(): Promise<void> {
             FROM "ExerciseTemplateVersion" AS version
             LEFT JOIN "ExerciseTemplate" AS template
               ON template."id" = version."templateId"
+            ORDER BY version."id"
           `
-        : await prisma.$queryRaw<ExerciseTemplateVersionConfigRow[]>`
-            SELECT NULL::jsonb AS "versionConfig",
+        : await prisma.$queryRaw<ForensicConfigRow[]>`
+            SELECT version."id" AS "versionId",
+                   version."templateId" AS "templateId",
+                   version."version" AS "versionNumber",
+                   NULL::jsonb AS "versionConfig",
                    template."config" AS "parentConfig",
                    (template."id" IS NOT NULL) AS "parentExists",
                    template."type"::text AS "templateType",
@@ -679,11 +700,24 @@ async function main(): Promise<void> {
             FROM "ExerciseTemplateVersion" AS version
             LEFT JOIN "ExerciseTemplate" AS template
               ON template."id" = version."templateId"
+            ORDER BY version."id"
           `;
       const classifications = targetRows.map((row) => classifyExerciseTemplateVersionConfig(row));
       const configuredInvalidCount = classifications.filter(
         (classification) => classification.kind === "CONFIGURED" && !classification.valid,
       ).length;
+      const invalidConfigDiagnostics = targetRows.flatMap((row) => {
+        const classification = classifyExerciseTemplateVersionConfig(row);
+        if (classification.kind !== "CONFIGURED" || classification.valid) return [];
+        return [
+          {
+            exerciseTemplateVersionId: row.versionId,
+            templateId: row.templateId,
+            version: row.versionNumber,
+            issues: sanitizedTrainingConfigIssues(row.versionConfig),
+          },
+        ];
+      });
       const missingRows = targetRows.filter(
         (row) => row.versionConfig === null || row.versionConfig === undefined,
       );
@@ -736,6 +770,7 @@ async function main(): Promise<void> {
         parentConfigMissing,
         missingParent,
         deterministic: safe ? "YES" : "NO",
+        invalidConfigDiagnostics,
         reason: safe
           ? canonicalPlacementExemptCount > 0 && backfillTargetCount === 0
             ? "canonical placement version config is intentionally exempt from training backfill"
