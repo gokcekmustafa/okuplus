@@ -65,6 +65,11 @@ export async function buildApp(
     requestTimeout: env.REQUEST_TIMEOUT_MS,
     keepAliveTimeout: env.KEEP_ALIVE_TIMEOUT_MS,
     return503OnClosing: true,
+    // Versioned curriculum question IDs can be longer than Fastify's default
+    // 100-character route-parameter limit. Keep a finite bound while allowing
+    // the immutable IDs used by the Cycle 2 question-attempt route to reach
+    // its handler instead of being rejected as HTTP 414 by the router.
+    routerOptions: { maxParamLength: 256 },
     // Do not trust client-supplied forwarding headers. A deployment that
     // needs real client-IP attribution must configure a verified proxy layer
     // explicitly before enabling a trusted-proxy policy.

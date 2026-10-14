@@ -116,6 +116,27 @@ describe("8I-2 security hardening", () => {
     }
   });
 
+  it("versioned question route IDs longer than the Fastify default reach routing", async () => {
+    const app = await buildApp(
+      parseEnv({
+        NODE_ENV: "test",
+        DATABASE_URL: "postgresql://test:test@localhost:5432/oku_plus_test",
+      }),
+    );
+
+    try {
+      expect(app.initialConfig.routerOptions?.maxParamLength).toBeGreaterThan(102);
+      const response = await app.inject({
+        method: "POST",
+        url: `/student/questions/${"q".repeat(102)}/attempts`,
+        payload: {},
+      });
+      expect(response.statusCode).not.toBe(414);
+    } finally {
+      await app.close();
+    }
+  });
+
   it("CORS yalnızca explicit allowlist origin döndürür", async () => {
     const app = await buildApp(
       parseEnv({

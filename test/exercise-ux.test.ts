@@ -439,4 +439,11 @@ describe("exercise UX state from production frontend", () => {
     expect(h.context.exerciseSession.status).toBe("COMPLETED");
     expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
   });
+
+  it("explains the safe server completion guard instead of hiding it behind a generic retry", () => {
+    const h = harness();
+    const message = h.run("formatExerciseCompletionError({ status: 400 })");
+    expect(message).toContain("tüm soruları yanıtla");
+    expect(message).not.toContain("HTTP");
+  });
 });

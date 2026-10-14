@@ -12436,6 +12436,18 @@ function formatExerciseSubmissionError(error) {
     return "Cevap gönderilemedi. Çok kısa sürede fazla istek gönderildi; biraz bekleyip tekrar dene.";
   return "Cevap gönderilemedi. Cevabın korunuyor; tekrar denediğinde önceki gönderim kontrol edilecek.";
 }
+function formatExerciseCompletionError(error) {
+  const status = Number.isInteger(error?.status) ? error.status : null;
+  if (status === 400)
+    return "Alıştırma tamamlanamadı. Bu çalışmadaki tüm soruları yanıtla; ilk cevabın yanlışsa aynı soruyu bir kez daha dene.";
+  if (status === 401)
+    return "Alıştırma tamamlanamadı. Oturumun süresi dolmuş olabilir; tekrar giriş yapıp yeniden dene.";
+  if (status === 403)
+    return "Alıştırma tamamlanamadı. Bu çalışmayı tamamlama yetkin doğrulanamadı; sayfayı yenileyip yeniden dene.";
+  if (status === 409)
+    return "Alıştırma tamamlanamadı. Gönderim sunucuya ulaşmış olabilir; sayfayı yenileyip durumunu kontrol et.";
+  return "Alıştırma tamamlanamadı. Cevapların korunuyor; tekrar denediğinde durum yeniden kontrol edilecek.";
+}
 async function populateExerciseStudentSelect() {
   const sel = $("exercise-student-select");
   if (!sel) return;
@@ -13854,7 +13866,7 @@ async function handleExerciseComplete() {
     }
     renderExerciseSession();
     $("exercise-completion-title")?.focus();
-  } catch {
+  } catch (error) {
     // The completion endpoint can finish the authoritative session update
     // before a response or a non-critical follow-up operation fails. Re-read
     // the session before showing a failure so a lost response does not turn a
@@ -13886,7 +13898,7 @@ async function handleExerciseComplete() {
     }
     errEl.textContent = isDailyTrainingExercise()
       ? "Günlük antrenman tamamlanamadı. Cevapların kaydedildi; tekrar dene."
-      : "Alıştırma tamamlanamadı. Cevapların kaydedildi; tekrar dene.";
+      : formatExerciseCompletionError(error);
     errEl.classList.remove("hidden");
     exerciseAwaitingNext = true;
   } finally {
