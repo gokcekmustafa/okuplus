@@ -380,6 +380,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await completeInitialCycle(assignedFixture, true);
     await completeInitialCycle(blockedFixture, true);
     await completeInitialCycle(concurrentFixture, true);
+    await completeInitialCycle(recoveryFixture, true);
     const blockedNext = await prisma.studentLearningPath.create({
       data: {
         tenantId: blockedFixture.actor.tenantId,
