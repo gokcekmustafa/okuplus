@@ -106,7 +106,11 @@ async function cleanup() {
   if (tenantIds.length) await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
 }
 
-async function createPublishedArtifact(kind: "CONTENT" | "TEMPLATE" | "ASSESSMENT", index: number) {
+async function createPublishedArtifact(
+  kind: "CONTENT" | "TEMPLATE" | "ASSESSMENT",
+  index: number,
+  templateConfig = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises[0]!.contract,
+) {
   if (kind === "CONTENT") {
     const contentId = id(100 + index);
     const versionId = id(200 + index);
@@ -156,10 +160,7 @@ async function createPublishedArtifact(kind: "CONTENT" | "TEMPLATE" | "ASSESSMEN
         id: versionId,
         templateId,
         version: 1,
-        config:
-          kind === "TEMPLATE"
-            ? EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises[0]!.contract
-            : undefined,
+        config: templateConfig,
         status: "PUBLISHED",
         publishedAt: new Date(),
       },
@@ -718,13 +719,16 @@ describe.sequential("P1 learning cycle transition integration", () => {
         exerciseTemplateVersionId: { not: null },
       },
       select: {
-        exerciseTemplateVersion: { select: { id: true, config: true } },
+        id: true,
+        exerciseTemplateVersionId: true,
       },
     });
-    const templateVersion = nextStep.exerciseTemplateVersion!;
-    await prisma.exerciseTemplateVersion.update({
-      where: { id: templateVersion.id },
-      data: { config: { schemaVersion: 1 } },
+    const invalidArtifact = await createPublishedArtifact("TEMPLATE", 99, {
+      schemaVersion: 1,
+    });
+    await prisma.learningStep.update({
+      where: { id: nextStep.id },
+      data: { exerciseTemplateVersionId: invalidArtifact.exerciseTemplateVersionId },
     });
 
     try {
@@ -747,9 +751,9 @@ describe.sequential("P1 learning cycle transition integration", () => {
         }),
       ).toBe(0);
     } finally {
-      await prisma.exerciseTemplateVersion.update({
-        where: { id: templateVersion.id },
-        data: { config: templateVersion.config },
+      await prisma.learningStep.update({
+        where: { id: nextStep.id },
+        data: { exerciseTemplateVersionId: nextStep.exerciseTemplateVersionId },
       });
     }
   });
