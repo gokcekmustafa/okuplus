@@ -1238,9 +1238,15 @@ export async function reconcileP1ToNextCycle(
           })
         : null;
 
-      // A completed/reassigned enrollment is historical state. Replays or
-      // stale client requests must never be able to reactivate a later cycle.
-      if (enrollment.routeStatus !== "ACTIVE") {
+      // A completed enrollment can be a recoverable historical state: the
+      // cycle may have been completed before the next graph was published or
+      // before a previous transition request finished. In that narrow case,
+      // re-run the evidence and graph gates below so the next cycle can be
+      // assigned without reopening or rewriting the completed cycle. Other
+      // historical states remain non-reactivatable.
+      const canRecoverCompletedCycle =
+        enrollment.routeStatus === "COMPLETED" && !existingAssociatedNext;
+      if (enrollment.routeStatus !== "ACTIVE" && !canRecoverCompletedCycle) {
         if (
           existingAssociatedNext &&
           (existingAssociatedNext.routeStatus === "ACTIVE" ||
@@ -1258,6 +1264,22 @@ export async function reconcileP1ToNextCycle(
           };
         }
         return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
+      }
+
+      if (canRecoverCompletedCycle) {
+        const conflictingActiveP1 = await tx.studentLearningPath.findFirst({
+          where: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            routeStatus: "ACTIVE",
+            id: { not: enrollment.id },
+            learningPath: { code: { startsWith: P1_PATH_PREFIX } },
+          },
+          select: { id: true },
+        });
+        if (conflictingActiveP1) {
+          return p1CycleReviewResult(enrollment.id, "NEXT_CYCLE_UNAVAILABLE", true, false);
+        }
       }
 
       const currentCompleted = await isP1CycleComplete(tx, actor, enrollment.learningPath);
@@ -1325,10 +1347,12 @@ export async function reconcileP1ToNextCycle(
         },
         data: { routeStatus: "REASSIGNED" },
       });
-      await tx.studentLearningPath.update({
-        where: { id: enrollment.id },
-        data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
-      });
+      if (enrollment.routeStatus === "ACTIVE") {
+        await tx.studentLearningPath.update({
+          where: { id: enrollment.id },
+          data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
+        });
+      }
       await tx.studentLearningPath.upsert({
         where: {
           tenantId_studentId_learningPathId: {

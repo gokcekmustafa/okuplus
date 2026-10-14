@@ -37,6 +37,7 @@ const ACTOR_EMAILS = [
   "p1-transition-4@example.test",
   "p1-transition-5@example.test",
   "p1-transition-6@example.test",
+  "p1-transition-7@example.test",
 ];
 const ACTOR_IDS = {
   complete: id(10),
@@ -45,6 +46,7 @@ const ACTOR_IDS = {
   assigned: id(13),
   blocked: id(14),
   concurrent: id(15),
+  recovery: id(16),
 };
 const TENANT_IDS = {
   complete: "",
@@ -53,6 +55,7 @@ const TENANT_IDS = {
   assigned: "",
   blocked: "",
   concurrent: "",
+  recovery: "",
 };
 
 type ActorFixture = {
@@ -291,7 +294,9 @@ async function completeInitialCycle(fixture: ActorFixture, includeAssessmentResu
             ? 400
             : fixture.actor.userId === ACTOR_IDS.concurrent
               ? 500
-              : 0;
+              : fixture.actor.userId === ACTOR_IDS.recovery
+                ? 600
+                : 0;
   for (const [index, step] of steps.entries()) {
     if (step.type !== "ASSESSMENT") {
       await prisma.studentLearningStepProgress.create({
@@ -350,6 +355,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
   let assignedFixture: ActorFixture;
   let blockedFixture: ActorFixture;
   let concurrentFixture: ActorFixture;
+  let recoveryFixture: ActorFixture;
   let blockedNextEnrollmentId = "";
 
   beforeAll(async () => {
@@ -367,6 +373,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     assignedFixture = await createActor(ACTOR_IDS.assigned, ACTOR_EMAILS[3]!, "assigned");
     blockedFixture = await createActor(ACTOR_IDS.blocked, ACTOR_EMAILS[4]!, "blocked");
     concurrentFixture = await createActor(ACTOR_IDS.concurrent, ACTOR_EMAILS[5]!, "concurrent");
+    recoveryFixture = await createActor(ACTOR_IDS.recovery, ACTOR_EMAILS[6]!, "recovery");
     await completeInitialCycle(completeFixture, true);
     await completeInitialCycle(incompleteFixture, false);
     await completeInitialCycle(unavailableFixture, true);
@@ -558,6 +565,57 @@ describe.sequential("P1 learning cycle transition integration", () => {
         },
       }),
     ).toBe(1);
+  });
+
+  it("recovers a completed current cycle when the next enrollment was not created", async () => {
+    await prisma.studentLearningPath.update({
+      where: { id: recoveryFixture.enrollmentId },
+      data: { routeStatus: "COMPLETED", completedAt: new Date() },
+    });
+    const beforeProgress = await prisma.studentLearningStepProgress.count({
+      where: {
+        tenantId: recoveryFixture.actor.tenantId,
+        studentId: recoveryFixture.actor.userId,
+      },
+    });
+
+    const result = await withPublicationApproval(() =>
+      reconcileP1ToNextCycle(recoveryFixture.actor, {
+        p1LearningPathId: recoveryFixture.enrollmentId,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      outcome: "ASSIGNED",
+      currentLearningPathId: recoveryFixture.enrollmentId,
+      nextLearningPathId: PATH_IDS.next,
+      readiness: { status: "ASSIGNED", currentCycleCompleted: true, nextCycleAvailable: true },
+    });
+    expect(
+      await prisma.studentLearningPath.findUnique({
+        where: { id: recoveryFixture.enrollmentId },
+        select: { routeStatus: true },
+      }),
+    ).toEqual({ routeStatus: "COMPLETED" });
+    expect(
+      await prisma.studentLearningStepProgress.count({
+        where: {
+          tenantId: recoveryFixture.actor.tenantId,
+          studentId: recoveryFixture.actor.userId,
+        },
+      }),
+    ).toBe(beforeProgress);
+
+    const replay = await withPublicationApproval(() =>
+      reconcileP1ToNextCycle(recoveryFixture.actor, {
+        p1LearningPathId: recoveryFixture.enrollmentId,
+      }),
+    );
+    expect(replay).toMatchObject({
+      outcome: "ALREADY_ASSIGNED",
+      nextLearningPathId: PATH_IDS.next,
+      readiness: { status: "ALREADY_ASSIGNED" },
+    });
   });
 
   it("does not reactivate reassigned, paused, or review-required next cycles", async () => {
