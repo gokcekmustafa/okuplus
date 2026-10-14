@@ -27,6 +27,14 @@ describe("roadmap lesson flow contract", () => {
     expect(service).toContain("findLessonForContentVersion(node.contentVersionId, actor)");
   });
 
+  it("pins lesson resolution to the requested published content version", () => {
+    expect(service).toContain('versions: { some: { id: contentVersionId, status: "PUBLISHED" } }');
+    expect(service).toContain(
+      'where: { id: contentVersionId, status: "PUBLISHED" },\n        take: 1',
+    );
+    expect(service).not.toContain('currentVersion: { id: contentVersionId, status: "PUBLISHED" }');
+  });
+
   it("completes only the addressed step and returns the server-selected next step", () => {
     expect(service).toContain("await completeLearningStep(actor, stepId)");
     expect(service).toContain("nextStep: await getNextLearningStepAfter(actor, stepId)");

@@ -24,7 +24,7 @@ type LessonRow = {
   title: string;
   difficulty: number;
   tenantId: string | null;
-  currentVersion: {
+  versions: Array<{
     id: string;
     contentId: string;
     version: number;
@@ -33,35 +33,34 @@ type LessonRow = {
     status: string;
     publishedAt: Date | null;
     metadata: Prisma.JsonValue | null;
-  } | null;
+  }>;
   contentSkills: Array<{ skill: { code: string; name: string } }>;
 };
+
+const LESSON_VERSION_SELECT = {
+  id: true,
+  contentId: true,
+  version: true,
+  title: true,
+  body: true,
+  status: true,
+  publishedAt: true,
+  metadata: true,
+} satisfies Prisma.ContentVersionSelect;
 
 const LESSON_SELECT = {
   id: true,
   title: true,
   difficulty: true,
   tenantId: true,
-  currentVersion: {
-    select: {
-      id: true,
-      contentId: true,
-      version: true,
-      title: true,
-      body: true,
-      status: true,
-      publishedAt: true,
-      metadata: true,
-    },
-  },
   contentSkills: { select: { skill: { select: { code: true, name: true } } } },
 } satisfies Prisma.ContentSelect;
 
 function assertActor(actor: LessonActor): asserts actor is LessonActor & { tenantId: string } {
   assertStudentActor(actor);
 }
-function metadataFor(row: LessonRow): LessonMetadata | null {
-  return parseLessonMetadata(row.currentVersion?.metadata);
+function metadataFor(version: LessonRow["versions"][number] | undefined): LessonMetadata | null {
+  return parseLessonMetadata(version?.metadata);
 }
 
 function visibleWhere(actor: LessonActor): Prisma.ContentWhereInput {
@@ -69,19 +68,22 @@ function visibleWhere(actor: LessonActor): Prisma.ContentWhereInput {
     deletedAt: null,
     status: "PUBLISHED",
     OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
-    currentVersion: { status: "PUBLISHED" },
   };
 }
 
-function toLesson(row: LessonRow, completedAt: Date | null) {
-  const metadata = metadataFor(row);
-  if (!metadata || !row.currentVersion) throw notFoundError("Ders bulunamadı");
+function toLesson(
+  row: LessonRow,
+  version: LessonRow["versions"][number],
+  completedAt: Date | null,
+) {
+  const metadata = metadataFor(version);
+  if (!metadata) throw notFoundError("Ders bulunamadı");
   return {
     id: row.id,
-    contentVersionId: row.currentVersion.id,
-    version: row.currentVersion.version,
-    title: row.currentVersion.title || row.title,
-    body: row.currentVersion.body,
+    contentVersionId: version.id,
+    version: version.version,
+    title: version.title || row.title,
+    body: version.body,
     difficulty: row.difficulty,
     skill: row.contentSkills[0]?.skill ?? null,
     ...metadata,
@@ -103,11 +105,19 @@ async function findLessonForContentVersion(contentVersionId: string, actor: Less
   const row = (await prisma.content.findFirst({
     where: {
       ...visibleWhere(actor),
-      currentVersion: { id: contentVersionId, status: "PUBLISHED" },
+      versions: { some: { id: contentVersionId, status: "PUBLISHED" } },
     },
-    select: LESSON_SELECT,
+    select: {
+      ...LESSON_SELECT,
+      versions: {
+        where: { id: contentVersionId, status: "PUBLISHED" },
+        take: 1,
+        select: LESSON_VERSION_SELECT,
+      },
+    },
   })) as LessonRow | null;
-  if (!row || !row.currentVersion || !metadataFor(row)) throw notFoundError("Ders bulunamadı");
+  const version = row?.versions[0];
+  if (!row || !version || !metadataFor(version)) throw notFoundError("Ders bulunamadı");
   const progress = await withTenantContext(actor, (tx) =>
     tx.studentLessonProgress.findUnique({
       where: {
@@ -120,7 +130,7 @@ async function findLessonForContentVersion(contentVersionId: string, actor: Less
       select: { completedAt: true },
     }),
   );
-  return toLesson(row, progress?.completedAt ?? null);
+  return toLesson(row, version, progress?.completedAt ?? null);
 }
 
 /**
