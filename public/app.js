@@ -635,6 +635,7 @@ function setGuestPhase(phase) {
   };
   for (const [name, id] of Object.entries(sections))
     $(id)?.classList.toggle("hidden", name !== phase);
+  $("guest-skill-grid")?.classList.toggle("hidden", phase !== "intro");
 }
 
 function showGuest() {
@@ -836,13 +837,13 @@ function renderGuestResult(result) {
     typeof result?.recommendedLevelName === "string" ? result.recommendedLevelName.trim() : "";
   const copyByKey = {
     GUEST_DIAGNOSTIC_RECOMMENDATION:
-      "Yanıtlarına göre öğrenme yoluna uygun bir başlangıç noktası belirledik.",
+      "Yanıtlarına göre hızlı okuma ve okuduğunu anlama becerilerine uygun bir başlangıç noktası belirledik.",
   };
   $("guest-result-level").textContent =
-    levelName || "Sana uygun başlangıç adımını birlikte keşfedelim.";
+    levelName || "Sana uygun hızlı okuma ve anlama başlangıcını birlikte keşfedelim.";
   $("guest-result-copy").textContent =
     copyByKey[result?.recommendationCopyKey] ||
-    "Bu sonuç, ilk adımını seçmene yardımcı olan kısa bir öneridir.";
+    "Bu sonuç, hızlı okuma ve okuduğunu anlama yolculuğundaki ilk adımını seçmene yardımcı olan kısa bir öneridir.";
   const questionCount = guestDiagnosticState.questionCount || guestDiagnosticState.questions.length;
   $("guest-result-count").textContent = questionCount
     ? `${questionCount} soruluk tanıyı tamamladın.`

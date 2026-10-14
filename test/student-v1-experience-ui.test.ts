@@ -6,7 +6,7 @@ const index = readFileSync("public/index.html", "utf8");
 
 describe("student V1 first-experience recovery states", () => {
   it("sets a clear expectation before signup or login", () => {
-    expect(index).toContain("Her gün birkaç kısa adımla daha hızlı ve dikkatli oku.");
+    expect(index).toContain("Hızlı oku, ana fikri yakala, metni daha iyi anla.");
     expect(index).toContain('id="login-form"');
   });
 

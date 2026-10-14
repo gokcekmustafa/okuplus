@@ -3,24 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OkuPratik</title>
+    <title>OkuPratik | Hızlı oku, daha iyi anla</title>
     <meta
       name="description"
-      content="OkuPratik ile her gün kısa adımlarla daha hızlı ve dikkatli oku."
+      content="OkuPratik ile hızlı okuma ve okuduğunu anlama becerilerini adım adım geliştir."
     />
     <link rel="canonical" href="https://www.okupratik.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="OkuPratik" />
     <meta
       property="og:description"
-      content="OkuPratik ile her gün kısa adımlarla daha hızlı ve dikkatli oku."
+      content="OkuPratik ile hızlı okuma ve okuduğunu anlama becerilerini adım adım geliştir."
     />
     <meta property="og:url" content="https://www.okupratik.com/" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="OkuPratik" />
     <meta
       name="twitter:description"
-      content="OkuPratik ile her gün kısa adımlarla daha hızlı ve dikkatli oku."
+      content="OkuPratik ile hızlı okuma ve okuduğunu anlama becerilerini adım adım geliştir."
     />
     <link
       rel="icon"
@@ -33,8 +33,11 @@
     <main id="view-login" class="login-shell hidden">
       <div class="card login-card">
         <div class="brand">
-          <h1>OkuPratik</h1>
-          <p>Her gün birkaç kısa adımla daha hızlı ve dikkatli oku.</p>
+          <div class="brand-lockup" aria-label="OkuPratik">
+            <span class="brand-lockup-icon" aria-hidden="true">↗</span>
+            <h1>OkuPratik</h1>
+          </div>
+          <p>Hızlı oku, ana fikri yakala, metni daha iyi anla.</p>
         </div>
         <div class="social-login" aria-label="Sosyal giriş seçenekleri">
           <button id="google-login-btn" type="button" class="btn btn-ghost btn-block" disabled>
@@ -81,8 +84,10 @@
         </form>
         <form id="signup-form" class="hidden" novalidate>
           <div class="auth-form-intro">
-            <h2>Öğrenme yolunu başlat</h2>
-            <p class="muted">Hedefini seç, seviyeni keşfet ve gelişimini kendi ritminde gör.</p>
+            <h2>Kendi okuma yolunu keşfet</h2>
+            <p class="muted">
+              Hızlı okuma ve okuduğunu anlama becerilerini kendi ritminde geliştir.
+            </p>
           </div>
           <label class="field">
             <span>Ad</span>
@@ -161,40 +166,78 @@
     <main id="view-guest" class="guest-shell hidden">
       <div id="guest-diagnostic-card" class="guest-card card">
         <div class="guest-topbar">
-          <div class="guest-brand-mark" aria-label="OkuPratik">OkuPratik</div>
+          <div class="guest-brand-mark" aria-label="OkuPratik">
+            <span class="guest-brand-icon" aria-hidden="true">↗</span>
+            <span>OkuPratik</span>
+          </div>
           <button id="guest-header-login-btn" type="button" class="btn btn-secondary btn-sm">
             Giriş yap
           </button>
         </div>
         <header class="guest-header">
-          <p class="guest-eyebrow">KISA BAŞLANGIÇ TANISI</p>
-          <h1>Okuma gücünü birlikte keşfedelim</h1>
+          <p class="guest-eyebrow">HIZLI OKUMA + OKUDUĞUNU ANLAMA</p>
+          <h1>Daha hızlı oku, daha iyi anla</h1>
           <p>
-            Sekiz kısa soruyu yanıtla; sana uygun başlangıç noktasını birlikte bulalım. Hesap açman
-            gerekmiyor.
+            Sekiz kısa soruyla hızlı okuma, ana fikir, ayrıntı ve çıkarım becerilerinde nereden
+            başlayacağını keşfet. Hesap açman gerekmiyor.
           </p>
           <div class="guest-trust-row" aria-label="Tanı bilgileri">
             <span>8 kısa soru</span>
-            <span>Hesap gerekmez</span>
-            <span>Sonuç anında</span>
+            <span>Yaklaşık 2 dakika</span>
+            <span>Başlangıç önerisi</span>
           </div>
         </header>
+
+        <section
+          id="guest-skill-grid"
+          class="guest-skill-grid"
+          aria-label="Geliştirilecek beceriler"
+        >
+          <article class="guest-skill-card">
+            <span class="guest-skill-icon" aria-hidden="true">↗</span>
+            <div>
+              <strong>Hızlı oku</strong>
+              <span>Metni daha akıcı takip et.</span>
+            </div>
+          </article>
+          <article class="guest-skill-card">
+            <span class="guest-skill-icon" aria-hidden="true">A</span>
+            <div>
+              <strong>Ana fikri yakala</strong>
+              <span>Metnin merkezindeki düşünceyi bul.</span>
+            </div>
+          </article>
+          <article class="guest-skill-card">
+            <span class="guest-skill-icon" aria-hidden="true">#</span>
+            <div>
+              <strong>Ayrıntıları seç</strong>
+              <span>Önemli bilgileri ayırt et.</span>
+            </div>
+          </article>
+          <article class="guest-skill-card">
+            <span class="guest-skill-icon" aria-hidden="true">∴</span>
+            <div>
+              <strong>Çıkarım yap</strong>
+              <span>İpuçlarını birleştirerek anlam kur.</span>
+            </div>
+          </article>
+        </section>
 
         <section
           id="guest-intro"
           class="guest-state guest-intro"
           aria-labelledby="guest-intro-title"
         >
-          <div class="guest-intro-icon" aria-hidden="true">✦</div>
-          <h2 id="guest-intro-title">Hazır olduğunda başlayalım</h2>
+          <div class="guest-intro-icon" aria-hidden="true">↗</div>
+          <h2 id="guest-intro-title">Başlangıç noktanı bulalım</h2>
           <p class="muted">
-            Kısa tanı, sana uygun ilk adımı önermek için hazırlanır. Hesap açmadan
-            tamamlayabilirsin.
+            Kısa tanı, hızlı okuma ve okuduğunu anlama becerilerinde sana uygun ilk adımı önermek
+            için hazırlanır.
           </p>
           <button id="guest-start" type="button" class="btn btn-primary guest-start-btn">
-            Tanılamayı Başlat
+            Tanılamayı başlat
           </button>
-          <p class="guest-intro-note">8 kısa soru · Yaklaşık 2 dakika</p>
+          <p class="guest-intro-note">8 kısa soru · Yaklaşık 2 dakika · Hesap gerekmez</p>
         </section>
 
         <section id="guest-loading" class="guest-state" aria-live="polite">
@@ -237,10 +280,10 @@
           </article>
 
           <p id="guest-question-meta" class="guest-question-meta"></p>
-          <h2 id="guest-question-heading">Soruyu yanıtla</h2>
+          <h2 id="guest-question-heading">Becerini birlikte keşfedelim</h2>
           <p class="guest-question-help">
-            En iyi seçeneği işaretle. Her soru için bir yanıt hakkın var; sonrasında kısa geri
-            bildirimi göreceksin.
+            Soruyu dikkatle oku ve sana en uygun seçeneği işaretle. Bu bir sınav değil; başlangıç
+            noktanı anlamamıza yardımcı oluyor.
           </p>
           <p id="guest-question-prompt" class="guest-question-prompt"></p>
           <div
@@ -276,8 +319,8 @@
           aria-labelledby="guest-result-heading"
         >
           <div class="guest-result-icon" aria-hidden="true">✓</div>
-          <p class="guest-eyebrow">TANI TAMAMLANDI</p>
-          <h2 id="guest-result-heading">Başlangıç seviyen için önerimiz</h2>
+          <p class="guest-eyebrow">BAŞLANGIÇ ÖNERİN HAZIR</p>
+          <h2 id="guest-result-heading">Hızlı okuma ve anlama başlangıcın</h2>
           <p id="guest-result-level" class="guest-result-level"></p>
           <p id="guest-result-copy" class="guest-result-copy"></p>
           <p id="guest-result-count" class="guest-result-count"></p>
