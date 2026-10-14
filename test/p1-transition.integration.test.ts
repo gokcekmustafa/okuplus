@@ -487,6 +487,12 @@ describe.sequential("P1 learning cycle transition integration", () => {
       learningPathId: PATH_IDS.initial,
     });
 
+    const staleStepResolution = await resolveP1CycleTransitionStep(completeFixture.actor, {
+      learningStepId: id(999_001),
+      assessmentId: assessmentStep!.assessmentId!,
+    });
+    expect(staleStepResolution).toEqual(resolved);
+
     const unEnrolledResolution = await resolveP1CycleTransitionStep(
       {
         userId: id(17),

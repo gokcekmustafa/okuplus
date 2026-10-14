@@ -943,16 +943,16 @@ export async function completeExerciseSession(
           },
         ).catch(() => null)
       : null;
-  const effectiveLearningStepId = session.learningStepId ?? resolvedP1Step?.learningStepId ?? null;
+  const effectiveLearningStepId = resolvedP1Step?.learningStepId ?? session.learningStepId ?? null;
   if (session.tenantId && shouldSyncLearningPath) {
     const learningActor = {
       userId: session.studentId,
       tenantId: session.tenantId,
       platformRole: null,
     } as const;
-    if (session.learningStepId) {
+    if (effectiveLearningStepId) {
       await completeLearningStep(
-        session.learningStepId,
+        effectiveLearningStepId,
         learningActor,
         scoreSummary as Prisma.InputJsonValue,
       ).catch(() => {});

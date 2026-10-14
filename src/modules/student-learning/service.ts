@@ -1128,14 +1128,13 @@ export async function getStudentSession(
   if (resolvedTrainingConfig?.status === "READY") {
     await loadTrainingRuntimeGraph(session.templateVersionId, actor);
   }
-  const resolvedP1Step =
-    !session.learningStepId && session.assessmentId
-      ? await resolveP1CycleTransitionStep(actor, {
-          learningStepId: null,
-          assessmentId: session.assessmentId,
-        }).catch(() => null)
-      : null;
-  const effectiveLearningStepId = session.learningStepId ?? resolvedP1Step?.learningStepId ?? null;
+  const resolvedP1Step = session.assessmentId
+    ? await resolveP1CycleTransitionStep(actor, {
+        learningStepId: session.learningStepId,
+        assessmentId: session.assessmentId,
+      }).catch(() => null)
+    : null;
+  const effectiveLearningStepId = resolvedP1Step?.learningStepId ?? session.learningStepId ?? null;
   const learningPathNavigation = effectiveLearningStepId
     ? await getLearningStepNavigation(actor, effectiveLearningStepId)
     : null;

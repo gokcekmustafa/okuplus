@@ -45,6 +45,7 @@ type PublishedPath = {
   title: string;
   area: string;
   enrolled?: boolean;
+  completedEnrollment?: boolean;
   progressCount?: number;
   completedProgressCount?: number;
   units: PathUnitRow[];
@@ -298,6 +299,9 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
       ...row,
       enrolled: row.enrollments.length > 0,
       activeEnrollment: row.enrollments.some((enrollment) => enrollment.routeStatus === "ACTIVE"),
+      completedEnrollment: row.enrollments.some(
+        (enrollment) => enrollment.routeStatus === "COMPLETED",
+      ),
       progressCount: progress.total,
       completedProgressCount: progress.completed,
     } as PublishedPath;
@@ -401,18 +405,21 @@ type PublishedPathSelectionCandidate = {
   version?: number;
   enrolled?: boolean;
   activeEnrollment?: boolean;
+  completedEnrollment?: boolean;
   progressCount?: number;
   completedProgressCount?: number;
 };
 
 /**
- * Keeps the completed P0 curriculum visible after an assigned P1 route is
- * created for the same area. P1 is a new phase after P0; it must not replace
- * the historical P0 projection that the student has already completed.
+ * Keeps completed curriculum phases visible when a new assigned phase is
+ * created for the same area. P1 is a new phase after P0, and a later P1
+ * cycle must append after an earlier completed P1 cycle instead of replacing
+ * its historical projection.
  *
  * Within each phase and area we still keep the existing canonical/enrollment
- * selection rules, so duplicate published records do not produce duplicate
- * modules or weaken tenant isolation.
+ * selection rules for the active route, so duplicate published records do not
+ * produce duplicate active modules or weaken tenant isolation. Completed P1
+ * enrollments are retained only as the student's own historical projections.
  */
 export function selectPublishedPathCandidates<T extends PublishedPathSelectionCandidate>(
   candidates: readonly T[],
@@ -420,8 +427,29 @@ export function selectPublishedPathCandidates<T extends PublishedPathSelectionCa
 ): T[] {
   const p0ByArea = new Map<string, T>();
   const p1ByArea = new Map<string, T>();
+  const completedP1ByArea = new Map<string, T[]>();
 
   for (const candidate of candidates) {
+    if (
+      candidate.code.startsWith(P1_PATH_PREFIX) &&
+      candidate.enrolled &&
+      candidate.completedEnrollment &&
+      !candidate.activeEnrollment
+    ) {
+      const history = completedP1ByArea.get(candidate.area) ?? [];
+      if (
+        !history.some(
+          (item) =>
+            item.code === candidate.code &&
+            item.version === candidate.version &&
+            item.tenantId === candidate.tenantId,
+        )
+      ) {
+        history.push(candidate);
+        completedP1ByArea.set(candidate.area, history);
+      }
+      continue;
+    }
     const target = candidate.code.startsWith(P1_PATH_PREFIX) ? p1ByArea : p0ByArea;
     const current = target.get(candidate.area);
     if (shouldReplacePublishedPath(current, candidate, actorTenantId)) {
@@ -434,13 +462,17 @@ export function selectPublishedPathCandidates<T extends PublishedPathSelectionCa
     ["READING_COMPREHENSION", 1],
     ["COMMON", 2],
   ]);
-  return [...p0ByArea.values(), ...p1ByArea.values()].sort((a, b) => {
+  const historicalP1 = [...completedP1ByArea.values()].flat();
+  return [...p0ByArea.values(), ...historicalP1, ...p1ByArea.values()].sort((a, b) => {
     const aPhase = a.code.startsWith(P1_PATH_PREFIX) ? 1 : 0;
     const bPhase = b.code.startsWith(P1_PATH_PREFIX) ? 1 : 0;
+    const aHistorical = a.completedEnrollment && !a.activeEnrollment ? 0 : 1;
+    const bHistorical = b.completedEnrollment && !b.activeEnrollment ? 0 : 1;
     return (
       aPhase - bPhase ||
       (areaOrder.get(a.area) ?? Number.MAX_SAFE_INTEGER) -
         (areaOrder.get(b.area) ?? Number.MAX_SAFE_INTEGER) ||
+      aHistorical - bHistorical ||
       a.area.localeCompare(b.area) ||
       a.code.localeCompare(b.code)
     );

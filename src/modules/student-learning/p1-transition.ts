@@ -354,17 +354,33 @@ export async function resolveP1CycleTransitionStep(
     });
     if (!currentPath) return null;
 
-    const step = await tx.learningStep.findFirst({
-      where: {
-        ...(input.learningStepId ? { id: input.learningStepId } : { assessmentId: assessmentId! }),
-        type: "ASSESSMENT",
-        status: "PUBLISHED",
-        isActive: true,
-        unit: { pathId: currentPath.id, status: "PUBLISHED" },
-      },
-      select: { id: true },
-    });
-    return step ? { learningStepId: step.id, learningPathId: currentPath.id } : null;
+    const stepScope = {
+      type: "ASSESSMENT" as const,
+      status: "PUBLISHED" as const,
+      isActive: true,
+      unit: { pathId: currentPath.id, status: "PUBLISHED" as const },
+    };
+    const step = input.learningStepId
+      ? await tx.learningStep.findFirst({
+          where: {
+            id: input.learningStepId,
+            ...(assessmentId ? { assessmentId } : {}),
+            ...stepScope,
+          },
+          select: { id: true },
+        })
+      : null;
+    const assessmentStep =
+      step ??
+      (assessmentId
+        ? await tx.learningStep.findFirst({
+            where: { assessmentId, ...stepScope },
+            select: { id: true },
+          })
+        : null);
+    return assessmentStep
+      ? { learningStepId: assessmentStep.id, learningPathId: currentPath.id }
+      : null;
   });
 }
 

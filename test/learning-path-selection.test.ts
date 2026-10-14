@@ -195,6 +195,42 @@ describe("published learning-path selection", () => {
     ]);
   });
 
+  it("keeps a completed P1 cycle visible before the active next cycle", () => {
+    const selected = selectPublishedPathCandidates(
+      [
+        {
+          code: "EDUCATION_V2_P0_READING_COMPREHENSION_G8_12",
+          area: "READING_COMPREHENSION",
+          tenantId: null,
+          enrolled: true,
+        },
+        {
+          code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+          area: "READING_COMPREHENSION",
+          tenantId: null,
+          enrolled: true,
+          completedEnrollment: true,
+          activeEnrollment: false,
+        },
+        {
+          code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+          area: "READING_COMPREHENSION",
+          tenantId: null,
+          enrolled: true,
+          completedEnrollment: false,
+          activeEnrollment: true,
+        },
+      ],
+      "tenant-1",
+    );
+
+    expect(selected.map((path) => path.code)).toEqual([
+      "EDUCATION_V2_P0_READING_COMPREHENSION_G8_12",
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+    ]);
+  });
+
   it("still prefers canonical P0 when neither path has student enrollment", () => {
     expect(
       shouldReplacePublishedPath(
