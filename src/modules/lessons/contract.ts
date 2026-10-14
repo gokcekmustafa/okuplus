@@ -5,6 +5,35 @@ const LEGACY_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE" as cons
 const CYCLE_2_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2" as const;
 const CYCLE_2_P1_A_ROUTE_FAMILY = "P1-A-CYCLE-2" as const;
 
+const lessonMetadataKeys = [
+  "lessonType",
+  "contractVersion",
+  "programId",
+  "routeFamily",
+  "skillCode",
+  "objective",
+  "explanation",
+  "workedExample",
+  "guidedPractice",
+  "exerciseTemplateVersionId",
+  "completionLabel",
+  "area",
+  "stage",
+  "observableOutcome",
+  "modeledThinking",
+  "misconception",
+  "correctFeedback",
+  "incorrectFeedback",
+  "independentApplication",
+  "feedback",
+  "reteach",
+  "transferTask",
+  "completionCondition",
+  "measurementSignals",
+  "successIndicators",
+  "academicSources",
+] as const;
+
 const academicSourceSchema = z
   .object({
     key: z.string().trim().min(1).max(120),
@@ -112,12 +141,18 @@ export function parseLessonMetadata(value: unknown): LessonMetadata | null {
     (value as { lessonType?: unknown }).lessonType === "LEARNING_EXERCISE" &&
     (value as { contractVersion?: unknown }).contractVersion === 2 &&
     (value as { programId?: unknown }).programId === CYCLE_2_P1_A_PROGRAM_ID &&
-    (value as { routeFamily?: unknown }).routeFamily === CYCLE_2_P1_A_ROUTE_FAMILY &&
+    ((value as { routeFamily?: unknown }).routeFamily === undefined ||
+      (value as { routeFamily?: unknown }).routeFamily === CYCLE_2_P1_A_ROUTE_FAMILY) &&
     (value as { exerciseTemplateVersionId?: unknown }).exerciseTemplateVersionId === null
   ) {
+    const raw = value as Record<string, unknown>;
+    const normalized = Object.fromEntries(
+      lessonMetadataKeys.filter((key) => key in raw).map((key) => [key, raw[key]]),
+    );
     const compatibilityParsed = lessonMetadataSchema.safeParse({
-      ...(value as Record<string, unknown>),
+      ...normalized,
       lessonType: LESSON_METADATA_TYPE,
+      routeFamily: CYCLE_2_P1_A_ROUTE_FAMILY,
     });
     return compatibilityParsed.success ? compatibilityParsed.data : null;
   }

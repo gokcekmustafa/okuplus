@@ -94,6 +94,7 @@ describe("published learning lesson contract", () => {
         programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
         routeFamily: "P1-A-CYCLE-2",
         exerciseTemplateVersionId: null,
+        contentKey: "p1a-v2-structure-teach",
       }),
     ).toMatchObject({
       lessonType: "LEARNING_LESSON",
@@ -101,6 +102,22 @@ describe("published learning lesson contract", () => {
       programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
       routeFamily: "P1-A-CYCLE-2",
       exerciseTemplateVersionId: null,
+    });
+  });
+
+  it("normalizes an older Cycle 2 envelope without a route family", () => {
+    expect(
+      parseLessonMetadata({
+        ...validLesson(),
+        lessonType: "LEARNING_EXERCISE",
+        contractVersion: 2,
+        programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+        exerciseTemplateVersionId: null,
+      }),
+    ).toMatchObject({
+      lessonType: "LEARNING_LESSON",
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
+      routeFamily: "P1-A-CYCLE-2",
     });
   });
 
