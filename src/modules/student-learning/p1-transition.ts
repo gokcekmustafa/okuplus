@@ -1472,28 +1472,12 @@ export async function reconcileP1ToNextCycle(
           data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
         });
       }
-      await tx.studentLearningPath.upsert({
-        where: {
-          tenantId_studentId_learningPathId: {
-            tenantId: actor.tenantId,
-            studentId: actor.userId,
-            learningPathId: nextPath.id,
-          },
-        },
-        update: {
-          routeStatus: "ACTIVE",
-          assignedAt: now,
-          recommendedPathId: nextPath.id,
-          measurementResultId: enrollment.measurementResultId,
-          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
-          selectionReason: {
-            source: "P1_CYCLE_CONTINUATION",
-            fromLearningPathId: enrollment.learningPath.id,
-            fromPathCode: enrollment.learningPath.code,
-            toPathCode: nextPath.code,
-          },
-        },
-        create: {
+      // Use a unique create for the first assignment rather than an upsert.
+      // If two approved retries race, PostgreSQL lets only one create win;
+      // the other transaction reaches the P2002 handler below and reports
+      // ALREADY_ASSIGNED instead of looking like a second assignment.
+      await tx.studentLearningPath.create({
+        data: {
           tenantId: actor.tenantId,
           studentId: actor.userId,
           learningPathId: nextPath.id,
