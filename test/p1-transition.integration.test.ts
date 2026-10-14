@@ -540,6 +540,19 @@ describe.sequential("P1 learning cycle transition integration", () => {
   });
 
   it("assigns one published next cycle when publication is explicitly approved in isolation", async () => {
+    // The student-facing path projection excludes draft units. Keep the
+    // transition query on the same published runtime graph so a legacy draft
+    // unit cannot make an otherwise complete visible cycle look incomplete.
+    await prisma.learningUnit.create({
+      data: {
+        id: id(1200),
+        pathId: PATH_IDS.initial,
+        code: "LEGACY_DRAFT_UNIT",
+        title: "Eski taslak ünite",
+        position: 99,
+        status: "DRAFT",
+      },
+    });
     const result = await withPublicationApproval(() =>
       reconcileP1ToNextCycle(assignedFixture.actor, {
         p1LearningPathId: assignedFixture.enrollmentId,

@@ -1156,11 +1156,13 @@ async function loadNextP1Cycle(
       code: true,
       version: true,
       units: {
+        where: { status: "PUBLISHED" as const },
         orderBy: { position: "asc" },
         select: {
           code: true,
           status: true,
           steps: {
+            where: { status: "PUBLISHED" as const, isActive: true },
             orderBy: { position: "asc" },
             select: {
               id: true,
@@ -1219,11 +1221,13 @@ export async function reconcileP1ToNextCycle(
             area: true,
             levelId: true,
             units: {
+              where: { status: "PUBLISHED" as const },
               orderBy: { position: "asc" as const },
               select: {
                 code: true,
                 status: true,
                 steps: {
+                  where: { status: "PUBLISHED" as const, isActive: true },
                   orderBy: { position: "asc" as const },
                   select: {
                     id: true,
