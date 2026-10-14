@@ -1,6 +1,7 @@
 import { safeParseTrainingExerciseVersionConfig } from "../modules/training/exercise-contract.js";
 
 export const CANONICAL_PLACEMENT_MANIFEST_ID = "OKU-READING-PLACEMENT-V1" as const;
+export const LEGACY_CURRICULUM_PACK_ID = "OKU-8G8-FIRST-REAL-CURRICULUM" as const;
 
 export type ExerciseTemplateVersionConfigRow = {
   versionConfig: unknown;
@@ -13,6 +14,7 @@ export type ExerciseTemplateVersionConfigRow = {
 export type ExerciseTemplateVersionConfigClassification =
   | { kind: "CONFIGURED"; valid: boolean }
   | { kind: "CANONICAL_PLACEMENT_EXEMPT" }
+  | { kind: "LEGACY_COMPATIBILITY"; packId: typeof LEGACY_CURRICULUM_PACK_ID }
   | { kind: "BACKFILL_REQUIRED"; parent: "VALID" | "INVALID" | "MISSING" | "ABSENT" };
 
 export type SanitizedTrainingConfigIssue = {
@@ -108,6 +110,50 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function stringField(value: unknown, key: string): string | null {
+  if (!isRecord(value) || typeof value[key] !== "string") return null;
+  return value[key] as string;
+}
+
+/**
+ * The first-real 8G8 pack predates the TRAINING version contract. Its
+ * published versions intentionally contain the immutable parent/catalog
+ * snapshot and are consumed by the explicit legacy path. This narrow marker
+ * must not become a generic exemption for arbitrary invalid configurations.
+ */
+export function isKnownLegacyCurriculumPackVersion(row: ExerciseTemplateVersionConfigRow): boolean {
+  if (row.versionStatus !== "PUBLISHED" || row.templateType !== "COMPREHENSION") return false;
+
+  const parent = row.parentConfig;
+  const version = row.versionConfig;
+  if (
+    stringField(parent, "packId") !== LEGACY_CURRICULUM_PACK_ID ||
+    stringField(version, "packId") !== LEGACY_CURRICULUM_PACK_ID
+  ) {
+    return false;
+  }
+
+  const parentIdentity = isRecord(parent) ? parent.stableIdentity : null;
+  const versionIdentity = isRecord(version) ? version.stableIdentity : null;
+  const parentTemplateVersionId = stringField(parentIdentity, "templateVersionId");
+  const versionTemplateVersionId = stringField(versionIdentity, "templateVersionId");
+  const templateId = stringField(parentIdentity, "templateId");
+  const contentId = stringField(parentIdentity, "contentId");
+  const contentVersionId = stringField(parentIdentity, "contentVersionId");
+
+  return (
+    parentTemplateVersionId !== null &&
+    parentTemplateVersionId === versionTemplateVersionId &&
+    /^8g8-template-version-[a-z0-9-]+-v1$/u.test(parentTemplateVersionId) &&
+    templateId !== null &&
+    /^8g8-template-[a-z0-9-]+$/u.test(templateId) &&
+    contentId !== null &&
+    /^8g8-content-[a-z0-9-]+$/u.test(contentId) &&
+    contentVersionId !== null &&
+    /^8g8-content-version-[a-z0-9-]+-v1$/u.test(contentVersionId)
+  );
+}
+
 export function isCanonicalPlacementVersion(row: ExerciseTemplateVersionConfigRow): boolean {
   return (
     row.versionStatus === "PUBLISHED" &&
@@ -126,6 +172,10 @@ export function classifyExerciseTemplateVersionConfig(
   // version config so it cannot be mistaken for invalid training data.
   if (isCanonicalPlacementVersion(row)) {
     return { kind: "CANONICAL_PLACEMENT_EXEMPT" };
+  }
+
+  if (isKnownLegacyCurriculumPackVersion(row)) {
+    return { kind: "LEGACY_COMPATIBILITY", packId: LEGACY_CURRICULUM_PACK_ID };
   }
 
   if (row.versionConfig !== null && row.versionConfig !== undefined) {

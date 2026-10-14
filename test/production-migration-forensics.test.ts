@@ -146,6 +146,7 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("backfillTargetCount");
     expect(script).toContain("observedMissingConfigCount");
     expect(script).toContain("configuredInvalidCount");
+    expect(script).toContain("legacyCompatibilityCount");
     expect(script).toContain("canonicalPlacementExemptCount");
     expect(workflow).toContain("INVALID_CONFIG_DIAGNOSTICS");
     expect(script).toContain("invalidConfigDiagnostics");

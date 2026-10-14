@@ -336,6 +336,7 @@ jobs:
             `**BACKFILL_TARGET_COUNT:** ${safe.releaseMigration1.dataPreflight.backfillTargetCount}`,
             `**OBSERVED_MISSING_CONFIG_COUNT:** ${safe.releaseMigration1.dataPreflight.observedMissingConfigCount}`,
             `**CONFIGURED_INVALID_COUNT:** ${safe.releaseMigration1.dataPreflight.configuredInvalidCount}`,
+            `**LEGACY_COMPATIBILITY_COUNT:** ${safe.releaseMigration1.dataPreflight.legacyCompatibilityCount}`,
             `**ALREADY_CONFIGURED:** ${safe.releaseMigration1.dataPreflight.alreadyConfigured}`,
             `**CANONICAL_PLACEMENT_EXEMPT_COUNT:** ${safe.releaseMigration1.dataPreflight.canonicalPlacementExemptCount}`,
             `**PARENT_CONFIG_VALID:** ${safe.releaseMigration1.dataPreflight.parentConfigValid}`,

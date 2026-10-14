@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyExerciseTemplateVersionConfig,
+  isKnownLegacyCurriculumPackVersion,
   sanitizedTrainingConfigIssues,
   type ExerciseTemplateVersionConfigRow,
 } from "../src/lib/exercise-template-version-config-policy.js";
@@ -122,6 +123,42 @@ describe("ExerciseTemplateVersion config policy", () => {
   it("marks a non-null but invalid version config for review", () => {
     expect(
       classifyExerciseTemplateVersionConfig(row({ versionConfig: { unsupported: true } })),
+    ).toEqual({ kind: "CONFIGURED", valid: false });
+  });
+
+  it("recognizes only the deterministic 8G8 legacy parent snapshot contract", () => {
+    const legacyConfig = {
+      packId: "OKU-8G8-FIRST-REAL-CURRICULUM",
+      stableIdentity: {
+        contentId: "8g8-content-golgeyi-olcmek",
+        contentVersionId: "8g8-content-version-golgeyi-olcmek-v1",
+        templateId: "8g8-template-golgeyi-olcmek",
+        templateVersionId: "8g8-template-version-golgeyi-olcmek-v1",
+      },
+    };
+    const legacyRow = row({
+      versionConfig: legacyConfig,
+      parentConfig: legacyConfig,
+    });
+
+    expect(isKnownLegacyCurriculumPackVersion(legacyRow)).toBe(true);
+    expect(classifyExerciseTemplateVersionConfig(legacyRow)).toEqual({
+      kind: "LEGACY_COMPATIBILITY",
+      packId: "OKU-8G8-FIRST-REAL-CURRICULUM",
+    });
+    expect(
+      classifyExerciseTemplateVersionConfig(
+        row({ versionConfig: legacyConfig, parentConfig: legacyConfig, versionStatus: "DRAFT" }),
+      ),
+    ).toEqual({ kind: "CONFIGURED", valid: false });
+    expect(
+      classifyExerciseTemplateVersionConfig(
+        row({
+          versionConfig: legacyConfig,
+          parentConfig: legacyConfig,
+          templateType: "MIXED",
+        }),
+      ),
     ).toEqual({ kind: "CONFIGURED", valid: false });
   });
 

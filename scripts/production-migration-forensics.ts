@@ -83,6 +83,7 @@ type Migration1DataPreflight = {
   totalExerciseTemplateVersions: number | null;
   observedMissingConfigCount: number | null;
   configuredInvalidCount: number | null;
+  legacyCompatibilityCount: number | null;
   backfillTargetCount: number | null;
   alreadyConfigured: number | null;
   canonicalPlacementExemptCount: number | null;
@@ -636,6 +637,7 @@ async function main(): Promise<void> {
       totalExerciseTemplateVersions: null,
       observedMissingConfigCount: null,
       configuredInvalidCount: null,
+      legacyCompatibilityCount: null,
       backfillTargetCount: null,
       alreadyConfigured: null,
       canonicalPlacementExemptCount: null,
@@ -703,6 +705,9 @@ async function main(): Promise<void> {
             ORDER BY version."id"
           `;
       const classifications = targetRows.map((row) => classifyExerciseTemplateVersionConfig(row));
+      const legacyCompatibilityCount = classifications.filter(
+        (classification) => classification.kind === "LEGACY_COMPATIBILITY",
+      ).length;
       const configuredInvalidCount = classifications.filter(
         (classification) => classification.kind === "CONFIGURED" && !classification.valid,
       ).length;
@@ -761,6 +766,7 @@ async function main(): Promise<void> {
         totalExerciseTemplateVersions: countSummary.total,
         observedMissingConfigCount: missingRows.length,
         configuredInvalidCount,
+        legacyCompatibilityCount,
         backfillTargetCount,
         alreadyConfigured: countSummary.configured,
         canonicalPlacementExemptCount,
@@ -774,7 +780,9 @@ async function main(): Promise<void> {
         reason: safe
           ? canonicalPlacementExemptCount > 0 && backfillTargetCount === 0
             ? "canonical placement version config is intentionally exempt from training backfill"
-            : "every training version missing config has one valid parent version config source"
+            : legacyCompatibilityCount > 0 && backfillTargetCount === 0
+              ? "known 8G8 legacy snapshots use the explicit legacy path and are not training runtime configs"
+              : "every training version missing config has one valid parent version config source"
           : configuredInvalidCount > 0
             ? "configured version has invalid training config and requires review"
             : "missing, invalid, or ambiguous parent config requires review before backfill",
