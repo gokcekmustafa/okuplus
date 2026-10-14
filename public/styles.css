@@ -8450,10 +8450,10 @@ textarea:focus-visible {
 
 .guest-art-note {
   position: absolute;
-  top: 24px;
+  top: 6px;
   right: 15px;
   z-index: 4;
-  padding: 12px 14px;
+  padding: 8px 12px;
   border-radius: 18px 18px 18px 4px;
   color: #18285f;
   background: #fff;
@@ -9342,7 +9342,7 @@ textarea:focus-visible {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 980px) {
   .guest-shell:not(.guest-diagnostic-mode) {
     padding: 10px;
   }
