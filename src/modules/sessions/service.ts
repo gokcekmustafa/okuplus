@@ -42,7 +42,10 @@ import {
   completeLearningStepForAssessment,
   completeLearningStepForTemplate,
 } from "../student-learning/persistent-path.js";
-import { reconcileP1ToNextCycle } from "../student-learning/p1-transition.js";
+import {
+  reconcileP1ToNextCycle,
+  resolveP1CycleTransitionStep,
+} from "../student-learning/p1-transition.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -926,6 +929,21 @@ export async function completeExerciseSession(
     !session.trainingSessionItem &&
     !isIndependentTrainingSession(session.deviceInfo) &&
     !isLearningPathReplaySession(session.deviceInfo);
+  const resolvedP1Step =
+    shouldSyncLearningPath && session.tenantId && actor.userId === session.studentId
+      ? await resolveP1CycleTransitionStep(
+          {
+            userId: session.studentId,
+            tenantId: session.tenantId,
+            platformRole: null,
+          },
+          {
+            learningStepId: session.learningStepId,
+            assessmentId: session.assessmentId,
+          },
+        ).catch(() => null)
+      : null;
+  const effectiveLearningStepId = session.learningStepId ?? resolvedP1Step?.learningStepId ?? null;
   if (session.tenantId && shouldSyncLearningPath) {
     const learningActor = {
       userId: session.studentId,
@@ -956,7 +974,7 @@ export async function completeExerciseSession(
       {
         templateVersionId: session.templateVersionId,
         assessmentId: session.assessmentId,
-        learningStepId: session.learningStepId,
+        learningStepId: effectiveLearningStepId,
       },
     ).catch(() => {});
   }
@@ -964,15 +982,13 @@ export async function completeExerciseSession(
   let nextLearningCycle: ExerciseSessionDetail["nextLearningCycle"] = null;
   if (
     session.tenantId &&
-    session.learningStepId &&
-    session.learningStep?.unit.path &&
-    session.learningStep.unit.path.code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12" &&
+    resolvedP1Step &&
     actor.userId === session.studentId &&
     shouldSyncLearningPath
   ) {
     nextLearningCycle = await reconcileP1ToNextCycle(
       { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
-      { p1LearningPathId: session.learningStep.unit.path.id },
+      { p1LearningPathId: resolvedP1Step.learningPathId },
     ).catch(() => null);
   }
 
@@ -983,7 +999,7 @@ export async function completeExerciseSession(
   let nextLearningStep: ExerciseSessionDetail["nextLearningStep"] = null;
   if (
     session.tenantId &&
-    session.learningStepId &&
+    effectiveLearningStepId &&
     actor.userId === session.studentId &&
     !session.assignmentId &&
     !session.trainingSessionItem &&
@@ -991,11 +1007,16 @@ export async function completeExerciseSession(
   ) {
     nextLearningStep = await getNextLearningStepAfter(
       { userId: session.studentId, tenantId: session.tenantId, platformRole: null },
-      session.learningStepId,
+      effectiveLearningStepId,
     ).catch(() => null);
   }
 
-  return { ...toSessionDetail(updated as any), nextLearningStep, nextLearningCycle };
+  return {
+    ...toSessionDetail(updated as any),
+    learningStepId: effectiveLearningStepId,
+    nextLearningStep,
+    nextLearningCycle,
+  };
 }
 
 function toSessionDetail(row: any): ExerciseSessionDetail {

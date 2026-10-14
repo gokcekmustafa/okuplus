@@ -32,6 +32,7 @@ import {
   isIndependentTrainingSession,
   learningPathReplayDeviceInfo,
 } from "../training/session-origin.js";
+import { resolveP1CycleTransitionStep } from "./p1-transition.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -1127,8 +1128,16 @@ export async function getStudentSession(
   if (resolvedTrainingConfig?.status === "READY") {
     await loadTrainingRuntimeGraph(session.templateVersionId, actor);
   }
-  const learningPathNavigation = session.learningStepId
-    ? await getLearningStepNavigation(actor, session.learningStepId)
+  const resolvedP1Step =
+    !session.learningStepId && session.assessmentId
+      ? await resolveP1CycleTransitionStep(actor, {
+          learningStepId: null,
+          assessmentId: session.assessmentId,
+        }).catch(() => null)
+      : null;
+  const effectiveLearningStepId = session.learningStepId ?? resolvedP1Step?.learningStepId ?? null;
+  const learningPathNavigation = effectiveLearningStepId
+    ? await getLearningStepNavigation(actor, effectiveLearningStepId)
     : null;
   const questions = session.templateVersion.questions.map((entry) => {
     const questionVersion = entry.questionVersion;
@@ -1159,6 +1168,7 @@ export async function getStudentSession(
   const { config: _versionConfig, ...templateVersion } = session.templateVersion;
   return {
     ...session,
+    learningStepId: effectiveLearningStepId,
     templateVersion: { ...templateVersion, training: trainingConfig },
     questions,
     learningPathNavigation,

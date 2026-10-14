@@ -154,6 +154,19 @@ describe("P1 transition foundation contracts", () => {
     );
   });
 
+  it("recovers legacy assessment sessions through the scoped P1 step resolver", async () => {
+    const [sessions, studentLearning] = await Promise.all([
+      readFile(new URL("../src/modules/sessions/service.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/modules/student-learning/service.ts", import.meta.url), "utf8"),
+    ]);
+
+    expect(sessions).toContain("resolveP1CycleTransitionStep");
+    expect(sessions).toContain("const effectiveLearningStepId");
+    expect(sessions).toContain("p1LearningPathId: resolvedP1Step.learningPathId");
+    expect(studentLearning).toContain("learningStepId: effectiveLearningStepId");
+    expect(studentLearning).toContain("assessmentId: session.assessmentId");
+  });
+
   it("refreshes the path and opens the first assigned P1 station without a manual reload", async () => {
     const [app, index] = await Promise.all([
       readFile(new URL("../public/app.js", import.meta.url), "utf8"),

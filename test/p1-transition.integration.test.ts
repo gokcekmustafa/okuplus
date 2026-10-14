@@ -15,7 +15,10 @@ vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (import
   };
 });
 
-import { reconcileP1ToNextCycle } from "../src/modules/student-learning/p1-transition.js";
+import {
+  reconcileP1ToNextCycle,
+  resolveP1CycleTransitionStep,
+} from "../src/modules/student-learning/p1-transition.js";
 import type { StudentActor } from "../src/modules/student-learning/policy.js";
 import {
   EDUCATION_V2_P1_A_PROGRAM,
@@ -466,6 +469,33 @@ describe.sequential("P1 learning cycle transition integration", () => {
         orderBy: { id: "asc" },
       }),
     ).toEqual(beforeAssessmentResults);
+  });
+
+  it("resolves a legacy final assessment session without learningStepId only in the enrolled P1 path", async () => {
+    const assessmentStep = await prisma.learningStep.findFirst({
+      where: { unit: { pathId: PATH_IDS.initial }, type: "ASSESSMENT" },
+      select: { id: true, assessmentId: true },
+    });
+    expect(assessmentStep?.assessmentId).toBeTruthy();
+
+    const resolved = await resolveP1CycleTransitionStep(completeFixture.actor, {
+      learningStepId: null,
+      assessmentId: assessmentStep!.assessmentId!,
+    });
+    expect(resolved).toEqual({
+      learningStepId: assessmentStep!.id,
+      learningPathId: PATH_IDS.initial,
+    });
+
+    const unEnrolledResolution = await resolveP1CycleTransitionStep(
+      {
+        userId: id(17),
+        tenantId: completeFixture.actor.tenantId,
+        platformRole: null,
+      },
+      { learningStepId: null, assessmentId: assessmentStep!.assessmentId! },
+    );
+    expect(unEnrolledResolution).toBeNull();
   });
 
   it("keeps repeated publication-gated checks review-required without creating a duplicate", async () => {

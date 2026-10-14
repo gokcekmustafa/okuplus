@@ -41,7 +41,7 @@ const P0_PATH_PREFIX = "EDUCATION_V2_P0_";
 const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-";
 const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
-const P1_A_INITIAL_PATH_CODE = `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`;
+export const P1_A_INITIAL_PATH_CODE = `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`;
 const P1_A_NEXT_CYCLE_PATH_CODE = "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
 export const P1_CYCLE_TRANSITION_POLICY_VERSION = "P1_CYCLE_TRANSITION_V1" as const;
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
@@ -319,6 +319,53 @@ function isP2002(error: unknown): boolean {
 
 export function nextP1CyclePathCode(pathCode: string): string | null {
   return pathCode === P1_A_INITIAL_PATH_CODE ? P1_A_NEXT_CYCLE_PATH_CODE : null;
+}
+
+/**
+ * Resolves the published final assessment step for an older session that was
+ * created before `learningStepId` was persisted. The assessment id is only
+ * accepted inside the student's own published initial P1 enrollment; this
+ * keeps legacy-session recovery tenant- and route-scoped.
+ */
+export async function resolveP1CycleTransitionStep(
+  actor: StudentActor,
+  input: { learningStepId: string | null; assessmentId: string | null },
+): Promise<{ learningStepId: string; learningPathId: string } | null> {
+  assertStudentActor(actor);
+  const assessmentId = input.assessmentId;
+  if (!assessmentId && !input.learningStepId) return null;
+
+  return withTenantContext(actor, async (tx) => {
+    const currentPath = await tx.learningPath.findFirst({
+      where: {
+        code: P1_A_INITIAL_PATH_CODE,
+        status: "PUBLISHED",
+        deletedAt: null,
+        enrollments: {
+          some: {
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            routeStatus: { in: ["ACTIVE", "COMPLETED", "PAUSED"] },
+          },
+        },
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!currentPath) return null;
+
+    const step = await tx.learningStep.findFirst({
+      where: {
+        ...(input.learningStepId ? { id: input.learningStepId } : { assessmentId: assessmentId! }),
+        type: "ASSESSMENT",
+        status: "PUBLISHED",
+        isActive: true,
+        unit: { pathId: currentPath.id, status: "PUBLISHED" },
+      },
+      select: { id: true },
+    });
+    return step ? { learningStepId: step.id, learningPathId: currentPath.id } : null;
+  });
 }
 
 function p1CycleReviewResult(
