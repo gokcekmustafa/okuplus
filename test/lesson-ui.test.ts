@@ -35,7 +35,7 @@ describe("student lesson UI", () => {
       `renderFocusedLesson({title:'Hedefi belirle',objective:'Okumadan önce hedefini söyle',explanation:'Önce ne aradığını netleştir.',workedExample:'Başlığı ve soruyu birlikte incele.',guidedPractice:'Şimdi kendi hedefini yaz.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Hızlı Okuma',learningPathPosition:7,learningPathTotal:22})`,
     );
     const html = h.get("lesson-detail").innerHTML;
-    expect(html).toContain("ŞİMDİKİ DURAĞIN");
+    expect(html).not.toContain("ŞİMDİKİ DURAĞIN");
     expect(html).toContain("Dersi tamamla");
     expect(html).toContain("Öğrenme Yolu · 7 / 22");
     expect(html).not.toContain("Sana uygun dersler");
