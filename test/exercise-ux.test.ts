@@ -250,6 +250,13 @@ describe("exercise UX state from production frontend", () => {
         learningStepId: "step-20",
         nextLearningStep: { id: "step-21", status: "active" },
       });
+      exerciseApi = async () => ({});
+      parseResponse = async () => ({
+        id: "session",
+        status: "COMPLETED",
+        learningStepId: "step-20",
+        nextLearningStep: { id: "step-21", status: "active" },
+      });
       refreshExerciseGamification = async () => null;
       showCelebration = () => {};
       recordPilotTelemetry = () => {};
@@ -312,9 +319,7 @@ describe("exercise UX state from production frontend", () => {
     let reads = 0;
     h.context.fetchStudentExercise = async () => {
       reads += 1;
-      return reads === 1
-        ? { id: "session", status: "IN_PROGRESS" }
-        : { id: "session", status: "COMPLETED", scoreSummary: { totalQuestions: 1 } };
+      return { id: "session", status: "COMPLETED", scoreSummary: { totalQuestions: 1 } };
     };
     h.context.exerciseApi = async () => {
       throw new Error("response lost after server completion");
@@ -326,9 +331,37 @@ describe("exercise UX state from production frontend", () => {
 
     await h.run("handleExerciseComplete()");
 
-    expect(reads).toBe(2);
+    expect(reads).toBe(1);
     expect(h.context.exerciseSession.status).toBe("COMPLETED");
     expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
+  });
+
+  it("sends the normal completion directly without a redundant preflight read", async () => {
+    const h = harness();
+    let reads = 0;
+    let completionCalls = 0;
+    h.context.fetchStudentExercise = async () => {
+      reads += 1;
+      return { id: "session", status: "IN_PROGRESS" };
+    };
+    h.context.exerciseApi = async () => {
+      completionCalls += 1;
+      return {};
+    };
+    h.context.parseResponse = async () => ({
+      id: "session",
+      status: "COMPLETED",
+      scoreSummary: { totalQuestions: 1 },
+    });
+    h.context.refreshExerciseGamification = async () => null;
+    h.context.recordPilotTelemetry = () => {};
+    h.context.renderExerciseSession = () => {};
+
+    await h.run("handleExerciseComplete()");
+
+    expect(completionCalls).toBe(1);
+    expect(reads).toBe(0);
+    expect(h.context.exerciseSession.status).toBe("COMPLETED");
   });
 
   it("does not turn a post-completion UI error into an exercise failure", async () => {

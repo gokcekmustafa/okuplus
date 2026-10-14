@@ -1665,6 +1665,81 @@ function renderTrainingHome(data) {
   }
 }
 
+function renderTodayData(data, scope) {
+  var na = $("today-next-action");
+  var stats = $("today-stats");
+  var recent = $("today-recent");
+  const recentActivityLabels = {
+    EXERCISE: "Alıştırma",
+    ASSIGNMENT: "Ödev",
+    ASSESSMENT: "Değerlendirme",
+  };
+  if (!na || scope !== insightScope()) return false;
+  const todayCard = $("today-card");
+  renderTrainingHome(data);
+  renderReviewCard(data.review);
+  var label = data.nextAction ? data.nextAction.label : "—";
+  var title = data.nextAction && data.nextAction.title ? " — " + data.nextAction.title : "";
+  var btn = "";
+  if (data.nextAction && data.nextAction.type === "RESUME_SESSION")
+    btn =
+      '<button type="button" class="btn btn-primary btn-sm" onclick="resumeTodaySession(\'' +
+      data.nextAction.id +
+      "')\">Devam Et</button>";
+  else if (data.nextAction && data.nextAction.type === "ASSIGNMENT_START")
+    btn =
+      '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayAssignment(\'' +
+      data.nextAction.id +
+      "')\">Ödeve Başla</button>";
+  else if (data.nextAction && data.nextAction.type === "ASSESSMENT_START")
+    btn =
+      '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayAssessment(\'' +
+      data.nextAction.id +
+      "')\">Değerlendirmeye Başla</button>";
+  else if (data.nextAction && data.nextAction.type === "PERSONAL_EXERCISE") {
+    const templateVersionId = encodeURIComponent(String(data.nextAction.id ?? "")).replaceAll(
+      "'",
+      "%27",
+    );
+    btn =
+      '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayExercise(\'' +
+      templateVersionId +
+      "')\">Çalışmaya Başla</button>";
+  }
+  if (data.nextAction && data.nextAction.type === "LEARNING_STEP") {
+    window.todayLearningStep = data.nextLearningStep || null;
+    btn =
+      '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayLearningStep()">' +
+      escapeHtml(data.nextAction.label || "Başla") +
+      "</button>";
+  }
+  na.innerHTML = escapeHtml(label + title) + " " + btn;
+  stats.textContent =
+    "Bugün tamamlanan: " +
+    data.completedToday +
+    " · Seri: " +
+    data.currentStreak +
+    " · Bugün kazanılan GP: " +
+    (data.dailyTraining?.totalGP ?? data.pointsToday ?? 0);
+  if (data.recentActivity && data.recentActivity.length) {
+    recent.innerHTML =
+      '<div class="muted" style="font-size:12px;margin-bottom:4px">Son aktivite</div>' +
+      data.recentActivity
+        .map(function (a) {
+          return (
+            "<div>" +
+            escapeHtml(a.title) +
+            " (" +
+            escapeHtml(recentActivityLabels[a.type] || "Çalışma") +
+            ")</div>"
+          );
+        })
+        .join("");
+  } else recent.innerHTML = '<span class="muted" style="font-size:12px">Henüz aktivite yok</span>';
+  todayCard?.setAttribute("aria-busy", "false");
+  return true;
+}
+
 async function loadToday() {
   if (todayLoading) return;
   var na = $("today-next-action");
@@ -1672,11 +1747,6 @@ async function loadToday() {
   var recent = $("today-recent");
   var errorEl = $("today-training-error");
   var retryEl = $("today-training-retry");
-  const recentActivityLabels = {
-    EXERCISE: "Alıştırma",
-    ASSIGNMENT: "Ödev",
-    ASSESSMENT: "Değerlendirme",
-  };
   if (!na) return;
   todayLoading = true;
   const todayCard = $("today-card");
@@ -1687,72 +1757,7 @@ async function loadToday() {
   try {
     var res = await authenticatedFetch("/student/today");
     var data = await parseResponse(res);
-    if (scope !== insightScope()) {
-      todayCard?.setAttribute("aria-busy", "false");
-      return;
-    }
-    renderTrainingHome(data);
-    renderReviewCard(data.review);
-    var label = data.nextAction ? data.nextAction.label : "—";
-    var title = data.nextAction && data.nextAction.title ? " — " + data.nextAction.title : "";
-    var btn = "";
-    if (data.nextAction && data.nextAction.type === "RESUME_SESSION")
-      btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="resumeTodaySession(\'' +
-        data.nextAction.id +
-        "')\">Devam Et</button>";
-    else if (data.nextAction && data.nextAction.type === "ASSIGNMENT_START")
-      btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayAssignment(\'' +
-        data.nextAction.id +
-        "')\">Ödeve Başla</button>";
-    else if (data.nextAction && data.nextAction.type === "ASSESSMENT_START")
-      btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayAssessment(\'' +
-        data.nextAction.id +
-        "')\">Değerlendirmeye Başla</button>";
-    else if (data.nextAction && data.nextAction.type === "PERSONAL_EXERCISE") {
-      const templateVersionId = encodeURIComponent(String(data.nextAction.id ?? "")).replaceAll(
-        "'",
-        "%27",
-      );
-      btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayExercise(\'' +
-        templateVersionId +
-        "')\">Çalışmaya Başla</button>";
-    }
-    if (data.nextAction && data.nextAction.type === "LEARNING_STEP") {
-      window.todayLearningStep = data.nextLearningStep || null;
-      btn =
-        '<button type="button" class="btn btn-primary btn-sm" onclick="startTodayLearningStep()">' +
-        escapeHtml(data.nextAction.label || "Başla") +
-        "</button>";
-    }
-    na.innerHTML = escapeHtml(label + title) + " " + btn;
-    stats.textContent =
-      "Bugün tamamlanan: " +
-      data.completedToday +
-      " · Seri: " +
-      data.currentStreak +
-      " · Bugün kazanılan GP: " +
-      (data.dailyTraining?.totalGP ?? data.pointsToday ?? 0);
-    if (data.recentActivity && data.recentActivity.length) {
-      recent.innerHTML =
-        '<div class="muted" style="font-size:12px;margin-bottom:4px">Son aktivite</div>' +
-        data.recentActivity
-          .map(function (a) {
-            return (
-              "<div>" +
-              escapeHtml(a.title) +
-              " (" +
-              escapeHtml(recentActivityLabels[a.type] || "Çalışma") +
-              ")</div>"
-            );
-          })
-          .join("");
-    } else
-      recent.innerHTML = '<span class="muted" style="font-size:12px">Henüz aktivite yok</span>';
-    todayCard?.setAttribute("aria-busy", "false");
+    renderTodayData(data, scope);
   } catch (error) {
     if (na) na.textContent = "";
     if (stats) stats.textContent = "";
@@ -3237,6 +3242,8 @@ async function loadLearningPath() {
     var data = await insightApi("learning-path");
     data = await recoverCompletedP1CycleOnLearningPathLoad(data);
     if (scope !== insightScope()) return;
+    if (data.today) renderTodayData(data.today, scope);
+    else void loadToday();
     container.setAttribute("aria-busy", "false");
     learningPathPhase = "home-insights";
     try {
@@ -3288,6 +3295,7 @@ async function loadLearningPath() {
     container.innerHTML =
       '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
     retryEl?.classList.remove("hidden");
+    void loadToday();
   } finally {
     learningPathLoading = false;
   }
@@ -4798,7 +4806,6 @@ function navigate(page) {
   if (page === "dashboard") {
     if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
     if (!isPlatformUser) {
-      void loadToday();
       void loadLearningPath();
       void loadEntitlements();
     }
@@ -12703,7 +12710,9 @@ async function loadExercisePage() {
         if (dailyTrainingSummary) rememberExerciseSession(null);
         else await loadTrainingActivities();
       }
-      await refreshExerciseGamification();
+      // Points are supplementary UI data; do not delay the first question
+      // paint while the gamification summary is fetched.
+      void refreshExerciseGamification();
     } else {
       await Promise.all([populateExerciseStudentSelect(), populateExerciseTemplateVersionSelect()]);
       if (exerciseSession) await loadExerciseQuestions();
@@ -13681,17 +13690,15 @@ async function handleExerciseComplete() {
     btn.textContent = "Tamamlanıyor…";
   }
   try {
-    // The prior completion response might have been lost. GET is source of truth.
-    const fresh = student ? await fetchStudentExercise(exerciseSession.id) : null;
-    exerciseSession =
-      fresh?.status === "COMPLETED"
-        ? fresh
-        : await parseResponse(
-            await exerciseApi(`/exercise-sessions/${exerciseSession.id}/complete`, {
-              method: "POST",
-              body: "{}",
-            }),
-          );
+    // The completion POST is authoritative. Avoid a redundant preflight GET
+    // on the normal path; if its response is lost, the recovery read below
+    // still reconciles the server's final session state.
+    exerciseSession = await parseResponse(
+      await exerciseApi(`/exercise-sessions/${exerciseSession.id}/complete`, {
+        method: "POST",
+        body: "{}",
+      }),
+    );
     completionConfirmed = exerciseSession?.status === "COMPLETED";
     if (!completionConfirmed) throw new Error("Tamamlanma durumu doğrulanamadı");
     const daily = student && isDailyTrainingExercise();

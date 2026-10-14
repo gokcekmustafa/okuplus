@@ -35,7 +35,17 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain('class="learning-map-v6-completed-state"');
     expect(app).toContain('fetch("/account/entitlements"');
     expect(app).toContain("function renderTrainingHome(data)");
+    expect(app).toContain("function renderTodayData(data, scope)");
+    expect(app).toContain("if (data.today) renderTodayData(data.today, scope);");
     expect(app).toContain("summary?.sessionCount");
+  });
+
+  it("uses the Learning Path response for the dashboard today card", () => {
+    const dashboardStart = app.indexOf('if (page === "dashboard")');
+    const dashboardEnd = app.indexOf('} else if (page === "premium-info")', dashboardStart);
+    const dashboardNavigation = app.slice(dashboardStart, dashboardEnd);
+    expect(dashboardNavigation).not.toContain("void loadToday();");
+    expect(dashboardNavigation).toContain("void loadLearningPath();");
   });
 
   it("keeps empty or unmeasurable progress honest", () => {

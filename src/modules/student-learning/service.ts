@@ -94,16 +94,45 @@ export interface TodayResponse {
   review: StudentReviewResponse | null;
 }
 
-export async function getToday(actor: {
-  userId: string;
-  tenantId: string | null;
-  platformRole: PlatformRole | null;
-}): Promise<TodayResponse> {
+type LearningPathProjection = Awaited<ReturnType<typeof getStudentLearningPath>>;
+
+function nextLearningStepFromPath(path: LearningPathProjection): TodayResponse["nextLearningStep"] {
+  const node = (path?.paths ?? (path ? [path] : []))
+    .flatMap((projection) => projection.nodes ?? [])
+    .find((item) => item.status === "active");
+  return node
+    ? {
+        id: node.id,
+        type: node.type,
+        title: node.label,
+        unitTitle: node.unit.title,
+        templateVersionId: node.templateVersionId,
+        contentVersionId: node.contentVersionId,
+        assessmentId: node.assessmentId,
+      }
+    : null;
+}
+
+export async function getToday(
+  actor: {
+    userId: string;
+    tenantId: string | null;
+    platformRole: PlatformRole | null;
+  },
+  options?: { nextLearningStep?: TodayResponse["nextLearningStep"] },
+): Promise<TodayResponse> {
   assertStudentActor(actor);
   const tenantId = actor.tenantId;
   const now = new Date();
   const { start, end } = todayBounds(now);
   const sessionDate = calendarDateStorage(now);
+
+  const nextLearningStepPromise = Object.prototype.hasOwnProperty.call(
+    options ?? {},
+    "nextLearningStep",
+  )
+    ? Promise.resolve(options?.nextLearningStep ?? null)
+    : getNextLearningStep(actor);
 
   const [
     completedToday,
@@ -278,7 +307,7 @@ export async function getToday(actor: {
       .then(
         (versions) => versions.find((version) => isTrainingVersionConfig(version.config)) ?? null,
       ),
-    getNextLearningStep(actor),
+    nextLearningStepPromise,
     tenantId ? getStudentReview(actor) : Promise.resolve(null),
   ]);
 
@@ -408,12 +437,16 @@ export async function getLearningPath(actor: {
   assertStudentActor(actor);
   const persistedPath = await getStudentLearningPath(actor);
   if (persistedPath) {
-    const academicProgram =
-      (await getPersistentAcademicProgram(actor).catch(() => null)) ?? buildAcademicProgram([]);
+    const [academicProgramResult, today] = await Promise.all([
+      getPersistentAcademicProgram(actor).catch(() => null),
+      getToday(actor, { nextLearningStep: nextLearningStepFromPath(persistedPath) }).catch(
+        () => null,
+      ),
+    ]);
     return {
       ...persistedPath,
-      academicProgram,
-      today: await getToday(actor).catch(() => null),
+      academicProgram: academicProgramResult ?? buildAcademicProgram([]),
+      today,
     };
   }
   const tenantId = actor.tenantId;

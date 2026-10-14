@@ -5,6 +5,8 @@ import { startPersonalExercise } from "../student-learning/service.js";
 import {
   loadTrainingRuntimeGraph,
   resolveTrainingRuntimeConfig,
+  trainingRuntimeVersionSelect,
+  validateTrainingRuntimeGraphRow,
   type TrainingActor,
 } from "./runtime.js";
 import { isIndependentTrainingSession } from "./session-origin.js";
@@ -157,13 +159,10 @@ function packageSortValue(value: Date | null): number {
 async function availableActivityPackages(actor: ActivityActor) {
   const rows = await prisma.exerciseTemplateVersion.findMany({
     where: visibleTemplateWhere(actor),
-    select: { id: true, version: true, publishedAt: true, config: true },
+    select: trainingRuntimeVersionSelect,
     orderBy: [{ publishedAt: "asc" }, { version: "asc" }, { id: "asc" }],
   });
-  const candidatesByFamily = new Map<
-    string,
-    Array<{ id: string; version: number; publishedAt: Date | null; config: unknown }>
-  >();
+  const candidatesByFamily = new Map<string, Array<(typeof rows)[number]>>();
   for (const row of rows) {
     const resolved = resolveTrainingRuntimeConfig("TRAINING", row.config);
     if (resolved.status !== "READY") continue;
@@ -188,7 +187,9 @@ async function availableActivityPackages(actor: ActivityActor) {
       }> = [];
       for (const candidate of candidatesByFamily.get(activity.family) ?? []) {
         try {
-          const graph = await loadTrainingRuntimeGraph(candidate.id, actor);
+          // The list query already loaded the complete published graph. Reuse
+          // it here so each activity does not issue a second identical query.
+          const graph = validateTrainingRuntimeGraphRow(candidate, actor);
           const resolved = resolveTrainingRuntimeConfig("TRAINING", candidate.config);
           if (resolved.status !== "READY") continue;
           validCandidates.push({
