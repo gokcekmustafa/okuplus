@@ -8438,119 +8438,14 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
-.guest-art-reader {
+.guest-art-photo {
   position: absolute;
-  bottom: -18px;
-  width: 112px;
-  height: 220px;
-  border-radius: 54px 54px 20px 20px;
-  box-shadow: inset 0 12px 0 rgba(255, 255, 255, 0.16);
-}
-
-.guest-art-reader::before {
-  position: absolute;
-  top: 18px;
-  left: 30px;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: #ffd5b9;
-  content: "";
-}
-
-.guest-art-reader::after {
-  position: absolute;
-  top: 33px;
-  left: 42px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #17244e;
-  box-shadow:
-    22px 0 #17244e,
-    10px 20px 0 -1px #f27873;
-  content: "";
-}
-
-.guest-art-reader-blue {
-  left: 22%;
-  background: linear-gradient(160deg, #4f62f2, #1934c7);
-  transform: rotate(7deg);
-}
-.guest-art-reader-teal {
-  right: 7%;
-  bottom: -10px;
-  background: linear-gradient(160deg, #42d6c5, #148eae);
-  transform: rotate(-7deg) scale(0.9);
-}
-
-.guest-art-reader b,
-.guest-art-reader i {
-  position: absolute;
-  bottom: 75px;
-  width: 84px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ffb7d1;
-  content: "";
-}
-
-.guest-art-reader b {
-  left: -38px;
-  transform: rotate(24deg);
-}
-.guest-art-reader i {
-  right: -38px;
-  transform: rotate(-24deg);
-  background: #fff1bd;
-}
-
-.guest-art-face {
-  display: none;
-}
-
-.guest-art-book {
-  position: absolute;
-  bottom: 42px;
-  z-index: 3;
-  width: 100px;
-  height: 68px;
-  border: 5px solid #f6a94c;
-  border-radius: 8px 12px 5px 10px;
-  background: #fff8df;
-  box-shadow: 5px 7px 0 rgba(31, 55, 145, 0.16);
-  transform: rotate(-13deg);
-}
-
-.guest-art-book::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 3px;
-  background: #f6a94c;
-  content: "";
-}
-
-.guest-art-book-front {
-  left: 37%;
-  background: #ffdd72;
-  transform: rotate(-8deg);
-}
-.guest-art-book-back {
-  left: 14%;
-  bottom: 51px;
-  background: #fff;
-  transform: rotate(12deg);
-}
-.guest-art-book-front span {
   display: block;
-  padding: 15px 8px;
-  color: #2440d5;
-  font-size: 12px;
-  font-weight: 900;
-  line-height: 1.05;
-  text-align: center;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
 }
 
 .guest-art-note {
@@ -8734,14 +8629,6 @@ textarea:focus-visible {
   .guest-art-window {
     inset: 10px 8% 18px 4%;
   }
-  .guest-art-reader {
-    transform: scale(0.78) rotate(7deg);
-    transform-origin: bottom left;
-  }
-  .guest-art-reader-teal {
-    transform: scale(0.7) rotate(-7deg);
-    transform-origin: bottom right;
-  }
   .guest-art-note {
     top: 8px;
     right: 8px;
@@ -8813,49 +8700,6 @@ textarea:focus-visible {
   }
   .guest-art-window-body {
     height: calc(100% - 18px);
-  }
-  .guest-art-reader {
-    width: 78px;
-    height: 142px;
-    bottom: -14px;
-  }
-  .guest-art-reader::before {
-    top: 12px;
-    left: 21px;
-    width: 36px;
-    height: 36px;
-  }
-  .guest-art-reader::after {
-    top: 23px;
-    left: 28px;
-    width: 5px;
-    height: 5px;
-    box-shadow:
-      15px 0 #17244e,
-      7px 14px 0 -1px #f27873;
-  }
-  .guest-art-reader b,
-  .guest-art-reader i {
-    bottom: 48px;
-    width: 60px;
-    height: 8px;
-  }
-  .guest-art-book {
-    bottom: 26px;
-    width: 66px;
-    height: 44px;
-    border-width: 3px;
-  }
-  .guest-art-book-front {
-    left: 36%;
-  }
-  .guest-art-book-back {
-    left: 15%;
-    bottom: 31px;
-  }
-  .guest-art-book-front span {
-    padding: 8px 4px;
-    font-size: 8px;
   }
   .guest-art-note {
     top: 6px;
@@ -9542,6 +9386,10 @@ textarea:focus-visible {
     border-radius: 22px;
   }
 
+  .guest-art-photo {
+    object-fit: contain;
+  }
+
   .guest-shell:not(.guest-diagnostic-mode) .guest-phone-frame {
     top: 0;
     right: 1%;
@@ -9550,7 +9398,8 @@ textarea:focus-visible {
     padding: 6px;
     border-width: 3px;
     border-radius: 31px;
-    transform: rotate(2deg);
+    transform: scale(0.84) rotate(2deg);
+    transform-origin: top right;
   }
 
   .guest-phone-screen {
@@ -9664,6 +9513,13 @@ textarea:focus-visible {
     width: 34px;
     height: 34px;
     border-radius: 11px;
+  }
+}
+
+@media (max-width: 560px) {
+  .guest-art-photo {
+    object-fit: cover;
+    object-position: 68% bottom;
   }
 }
 
