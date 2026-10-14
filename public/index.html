@@ -174,19 +174,65 @@
             Giriş yap
           </button>
         </div>
-        <header class="guest-header">
-          <p class="guest-eyebrow">HIZLI OKUMA + OKUDUĞUNU ANLAMA</p>
-          <h1>Daha hızlı oku, daha iyi anla</h1>
-          <p>
-            Sekiz kısa soruyla hızlı okuma, ana fikir, ayrıntı ve çıkarım becerilerinde nereden
-            başlayacağını keşfet. Hesap açman gerekmiyor.
-          </p>
-          <div class="guest-trust-row" aria-label="Tanı bilgileri">
-            <span>8 kısa soru</span>
-            <span>Yaklaşık 2 dakika</span>
-            <span>Başlangıç önerisi</span>
+        <div class="guest-landing-stage">
+          <div class="guest-landing-copy">
+            <header class="guest-header">
+              <p class="guest-eyebrow">HIZLI OKUMA + OKUDUĞUNU ANLAMA</p>
+              <h1>Daha hızlı oku, daha iyi anla</h1>
+              <p>
+                Okuma maceran burada başlıyor. Ana fikri daha hızlı yakala ve metindeki önemli
+                ipuçlarını daha iyi anla. Kısa tanı, sana uygun başlangıç noktasını birlikte
+                bulmamıza yardımcı olur.
+              </p>
+              <div class="guest-trust-row" aria-label="Tanı bilgileri">
+                <span>8 kısa soru</span>
+                <span>Yaklaşık 2 dakika</span>
+                <span>Sana özel başlangıç</span>
+              </div>
+            </header>
+
+            <section
+              id="guest-intro"
+              class="guest-state guest-intro"
+              aria-labelledby="guest-intro-title"
+            >
+              <div class="guest-intro-icon" aria-hidden="true">↗</div>
+              <div>
+                <h2 id="guest-intro-title">Güçlü yanlarını birlikte keşfedelim</h2>
+                <p class="muted">
+                  Kısa tanı, hızlı okuma ve okuduğunu anlama becerilerinde sana uygun ilk adımı
+                  önermek için hazırlanır.
+                </p>
+              </div>
+              <button id="guest-start" type="button" class="btn btn-primary guest-start-btn">
+                Başla <span aria-hidden="true">→</span>
+              </button>
+              <p class="guest-intro-note">8 kısa soru · Yaklaşık 2 dakika · Hesap gerekmez</p>
+            </section>
           </div>
-        </header>
+
+          <div class="guest-hero-art" aria-hidden="true">
+            <div class="guest-hero-spark guest-hero-spark-one">✦</div>
+            <div class="guest-hero-spark guest-hero-spark-two">✧</div>
+            <div class="guest-art-window">
+              <div class="guest-art-window-bar"><i></i><i></i><i></i><span></span></div>
+              <div class="guest-art-window-body">
+                <div class="guest-art-book guest-art-book-back"></div>
+                <div class="guest-art-book guest-art-book-front">
+                  <span>Oku<br />Pratik</span>
+                </div>
+                <div class="guest-art-reader guest-art-reader-blue">
+                  <span class="guest-art-face"></span><b></b><i></i>
+                </div>
+                <div class="guest-art-reader guest-art-reader-teal">
+                  <span class="guest-art-face"></span><b></b><i></i>
+                </div>
+                <div class="guest-art-note">Daha hızlı oku<br /><strong>Daha iyi anla</strong></div>
+              </div>
+            </div>
+            <div class="guest-art-quote">Her cevap yeni bir ipucu ✦</div>
+          </div>
+        </div>
 
         <section
           id="guest-skill-grid"
@@ -221,23 +267,6 @@
               <span>İpuçlarını birleştirerek anlam kur.</span>
             </div>
           </article>
-        </section>
-
-        <section
-          id="guest-intro"
-          class="guest-state guest-intro"
-          aria-labelledby="guest-intro-title"
-        >
-          <div class="guest-intro-icon" aria-hidden="true">↗</div>
-          <h2 id="guest-intro-title">Başlangıç noktanı bulalım</h2>
-          <p class="muted">
-            Kısa tanı, hızlı okuma ve okuduğunu anlama becerilerinde sana uygun ilk adımı önermek
-            için hazırlanır.
-          </p>
-          <button id="guest-start" type="button" class="btn btn-primary guest-start-btn">
-            Tanılamayı başlat
-          </button>
-          <p class="guest-intro-note">8 kısa soru · Yaklaşık 2 dakika · Hesap gerekmez</p>
         </section>
 
         <section id="guest-loading" class="guest-state" aria-live="polite">

@@ -636,6 +636,7 @@ function setGuestPhase(phase) {
   for (const [name, id] of Object.entries(sections))
     $(id)?.classList.toggle("hidden", name !== phase);
   $("guest-skill-grid")?.classList.toggle("hidden", phase !== "intro");
+  $("view-guest")?.classList.toggle("guest-diagnostic-mode", phase !== "intro");
 }
 
 function showGuest() {

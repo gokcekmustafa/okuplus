@@ -76,4 +76,15 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain('$("guest-skill-grid")?.classList.toggle("hidden", phase !== "intro");');
     expect(app).toContain("hızlı okuma ve okuduğunu anlama becerilerine uygun");
   });
+
+  it("switches to a focused single-screen diagnostic without changing the answer flow", () => {
+    expect(index).toContain('class="guest-landing-stage"');
+    expect(index).toContain('class="guest-hero-art"');
+    expect(app).toContain(
+      '$("view-guest")?.classList.toggle("guest-diagnostic-mode", phase !== "intro");',
+    );
+    expect(styles).toContain(".guest-diagnostic-mode #guest-question-view:not(.hidden)");
+    expect(styles).toContain("height: 100dvh");
+    expect(styles).toContain("overflow: auto");
+  });
 });
