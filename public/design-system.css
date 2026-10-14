@@ -1,0 +1,1958 @@
+/* OkuPratik's shared presentation layer. State, route access and progress
+   continue to come from app.js and the server. */
+:root {
+  --ui-ink: #17234d;
+  --ui-muted: #67718b;
+  --ui-brand: #3454ed;
+  --ui-brand-hover: #2441cd;
+  --ui-brand-soft: #eef2ff;
+  --ui-teal: #087e79;
+  --ui-teal-soft: #eafaf5;
+  --ui-yellow: #a36a0a;
+  --ui-yellow-soft: #fff8df;
+  --ui-coral: #b95439;
+  --ui-coral-soft: #fff0e9;
+  --ui-purple: #7250c9;
+  --ui-purple-soft: #f3efff;
+  --ui-line: #e2e7f1;
+  --ui-canvas: #f5f7fc;
+  --ui-surface: #ffffff;
+  --ui-success: #177456;
+  --ui-success-soft: #eaf8f0;
+  --ui-danger: #ba3949;
+  --ui-danger-soft: #fff0f2;
+  --ui-shadow: 0 5px 22px rgb(33 54 102 / 5%);
+  --ui-space: 18px;
+  --ui-radius: 20px;
+  --bg: var(--ui-canvas);
+  --surface: var(--ui-surface);
+  --text: var(--ui-ink);
+  --muted: var(--ui-muted);
+  --border: var(--ui-line);
+  --primary: var(--ui-brand);
+  --primary-hover: var(--ui-brand-hover);
+  --primary-soft: var(--ui-brand-soft);
+  --danger: var(--ui-danger);
+  --radius: var(--ui-radius);
+  --radius-sm: 12px;
+  --shadow: var(--ui-shadow);
+  --topbar-h: 64px;
+  --student-ink: var(--ui-ink);
+  --student-muted: var(--ui-muted);
+  --student-blue: var(--ui-brand);
+  --student-teal: var(--ui-teal);
+}
+
+:root[data-theme="dark"] {
+  --ui-ink: #e6ecff;
+  --ui-muted: #a5b1ce;
+  --ui-brand: #6689ff;
+  --ui-brand-hover: #5477f1;
+  --ui-brand-soft: #222f53;
+  --ui-teal: #82dac4;
+  --ui-teal-soft: #183c38;
+  --ui-yellow: #f0c364;
+  --ui-yellow-soft: #3b3220;
+  --ui-coral: #f2ac92;
+  --ui-coral-soft: #402b2d;
+  --ui-purple: #c5aaff;
+  --ui-purple-soft: #302643;
+  --ui-line: #2e3c55;
+  --ui-canvas: #111a2b;
+  --ui-surface: #1a2539;
+  --ui-success: #8be0b6;
+  --ui-success-soft: #173d32;
+  --ui-danger: #ffa2ac;
+  --ui-danger-soft: #422c35;
+  --ui-shadow: 0 5px 22px rgb(0 0 0 / 12%);
+}
+
+body {
+  background: var(--ui-canvas);
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.ui-icon {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
+}
+
+:is(.app, .login-shell, .guest-diagnostic-mode)
+  :is(
+    button,
+    a,
+    input,
+    textarea,
+    select,
+    summary,
+    [role="radio"],
+    [role="checkbox"],
+    [tabindex="0"]
+  ):focus-visible {
+  outline: 3px solid var(--ui-brand);
+  outline-offset: 3px;
+}
+
+.app .btn,
+.login-shell .btn,
+.guest-diagnostic-mode .btn {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.app .btn-primary,
+.login-shell .btn-primary,
+.guest-diagnostic-mode .btn-primary {
+  border-color: transparent;
+  color: #fff;
+  background: var(--ui-brand);
+  box-shadow: 0 4px 10px rgb(52 84 237 / 16%);
+}
+
+.app .btn-primary:hover,
+.login-shell .btn-primary:hover,
+.guest-diagnostic-mode .btn-primary:hover {
+  background: var(--ui-brand-hover);
+}
+
+.app .btn-secondary,
+.login-shell .btn-secondary {
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+
+.app .btn-ghost {
+  color: var(--ui-muted);
+  background: transparent;
+  box-shadow: none;
+}
+.app .btn-sm {
+  min-height: 36px;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+.app .btn-icon {
+  width: 44px;
+  min-width: 44px;
+  padding: 8px;
+}
+.app .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.app :is(input:not([type="radio"]):not([type="checkbox"]), select, textarea),
+.login-shell :is(input, select, textarea) {
+  max-width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--ui-line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+  font-size: 16px;
+}
+
+.app .field > span {
+  font-size: 12px;
+  color: var(--ui-muted);
+  font-weight: 650;
+}
+.app .card {
+  border-color: var(--ui-line);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.app .muted {
+  color: var(--ui-muted);
+}
+.app .badge {
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.app .badge-info {
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .badge-success {
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+}
+.app .badge-warning {
+  color: var(--ui-yellow);
+  background: var(--ui-yellow-soft);
+}
+.app :is(.error-banner, .error:not(:empty)) {
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--ui-danger);
+  background: var(--ui-danger-soft);
+  line-height: 1.5;
+}
+.app [role="status"]:empty {
+  display: none;
+}
+
+/* Shared shell: compact context, consistent navigation and real content space. */
+.app,
+.app.student-shell {
+  background: var(--ui-canvas);
+}
+.app.student-shell {
+  --student-ink: var(--ui-ink);
+  --student-muted: var(--ui-muted);
+  --student-blue: var(--ui-brand);
+  --student-teal: var(--ui-teal);
+}
+.app .sidebar {
+  background: var(--ui-surface);
+  border-right: 1px solid var(--ui-line);
+}
+.app .sidebar-brand {
+  padding: 25px 22px 18px;
+  border-bottom: 0;
+}
+.app .brand-mark {
+  color: var(--ui-ink);
+  font-size: 23px;
+  font-weight: 850;
+  letter-spacing: -0.045em;
+}
+.app .sidebar-nav {
+  gap: 5px;
+  padding: 12px;
+}
+.app .nav-item {
+  min-height: 44px;
+  gap: 12px;
+  padding: 10px 12px;
+  color: var(--ui-muted);
+  border-radius: 12px;
+  font-weight: 600;
+}
+.app .nav-item:hover {
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .nav-item.active {
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  box-shadow: none;
+  font-weight: 750;
+}
+.app .nav-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+}
+.app .topbar {
+  height: var(--topbar-h);
+  padding-inline: 26px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-line);
+  box-shadow: none;
+}
+.app .topbar-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.app .topbar-user {
+  gap: 8px;
+}
+.app .tenant-name {
+  max-width: 190px;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.app .topbar-gamification {
+  gap: 6px;
+  margin: 0;
+}
+.app .gamification-badge {
+  padding: 5px 9px;
+  gap: 4px;
+  border: 0;
+  color: var(--ui-ink);
+  background: var(--ui-brand-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.app .gamification-badge .ui-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--ui-yellow);
+}
+.app .gamification-badge:last-child .ui-icon {
+  color: var(--ui-coral);
+}
+.app .user-menu-toggle {
+  min-height: 38px;
+  padding: 7px 11px;
+  border-radius: 11px;
+}
+.app .user-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.app .theme-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--ui-purple);
+  background: var(--ui-purple-soft);
+  border: 0;
+}
+.app .theme-toggle .ui-icon {
+  width: 20px;
+  height: 20px;
+}
+.app .user-menu {
+  min-width: 220px;
+  border-radius: 16px;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.app .user-menu button {
+  min-height: 44px;
+  color: var(--ui-ink);
+}
+.app .page {
+  padding: 28px clamp(18px, 3vw, 40px) 40px;
+}
+.app .page-view {
+  max-width: 1240px;
+  min-width: 0;
+}
+.app :is(.page-head, .insight-heading) {
+  margin-bottom: 20px;
+  gap: 16px;
+}
+.app :is(.page-head, .insight-heading) h2 {
+  margin: 0 0 6px;
+  color: var(--ui-ink);
+  font-size: clamp(24px, 2.7vw, 34px);
+  line-height: 1.18;
+  letter-spacing: -0.045em;
+}
+.app :is(.page-head, .insight-heading) p {
+  margin: 5px 0 0;
+  color: var(--ui-muted);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 65ch;
+}
+.app :is(.insight-eyebrow, .eyebrow) {
+  color: var(--ui-brand);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+  font-weight: 800;
+}
+.app .insight-heading .insight-eyebrow {
+  margin: 0 0 7px;
+}
+.app .insight-panel {
+  padding: 22px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.app .insight-panel h3 {
+  color: var(--ui-ink);
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.app .insight-panel h4 {
+  color: var(--ui-ink);
+  font-size: 15px;
+}
+
+/* Metrics use label/value pairs rather than tall single-number cards. */
+.app :is(.insight-metrics, .measurement-stat-grid, .stat-grid, .management-kpi-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.app .insight-stat {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon value";
+  gap: 3px 11px;
+  align-content: center;
+  min-height: 104px;
+  padding: 17px;
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+.app .insight-stat > span:first-child {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  font-size: 20px;
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .insight-stat > span:nth-child(2) {
+  grid-area: label;
+  color: var(--ui-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.app .insight-stat > strong {
+  grid-area: value;
+  font-size: clamp(19px, 2vw, 26px);
+  color: var(--ui-ink);
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  overflow-wrap: anywhere;
+}
+.app :is(.insight-gold, .insight-orange, .insight-purple, .insight-blue, .insight-green) {
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+.app .insight-gold > span:first-child {
+  color: var(--ui-yellow);
+  background: var(--ui-yellow-soft);
+}
+.app .insight-orange > span:first-child {
+  color: var(--ui-coral);
+  background: var(--ui-coral-soft);
+}
+.app .insight-purple > span:first-child {
+  color: var(--ui-purple);
+  background: var(--ui-purple-soft);
+}
+.app .insight-green > span:first-child {
+  color: var(--ui-teal);
+  background: var(--ui-teal-soft);
+}
+.app :is(.stat-card, .management-kpi-card) {
+  padding: 18px;
+  min-height: 100px;
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+.app :is(.stat-label, .management-kpi-label) {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.app :is(.stat-value, .management-kpi-value) {
+  margin-top: 8px;
+  color: var(--ui-ink);
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.app .insight-bar {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ui-line);
+  overflow: hidden;
+}
+.app .insight-bar > span {
+  background: linear-gradient(90deg, var(--ui-brand), var(--ui-teal));
+  border-radius: inherit;
+}
+
+/* Dashboard and roadmap: one main action, with an unobstructed route. */
+.app #home-insights {
+  padding: 13px 17px;
+  margin: 0 0 18px;
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  background: var(--ui-surface);
+  box-shadow: none;
+}
+.app #home-insights-values {
+  gap: 16px;
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.app #home-insights-values > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.app #home-insights-values .ui-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ui-brand);
+}
+.app.student-shell #learning-path-card.learning-path-card {
+  padding: 24px;
+  margin-top: 12px;
+  border: 1px solid var(--ui-line);
+  border-radius: 24px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.app.student-shell #learning-path-card .learning-map-v6-header h4 {
+  color: var(--ui-ink);
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+.app.student-shell #learning-path-card .learning-map-v6-header p {
+  color: var(--ui-muted);
+}
+.app.student-shell #learning-path-card .learning-map-v6-kicker {
+  color: var(--ui-brand);
+}
+.app.student-shell #learning-path-card .learning-map-v6-summary {
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: var(--ui-ink);
+  background: var(--ui-brand-soft);
+}
+.app.student-shell #learning-path-card .learning-map-v6-route {
+  max-width: 880px;
+  margin-inline: auto;
+}
+.app.student-shell #learning-path-card .learning-map-v6-node {
+  border-radius: 23px;
+}
+.app.student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-marker {
+  color: var(--ui-success);
+  border-color: color-mix(in srgb, var(--ui-success) 30%, var(--ui-line));
+  background: var(--ui-success-soft);
+}
+.app.student-shell #learning-path-card .learning-map-v6-step.locked .learning-map-v6-marker {
+  color: var(--ui-muted);
+  background: var(--ui-canvas);
+  border-color: var(--ui-line);
+}
+.app.student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-marker {
+  background: var(--ui-brand);
+  border-color: var(--ui-brand);
+  color: #fff;
+  box-shadow:
+    0 0 0 7px var(--ui-brand-soft),
+    0 8px 18px rgb(52 84 237 / 20%);
+}
+.app.student-shell #learning-path-card .learning-map-v6-kind {
+  color: var(--ui-ink);
+}
+.app.student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-kind {
+  color: var(--ui-success);
+}
+.app.student-shell #learning-path-card .learning-map-v6-completed-state {
+  color: var(--ui-success);
+}
+.app.student-shell #learning-path-card .learning-map-v6-action {
+  color: #fff;
+  background: var(--ui-brand);
+  box-shadow: none;
+}
+.app.student-shell #learning-path-card .learning-map-v6-path path {
+  stroke: color-mix(in srgb, var(--ui-brand) 24%, var(--ui-line));
+}
+.app .learning-path-course-header {
+  align-items: start;
+}
+.app .learning-path-course-header-actions {
+  min-width: 0;
+}
+.app .learning-path-course-summary {
+  min-width: 0;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.app .learning-path-course-layout {
+  gap: 20px;
+}
+.app .learning-path-module-sidebar {
+  background: #17254d;
+  border-color: #17254d;
+  box-shadow: none;
+}
+.app .learning-path-module-content {
+  border-radius: 20px;
+  background: var(--ui-surface);
+}
+.app .learning-path-module-hero {
+  padding: 24px;
+  color: var(--ui-ink);
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
+}
+.app .learning-path-step-card {
+  border-color: var(--ui-line);
+  border-radius: 14px;
+  background: var(--ui-surface);
+}
+
+/* Learning content uses readable prose and distinct teaching/example panels. */
+.app.student-shell .lesson-layout.is-learning-path,
+.app.student-shell .lesson-layout.is-learning-path #lesson-detail {
+  max-height: none;
+  overflow: visible;
+}
+.app.student-shell .lesson-layout.is-learning-path #lesson-detail {
+  max-width: 940px;
+  padding: 24px;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+  border-radius: 22px;
+  box-shadow: var(--ui-shadow);
+}
+.app.student-shell .lesson-detail > h3 {
+  font-size: clamp(22px, 2.5vw, 28px);
+  color: var(--ui-ink);
+  letter-spacing: -0.035em;
+}
+.app.student-shell .learning-path-step-context {
+  gap: 6px 10px;
+  color: var(--ui-muted);
+  margin-bottom: 15px;
+}
+.app.student-shell .learning-path-step-progress {
+  background: var(--ui-brand-soft);
+  border-color: transparent;
+  color: var(--ui-brand);
+}
+.app.student-shell .lesson-detail .lesson-objective {
+  padding: 12px 15px;
+  color: var(--ui-muted);
+  background: var(--ui-canvas);
+  border: 0;
+  font-size: 14px;
+}
+.app.student-shell .lesson-detail > section {
+  padding: 20px;
+  margin-top: 16px;
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+  background: var(--ui-surface);
+}
+.app.student-shell .lesson-detail > section:nth-of-type(2) {
+  background: var(--ui-teal-soft);
+  border-color: transparent;
+}
+.app.student-shell .lesson-detail > section:nth-of-type(3) {
+  background: var(--ui-yellow-soft);
+  border-color: transparent;
+}
+.app.student-shell .lesson-detail > section h4 {
+  color: var(--ui-brand);
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+.app.student-shell .lesson-detail > section p {
+  max-width: 70ch;
+  color: var(--ui-ink);
+  font-size: 16px;
+  line-height: 1.75;
+}
+.app .lesson-completed-state {
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+  min-height: 40px;
+}
+.app .lesson-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.app .lesson-actions [data-learning-step-back] {
+  background: transparent;
+  box-shadow: none;
+}
+.app .lesson-navigation {
+  display: flex;
+  gap: 10px;
+  padding-top: 18px;
+  margin-top: 20px;
+  border-top: 1px solid var(--ui-line);
+}
+.app .lesson-navigation .btn {
+  flex: 1;
+}
+
+/* Question, answer and result components share state colors and natural height. */
+.app.student-shell #page-exercise {
+  max-width: 1060px;
+  max-height: none;
+  min-height: auto;
+  overflow: visible;
+  padding-bottom: 20px;
+}
+.app.student-shell
+  #page-exercise
+  :is(#student-reading-card, #exercise-questions-card, #exercise-result-card) {
+  max-height: none;
+  overflow: visible;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.app.student-shell #student-exercise-header {
+  padding: 12px 15px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  border-radius: 15px;
+  box-shadow: none;
+  margin-bottom: 16px;
+}
+.app.student-shell .learning-path-exercise-context {
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
+  font-size: 12px;
+  border-radius: 10px;
+}
+.app.student-shell .learning-path-exercise-progress {
+  color: var(--ui-brand);
+}
+.app .progress-track {
+  height: 6px;
+  background: var(--ui-line);
+  border-radius: 999px;
+}
+.app .progress-fill {
+  background: var(--ui-brand);
+  border-radius: inherit;
+}
+.app .reading-card-kicker {
+  font-size: 10px;
+  color: var(--ui-teal);
+  letter-spacing: 0.12em;
+  font-weight: 800;
+}
+.app.student-shell #student-reading-body {
+  max-width: 65ch;
+  color: var(--ui-ink);
+  font-size: 16px;
+  line-height: 1.75;
+}
+.app .student-exercise-content {
+  padding: 17px 18px;
+  background: var(--ui-brand-soft);
+  border: 0;
+  border-radius: 15px;
+}
+.app .student-exercise-content #exercise-prompt {
+  color: var(--ui-ink);
+  font-weight: 650;
+}
+.app :is(.exercise-hint, .exercise-explanation) {
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+}
+.app :is(.exercise-hint, .exercise-explanation) summary {
+  padding: 12px 14px;
+  color: var(--ui-brand);
+  font-size: 13px;
+  cursor: pointer;
+}
+.app :is(.exercise-hint, .exercise-explanation) p {
+  margin: 0;
+  padding: 0 14px 14px;
+  color: var(--ui-muted);
+  line-height: 1.6;
+}
+.app.student-shell #exercise-mc-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px !important;
+}
+.app.student-shell #page-exercise label.answer-card {
+  min-height: 52px;
+  padding: 13px 15px;
+  gap: 14px;
+  color: var(--ui-ink);
+  border: 1.5px solid var(--ui-line);
+  border-radius: 13px;
+  background: var(--ui-surface);
+  box-shadow: none;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.app.student-shell #page-exercise label.answer-card > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app.student-shell #page-exercise label.answer-card:hover {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+  transform: none;
+}
+.app.student-shell #page-exercise label.answer-card.selected {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+  color: var(--ui-ink);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-brand) 12%, transparent);
+}
+.app.student-shell #page-exercise label.answer-card.correct {
+  background: var(--ui-success-soft);
+  border-color: var(--ui-success);
+}
+.app.student-shell #page-exercise label.answer-card.wrong {
+  background: var(--ui-danger-soft);
+  border-color: var(--ui-danger);
+}
+.app.student-shell #page-exercise label.answer-card::after {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--ui-muted);
+}
+.app.student-shell #page-exercise label.answer-card.selected::after {
+  color: var(--ui-brand);
+}
+.app .feedback-panel {
+  padding: 16px;
+  border: 1px solid var(--ui-line);
+  border-radius: 15px;
+  color: var(--ui-ink);
+}
+.app .feedback-panel.correct {
+  background: var(--ui-success-soft);
+  border-color: var(--ui-success);
+}
+.app .feedback-panel.wrong {
+  background: var(--ui-yellow-soft);
+  border-color: color-mix(in srgb, var(--ui-yellow) 35%, transparent);
+}
+.app .feedback-panel.pending {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
+}
+.app .feedback-panel > strong {
+  font-size: 16px;
+}
+.app .exercise-actions {
+  margin-top: 14px;
+}
+.app.student-shell #exercise-submit-attempt {
+  min-height: 48px;
+  border-radius: 13px;
+}
+.app .completion-card {
+  padding: 24px;
+  border-radius: 18px;
+  color: var(--ui-ink);
+  background: linear-gradient(135deg, var(--ui-brand-soft), var(--ui-teal-soft));
+}
+.app .completion-card h3 {
+  color: var(--ui-ink);
+  font-size: 23px;
+  letter-spacing: -0.03em;
+}
+.app .completion-card p {
+  color: var(--ui-muted);
+}
+.app .exercise-result-stats {
+  gap: 10px;
+}
+.app .exercise-result-stats > div {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ui-surface);
+}
+.app .exercise-result-stats dt {
+  color: var(--ui-muted);
+  font-size: 11px;
+}
+.app .exercise-result-stats dd {
+  color: var(--ui-ink);
+  font-size: 24px;
+}
+.app .learning-path-exercise-navigation {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+/* Training: six distinct skill cards with compact package/result rows. */
+.app.student-shell .training-activities-list {
+  margin-top: 0;
+}
+.app.student-shell .training-activities-intro {
+  padding: 22px;
+  border: 1px solid var(--ui-line);
+  border-radius: 22px;
+  background: linear-gradient(120deg, var(--ui-brand-soft), var(--ui-surface));
+}
+.app.student-shell .training-activities-intro h3 {
+  color: var(--ui-ink);
+  font-size: clamp(23px, 3vw, 30px);
+  line-height: 1.2;
+  letter-spacing: -0.045em;
+  margin: 5px 0 10px;
+}
+.app.student-shell .training-activities-intro .muted {
+  max-width: 60ch;
+  font-size: 14px;
+}
+.app.student-shell .training-independent-note {
+  border: 0;
+  padding: 9px 0 0;
+  margin-top: 4px;
+  color: var(--ui-muted);
+  background: transparent;
+  font-size: 11px;
+}
+.app.student-shell .training-activities-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.app.student-shell .training-activity-card {
+  --activity-color: var(--ui-brand);
+  --activity-soft: var(--ui-brand-soft);
+  position: relative;
+  display: flex;
+  gap: 11px;
+  padding: 18px;
+  border: 1px solid var(--ui-line);
+  border-radius: 20px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.app.student-shell .training-activity-card[data-competency="FAST_RECOGNITION"] {
+  --activity-color: var(--ui-yellow);
+  --activity-soft: var(--ui-yellow-soft);
+}
+.app.student-shell .training-activity-card[data-competency="RC_MAIN_IDEA"] {
+  --activity-color: var(--ui-teal);
+  --activity-soft: var(--ui-teal-soft);
+}
+.app.student-shell .training-activity-card[data-competency="RC_DETAIL"] {
+  --activity-color: var(--ui-purple);
+  --activity-soft: var(--ui-purple-soft);
+}
+.app.student-shell .training-activity-card[data-competency="FAST_CHUNKING"] {
+  --activity-color: var(--ui-coral);
+  --activity-soft: var(--ui-coral-soft);
+}
+.app.student-shell .training-activity-card[data-competency="RC_INFERENCE"] {
+  --activity-color: var(--ui-brand);
+  --activity-soft: var(--ui-brand-soft);
+}
+.app.student-shell .training-activity-card-head {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.app.student-shell .training-activity-identity {
+  gap: 10px;
+}
+.app.student-shell .training-activity-icon {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--activity-color);
+  background: var(--activity-soft);
+}
+.app.student-shell .training-activity-kicker {
+  color: var(--activity-color);
+  font-size: 9px;
+  margin: 0 0 3px;
+  letter-spacing: 0.08em;
+}
+.app.student-shell .training-activity-card h4 {
+  color: var(--ui-ink);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+.app.student-shell .training-activity-status {
+  max-width: 95px;
+  font-size: 10px;
+  padding: 5px 8px;
+}
+.app.student-shell .training-activity-card > p {
+  flex: 0;
+  color: var(--ui-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.app.student-shell .training-activity-skill {
+  font-size: 11px;
+  padding: 8px 10px;
+  background: var(--activity-soft);
+  border-radius: 9px;
+}
+.app.student-shell .training-activity-skill strong {
+  color: var(--activity-color);
+  font-size: 12px;
+}
+.app.student-shell .training-activity-package-track {
+  gap: 5px;
+}
+.app.student-shell .training-activity-package-dot {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+.app.student-shell .training-activity-package-dot.is-available,
+.app.student-shell .training-activity-package-dot.is-in_progress {
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-brand);
+}
+.app.student-shell .training-activity-package-dot.is-completed {
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+  border-color: var(--ui-success);
+}
+.app.student-shell .training-activity-package-dot.is-locked {
+  color: var(--ui-muted);
+  background: var(--ui-canvas);
+  border-color: var(--ui-line);
+}
+.app.student-shell .training-activity-card .training-activity-package-hint {
+  font-size: 11px;
+  margin: 0;
+}
+.app.student-shell .training-activity-meta {
+  color: var(--ui-muted);
+  font-size: 11px;
+  gap: 5px 12px;
+}
+.app.student-shell .training-activity-card .btn {
+  min-height: 44px;
+  margin-top: auto;
+  font-size: 13px;
+  border-radius: 12px;
+}
+.app .training-home-card {
+  padding: 22px;
+  border-color: var(--ui-line);
+  background: var(--ui-surface);
+}
+.app .training-focus-grid {
+  gap: 10px;
+}
+.app .training-focus-card {
+  padding: 12px;
+  color: var(--ui-ink);
+  background: var(--ui-canvas);
+  border: 0;
+}
+
+/* Assignments and official measurement keep their own identity and data. */
+.app.student-shell .student-section-intro {
+  position: relative;
+  padding: 22px;
+  margin-bottom: 18px;
+  border: 1px solid var(--ui-line);
+  border-radius: 20px;
+  color: var(--ui-ink);
+  background: linear-gradient(120deg, var(--ui-brand-soft), var(--ui-surface));
+}
+.app.student-shell .student-section-intro h3 {
+  color: var(--ui-ink);
+  font-size: 23px;
+  line-height: 1.2;
+  margin: 4px 0 9px;
+  letter-spacing: -0.035em;
+}
+.app.student-shell .student-section-intro .muted {
+  max-width: 65ch;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+.app.student-shell .student-section-intro .insight-eyebrow {
+  margin: 0 0 8px;
+}
+.app.student-shell .assessment-intro {
+  background: linear-gradient(120deg, var(--ui-teal-soft), var(--ui-surface));
+}
+.app.student-shell .assessment-intro .insight-eyebrow {
+  color: var(--ui-teal);
+}
+.app .learning-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+.app .learning-card {
+  padding: 20px;
+  border: 1px solid var(--ui-line);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.app .learning-card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  font-size: 23px;
+}
+.app .learning-card h3 {
+  color: var(--ui-ink);
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.app .learning-card p {
+  font-size: 13px;
+  color: var(--ui-muted);
+}
+.app .learning-card-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app .assessment-icon {
+  color: var(--ui-teal);
+  background: var(--ui-teal-soft);
+}
+.app .measurement-skill-grid {
+  gap: 14px;
+}
+.app .measurement-skill-card {
+  padding: 18px;
+  border-color: var(--ui-line);
+  background: var(--ui-surface);
+  border-radius: 16px;
+}
+.app .measurement-section-heading h3 {
+  color: var(--ui-ink);
+  font-size: 19px;
+}
+.app .measurement-history {
+  padding: 0 18px;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.app .measurement-history-item {
+  border-color: var(--ui-line);
+}
+.app .measurement-history-icon {
+  color: var(--ui-teal);
+  background: var(--ui-teal-soft);
+}
+.app :is(.empty-learning-state, .measurement-empty, .management-empty-state) {
+  padding: 24px;
+  border: 1px dashed var(--ui-line);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  color: var(--ui-muted);
+}
+.app .empty-learning-state h3 {
+  color: var(--ui-ink);
+  font-size: 18px;
+}
+.app.student-shell #student-assignment-recommendations {
+  border: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+}
+.app.student-shell #student-assignment-recommendations h3 {
+  font-size: 18px;
+}
+.app.student-shell #student-assignment-recommendations p {
+  font-size: 13px;
+}
+
+/* Progress, rewards, profile and billing share compact sections and tables. */
+.app .insight-columns {
+  gap: 20px;
+}
+.app .skill-progress-card {
+  padding: 18px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+  border-radius: 16px;
+}
+.app .skill-progress-card h4 {
+  color: var(--ui-ink);
+  font-size: 16px;
+}
+.app .skill-title > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .skill-stage {
+  color: var(--ui-teal);
+  background: var(--ui-teal-soft);
+  font-size: 10px;
+}
+.app .onboarding-card.card {
+  border: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+  padding: 28px;
+}
+.app .onboarding-card h1 {
+  color: var(--ui-ink);
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+.app .onboarding-lead {
+  color: var(--ui-muted);
+  font-size: 14px;
+}
+.app .onboarding-mascot {
+  display: grid;
+  place-items: center;
+  background: var(--ui-brand-soft);
+  color: var(--ui-brand);
+}
+.app .onboarding-mascot .ui-icon {
+  width: 40px;
+  height: 40px;
+}
+.app :is(.onboarding-step-icon, .goal-icon) {
+  display: grid;
+  place-items: center;
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .management-kpi-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .analytics-kpi-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.app .analytics-columns > .card {
+  padding: 20px;
+}
+.app .management-section-heading h3 {
+  color: var(--ui-ink);
+  font-size: 20px;
+}
+.app .goal-card {
+  border-color: var(--ui-line);
+  border-radius: 14px;
+  background: var(--ui-surface);
+}
+.app .goal-card.active {
+  border-color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+}
+.app .onboarding-dot.active {
+  background: var(--ui-brand);
+}
+.app .insight-path {
+  background: linear-gradient(120deg, var(--ui-brand-soft), var(--ui-surface));
+  border-color: var(--ui-line);
+}
+.app .insight-streak {
+  background: var(--ui-coral-soft);
+  border-color: transparent;
+}
+.app .development-achievements {
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.app :is(.development-journey-summary, .development-comparison-card) {
+  padding: 15px;
+  color: var(--ui-ink);
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
+  border-radius: 14px;
+}
+.app .development-summary {
+  margin: 14px 0;
+  color: var(--ui-muted);
+}
+.app .development-summary strong {
+  color: var(--ui-ink);
+  font-size: 23px;
+}
+.app :is(.development-award, .gamification-badge-card) {
+  color: var(--ui-ink);
+  background: var(--ui-purple-soft);
+  border-color: transparent;
+}
+.app .insight-facts {
+  color: var(--ui-muted);
+}
+.app .insight-facts strong {
+  color: var(--ui-ink);
+}
+.app .settings-card {
+  padding: 24px;
+  margin-bottom: 18px;
+}
+.app .settings-card h3 {
+  font-size: 20px;
+  color: var(--ui-ink);
+}
+.app .settings-card > div > p {
+  font-size: 13px;
+}
+.app .settings-form {
+  gap: 16px;
+}
+.app .settings-form .btn {
+  justify-self: start;
+}
+.app :is(.entitlement-card, .premium-info-card, .billing-account-card) {
+  padding: 20px;
+  border: 1px solid var(--ui-line);
+  border-radius: 20px;
+  background: var(--ui-surface);
+}
+.app .entitlement-usage-row {
+  color: var(--ui-ink);
+  background: var(--ui-brand-soft);
+}
+
+/* Management and analytics stay neutral, legible and dense enough for data. */
+.app:not(.student-shell) .page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.app:not(.student-shell) .page-head > div {
+  min-width: 0;
+}
+.app:not(.student-shell) .data-table {
+  font-size: 13px;
+}
+.app:not(.student-shell) .data-table th {
+  padding: 13px 16px;
+  color: var(--ui-muted);
+  background: var(--ui-canvas);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.025em;
+}
+.app:not(.student-shell) .data-table td {
+  padding: 13px 16px;
+  border-color: var(--ui-line);
+  color: var(--ui-ink);
+}
+.app:not(.student-shell) .data-table tbody tr:hover {
+  background: var(--ui-brand-soft);
+}
+.app .table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 16px;
+}
+.app :is(.analytics-range-controls, .analytics-filter-controls, .management-dashboard-controls) {
+  padding: 13px;
+  gap: 12px;
+  border: 1px solid var(--ui-line);
+  border-radius: 15px;
+  background: var(--ui-surface);
+}
+.app :is(.analytics-columns, .analytics-detail-columns) {
+  gap: 18px;
+}
+.app .analytics-section {
+  margin-top: 24px;
+}
+.app .analytics-detail-card {
+  padding: 22px;
+}
+.app .analytics-detail-grid article {
+  padding: 14px;
+  background: var(--ui-canvas);
+  border-radius: 12px;
+  border: 0;
+}
+.app :is(.info-item, .detail-item) {
+  min-width: 0;
+}
+.app :is(.info-item dd, .detail-item dd) {
+  overflow-wrap: anywhere;
+}
+.app :is(.modal, .premium-dialog),
+dialog {
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+  background: var(--ui-surface);
+  border-radius: 22px;
+  box-shadow: 0 20px 70px rgb(19 33 70 / 20%);
+}
+.app .modal {
+  max-height: calc(100dvh - 36px);
+}
+.app :is(.modal-head, .modal-foot, .modal-actions) {
+  padding: 16px 20px;
+  border-color: var(--ui-line);
+}
+.app .modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+dialog {
+  max-width: min(640px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+}
+dialog::backdrop {
+  background: rgb(17 30 62 / 45%);
+}
+
+/* Public welcome stays familiar; auth and diagnostic share the app's language. */
+.login-shell {
+  background: linear-gradient(135deg, var(--ui-brand-soft), var(--ui-canvas), var(--ui-teal-soft));
+  padding: 30px 18px;
+}
+.login-card {
+  width: min(100%, 460px);
+  padding: 32px;
+  border-radius: 26px;
+  border-color: var(--ui-line);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.login-shell .brand h1 {
+  color: var(--ui-ink);
+  font-size: 29px;
+  letter-spacing: -0.045em;
+}
+.login-shell .brand > p {
+  color: var(--ui-muted);
+  font-size: 14px;
+}
+.login-shell .social-login {
+  border-color: var(--ui-line);
+}
+.login-shell .brand-lockup-icon {
+  background: var(--ui-brand);
+}
+.guest-diagnostic-mode {
+  height: auto;
+  min-height: 100dvh;
+  background: var(--ui-canvas);
+}
+.guest-diagnostic-mode .guest-card {
+  height: auto;
+  min-height: calc(100dvh - 24px);
+  padding: 24px;
+  max-width: 1100px;
+  background: var(--ui-surface);
+  border-color: var(--ui-line);
+}
+.guest-diagnostic-mode .guest-nav {
+  display: none;
+}
+.guest-diagnostic-mode #guest-question-view:not(.hidden) {
+  flex: none;
+  min-height: auto;
+  overflow: visible;
+  margin-top: 24px;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-line);
+}
+.guest-diagnostic-mode #guest-question-view > .guest-passage {
+  max-height: none;
+  overflow: visible;
+  padding: 20px;
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
+}
+.guest-diagnostic-mode .guest-passage-body {
+  color: var(--ui-ink);
+  font-size: 16px;
+  line-height: 1.7;
+}
+.guest-diagnostic-mode .guest-question-help {
+  font-size: 12px;
+}
+.guest-diagnostic-mode .guest-question-prompt {
+  color: var(--ui-ink);
+  font-size: 17px;
+  line-height: 1.6;
+}
+.guest-diagnostic-mode .guest-progress-track {
+  background: var(--ui-line);
+  height: 7px;
+}
+.guest-diagnostic-mode .guest-progress-track > span {
+  background: var(--ui-teal);
+}
+.guest-diagnostic-mode .guest-answer-option {
+  min-height: 52px;
+  padding: 13px 15px;
+  border: 1.5px solid var(--ui-line);
+  border-radius: 13px;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+  font-size: 15px;
+}
+.guest-diagnostic-mode .guest-answer-option.selected {
+  border-color: var(--ui-brand);
+  background: var(--ui-brand-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-brand) 12%, transparent);
+}
+.guest-diagnostic-mode #guest-answer-submit {
+  min-height: 48px;
+  margin-top: 14px;
+  background: var(--ui-brand);
+}
+.guest-diagnostic-mode .guest-answer-feedback {
+  padding: 15px;
+  background: var(--ui-brand-soft);
+  color: var(--ui-ink);
+  border-color: var(--ui-line);
+}
+
+@media (min-width: 1024px) {
+  .app.student-shell
+    #page-exercise:has(#student-reading-card[style*="display: block"]):has(
+      #exercise-questions-card[style*="display: block"]
+    ) {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    grid-template-areas: "header header" "status status" "retry retry" "reading instructions" "reading questions" "result result" "navigation navigation";
+    gap: 12px 20px;
+    align-items: start;
+  }
+  .app.student-shell #page-exercise #student-exercise-header {
+    grid-area: header;
+  }
+  .app.student-shell #page-exercise #exercise-load-status {
+    grid-area: status;
+  }
+  .app.student-shell #page-exercise #exercise-retry-load {
+    grid-area: retry;
+  }
+  .app.student-shell #page-exercise #student-reading-card {
+    grid-area: reading;
+  }
+  .app.student-shell #page-exercise #exercise-training-instructions {
+    grid-area: instructions;
+  }
+  .app.student-shell #page-exercise #exercise-questions-card {
+    grid-area: questions;
+  }
+  .app.student-shell #page-exercise #exercise-result-card {
+    grid-area: result;
+  }
+  .app.student-shell #page-exercise #exercise-learning-path-navigation {
+    grid-area: navigation;
+  }
+}
+
+@media (max-width: 1100px) {
+  .app.student-shell .training-activities-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app .measurement-skill-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app .analytics-range-controls {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --ui-space: 14px;
+  }
+  .app .topbar {
+    height: 64px;
+    min-height: 64px;
+    padding: 0 14px;
+    gap: 6px;
+  }
+  .app .topbar-context {
+    display: grid;
+    gap: 2px;
+    justify-items: start;
+  }
+  .app .topbar-context .tenant-name {
+    font-size: 10px;
+    max-width: 130px;
+    line-height: 1.15;
+  }
+  .app .topbar-gamification {
+    gap: 5px;
+    margin: 0;
+  }
+  .app .gamification-badge {
+    padding: 3px 6px;
+    font-size: 11px;
+    min-height: 22px;
+  }
+  .app .user-name {
+    max-width: 105px;
+    font-size: 12px;
+  }
+  .app .user-menu-toggle {
+    min-height: 36px;
+    padding: 6px 9px;
+  }
+  .app .theme-toggle {
+    width: 34px;
+    height: 34px;
+  }
+  .app .context-switcher {
+    max-width: 150px;
+    margin: 0;
+    min-height: 32px;
+    padding: 3px 7px;
+    font-size: 12px;
+  }
+  .app .page {
+    padding: 20px 14px 24px;
+  }
+  .app.student-shell .app-main {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  .app.student-shell .student-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    height: auto;
+    min-height: 66px;
+    padding: 5px 6px calc(5px + env(safe-area-inset-bottom));
+    background: var(--ui-surface);
+    border-color: var(--ui-line);
+    box-shadow: 0 -3px 20px rgb(31 47 84 / 4%);
+  }
+  .app.student-shell .bottom-nav-item {
+    min-width: 0;
+    min-height: 52px;
+    gap: 4px;
+    padding: 7px 2px;
+    border-radius: 12px;
+    color: var(--ui-muted);
+  }
+  .app.student-shell .bottom-nav-item.active {
+    color: var(--ui-brand);
+    background: var(--ui-brand-soft);
+  }
+  .app.student-shell .bottom-nav-icon {
+    display: grid;
+    place-items: center;
+    width: 23px;
+    height: 23px;
+  }
+  .app.student-shell .bottom-nav-icon .ui-icon {
+    width: 22px;
+    height: 22px;
+  }
+  .app.student-shell .bottom-nav-label {
+    font-size: 9px;
+    line-height: 1.25;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .app :is(.page-head, .insight-heading) {
+    margin-bottom: 17px;
+  }
+  .app :is(.page-head, .insight-heading) h2 {
+    font-size: 25px;
+  }
+  .app :is(.page-head, .insight-heading) p {
+    font-size: 13px;
+  }
+  .app .insight-heading {
+    align-items: start;
+  }
+  .app .insight-heading .btn {
+    min-height: 36px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .app .insight-panel {
+    padding: 18px;
+  }
+  .app :is(.insight-metrics, .measurement-stat-grid, .stat-grid, .management-kpi-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .app .insight-stat {
+    grid-template-columns: 30px minmax(0, 1fr);
+    padding: 13px;
+    gap: 4px 9px;
+    min-height: 98px;
+    border-radius: 15px;
+  }
+  .app .insight-stat > span:first-child {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+  .app .insight-stat > span:first-child .ui-icon {
+    width: 18px;
+    height: 18px;
+  }
+  .app .insight-stat > span:nth-child(2) {
+    font-size: 10px;
+  }
+  .app .insight-stat > strong {
+    font-size: 19px;
+  }
+  .app :is(.insight-columns, .development-columns, .analytics-columns, .analytics-detail-columns) {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .app .learning-card-grid {
+    grid-template-columns: 1fr;
+  }
+  .app.student-shell .student-section-intro {
+    padding: 18px;
+  }
+  .app.student-shell .student-section-intro h3 {
+    font-size: 20px;
+  }
+  .app.student-shell .student-section-intro .muted {
+    font-size: 13px;
+  }
+  .app.student-shell .training-activities-intro {
+    padding: 18px;
+  }
+  .app.student-shell .training-activities-intro h3 {
+    font-size: 24px;
+  }
+  .app.student-shell .training-activity-card {
+    padding: 16px;
+  }
+  .app.student-shell .training-activity-card-head {
+    align-items: center;
+    flex-direction: row;
+  }
+  .app.student-shell .lesson-layout.is-learning-path #lesson-detail {
+    padding: 18px;
+  }
+  .app.student-shell .lesson-detail > section {
+    padding: 16px;
+  }
+  .app.student-shell .lesson-detail > section p {
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .app.student-shell
+    #page-exercise
+    :is(#student-reading-card, #exercise-questions-card, #exercise-result-card) {
+    padding: 16px;
+  }
+  .app.student-shell #page-exercise #student-exercise-header {
+    margin-bottom: 14px;
+  }
+  .app.student-shell #page-exercise label.answer-card {
+    min-height: 52px;
+    font-size: 15px;
+  }
+  .app.student-shell #student-reading-body {
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .app .completion-card {
+    padding: 18px;
+  }
+  .app .exercise-result-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app .settings-card {
+    padding: 18px;
+  }
+  .app .settings-form {
+    grid-template-columns: 1fr;
+  }
+  .app .modal-backdrop {
+    padding: 12px;
+  }
+  .app .modal {
+    max-width: 100%;
+    max-height: calc(100dvh - 24px);
+    border-radius: 18px;
+  }
+  .app .modal-body {
+    padding: 16px;
+  }
+  .app :is(.modal-foot, .modal-actions) {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .app .analytics-range-controls .field {
+    flex: 1 1 130px;
+  }
+  .app .analytics-filter-controls .field {
+    flex: 1 1 180px;
+  }
+  .guest-diagnostic-mode .guest-card {
+    min-height: 100dvh;
+    height: auto;
+    padding: 16px;
+  }
+  .guest-diagnostic-mode #guest-question-view:not(.hidden) {
+    padding: 16px;
+    margin-top: 18px;
+  }
+  .guest-diagnostic-mode #guest-question-view > .guest-passage {
+    max-height: none;
+    overflow: visible;
+  }
+  .guest-diagnostic-mode .guest-question-help {
+    display: none;
+  }
+  .guest-diagnostic-mode .guest-answer-option {
+    padding: 13px 14px;
+    font-size: 15px;
+  }
+  .guest-diagnostic-mode #guest-question-view > #guest-answer-submit {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .app.student-shell .training-activities-grid {
+    grid-template-columns: 1fr;
+  }
+  .app.student-shell .training-activity-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .app.student-shell
+    .training-activity-card
+    > :is(.training-activity-card-head, p, .training-activity-meta, .btn) {
+    grid-column: 1 / -1;
+  }
+  .app.student-shell .training-activity-card > .training-activity-package-hint {
+    grid-column: 1 / -1;
+  }
+  .app.student-shell .training-activity-package-track {
+    justify-content: end;
+  }
+  .app .measurement-skill-grid {
+    grid-template-columns: 1fr;
+  }
+  .app #home-insights {
+    padding: 12px;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+  .app #home-insights-values {
+    gap: 12px;
+    font-size: 12px;
+  }
+  .app #home-insights .btn {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+  .app.student-shell #learning-path-card.learning-path-card {
+    padding: 18px 12px;
+  }
+  .app.student-shell #learning-path-card .learning-map-v6-header h4 {
+    font-size: 25px;
+  }
+  .app.student-shell #learning-path-card .learning-map-v6-summary {
+    gap: 8px;
+  }
+  .app .learning-path-course-header {
+    flex-wrap: wrap;
+  }
+  .app .learning-path-course-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .app.student-shell .learning-path-step-context {
+    font-size: 11px;
+  }
+  .app .learning-path-step-progress {
+    margin-left: 0;
+    font-size: 10px;
+  }
+  .app .lesson-actions {
+    flex-direction: row;
+  }
+  .app .lesson-actions > * {
+    flex: 1 1 150px;
+  }
+  .app .learning-path-exercise-navigation .btn {
+    flex: 1;
+  }
+  .login-card {
+    padding: 24px 20px;
+  }
+  .guest-shell:not(.guest-diagnostic-mode) .guest-hero-art {
+    min-height: 280px;
+  }
+  .guest-shell:not(.guest-diagnostic-mode) .guest-phone-frame {
+    transform: scale(0.72) rotate(2deg);
+  }
+  .guest-shell:not(.guest-diagnostic-mode) .guest-skill-card {
+    display: flex;
+    text-align: left;
+    justify-items: start;
+    min-height: 80px;
+    padding: 12px 9px;
+    gap: 9px;
+  }
+  .guest-shell:not(.guest-diagnostic-mode) .guest-skill-card strong {
+    font-size: 11px;
+  }
+  .guest-shell:not(.guest-diagnostic-mode) .guest-skill-card > div > span {
+    display: block;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app *,
+  .login-shell *,
+  .guest-diagnostic-mode * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

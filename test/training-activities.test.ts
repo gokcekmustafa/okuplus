@@ -70,7 +70,7 @@ describe("independent training activities", () => {
     expect(activities).toContain("isIndependentTrainingSession");
     expect(activities).toContain("legacyProgress: currentSession");
     expect(app).toContain("Beceri");
-    expect(app).toContain("Öğrenme Yolu'ndan ayrı çalışma");
+    expect(index).toContain("Bu alan Öğrenme Yolu'ndan bağımsızdır.");
     expect(app).toContain("Bir beceri seç; kısa bir çalışmayla başlayabilirsin.");
     expect(app).toContain("Tekrar çalış →");
     expect(app).toContain("Devam et →");

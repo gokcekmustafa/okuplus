@@ -1,0 +1,113 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.8"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <symbol id="home" viewBox="0 0 24 24">
+    <path d="m3 10 9-7 9 7v10H6V10" />
+    <path d="M10 20v-7h4v7" />
+  </symbol>
+  <symbol id="chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 15l4-5 4 2 5-7" /></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7z" /></symbol>
+  <symbol id="clipboard" viewBox="0 0 24 24">
+    <rect x="5" y="4" width="14" height="18" rx="3" />
+    <rect x="9" y="2" width="6" height="4" rx="1" />
+    <path d="m8 12 2 2 5-5M9 18h6" />
+  </symbol>
+  <symbol id="assessment" viewBox="0 0 24 24">
+    <path d="M4 3v18h17M8 17v-5M13 17V7M18 17V4" />
+  </symbol>
+  <symbol id="medal" viewBox="0 0 24 24">
+    <circle cx="12" cy="9" r="6" />
+    <path d="m8 14-2 8 6-3 6 3-2-8m-7-5 2 2 4-4" />
+  </symbol>
+  <symbol id="users" viewBox="0 0 24 24">
+    <circle cx="9" cy="7" r="4" />
+    <path d="M2 21v-3a7 7 0 0 1 14 0v3M17 3a4 4 0 0 1 0 8m2 4a7 7 0 0 1 3 6" />
+  </symbol>
+  <symbol id="building" viewBox="0 0 24 24">
+    <rect x="4" y="2" width="16" height="20" rx="2" />
+    <path d="M9 22v-5h6v5M8 6h1m6 0h1M8 10h1m6 0h1" />
+  </symbol>
+  <symbol id="calendar" viewBox="0 0 24 24">
+    <rect x="3" y="5" width="18" height="17" rx="3" />
+    <path d="M7 2v6m10-6v6M3 11h18m-14 5h3m4 0h3" />
+  </symbol>
+  <symbol id="book" viewBox="0 0 24 24">
+    <path
+      d="M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1v16M5 8h3m8 0h3M5 12h3m8 0h3"
+    />
+  </symbol>
+  <symbol id="question" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M9 8a3 3 0 1 1 4 3c-1 .5-1 1-1 3m0 3h.01" />
+  </symbol>
+  <symbol id="target" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="5" />
+    <circle cx="12" cy="12" r="1" />
+  </symbol>
+  <symbol id="layers" viewBox="0 0 24 24">
+    <path d="m12 2 10 5-10 5L2 7zm-10 10 10 5 10-5M2 17l10 5 10-5" />
+  </symbol>
+  <symbol id="grid" viewBox="0 0 24 24">
+    <rect x="3" y="3" width="7" height="7" rx="2" />
+    <rect x="14" y="3" width="7" height="7" rx="2" />
+    <rect x="3" y="14" width="7" height="7" rx="2" />
+    <rect x="14" y="14" width="7" height="7" rx="2" />
+  </symbol>
+  <symbol id="settings" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="3" />
+    <path d="m9 3 1-1h4l1 1 1 3 3 1 2 3v4l-2 3-3 1-1 3-1 1h-4l-1-1-1-3-3-1-2-3v-4l2-3 3-1z" />
+  </symbol>
+  <symbol id="sun" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1" />
+  </symbol>
+  <symbol id="moon" viewBox="0 0 24 24">
+    <path d="M21 13a9 9 0 1 1-10-10 7 7 0 0 0 10 10Z" />
+  </symbol>
+  <symbol id="flame" viewBox="0 0 24 24">
+    <path
+      d="M12 2c1 5-5 6-5 11 0 1 0 2 1 3-2-1-3-3-2-6-5 6-2 12 6 12 7 0 9-7 6-12 0 3-1 4-2 4 2-5 1-8-4-12Z"
+    />
+  </symbol>
+  <symbol id="star" viewBox="0 0 24 24">
+    <path d="m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" />
+  </symbol>
+  <symbol id="trophy" viewBox="0 0 24 24">
+    <path
+      d="M7 3h10v6a5 5 0 0 1-10 0zm5 11v7m-4 0h8M7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4"
+    />
+  </symbol>
+  <symbol id="compass" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <path d="m16 8-3 5-5 3 3-5z" />
+  </symbol>
+  <symbol id="search" viewBox="0 0 24 24">
+    <circle cx="10" cy="10" r="7" />
+    <path d="m15 15 6 6" />
+  </symbol>
+  <symbol id="eye" viewBox="0 0 24 24">
+    <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3z" /></symbol>
+  <symbol id="clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 6v6l4 2" />
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6" /></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6" /></symbol>
+  <symbol id="credit" viewBox="0 0 24 24">
+    <rect x="2" y="4" width="20" height="16" rx="3" />
+    <path d="M2 9h20M6 15h4" />
+  </symbol>
+  <symbol id="logout" viewBox="0 0 24 24"><path d="M9 3H4v18h5m5-14 5 5-5 5M8 12h11" /></symbol>
+  <symbol id="leaf" viewBox="0 0 24 24">
+    <path d="M20 3C8 1 1 6 5 14c8 4 13-3 15-11ZM3 21 15 9" />
+  </symbol>
+</svg>

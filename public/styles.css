@@ -8846,14 +8846,13 @@ textarea:focus-visible {
   }
 }
 
-/* Keep learning and question work focused on small screens. Long passages use
-   an inner panel only when their real content cannot fit; the document itself
-   remains fixed so controls do not jump while an answer is being checked. */
+/* Keep learning and question work focused on small screens without clipping
+   long passages or answer controls. The document remains scrollable. */
 @media (max-width: 720px) {
   .student-shell #page-exercise:not(.hidden) {
-    min-height: calc(100dvh - 88px);
-    max-height: calc(100dvh - 88px);
-    overflow: hidden;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
   }
 
   .student-shell #page-exercise:not(.hidden) > .page-head {
@@ -8871,8 +8870,8 @@ textarea:focus-visible {
   .student-shell #page-exercise:not(.hidden) #student-reading-card,
   .student-shell #page-exercise:not(.hidden) #exercise-questions-card,
   .student-shell #page-exercise:not(.hidden) #exercise-result-card {
-    max-height: 54dvh;
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
   }
   .student-shell #page-exercise:not(.hidden) #student-reading-card {
     margin-bottom: 8px;
@@ -8904,12 +8903,12 @@ textarea:focus-visible {
     padding-top: 8px;
   }
   .student-shell #page-lessons:not(.hidden) .lesson-layout.is-learning-path {
-    max-height: calc(100dvh - 158px);
-    overflow: hidden;
+    max-height: none;
+    overflow: visible;
   }
   .student-shell #page-lessons:not(.hidden) .lesson-layout.is-learning-path #lesson-detail {
-    max-height: calc(100dvh - 158px);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -9586,9 +9585,8 @@ textarea:focus-visible {
   .student-shell #page-exercise:not(.hidden) #student-reading-card,
   .student-shell #page-exercise:not(.hidden) #exercise-questions-card,
   .student-shell #page-exercise:not(.hidden) #exercise-result-card {
-    max-height: min(54dvh, 430px);
-    overflow: auto;
-    overscroll-behavior: contain;
+    max-height: none;
+    overflow: visible;
   }
 
   .student-shell #page-exercise:not(.hidden) #student-reading-card {
@@ -9640,15 +9638,15 @@ textarea:focus-visible {
   }
 
   .student-shell #page-lessons.is-focused-lesson:not(.hidden) .lesson-layout.is-learning-path {
-    max-height: calc(100dvh - 128px);
+    max-height: none;
   }
 
   .student-shell
     #page-lessons.is-focused-lesson:not(.hidden)
     .lesson-layout.is-learning-path
     #lesson-detail {
-    max-height: calc(100dvh - 128px);
-    overflow: auto;
+    max-height: none;
+    overflow: visible;
   }
 }
 

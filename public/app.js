@@ -62,7 +62,9 @@ function applyTheme(theme) {
   toggle.setAttribute("aria-pressed", String(dark));
   toggle.setAttribute("aria-label", dark ? "Açık temaya geç" : "Koyu temaya geç");
   toggle.title = dark ? "Açık temaya geç" : "Koyu temaya geç";
-  toggle.querySelector("span")?.replaceChildren(document.createTextNode(dark ? "☀️" : "🌙"));
+  const icon = toggle.querySelector("span");
+  if (icon)
+    icon.innerHTML = `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#${dark ? "sun" : "moon"}"></use></svg>`;
 }
 
 function setupThemeEvents() {
@@ -3564,12 +3566,12 @@ function renderTrainingActivities() {
     RC_INFERENCE: "Çıkarım",
   };
   const skillIcons = {
-    FAST_ATTENTION: "◉",
-    FAST_RECOGNITION: "⚡",
-    FAST_CHUNKING: "▤",
-    RC_MAIN_IDEA: "✦",
-    RC_DETAIL: "⌕",
-    RC_INFERENCE: "↗",
+    FAST_ATTENTION: "target",
+    FAST_RECOGNITION: "bolt",
+    FAST_CHUNKING: "layers",
+    RC_MAIN_IDEA: "book",
+    RC_DETAIL: "search",
+    RC_INFERENCE: "spark",
   };
   grid.innerHTML = trainingActivities
     .map((activity) => {
@@ -3633,12 +3635,11 @@ function renderTrainingActivities() {
           : totalPackages > 0
             ? `Sıra: ${currentPackageNumber}. paket`
             : "Bu beceri için doğrulanmış paket bulunmuyor.";
-      return `<article class="training-activity-card" aria-labelledby="${escapeHtml(activityTitleId)}" aria-describedby="${escapeHtml(activityDescriptionId)}">
+      return `<article class="training-activity-card" data-competency="${escapeHtml(activity.competency || "")}" aria-labelledby="${escapeHtml(activityTitleId)}" aria-describedby="${escapeHtml(activityDescriptionId)}">
         <div class="training-activity-card-head">
           <div class="training-activity-identity">
-            <span class="training-activity-icon" aria-hidden="true">${escapeHtml(skillIcons[activity.competency] || "✦")}</span>
+            <span class="training-activity-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><use href="/assets/ui-icons.svg#${escapeHtml(skillIcons[activity.competency] || "book")}"></use></svg></span>
             <div>
-              <p class="training-activity-kicker">BECERİ ANTRENMANI</p>
               <h4 id="${escapeHtml(activityTitleId)}">${escapeHtml(activity.title || "Antrenman")}</h4>
             </div>
           </div>
@@ -3646,7 +3647,6 @@ function renderTrainingActivities() {
         </div>
         <p id="${escapeHtml(activityDescriptionId)}">${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
         <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
-        <div class="training-activity-scope"><span aria-hidden="true">↳</span> Öğrenme Yolu'ndan ayrı çalışma</div>
         ${packageTrack}
         <p class="training-activity-package-hint">${escapeHtml(packageHint)}</p>
         <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
@@ -17867,7 +17867,21 @@ function formatAvgTime(value) {
   } sn`;
 }
 function insightMetric(icon, label, value, tone = "", id = "") {
-  return `<article class="insight-stat ${tone}"><span aria-hidden="true">${icon}</span><span>${escapeHtml(label)}</span><strong${id ? ` id="${id}"` : ""}>${escapeHtml(String(value))}</strong></article>`;
+  const iconNames = {
+    "⭐": "star",
+    "🔥": "flame",
+    "🏆": "trophy",
+    "📚": "book",
+    "📈": "chart",
+    "🧭": "compass",
+    "📌": "target",
+    "🧾": "clipboard",
+    "↗": "chart",
+    "✅": "check",
+    "🎯": "target",
+  };
+  const iconMarkup = `<svg class="ui-icon" viewBox="0 0 24 24"><use href="/assets/ui-icons.svg#${iconNames[icon] || "chart"}"></use></svg>`;
+  return `<article class="insight-stat ${tone}"><span aria-hidden="true">${iconMarkup}</span><span>${escapeHtml(label)}</span><strong${id ? ` id="${id}"` : ""}>${escapeHtml(String(value))}</strong></article>`;
 }
 function insightBar(accuracy, label) {
   if (!Number.isFinite(accuracy)) return '<p class="muted">Henüz yeterli veri yok.</p>';
@@ -17904,7 +17918,7 @@ function renderHomeInsights(path) {
   if (isPlatformUser || !path.today) return;
   const p = path.overallProgress;
   $("home-insights-values").innerHTML =
-    `<span>⭐ <strong>${path.today.totalPoints}</strong> GP</span><span>🔥 <strong>${path.today.currentStreak}</strong> gün</span>${p ? `<span>📈 <strong>${p.completed}/${p.total}</strong> adım</span>` : ""}`;
+    `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#star"></use></svg> <strong>${path.today.totalPoints}</strong> GP</span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#flame"></use></svg> <strong>${path.today.currentStreak}</strong> gün</span>${p ? `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#chart"></use></svg> <strong>${p.completed}/${p.total}</strong> adım</span>` : ""}`;
   $("home-insights").classList.remove("hidden");
 }
 const DEVELOPMENT_SKILL_CARDS = [
@@ -17979,6 +17993,14 @@ function findTrainingSkill(skills, family, competency) {
   return (skills || []).find((item) => item.family === family || item.competency === competency);
 }
 function renderProgressList(items, trainingSkills) {
+  const skillIcons = {
+    FAST_ATTENTION: "eye",
+    FAST_RECOGNITION: "bolt",
+    FAST_CHUNKING: "layers",
+    RC_MAIN_IDEA: "book",
+    RC_DETAIL: "search",
+    RC_INFERENCE: "spark",
+  };
   $("progress-skills").innerHTML = DEVELOPMENT_SKILL_CARDS.map((card) => {
     const trainingProgress = findTrainingSkill(
       trainingSkills,
@@ -17997,7 +18019,7 @@ function renderProgressList(items, trainingSkills) {
       ? `<div><dt>Ortalama süre</dt><dd>${escapeHtml(formatAvgTime(averageResponseTimeMs))}</dd></div>`
       : "";
     return `<article class="insight-panel skill-progress-card" data-skill-code="${escapeHtml(card.aliases[0])}">
-      <div class="skill-title"><span aria-hidden="true">${card.icon}</span><h4>${card.label}</h4><strong class="skill-stage">${state.label}</strong></div>
+      <div class="skill-title"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><use href="/assets/ui-icons.svg#${skillIcons[card.aliases[0]] || "book"}"></use></svg></span><h4>${card.label}</h4><strong class="skill-stage">${state.label}</strong></div>
       <p class="muted skill-state-detail">${state.detail}</p>
       ${insightBar(state.value, label)}
       ${progress ? `<dl class="insight-facts"><div><dt>Egzersiz</dt><dd class="skill-sessions">${sessionCount ?? 0}</dd></div><div><dt>Puanlanan cevap</dt><dd class="skill-attempts">${attemptCount ?? 0}</dd></div>${exposureCount !== undefined ? `<div><dt>Farklı çalışma</dt><dd>${exposureCount}</dd></div>` : `<div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div>`}${responseTimeFact}</dl>${lastActivityAt ? `<time class="muted skill-last-activity">Son çalışma: ${escapeHtml(insightDate(lastActivityAt))}</time>` : ""}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}

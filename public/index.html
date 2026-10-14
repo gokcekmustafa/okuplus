@@ -27,6 +27,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='14' font-family='sans-serif' font-weight='700' fill='%23fff' text-anchor='middle'%3EOP%3C/text%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/design-system.css" />
   </head>
   <body>
     <!-- ================= Login ================= -->
@@ -419,31 +420,52 @@
 
         <nav class="sidebar-nav" aria-label="Ana menü">
           <button class="nav-item" data-page="dashboard" data-student-primary type="button">
-            <span class="nav-icon" aria-hidden="true">⌂</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#home"></use></svg
+            ></span>
             <span class="nav-label">Ana Sayfa</span>
           </button>
           <button class="nav-item" data-page="tenants" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">🏢</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#building"></use></svg
+            ></span>
             <span class="nav-label">Kurumlar</span>
           </button>
           <button class="nav-item" data-page="users" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">🧑‍🤝‍🧑</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#users"></use></svg
+            ></span>
             <span class="nav-label">Kullanıcılar</span>
           </button>
           <button class="nav-item" data-page="students" data-admin data-management type="button">
-            <span class="nav-icon" aria-hidden="true">👥</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#users"></use></svg
+            ></span>
             <span class="nav-label">Öğrenciler</span>
           </button>
           <button class="nav-item" data-page="teachers" data-admin data-organization type="button">
-            <span class="nav-icon" aria-hidden="true">🧑‍🏫</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#users"></use></svg
+            ></span>
             <span class="nav-label">Öğretmenler</span>
           </button>
           <button class="nav-item" data-page="branches" data-admin data-organization type="button">
-            <span class="nav-icon" aria-hidden="true">🏬</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#building"></use></svg
+            ></span>
             <span class="nav-label">Şubeler</span>
           </button>
           <button class="nav-item" data-page="classes" data-admin data-organization type="button">
-            <span class="nav-icon" aria-hidden="true">🏫</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#building"></use></svg
+            ></span>
             <span class="nav-label">Sınıflar</span>
           </button>
           <button
@@ -454,27 +476,45 @@
             data-organization-admin
             type="button"
           >
-            <span class="nav-icon" aria-hidden="true">📅</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#calendar"></use></svg
+            ></span>
             <span class="nav-label">Akademik Yıllar</span>
           </button>
           <button class="nav-item" data-page="contents" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">📚</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#book"></use></svg
+            ></span>
             <span class="nav-label">İçerikler</span>
           </button>
           <button class="nav-item" data-page="questions" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">❓</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#question"></use></svg
+            ></span>
             <span class="nav-label">Soru Bankası</span>
           </button>
           <button class="nav-item" data-page="templates" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">📋</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#clipboard"></use></svg
+            ></span>
             <span class="nav-label">Şablonlar</span>
           </button>
           <button class="nav-item" data-page="skills" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">🎯</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#target"></use></svg
+            ></span>
             <span class="nav-label">Beceriler</span>
           </button>
           <button class="nav-item" data-page="levels" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true">🪜</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#layers"></use></svg
+            ></span>
             <span class="nav-label">Seviyeler</span>
           </button>
           <button
@@ -484,11 +524,17 @@
             data-organization-admin
             type="button"
           >
-            <span class="nav-icon" aria-hidden="true">▦</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#grid"></use></svg
+            ></span>
             <span class="nav-label">Kurum Paneli</span>
           </button>
           <button class="nav-item" data-page="analytics" data-management type="button">
-            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#assessment"></use></svg
+            ></span>
             <span class="nav-label">Öğrenci Analitiği</span>
           </button>
           <button
@@ -498,35 +544,59 @@
             data-branch-manager
             type="button"
           >
-            <span class="nav-icon" aria-hidden="true">▦</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#grid"></use></svg
+            ></span>
             <span class="nav-label">Şube Paneli</span>
           </button>
           <button class="nav-item" data-page="assignments" data-student-secondary type="button">
-            <span class="nav-icon" aria-hidden="true">📝</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#clipboard"></use></svg
+            ></span>
             <span class="nav-label">Ödevler</span>
           </button>
           <button class="nav-item hidden" data-page="teacher-classes" data-teacher type="button">
-            <span class="nav-icon" aria-hidden="true">🏫</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#building"></use></svg
+            ></span>
             <span class="nav-label">Sınıflarım</span>
           </button>
           <button class="nav-item" data-page="exercise" data-student-primary type="button">
-            <span class="nav-icon" aria-hidden="true">✏️</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#bolt"></use></svg
+            ></span>
             <span class="nav-label">Antrenman</span>
           </button>
           <button class="nav-item" data-page="assessments" data-student-secondary type="button">
-            <span class="nav-icon" aria-hidden="true">📊</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#assessment"></use></svg
+            ></span>
             <span class="nav-label">Ölçme &amp; Değerlendirme</span>
           </button>
           <button class="nav-item" data-page="badges" data-student-secondary type="button">
-            <span class="nav-icon" aria-hidden="true">🏅</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#medal"></use></svg
+            ></span>
             <span class="nav-label">Rozetler &amp; Kupalar</span>
           </button>
           <button class="nav-item" data-page="lessons" data-student type="button">
-            <span class="nav-icon" aria-hidden="true">📖</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#book"></use></svg
+            ></span>
             <span class="nav-label">Öğrenme Yolum</span>
           </button>
           <button class="nav-item" data-page="progress" data-student-primary type="button">
-            <span class="nav-icon" aria-hidden="true">📈</span>
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#chart"></use></svg
+            ></span>
             <span class="nav-label">Gelişimim</span>
           </button>
         </nav>
@@ -559,10 +629,18 @@
               aria-label="Puan ve seri"
             >
               <span class="gamification-badge" title="Toplam Gelişim Puanı"
-                ><span aria-hidden="true">⭐</span> <span id="topbar-gp">—</span> GP</span
+                ><span aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#star"></use></svg
+                ></span>
+                <span id="topbar-gp">—</span> GP</span
               >
               <span class="gamification-badge" title="Günlük seri"
-                ><span aria-hidden="true">🔥</span> <span id="topbar-streak">—</span></span
+                ><span aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#flame"></use></svg
+                ></span>
+                <span id="topbar-streak">—</span></span
               >
             </div>
           </div>
@@ -615,7 +693,7 @@
                 <div
                   class="onboarding-progress"
                   id="onboarding-progress"
-                  aria-label="Onboarding ilerlemesi"
+                  aria-label="Başlangıç ilerlemesi"
                 >
                   <span class="onboarding-progress-label">Başlangıç</span>
                   <span class="onboarding-progress-count"
@@ -631,7 +709,11 @@
                 </div>
                 <div id="onboarding-step-1">
                   <div class="onboarding-hero" aria-hidden="true">
-                    <div class="onboarding-mascot">📚</div>
+                    <div class="onboarding-mascot">
+                      <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <use href="/assets/ui-icons.svg#book"></use>
+                      </svg>
+                    </div>
                     <span class="mascot-spark">✦</span>
                   </div>
                   <h1>Hoş geldin!</h1>
@@ -660,7 +742,11 @@
                   /></label>
                 </div>
                 <div id="onboarding-step-2" class="hidden">
-                  <div class="onboarding-step-icon" aria-hidden="true">🎯</div>
+                  <div class="onboarding-step-icon" aria-hidden="true">
+                    <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#target"></use>
+                    </svg>
+                  </div>
                   <h1>Bugün neye ulaşmak istiyorsun?</h1>
                   <p class="onboarding-lead">Sana en uygun öğrenme yolunu seçelim.</p>
                   <div class="field">
@@ -727,7 +813,11 @@
                   >
                 </div>
                 <div id="onboarding-step-3" class="hidden">
-                  <div class="onboarding-step-icon" aria-hidden="true">🛡️</div>
+                  <div class="onboarding-step-icon" aria-hidden="true">
+                    <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#check"></use>
+                    </svg>
+                  </div>
                   <h1>Neredeyse hazırsın</h1>
                   <p class="onboarding-lead">Güvenli ve kişisel bir deneyim için son bir adım.</p>
                   <div class="consent-list">
@@ -1302,7 +1392,9 @@
                 ><strong class="management-kpi-value" data-management-kpi="teachers">—</strong>
               </article>
               <article class="management-kpi-card">
-                <span class="management-kpi-icon" aria-hidden="true">👥</span
+                <span class="management-kpi-icon" aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#users"></use></svg></span
                 ><span class="management-kpi-label">Öğrenciler</span
                 ><strong class="management-kpi-value" data-management-kpi="students">—</strong>
               </article>
@@ -1395,7 +1487,9 @@
                 ><strong class="management-kpi-value" data-management-kpi="teachers">—</strong>
               </article>
               <article class="management-kpi-card">
-                <span class="management-kpi-icon" aria-hidden="true">👥</span
+                <span class="management-kpi-icon" aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#users"></use></svg></span
                 ><span class="management-kpi-label">Öğrenciler</span
                 ><strong class="management-kpi-value" data-management-kpi="students">—</strong>
               </article>
@@ -1501,32 +1595,44 @@
               </div>
               <div class="management-kpi-grid analytics-kpi-grid">
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">👥</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#users"></use></svg></span
                   ><span class="management-kpi-label">Kayıtlı öğrenciler</span
                   ><strong id="analytics-registered" class="management-kpi-value">—</strong>
                 </article>
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">🟢</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#check"></use></svg></span
                   ><span class="management-kpi-label">Aktif öğrenciler</span
                   ><strong id="analytics-active" class="management-kpi-value">—</strong>
                 </article>
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">▶️</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#bolt"></use></svg></span
                   ><span class="management-kpi-label">Alıştırma oturumları</span
                   ><strong id="analytics-exercise-sessions" class="management-kpi-value">—</strong>
                 </article>
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">⏱️</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#clock"></use></svg></span
                   ><span class="management-kpi-label">Ortalama süre</span
                   ><strong id="analytics-duration" class="management-kpi-value">—</strong>
                 </article>
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">⚠️</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#question"></use></svg></span
                   ><span class="management-kpi-label">Tamamlanmayan öğrenciler</span
                   ><strong id="analytics-not-continued" class="management-kpi-value">—</strong>
                 </article>
                 <article class="management-kpi-card">
-                  <span class="management-kpi-icon">🛠️</span
+                  <span class="management-kpi-icon"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#settings"></use></svg></span
                   ><span class="management-kpi-label">Teknik hatalar</span
                   ><strong id="analytics-errors" class="management-kpi-value">—</strong>
                 </article>
@@ -6069,7 +6175,10 @@
               </div>
               <div class="development-summary" aria-label="Gelişim özeti">
                 <strong
-                  ><span aria-hidden="true">⭐</span>
+                  ><span aria-hidden="true"
+                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <use href="/assets/ui-icons.svg#star"></use></svg
+                  ></span>
                   <span id="development-total-gp">—</span> GP</strong
                 >
                 <span id="development-achievement-count">Başarıların yükleniyor…</span>
@@ -6131,16 +6240,23 @@
             <div id="gamification-error" class="error hidden" role="alert"></div>
             <div class="insight-metrics gamification-summary" aria-label="Gamification özeti">
               <article class="insight-stat insight-gold">
-                <span aria-hidden="true">⭐</span><span>Toplam GP</span
-                ><strong id="gamification-total-points">—</strong>
+                <span aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#star"></use></svg></span
+                ><span>Toplam GP</span><strong id="gamification-total-points">—</strong>
               </article>
               <article class="insight-stat insight-orange">
-                <span aria-hidden="true">🔥</span><span>Mevcut seri</span
+                <span aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#flame"></use></svg></span
+                ><span>Mevcut seri</span
                 ><strong><span id="gamification-current-days">—</span> gün</strong>
               </article>
               <article class="insight-stat insight-purple">
-                <span aria-hidden="true">🏆</span><span>Kazanılan rozet</span
-                ><strong id="gamification-badge-count">—</strong>
+                <span aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <use href="/assets/ui-icons.svg#trophy"></use></svg></span
+                ><span>Kazanılan rozet</span><strong id="gamification-badge-count">—</strong>
               </article>
             </div>
             <section class="insight-panel insight-streak" aria-label="Serin">
@@ -6301,7 +6417,9 @@
             data-bottom-page="dashboard"
             aria-label="Ana Sayfa"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">⌂</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#home"></use></svg></span
             ><span class="bottom-nav-label">Ana Sayfa</span>
           </button>
           <button
@@ -6310,7 +6428,9 @@
             data-bottom-page="progress"
             aria-label="Gelişimim"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">📈</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#chart"></use></svg></span
             ><span class="bottom-nav-label">Gelişimim</span>
           </button>
           <button
@@ -6319,7 +6439,9 @@
             data-bottom-page="exercise"
             aria-label="Antrenman"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">✏️</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#bolt"></use></svg></span
             ><span class="bottom-nav-label">Antrenman</span>
           </button>
           <button
@@ -6328,7 +6450,9 @@
             data-bottom-page="assignments"
             aria-label="Ödevler"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">📝</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#clipboard"></use></svg></span
             ><span class="bottom-nav-label">Ödevler</span>
           </button>
           <button
@@ -6337,7 +6461,9 @@
             data-bottom-page="assessments"
             aria-label="Ölçme ve değerlendirme"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">📊</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#assessment"></use></svg></span
             ><span class="bottom-nav-label">Ölçme</span>
           </button>
           <button
@@ -6346,7 +6472,9 @@
             data-bottom-page="badges"
             aria-label="Rozetler ve kupalar"
           >
-            <span class="bottom-nav-icon" aria-hidden="true">🏅</span
+            <span class="bottom-nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#medal"></use></svg></span
             ><span class="bottom-nav-label">Rozetler</span>
           </button>
         </nav>
