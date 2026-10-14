@@ -93,7 +93,9 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).not.toContain('<p class="insight-eyebrow">ŞİMDİKİ DURAĞIN</p>');
     expect(app).not.toContain('class="lesson-flow"');
     expect(styles).toContain(".student-shell #page-exercise > .page-head");
-    expect(styles).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(styles).toContain("grid-template-columns: 1fr;");
+    expect(styles).toContain("max-height: none;");
+    expect(styles).toContain("overflow: visible;");
     expect(styles).toContain("#exercise-questions-card::-webkit-scrollbar");
     expect(styles).toContain("scrollbar-width: none");
   });

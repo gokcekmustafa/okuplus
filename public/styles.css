@@ -9197,3 +9197,42 @@ textarea:focus-visible {
     overflow: auto;
   }
 }
+
+/* The page itself is the mobile scroll surface. Do not clip the exercise
+   content inside a fixed-height card: every option must remain reachable. */
+@media (max-width: 720px) {
+  .student-shell #page-exercise:not(.hidden) {
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+    padding-bottom: 32px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-card,
+  .student-shell #page-exercise:not(.hidden) #exercise-questions-card,
+  .student-shell #page-exercise:not(.hidden) #exercise-result-card {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-mc-options {
+    grid-template-columns: 1fr;
+    gap: 8px !important;
+  }
+
+  .student-shell #page-exercise:not(.hidden) .answer-card {
+    min-height: 48px;
+    padding: 10px 12px;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .student-shell #page-lessons.is-focused-lesson:not(.hidden) .lesson-layout.is-learning-path,
+  .student-shell
+    #page-lessons.is-focused-lesson:not(.hidden)
+    .lesson-layout.is-learning-path
+    #lesson-detail {
+    max-height: none;
+    overflow: visible;
+  }
+}
