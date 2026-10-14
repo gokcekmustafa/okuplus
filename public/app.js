@@ -13736,19 +13736,79 @@ async function handleExerciseComplete() {
     completionConfirmed = exerciseSession?.status === "COMPLETED";
     if (!completionConfirmed) throw new Error("Tamamlanma durumu doğrulanamadı");
     const daily = student && isDailyTrainingExercise();
-    if (student && typeof recordPilotTelemetry === "function") {
-      recordPilotTelemetry(
-        "EXERCISE_COMPLETED",
-        { sessionId: exerciseSession.id },
-        daily ? "training-completed" : "exercise-completed",
-      );
-      if (exerciseSession.assessmentId)
-        recordPilotTelemetry(
-          "ASSESSMENT_COMPLETED",
-          { sessionId: exerciseSession.id },
-          "placement-completed",
-        );
+    const guidedLearningPathCompletion =
+      student && !daily && Boolean(exerciseSession.learningStepId);
+    let nextCycleTransition = exerciseSession.nextLearningCycle || null;
+
+    // Returning to the roadmap is part of the authoritative guided flow. Do
+    // it before optional telemetry, points, or celebration UI so a non-critical
+    // presentation failure cannot leave the student on a completed exercise
+    // result screen.
+    if (
+      guidedLearningPathCompletion &&
+      !exerciseSession.nextLearningStep &&
+      exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY" &&
+      String(activeLearningStepNode?.learningPathCode || "") ===
+        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
+    ) {
+      try {
+        nextCycleTransition ||= await reconcileP1ToNextCycle(activeLearningStepNode.learningPathId);
+      } catch {
+        // The completed session remains authoritative. Keep a separate P1
+        // retry state so this does not accidentally retry the P0 transition.
+        pendingP1CycleReconcile = {
+          p1LearningPathId: activeLearningStepNode.learningPathId,
+        };
+      }
     }
+
+    if (student && typeof recordPilotTelemetry === "function") {
+      try {
+        recordPilotTelemetry(
+          "EXERCISE_COMPLETED",
+          { sessionId: exerciseSession.id },
+          daily ? "training-completed" : "exercise-completed",
+        );
+        if (exerciseSession.assessmentId)
+          recordPilotTelemetry(
+            "ASSESSMENT_COMPLETED",
+            { sessionId: exerciseSession.id },
+            "placement-completed",
+          );
+      } catch {
+        // Telemetry is best effort and must not block the learning path.
+      }
+    }
+
+    if (guidedLearningPathCompletion) {
+      const completedStep = {
+        ...(activeLearningStepNode || {}),
+        id: exerciseSession.learningStepId,
+        status: "completed",
+      };
+      activeLearningStepNode = completedStep;
+      activeLearningStepNavigation = normalizeLearningPathNavigation(
+        {
+          previousStep: activeLearningStepNavigation?.previousStep || null,
+          nextStep: exerciseSession.nextLearningStep || null,
+        },
+        completedStep,
+      );
+      exerciseBusy = false;
+      returnToLearningPathAfterGuidedExercise();
+      if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
+        setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
+          error: true,
+        });
+      } else if (pendingP1CycleReconcile) {
+        setLearningPathTransitionStatus(
+          "Öğrenme döngün tamamlandı. Sonraki döngü şu anda kontrol edilemedi; ilerlemen korunuyor.",
+          { retry: true, error: true },
+        );
+      }
+      return;
+    }
+
     if (student && !daily) {
       const isAssessment = Boolean(exerciseSession.assessmentId);
       const beforeBadges = new Set((exerciseGamification?.badges || []).map((badge) => badge.id));
@@ -13810,58 +13870,6 @@ async function handleExerciseComplete() {
       resetExerciseState();
       renderExerciseSession();
       $("exercise-completion-title")?.focus();
-      return;
-    }
-    let nextCycleTransition = exerciseSession.nextLearningCycle || null;
-    if (
-      student &&
-      learningPathEntryMode &&
-      exerciseSession.learningStepId &&
-      !exerciseSession.nextLearningStep &&
-      exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY" &&
-      String(activeLearningStepNode?.learningPathCode || "") ===
-        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
-    ) {
-      try {
-        nextCycleTransition ||= await reconcileP1ToNextCycle(activeLearningStepNode.learningPathId);
-      } catch {
-        // The completed session remains authoritative. Keep a separate P1
-        // retry state so this does not accidentally retry the P0 transition.
-        pendingP1CycleReconcile = {
-          p1LearningPathId: activeLearningStepNode.learningPathId,
-        };
-      }
-    }
-    if (student && learningPathEntryMode && exerciseSession.learningStepId) {
-      const completedStep = {
-        ...(activeLearningStepNode || {}),
-        id: exerciseSession.learningStepId,
-        status: "completed",
-      };
-      activeLearningStepNode = completedStep;
-      activeLearningStepNavigation = normalizeLearningPathNavigation(
-        {
-          previousStep: activeLearningStepNavigation?.previousStep || null,
-          nextStep: exerciseSession.nextLearningStep || null,
-        },
-        completedStep,
-      );
-      // A roadmap exercise is a single guided action. Once the server has
-      // accepted its completion, return to the map so the newly unlocked
-      // station is visible immediately instead of leaving the student on a
-      // second training-style completion screen.
-      exerciseBusy = false;
-      returnToLearningPathAfterGuidedExercise();
-      if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
-        setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
-          error: true,
-        });
-      } else if (pendingP1CycleReconcile) {
-        setLearningPathTransitionStatus(
-          "Öğrenme döngün tamamlandı. Sonraki döngü şu anda kontrol edilemedi; ilerlemen korunuyor.",
-          { retry: true, error: true },
-        );
-      }
       return;
     }
     renderExerciseSession();

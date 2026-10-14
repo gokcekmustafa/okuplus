@@ -329,6 +329,48 @@ describe("exercise UX state from production frontend", () => {
     expect(h.context.learningPathEntryMode).toBe(false);
   });
 
+  it("uses the persisted step link to return even if the entry mode flag was lost", async () => {
+    const h = harness();
+    h.context.learningPathEntryMode = false;
+    h.context.exerciseSession = {
+      id: "session",
+      status: "IN_PROGRESS",
+      learningStepId: "step-20",
+    };
+    h.context.activeLearningStepNode = { id: "step-20", status: "active" };
+    h.context.activeLearningStepNavigation = null;
+    h.context.refreshExerciseGamification = async () => {
+      throw new Error("optional points request failed");
+    };
+    h.context.showCelebration = () => {
+      throw new Error("optional presentation failed");
+    };
+    h.context.fetchStudentExercise = async () => ({ id: "session", status: "IN_PROGRESS" });
+    h.context.exerciseApi = async () => ({});
+    h.context.parseResponse = async () => ({
+      id: "session",
+      status: "COMPLETED",
+      learningStepId: "step-20",
+      scoreSummary: { totalQuestions: 1 },
+    });
+    h.context.recordPilotTelemetry = () => {};
+    h.context.rememberExerciseSession = () => {};
+    h.context.resetDailyTrainingState = () => {};
+    h.context.resetExerciseState = () => {};
+    h.context.renderExerciseSession = () => {};
+    h.context.normalizeLearningPathNavigation = (navigation: unknown) => navigation;
+    h.context.navigate = (page: string) => {
+      h.context.lastNavigatedPage = page;
+    };
+    h.get("learning-path").scrollIntoView = () => {};
+
+    await h.run("handleExerciseComplete()");
+
+    expect(h.context.lastNavigatedPage).toBe("dashboard");
+    expect(h.context.learningPathEntryMode).toBe(false);
+    expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
+  });
+
   it("opens the final Learning Path station as a terminal checkpoint", () => {
     expect(source).toContain('if (type === "NEXT_LEARNING")');
     expect(source).toContain("renderLearningPathTerminalStep(node)");
