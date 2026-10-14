@@ -135,6 +135,61 @@ describe("exercise UX state from production frontend", () => {
     expect(h.run('exerciseFeedbackText("Bu kez olmadı.")')).toBe("");
   });
 
+  it("does not pass structured feedback objects to the retry celebration", async () => {
+    const h = harness();
+    let detail: unknown = null;
+    h.context.showCelebration = (payload: { detail?: unknown }) => {
+      detail = payload.detail;
+    };
+    h.run(`
+      exerciseRequest = null;
+      crypto = { randomUUID: () => "request-id" };
+      $("exercise-current-question").dataset = { questionVersionId: "q1", questionType: "OPEN_ENDED" };
+      $("exercise-current-question").querySelector = () => ({ value: "Yanıt" });
+      exerciseApi = async () => ({});
+      parseResponse = async () => ({
+        id: "attempt",
+        questionVersionId: "q1",
+        isCorrect: false,
+        rawScore: 0,
+        responseOrder: 1,
+        feedback: { message: "Kısa açıklama" },
+      });
+      refreshExerciseGamification = async () => null;
+      recordPilotTelemetry = () => {};
+      isFastReadingExercise = () => false;
+      isDailyTrainingExercise = () => false;
+    `);
+
+    await h.run("handleExerciseSubmitAttempt()");
+
+    expect(detail).toBe("Kısa açıklama");
+    expect(String(detail)).not.toContain("[object Object]");
+  });
+
+  it("encodes session and question identifiers before placing them in request paths", () => {
+    expect(source).toContain("`/questions/${encodeURIComponent(questionVersionId)}/attempts`");
+    expect(source).toContain(
+      "`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/questions`",
+    );
+    expect(source).toContain(
+      "exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/complete`",
+    );
+  });
+
+  it("reuses questions already returned by the student session endpoint", () => {
+    expect(source).toContain(
+      "if (Array.isArray(session.questions)) applyExerciseQuestions(session.questions)",
+    );
+    expect(source).toContain("function applyExerciseQuestions(questions)");
+  });
+
+  it("keeps the station marker visible while its start request is pending", () => {
+    expect(source).toContain('button.matches(".learning-map-v6-node")');
+    expect(styles).toContain(".learning-map-v6-node.is-pending .learning-map-v6-marker");
+    expect(styles).toContain("okuplus-map-v6-loading-fill");
+  });
+
   it("keeps answered but unscored items pending even when summary flag is false", () => {
     const h = harness();
     h.context.exerciseSession.scoreSummary = {

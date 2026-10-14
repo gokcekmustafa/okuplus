@@ -277,15 +277,25 @@ describe("exercise answer request security", () => {
   });
 });
 
-describe("safe submission error diagnostics", () => {
-  it("shows safe status/code diagnostics without response details", () => {
+describe("safe submission error messages", () => {
+  it("uses Turkish safe copy without response details or internal codes", () => {
     const h = errorFormatterHarness();
     const message = h.run(
       'formatExerciseSubmissionError({ status: 403, code: "FORBIDDEN", details: { secret: "hidden" } })',
     );
 
-    expect(message).toContain("HTTP 403 · FORBIDDEN");
+    expect(message).toContain("Güvenlik doğrulaması başarısız");
+    expect(message).not.toContain("HTTP");
+    expect(message).not.toContain("FORBIDDEN");
     expect(message).not.toContain("hidden");
     expect(message).not.toContain("secret");
+  });
+
+  it("gives a Turkish message for an oversized request path", () => {
+    const h = errorFormatterHarness();
+    const message = h.run("formatExerciseSubmissionError({ status: 414 })");
+
+    expect(message).toContain("İstek adresi geçersiz");
+    expect(message).not.toContain("HTTP 414");
   });
 });

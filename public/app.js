@@ -211,14 +211,28 @@ function setAsyncButtonState(button, busy, pendingLabel) {
   if (busy) {
     if (!button.dataset.idleLabel)
       button.dataset.idleLabel = label?.textContent || button.textContent;
-    if (label) {
+    if (button.matches(".learning-map-v6-node")) {
+      const action = button.querySelector(".learning-map-v6-action");
+      if (action) {
+        button.dataset.idleAction = action.textContent || "";
+        action.textContent = pendingLabel;
+      }
+      // Keep the station number and marker visible while the request is in
+      // flight. The pending class supplies the visual loading animation.
+    } else if (label) {
       label.textContent = pendingLabel;
       label.classList.remove("hidden");
     } else {
       button.textContent = pendingLabel;
     }
   } else if (button.dataset.idleLabel) {
-    if (label) {
+    if (button.matches(".learning-map-v6-node")) {
+      const action = button.querySelector(".learning-map-v6-action");
+      if (action && button.dataset.idleAction !== undefined) {
+        action.textContent = button.dataset.idleAction;
+      }
+      delete button.dataset.idleAction;
+    } else if (label) {
       label.textContent = button.dataset.idleLabel;
       label.classList.remove("hidden");
     } else button.textContent = button.dataset.idleLabel;
@@ -329,7 +343,7 @@ function showCelebration({
   $("celebration-icon").textContent = icon;
   $("celebration-eyebrow").textContent = eyebrow;
   $("celebration-title").textContent = title;
-  $("celebration-detail").textContent = detail || "";
+  $("celebration-detail").textContent = presentationText(detail);
   $("celebration-reward").textContent = reward || "";
   layer.dataset.kind = kind;
   layer.classList.toggle("celebration-major", major);
@@ -348,6 +362,16 @@ function showCelebration({
     }
   }
   celebrationTimer = setTimeout(hideCelebration, major ? 4200 : 2200);
+}
+
+function presentationText(value) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (!value || typeof value !== "object") return "";
+  for (const key of ["explanation", "message", "detail", "text"]) {
+    if (typeof value[key] === "string" && value[key].trim()) return value[key].trim();
+  }
+  return "";
 }
 
 function hideCelebration() {
@@ -2749,7 +2773,7 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
     navigate("exercise");
   } catch (error) {
     setAsyncButtonState(button, false, "Başlatılıyor…");
-    if (!isPremiumLimitError(error)) alert(error.message);
+    if (!isPremiumLimitError(error)) alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
   }
 }
 
@@ -3391,7 +3415,7 @@ window.startTodayAssignment = async function (id) {
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (e) {
-    if (!isPremiumLimitError(e)) alert(e.message);
+    if (!isPremiumLimitError(e)) alert("Bu görev şu anda açılamadı. Lütfen tekrar dene.");
   }
 };
 window.startTodayAssessment = async function (
@@ -3446,7 +3470,7 @@ function formatDailyTrainingError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
   if (status === 401) return "Oturumun sona ermiş olabilir. Lütfen tekrar giriş yap.";
   if (status === 403 && isPremiumLimitError(error)) {
-    return error.message || "Günlük ücretsiz kullanım hakkın doldu.";
+    return "Günlük ücretsiz kullanım hakkın doldu.";
   }
   if (status === 403) return "Bu antrenmana şu anda erişilemiyor. Sayfayı yenileyip tekrar dene.";
   if (status === 404 || status === 409)
@@ -12400,26 +12424,17 @@ function hideExerciseError() {
 }
 function formatExerciseSubmissionError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
-  const safeCodes = new Set([
-    "UNAUTHORIZED",
-    "FORBIDDEN",
-    "VALIDATION_ERROR",
-    "CONFLICT",
-    "RATE_LIMITED",
-    "REQUEST_ERROR",
-    "PAYLOAD_TOO_LARGE",
-  ]);
-  const code = safeCodes.has(error?.code) ? error.code : null;
-  const diagnostic =
-    status === null ? "AĞ HATASI" : code ? `HTTP ${status} · ${code}` : `HTTP ${status}`;
-
   if (status === 401)
-    return `Cevap gönderilemedi (${diagnostic}). Oturum süren dolmuş olabilir; tekrar giriş yapıp yeniden dene.`;
+    return "Cevap gönderilemedi. Oturum süren dolmuş olabilir; tekrar giriş yapıp yeniden dene.";
   if (status === 403)
-    return `Cevap gönderilemedi (${diagnostic}). Güvenlik doğrulaması başarısız; sayfayı yenileyip yeniden dene.`;
+    return "Cevap gönderilemedi. Güvenlik doğrulaması başarısız; sayfayı yenileyip yeniden dene.";
   if (status === 409)
-    return `Cevap gönderilemedi (${diagnostic}). Gönderim sunucuya ulaşmış olabilir; tekrar denediğinde kontrol edilecek.`;
-  return `Cevap gönderilemedi (${diagnostic}). Cevabın korunuyor; tekrar denediğinde önceki gönderim kontrol edilecek.`;
+    return "Cevap gönderilemedi. Gönderim sunucuya ulaşmış olabilir; tekrar denediğinde kontrol edilecek.";
+  if (status === 414)
+    return "Cevap gönderilemedi. İstek adresi geçersiz; sayfayı yenileyip tekrar dene. Cevabın korunuyor.";
+  if (status === 429)
+    return "Cevap gönderilemedi. Çok kısa sürede fazla istek gönderildi; biraz bekleyip tekrar dene.";
+  return "Cevap gönderilemedi. Cevabın korunuyor; tekrar denediğinde önceki gönderim kontrol edilecek.";
 }
 async function populateExerciseStudentSelect() {
   const sel = $("exercise-student-select");
@@ -12704,7 +12719,8 @@ async function loadExercisePage() {
         }
         restoreExerciseAttempts(session);
         rememberExerciseSession(session.id);
-        await loadExerciseQuestions();
+        if (Array.isArray(session.questions)) applyExerciseQuestions(session.questions);
+        else await loadExerciseQuestions();
       } else {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
@@ -13091,18 +13107,21 @@ async function handleExerciseCreate() {
     }
   }
 }
-async function loadExerciseQuestions() {
-  if (!exerciseSession) return;
-  const data = await parseResponse(
-    await exerciseApi(`/exercise-sessions/${exerciseSession.id}/questions`),
-  );
-  exerciseQuestions = Array.isArray(data.questions) ? data.questions : [];
+function applyExerciseQuestions(questions) {
+  exerciseQuestions = Array.isArray(questions) ? questions : [];
   exerciseQuestions.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const unanswered = exerciseQuestions.findIndex((q) => !exerciseAttempts.has(q.questionVersionId));
   currentExerciseQuestionIndex =
     unanswered < 0 ? Math.max(0, exerciseQuestions.length - 1) : unanswered;
   renderExerciseQuestion();
   renderExerciseSession();
+}
+async function loadExerciseQuestions() {
+  if (!exerciseSession) return;
+  const data = await parseResponse(
+    await exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/questions`),
+  );
+  applyExerciseQuestions(data.questions);
 }
 function renderExerciseQuestion() {
   const container = $("exercise-current-question");
@@ -13347,7 +13366,7 @@ function renderExerciseQuestion() {
     } catch (err) {
       const message = isDailyTrainingExercise()
         ? formatDailyTrainingError(err)
-        : err.message || "Soru yüklenemedi.";
+        : "Soru yüklenemedi. Bağlantını kontrol edip tekrar dene.";
       container.innerHTML = `<p class="error">${escapeHtml(message)}</p>`;
     }
   })();
@@ -13536,9 +13555,9 @@ async function handleExerciseSubmitAttempt() {
     } else {
       throw new Error("Bilinmeyen soru tipi");
     }
-  } catch (e) {
+  } catch {
     if (errEl) {
-      errEl.textContent = e.message;
+      errEl.textContent = "Cevap biçimi geçersiz. Lütfen tekrar dene.";
       errEl.classList.remove("hidden");
     }
     return;
@@ -13599,18 +13618,21 @@ async function handleExerciseSubmitAttempt() {
         hintUsed: submittedHintUsed,
         isFinal: submittedIsFinal,
       } = exerciseRequest;
-      const response = await exerciseApi(`/questions/${questionVersionId}/attempts`, {
-        method: "POST",
-        body: JSON.stringify({
-          sessionId,
-          answer: submittedAnswer,
-          clientAttemptId,
-          exposureStartedAt,
-          answerStartedAt: submittedAnswerStartedAt,
-          hintUsed: submittedHintUsed,
-          isFinal: submittedIsFinal,
-        }),
-      });
+      const response = await exerciseApi(
+        `/questions/${encodeURIComponent(questionVersionId)}/attempts`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            sessionId,
+            answer: submittedAnswer,
+            clientAttemptId,
+            exposureStartedAt,
+            answerStartedAt: submittedAnswerStartedAt,
+            hintUsed: submittedHintUsed,
+            isFinal: submittedIsFinal,
+          }),
+        },
+      );
       // A replay can return 409: reconcile from the server, never manufacture success.
       if (response.status === 409 && isPlatformUser === false) {
         const session = await fetchStudentExercise(sessionId);
@@ -13630,7 +13652,7 @@ async function handleExerciseSubmitAttempt() {
         icon: "💡",
         eyebrow: "DEVAM ET",
         title: "Tekrar düşün!",
-        detail: data.feedback || "Bu cevap öğrenmenin bir parçası.",
+        detail: exerciseFeedbackText(data.feedback) || "Bu cevap öğrenmenin bir parçası.",
         kind: "wrong",
         key: "attempt-" + data.id,
       });
@@ -13655,7 +13677,7 @@ async function handleExerciseSubmitAttempt() {
     }
   } catch (err) {
     if (isPremiumLimitError(err)) {
-      errEl.textContent = err.message || "Günlük ücretsiz soru hakkın doldu.";
+      errEl.textContent = "Günlük ücretsiz soru hakkın doldu.";
       errEl.classList.remove("hidden");
       exerciseRequest = null;
       lockExerciseInputs(false);
@@ -13694,7 +13716,7 @@ async function handleExerciseComplete() {
     // on the normal path; if its response is lost, the recovery read below
     // still reconciles the server's final session state.
     exerciseSession = await parseResponse(
-      await exerciseApi(`/exercise-sessions/${exerciseSession.id}/complete`, {
+      await exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/complete`, {
         method: "POST",
         body: "{}",
       }),
