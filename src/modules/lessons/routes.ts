@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { ok } from "../../lib/response.js";
-import { validationError } from "../../lib/errors.js";
+import { isApiError, validationError } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import type { AuthProvider } from "../auth/index.js";
 import { completeStudentLearningStepLesson, getStudentLearningStepLesson } from "./service.js";
@@ -28,9 +28,27 @@ export async function lessonStudentRoutes(
   const preHandler = [requireAuth(opts.authProvider)];
   app.get("/student/learning-path/steps/:stepId/lesson", { preHandler }, async (request) => {
     const query = request.query as { fromStepId?: string };
-    return ok(
-      await getStudentLearningStepLesson(stepId(request), actor(request), query.fromStepId),
-    );
+    const requestedStepId = stepId(request);
+    try {
+      return ok(
+        await getStudentLearningStepLesson(requestedStepId, actor(request), query.fromStepId),
+      );
+    } catch (error) {
+      if (isApiError(error) && error.code === "NOT_FOUND") {
+        request.log.warn(
+          {
+            event: "student.learning_step_lesson.not_found",
+            stepId: requestedStepId,
+            reason:
+              error.message === "Bu öğrenme adımının yayınlanmış dersi yok"
+                ? "MISSING_CONTENT_VERSION"
+                : "CONTENT_OR_LESSON_UNAVAILABLE",
+          },
+          "Learning step lesson unavailable",
+        );
+      }
+      throw error;
+    }
   });
   app.post(
     "/student/learning-path/steps/:stepId/lesson/complete",
