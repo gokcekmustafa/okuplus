@@ -120,6 +120,8 @@ let gamificationRequest = 0;
 let historyRequest = 0;
 let todayLoading = false;
 let learningPathLoading = false;
+let learningPathContinuation = null;
+let learningPathNavigationRevision = 0;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
 let pendingP1Reconcile = null;
@@ -2735,7 +2737,53 @@ function activeLearningPathNodeFromData(data) {
   );
 }
 
+function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
+  learningPathEntryMode = false;
+  activeLearningStepNode = null;
+  activeLearningStepNavigation = null;
+  activeLearningStepNavigationFromStepId = null;
+  // Evict in-flight reads, not the identity-scoped presentation snapshot. The
+  // refreshed map, never the completion response alone, authorizes continuation.
+  insightRequestCache().clear();
+  navigate("dashboard", {
+    continuation:
+      node?.id && !replay && node.status !== "completed"
+        ? { fromId: node.id, nextId: nextStep?.id || null, scope: insightScope() }
+        : null,
+  });
+}
+
+async function continueAfterLearningPathMotion(nodes, continuation, settled) {
+  if (!continuation || continuation !== learningPathContinuation) return;
+  const result = await settled;
+  if (
+    continuation !== learningPathContinuation ||
+    result?.cancelled ||
+    currentPage !== "dashboard" ||
+    continuation.scope !== insightScope() ||
+    document.visibilityState === "hidden"
+  )
+    return;
+  learningPathContinuation = null;
+  const fromIndex = nodes.findIndex((node) => node.id === continuation.fromId);
+  const toIndex = nodes.findIndex((node) => node.status === "active");
+  const target = nodes[toIndex];
+  if (
+    fromIndex < 0 ||
+    nodes[fromIndex].status !== "completed" ||
+    toIndex <= fromIndex ||
+    nodes.slice(fromIndex + 1, toIndex).some((node) => node.status !== "completed") ||
+    (continuation.nextId && target?.id !== continuation.nextId) ||
+    !(isUsableLearningPathNode(target) || target?.type === "NEXT_LEARNING")
+  )
+    return;
+  await startLearningPathNode(target, null, continuation.fromId);
+}
+
 async function startLearningPathNode(node, button, navigationFromStepId = null) {
+  learningPathContinuation = null;
+  const revision = ++learningPathNavigationRevision;
+  const scope = insightScope();
   var tv = node?.templateVersionId;
   var type = node?.type;
   activeLearningStepNode = node;
@@ -2789,6 +2837,7 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
       }),
     });
     var data = await parseResponse(response);
+    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (error) {
@@ -3256,18 +3305,26 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       if (node) void startLearningPathNode(node, el);
     });
   }
-  uiMotion.enhanceRoadmap(container, nodes, insightsIdentity, (milestone) => {
-    showCelebration({
-      icon: "✓",
-      eyebrow: milestone === "cycle" ? "DÖNGÜ TAMAMLANDI" : "ÜNİTE TAMAMLANDI",
-      title:
-        milestone === "cycle" ? "Öğrenme döngüsünü tamamladın!" : "Bir üniteyi daha tamamladın!",
-      detail: "İlerlemen kaydedildi. Öğrenme yoluna buradan devam edebilirsin.",
-      kind: "milestone",
-      major: true,
-      duration: 1600,
-    });
-  });
+  const continuation = learningPathContinuation;
+  const settled = uiMotion.enhanceRoadmap(
+    container,
+    nodes,
+    insightsIdentity,
+    (milestone) => {
+      showCelebration({
+        icon: "✓",
+        eyebrow: milestone === "cycle" ? "DÖNGÜ TAMAMLANDI" : "ÜNİTE TAMAMLANDI",
+        title:
+          milestone === "cycle" ? "Öğrenme döngüsünü tamamladın!" : "Bir üniteyi daha tamamladın!",
+        detail: "İlerlemen kaydedildi. Öğrenme yoluna buradan devam edebilirsin.",
+        kind: "milestone",
+        major: true,
+        duration: 1600,
+      });
+    },
+    continuation?.fromId,
+  );
+  void continueAfterLearningPathMotion(nodes, continuation, settled);
   uiMotion.enhanceProgress(container, "roadmap");
 }
 
@@ -3277,6 +3334,7 @@ async function loadLearningPath() {
   var retryEl = $("learning-path-retry");
   if (!container) return;
   learningPathLoading = true;
+  const continuation = learningPathContinuation;
   clearLearningPathTransitionStatus();
   const scope = insightScope();
   var learningPathPhase = "request";
@@ -3291,7 +3349,8 @@ async function loadLearningPath() {
   try {
     var data = await insightApi("learning-path");
     data = await recoverCompletedP1CycleOnLearningPathLoad(data);
-    if (scope !== insightScope()) return;
+    if (scope !== insightScope() || currentPage !== "dashboard") return;
+    if (continuation !== learningPathContinuation) return;
     if (data.today) renderTodayData(data.today, scope);
     else void loadToday();
     container.setAttribute("aria-busy", "false");
@@ -3333,6 +3392,12 @@ async function loadLearningPath() {
     learningPathPhase = "learning-path-map";
     renderLearningPathMap(pathGroups, data.currentLevel);
   } catch (error) {
+    if (
+      scope !== insightScope() ||
+      currentPage !== "dashboard" ||
+      continuation !== learningPathContinuation
+    )
+      return;
     reportLearningPathClientError(error, learningPathPhase);
     console.error("learning-path-load-failed", {
       requestId: error?.requestId ?? null,
@@ -3348,6 +3413,14 @@ async function loadLearningPath() {
     void loadToday();
   } finally {
     learningPathLoading = false;
+    // A completion may arrive while a previous map read is still in flight.
+    // Do not animate or open a station from that pre-completion response.
+    if (
+      currentPage === "dashboard" &&
+      learningPathContinuation &&
+      continuation !== learningPathContinuation
+    )
+      void loadLearningPath();
   }
 }
 
@@ -3449,6 +3522,8 @@ window.startTodayAssessment = async function (
   navigationFromStepId = null,
   navigationTargetStepId = null,
 ) {
+  const revision = learningPathNavigationRevision;
+  const scope = insightScope();
   try {
     const body = navigationFromStepId
       ? { navigationFromStepId, navigationTargetStepId: navigationTargetStepId || id }
@@ -3458,6 +3533,7 @@ window.startTodayAssessment = async function (
       body: JSON.stringify(body),
     });
     var data = await parseResponse(r);
+    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (e) {
@@ -4498,7 +4574,9 @@ async function completeLearningPathTerminalStep() {
   const node = activeLearningStepNode;
   const button = $("lesson-detail")?.querySelector("[data-learning-terminal-complete]");
   const status = $("lesson-detail-status");
-  if (!node?.id || !button) return;
+  if (!node?.id || !button || button.disabled) return;
+  const revision = learningPathNavigationRevision;
+  const scope = insightScope();
   setAsyncButtonState(button, true, "Tamamlanıyor…");
   if (status) status.textContent = "Son durak tamamlanıyor…";
   try {
@@ -4510,6 +4588,7 @@ async function completeLearningPathTerminalStep() {
       },
     );
     await parseResponse(response);
+    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
     let reconcileResult = null;
     if (node.learningPathId && String(node.learningPathCode || "").startsWith("EDUCATION_V2_P0_")) {
       try {
@@ -4520,16 +4599,12 @@ async function completeLearningPathTerminalStep() {
         pendingP1Reconcile = { p0LearningPathId: node.learningPathId };
       }
     }
-    if (reconcileResult) {
-      await finishP1Reconcile(node.learningPathId, reconcileResult);
-      return;
+    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
+    if (reconcileResult) pendingP1Reconcile = null;
+    returnToLearningPathAfterStep(node);
+    if (reconcileResult?.outcome === "REVIEW_REQUIRED") {
+      setLearningPathTransitionStatus(p1TransitionReviewMessage(reconcileResult), { error: true });
     }
-    learningPathEntryMode = false;
-    activeLearningStepNode = null;
-    activeLearningStepNavigation = null;
-    activeLearningStepNavigationFromStepId = null;
-    resetInsights();
-    navigate("dashboard");
     if (pendingP1Reconcile) {
       setLearningPathTransitionStatus(
         "P0 tamamlandı. Yeni öğrenme yolu hazırlanırken bağlantı sorunu oluştu; tekrar deneyebilirsin.",
@@ -4622,23 +4697,17 @@ async function completeFocusedLearningStep() {
   const node = activeLearningStepNode;
   const button = $("lesson-detail")?.querySelector("[data-learning-step-complete]");
   const status = $("lesson-detail-status");
-  if (!node || !button) return;
+  if (!node || !button || button.disabled) return;
+  const revision = learningPathNavigationRevision;
+  const scope = insightScope();
   setAsyncButtonState(button, true, "Yükleniyor…");
   if (status) status.textContent = "Adım tamamlanıyor…";
   try {
     const data = await parseResponse(
       await learningPathStepApi(node.id, "/complete", { method: "POST", body: "{}" }),
     );
-    const nextStep = data?.nextStep || null;
-    if (!nextStep) {
-      learningPathEntryMode = false;
-      activeLearningStepNode = null;
-      navigate("dashboard");
-      return;
-    }
-    activeLearningStepNode = learningPathTargetWithProgress(node, nextStep, "next");
-    learningPathEntryMode = true;
-    await startLearningPathNode(activeLearningStepNode, null, node.id);
+    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
+    returnToLearningPathAfterStep(node, data?.nextStep || null);
   } catch (err) {
     setAsyncButtonState(button, false, "Yükleniyor…");
     if (status) {
@@ -4818,8 +4887,7 @@ function canAccessPage(page) {
   return false;
 }
 
-function navigate(page) {
-  uiMotion.cancel();
+function navigate(page, { continuation = null } = {}) {
   if (!PAGES.includes(page)) return;
   if (!canAccessPage(page)) {
     const fallback = roleHomePage();
@@ -4828,6 +4896,10 @@ function navigate(page) {
   }
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && !canAccessPage(page)) return;
+
+  uiMotion.cancel();
+  learningPathNavigationRevision++;
+  learningPathContinuation = continuation;
 
   currentPage = page;
 
@@ -12805,21 +12877,61 @@ function returnToExercisePath() {
   navigate("dashboard");
   $("learning-path")?.scrollIntoView({ block: "start" });
 }
-function returnToLearningPathAfterGuidedExercise() {
+function returnToLearningPathAfterGuidedExercise(node, nextStep, replay) {
   if (exerciseBusy) return;
   exerciseReviewMode = false;
   learningPathEntryMode = false;
   exerciseMode = null;
   activeTrainingActivityId = null;
-  activeLearningStepNode = null;
-  activeLearningStepNavigation = null;
-  activeLearningStepNavigationFromStepId = null;
   rememberExerciseSession(null);
   resetDailyTrainingState();
   resetExerciseState();
-  renderExerciseSession();
-  navigate("dashboard");
-  $("learning-path")?.scrollIntoView({ block: "start" });
+  returnToLearningPathAfterStep(node, nextStep, replay);
+}
+
+async function finishGuidedExerciseCompletion(originalSession, node, isCurrent, daily) {
+  const stepId = exerciseSession?.learningStepId || originalSession.learningStepId;
+  if (
+    isPlatformUser !== false ||
+    daily ||
+    !stepId ||
+    exerciseSession?.status !== "COMPLETED" ||
+    originalSession.assignmentId ||
+    originalSession.deviceInfo?.source === "INDEPENDENT_TRAINING"
+  )
+    return false;
+  if (!isCurrent()) return true;
+  const nextStep = exerciseSession.nextLearningStep || null;
+  const replay =
+    originalSession.deviceInfo?.source === "LEARNING_PATH_REPLAY" || node?.status === "completed";
+  let nextCycleTransition = exerciseSession.nextLearningCycle || null;
+  if (
+    !nextStep &&
+    !replay &&
+    node?.learningPathCode === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
+  ) {
+    try {
+      nextCycleTransition ||= await reconcileP1ToNextCycle(node.learningPathId);
+    } catch {
+      if (isCurrent()) pendingP1CycleReconcile = { p1LearningPathId: node.learningPathId };
+    }
+  }
+  if (!isCurrent()) return true;
+  exerciseBusy = false;
+  // The original server session link survives a lost completion response.
+  // Optional result/points rendering is not part of the guided return path.
+  returnToLearningPathAfterGuidedExercise({ ...node, id: stepId }, nextStep, replay);
+  if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
+    setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
+      error: true,
+    });
+  } else if (pendingP1CycleReconcile) {
+    setLearningPathTransitionStatus(
+      "Öğrenme döngün tamamlandı. Sonraki döngü şu anda kontrol edilemedi; ilerlemen korunuyor.",
+      { retry: true, error: true },
+    );
+  }
+  return true;
 }
 function renderDailyTrainingResult() {
   const resultCard = $("exercise-result-card");
@@ -13726,6 +13838,15 @@ async function handleExerciseComplete() {
   exerciseBusy = true;
   let completionConfirmed = false;
   const student = isPlatformUser === false;
+  const originalSession = exerciseSession;
+  const originalNode = activeLearningStepNode;
+  const scope = insightScope();
+  const revision = learningPathNavigationRevision;
+  const daily = student && isDailyTrainingExercise();
+  const isCurrent = () =>
+    scope === insightScope() &&
+    revision === learningPathNavigationRevision &&
+    exerciseSession?.id === originalSession.id;
   const btn = $(student ? "exercise-submit-attempt" : "exercise-complete-btn");
   const errEl = $(student ? "exercise-attempt-error" : "exercise-complete-error");
   errEl.classList.add("hidden");
@@ -13739,40 +13860,16 @@ async function handleExerciseComplete() {
     // The completion POST is authoritative. Avoid a redundant preflight GET
     // on the normal path; if its response is lost, the recovery read below
     // still reconciles the server's final session state.
-    exerciseSession = await parseResponse(
+    const completed = await parseResponse(
       await exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/complete`, {
         method: "POST",
         body: "{}",
       }),
     );
+    if (!isCurrent()) return;
+    exerciseSession = completed;
     completionConfirmed = exerciseSession?.status === "COMPLETED";
     if (!completionConfirmed) throw new Error("Tamamlanma durumu doğrulanamadı");
-    const daily = student && isDailyTrainingExercise();
-    const guidedLearningPathCompletion =
-      student && !daily && Boolean(exerciseSession.learningStepId);
-    let nextCycleTransition = exerciseSession.nextLearningCycle || null;
-
-    // Returning to the roadmap is part of the authoritative guided flow. Do
-    // it before optional telemetry, points, or celebration UI so a non-critical
-    // presentation failure cannot leave the student on a completed exercise
-    // result screen.
-    if (
-      guidedLearningPathCompletion &&
-      !exerciseSession.nextLearningStep &&
-      exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY" &&
-      String(activeLearningStepNode?.learningPathCode || "") ===
-        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
-    ) {
-      try {
-        nextCycleTransition ||= await reconcileP1ToNextCycle(activeLearningStepNode.learningPathId);
-      } catch {
-        // The completed session remains authoritative. Keep a separate P1
-        // retry state so this does not accidentally retry the P0 transition.
-        pendingP1CycleReconcile = {
-          p1LearningPathId: activeLearningStepNode.learningPathId,
-        };
-      }
-    }
 
     if (student && typeof recordPilotTelemetry === "function") {
       try {
@@ -13792,34 +13889,8 @@ async function handleExerciseComplete() {
       }
     }
 
-    if (guidedLearningPathCompletion) {
-      const completedStep = {
-        ...(activeLearningStepNode || {}),
-        id: exerciseSession.learningStepId,
-        status: "completed",
-      };
-      activeLearningStepNode = completedStep;
-      activeLearningStepNavigation = normalizeLearningPathNavigation(
-        {
-          previousStep: activeLearningStepNavigation?.previousStep || null,
-          nextStep: exerciseSession.nextLearningStep || null,
-        },
-        completedStep,
-      );
-      exerciseBusy = false;
-      returnToLearningPathAfterGuidedExercise();
-      if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
-        setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
-          error: true,
-        });
-      } else if (pendingP1CycleReconcile) {
-        setLearningPathTransitionStatus(
-          "Öğrenme döngün tamamlandı. Sonraki döngü şu anda kontrol edilemedi; ilerlemen korunuyor.",
-          { retry: true, error: true },
-        );
-      }
+    if (await finishGuidedExerciseCompletion(originalSession, originalNode, isCurrent, daily))
       return;
-    }
 
     if (student && !daily) {
       const isAssessment = Boolean(exerciseSession.assessmentId);
@@ -13894,9 +13965,11 @@ async function handleExerciseComplete() {
     // before a response or a non-critical follow-up operation fails. Re-read
     // the session before showing a failure so a lost response does not turn a
     // completed exercise into a misleading retry prompt.
+    if (!isCurrent()) return;
     if (!completionConfirmed && student && exerciseSession?.id) {
       try {
         const reconciled = await fetchStudentExercise(exerciseSession.id);
+        if (!isCurrent()) return;
         if (reconciled?.status === "COMPLETED") {
           exerciseSession = reconciled;
           completionConfirmed = true;
@@ -13907,6 +13980,8 @@ async function handleExerciseComplete() {
       }
     }
     if (completionConfirmed) {
+      if (await finishGuidedExerciseCompletion(originalSession, originalNode, isCurrent, daily))
+        return;
       exerciseAwaitingNext = true;
       try {
         renderExerciseSession();
@@ -17826,6 +17901,8 @@ function insightRequestCache() {
   return globalThis.__okuInsightRequests;
 }
 function resetInsights() {
+  learningPathContinuation = null;
+  learningPathNavigationRevision++;
   uiMotion.reset();
   progressRequest++;
   gamificationRequest++;

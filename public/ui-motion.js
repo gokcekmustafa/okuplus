@@ -1,5 +1,6 @@
 // Presentation only: these helpers never fetch, persist, unlock or score anything.
-// Final server state is rendered first; motion is optional and never awaited.
+// Final server state is rendered first. Callers may await presentation before
+// opening a server-unlocked station; motion never determines access itself.
 export function planRoadmapTransition(previous, current) {
   if (!previous?.length || !current?.length) return null;
   const from = previous.find((node) => node.status === "active");
@@ -54,11 +55,13 @@ export function createUiMotion(env = globalThis) {
   let snapshot = [];
   let roadmapContainer = null;
   let frame = null;
+  let roadmapRun = null;
   const allowed = () => !media?.matches && env.document?.visibilityState !== "hidden";
 
   function cancel() {
     if (frame !== null) env.cancelAnimationFrame?.(frame);
     frame = null;
+    roadmapRun?.finish(true);
     for (const animation of animations) animation.cancel();
     animations.clear();
   }
@@ -72,13 +75,13 @@ export function createUiMotion(env = globalThis) {
     awards.clear();
   }
 
-  function play(element, keyframes, duration = 180) {
+  function play(element, keyframes, duration = 180, easing = "cubic-bezier(.2,.7,.25,1)") {
     if (!allowed() || !element?.animate || element.isConnected === false) return null;
     try {
       byTarget.get(element)?.cancel();
       const animation = element.animate(keyframes, {
         duration,
-        easing: "cubic-bezier(.2,.7,.25,1)",
+        easing,
       });
       byTarget.set(element, animation);
       animations.add(animation);
@@ -103,12 +106,18 @@ export function createUiMotion(env = globalThis) {
     ]);
   }
 
-  function enhanceRoadmap(container, nodes, identity, onMilestone) {
+  function enhanceRoadmap(container, nodes, identity, onMilestone, completedStepId = null) {
     if (identity !== scope) {
       reset();
       scope = identity;
     }
-    const plan = planRoadmapTransition(snapshot, nodes);
+    // A resumed session may have a stale/missing map snapshot. Its confirmed
+    // completion provides the origin, but the fresh server map must mark it complete
+    // and expose the next active station without an incomplete intervening step.
+    const plan = planRoadmapTransition(
+      completedStepId ? [{ id: completedStepId, status: "active" }] : snapshot,
+      nodes,
+    );
     roadmapContainer = container;
     snapshot = nodes.map(({ id, status, unitId, unitTitle, learningPathId, learningPathCode }) => ({
       id,
@@ -119,10 +128,26 @@ export function createUiMotion(env = globalThis) {
       learningPathCode,
     }));
     if (frame !== null) env.cancelAnimationFrame?.(frame);
+    roadmapRun?.finish(true);
+    let resolve;
+    const settled = new Promise((done) => {
+      resolve = done;
+    });
+    const run = {
+      finish(cancelled = false) {
+        if (roadmapRun !== run) return;
+        roadmapRun = null;
+        resolve({ cancelled, plan });
+      },
+    };
+    roadmapRun = run;
     frame =
       env.requestAnimationFrame?.(() => {
         frame = null;
-        if (container.isConnected === false || env.document?.visibilityState === "hidden") return;
+        if (container.isConnected === false || env.document?.visibilityState === "hidden") {
+          run.finish(true);
+          return;
+        }
         const buttons = Array.from(container.querySelectorAll(".learning-map-v6-node"));
         const current = buttons.find((button) => button.getAttribute("aria-current") === "step");
         if (current) {
@@ -134,11 +159,15 @@ export function createUiMotion(env = globalThis) {
             const nearby = Math.abs(rect.top - env.innerHeight / 2) < env.innerHeight * 1.5;
             current.scrollIntoView({
               block: "center",
-              behavior: plan && nearby && allowed() ? "smooth" : "auto",
+              behavior: plan && !completedStepId && nearby && allowed() ? "smooth" : "auto",
             });
           }
         }
-        if (!plan) return;
+        if (!plan) {
+          run.finish();
+          return;
+        }
+        let movement = null;
         const from = buttons.find((button) => button.dataset.nodeId === plan.fromId);
         const to = buttons.find((button) => button.dataset.nodeId === plan.toId);
         const fromMarker = from?.querySelector(".learning-map-v6-marker-wrap");
@@ -156,8 +185,9 @@ export function createUiMotion(env = globalThis) {
             };
           });
           const character = to.querySelector(".learning-map-v6-character img");
-          if (Math.abs(dy) <= env.innerHeight * 1.5) play(character, frames, 680);
-          else enter(character, plan.toId);
+          if (Math.abs(dy) <= env.innerHeight * 1.5)
+            movement = play(character, frames, 1400, "ease-in-out");
+          else movement = play(character, [{ opacity: 0.5 }, { opacity: 1 }], 400);
           play(
             to.querySelector(".learning-map-v6-marker"),
             [
@@ -180,7 +210,15 @@ export function createUiMotion(env = globalThis) {
             /* Celebration is optional. */
           }
         }
+        if (movement)
+          movement.finished.then(
+            () => run.finish(),
+            () => run.finish(true),
+          );
+        else run.finish();
       }) ?? null;
+    if (frame === null) run.finish();
+    return settled;
   }
 
   function enhanceProgress(container, keyPrefix) {

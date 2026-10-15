@@ -18,9 +18,19 @@ function harness(reduced = false) {
     addEventListener: vi.fn(),
     querySelector: () => null,
   };
-  const animations: { cancel: ReturnType<typeof vi.fn>; finished: Promise<unknown> }[] = [];
+  const animations: {
+    cancel: ReturnType<typeof vi.fn>;
+    finish: () => void;
+    finished: Promise<unknown>;
+  }[] = [];
   const animate = vi.fn((_frames: unknown[], _options: unknown) => {
-    const animation = { cancel: vi.fn(), finished: new Promise(() => {}) };
+    let finish!: () => void;
+    let reject!: () => void;
+    const finished = new Promise<void>((resolve, fail) => {
+      finish = resolve;
+      reject = fail;
+    });
+    const animation = { cancel: vi.fn(() => reject()), finish, finished };
     animations.push(animation);
     return animation;
   });
@@ -69,6 +79,45 @@ function harness(reduced = false) {
 }
 
 describe("server-confirmed, optional UI motion", () => {
+  it("settles only after the slower character movement has finished", async () => {
+    const h = harness();
+    const done = vi.fn();
+    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
+    void pending.then(done);
+    h.flush();
+    await Promise.resolve();
+    expect(done).not.toHaveBeenCalled();
+    expect(h.animate.mock.calls.find(([frames]) => frames.length === 9)?.[1]).toMatchObject({
+      duration: 1400,
+      easing: "ease-in-out",
+    });
+    h.animations[0]!.finish();
+    await expect(pending).resolves.toMatchObject({
+      cancelled: false,
+      plan: { fromId: "31", toId: "32" },
+    });
+  });
+
+  it.each(["scheduled", "moving"])(
+    "settles a cancelled %s roadmap without continuation",
+    async (phase) => {
+      const h = harness();
+      const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
+      if (phase === "moving") h.flush();
+      h.motion.cancel();
+      h.flush();
+      await expect(pending).resolves.toMatchObject({ cancelled: true });
+    },
+  );
+
+  it("continues without an artificial delay when reduced motion is enabled", async () => {
+    const h = harness(true);
+    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
+    h.flush();
+    await expect(pending).resolves.toMatchObject({ cancelled: false, plan: { toId: "32" } });
+    expect(h.animate).not.toHaveBeenCalled();
+  });
+
   it("never invents movement on first load, an unchanged path or an incomplete source", () => {
     expect(planRoadmapTransition([], after())).toBeNull();
     expect(planRoadmapTransition(before(), before())).toBeNull();

@@ -48,7 +48,21 @@ function harness() {
     exerciseQuestions: [{ questionVersionId: "q1" }],
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
+    activeLearningStepNode: null,
+    learningPathContinuation: null,
+    learningPathNavigationRevision: 0,
+    currentPage: "exercise",
+    insightScope: () => "student:tenant",
+    insightRequestCache: () => new Map(),
+    pendingP1CycleReconcile: null,
   });
+  runInContext(
+    source.slice(
+      source.indexOf("function returnToLearningPathAfterStep("),
+      source.indexOf("async function startLearningPathNode("),
+    ),
+    context,
+  );
   runInContext(exerciseCode, context);
   return { context, get, run: (code: string) => runInContext(code, context) };
 }
@@ -376,6 +390,78 @@ describe("exercise UX state from production frontend", () => {
     expect(h.context.lastNavigatedPage).toBe("dashboard");
     expect(h.context.learningPathEntryMode).toBe(false);
     expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
+  });
+
+  it.each(["response", "recovery"])(
+    "returns a confirmed guided %s through the same roadmap continuation",
+    async (mode) => {
+      const h = harness();
+      const original = { id: "session", status: "IN_PROGRESS", learningStepId: "step-35" };
+      h.context.exerciseSession = original;
+      h.context.activeLearningStepNode = { id: "step-35", status: "active" };
+      h.context.exerciseApi = async () => {
+        if (mode === "recovery") throw new Error("response lost");
+        return {};
+      };
+      // A reduced response must not erase the original server-provided step link.
+      const completed = { id: "session", status: "COMPLETED" };
+      h.context.parseResponse = async () => completed;
+      h.context.fetchStudentExercise = async () => completed;
+      h.context.rememberExerciseSession = () => {};
+      h.context.resetDailyTrainingState = () => {};
+      h.context.resetExerciseState = () => {};
+      h.context.renderExerciseSession = () => {
+        throw new Error("result UI must not block return");
+      };
+      h.context.navigate = (page: string, options: unknown) => {
+        h.context.lastNavigation = { page, options };
+      };
+      await h.run("handleExerciseComplete()");
+      expect(h.context.lastNavigation).toEqual({
+        page: "dashboard",
+        options: { continuation: { fromId: "step-35", nextId: null, scope: "student:tenant" } },
+      });
+      expect(original.status).toBe("IN_PROGRESS");
+    },
+  );
+
+  it.each(["assignment", "independent", "daily"])(
+    "does not continue a %s session on the roadmap",
+    async (kind) => {
+      const h = harness();
+      h.context.exerciseSession = {
+        id: "session",
+        status: "IN_PROGRESS",
+        learningStepId: "step-35",
+        ...(kind === "assignment" ? { assignmentId: "assignment" } : {}),
+        ...(kind === "independent" ? { deviceInfo: { source: "INDEPENDENT_TRAINING" } } : {}),
+      };
+      h.context.returnToLearningPathAfterGuidedExercise = () => {
+        throw new Error("unexpected return");
+      };
+      h.context.exerciseSession.status = "COMPLETED";
+      expect(
+        await h.run(
+          `finishGuidedExerciseCompletion(exerciseSession, null, () => true, ${kind === "daily"})`,
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("ignores completion responses after the student has navigated elsewhere", async () => {
+    const h = harness();
+    let resolve!: (value: unknown) => void;
+    h.context.exerciseSession.learningStepId = "step-35";
+    h.context.exerciseApi = () =>
+      new Promise((done) => {
+        resolve = done;
+      });
+    h.context.parseResponse = async () => ({ id: "session", status: "COMPLETED" });
+    const pending = h.run("handleExerciseComplete()");
+    h.context.learningPathNavigationRevision++;
+    resolve({});
+    await pending;
+    expect(h.context.exerciseSession.status).toBe("IN_PROGRESS");
   });
 
   it("opens the final Learning Path station as a terminal checkpoint", () => {

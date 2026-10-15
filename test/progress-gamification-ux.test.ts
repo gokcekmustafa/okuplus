@@ -37,6 +37,8 @@ function harness(missingIds: string[] = []) {
     escapeHtml: (s: string) => s.replaceAll("<", "&lt;"),
     getStoredTokens: () => ({ accessToken: "token", tenantId: "personal" }),
     insightsIdentity: "student:personal",
+    learningPathContinuation: null,
+    learningPathNavigationRevision: 0,
     progressRequest: 0,
     gamificationRequest: 0,
     historyRequest: 0,
