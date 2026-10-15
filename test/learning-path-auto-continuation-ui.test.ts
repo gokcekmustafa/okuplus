@@ -71,6 +71,56 @@ function harness() {
 }
 
 describe("guided station completion → map → motion → next server-unlocked station", () => {
+  it("recovers the latest completed cycle using the server route link, beyond station 40", async () => {
+    const reconcile = vi.fn(async () => ({ outcome: "ASSIGNED" }));
+    const fresh = { paths: [{ path: { id: "cycle-3" }, nodes: [{ id: "41", status: "active" }] }] };
+    const context = createContext({
+      reconcileP1ToNextCycle: reconcile,
+      insightApi: vi.fn(async () => fresh),
+      setLearningPathTransitionStatus: vi.fn(),
+    });
+    runInContext(
+      section(
+        "async function recoverCompletedP1CycleOnLearningPathLoad(",
+        "async function freshLearningPathForTransition(",
+      ),
+      context,
+    );
+    context.data = {
+      paths: [
+        {
+          path: {
+            id: "cycle-1",
+            code: "EDUCATION_V2_P1_A_FIRST",
+            routeStatus: "COMPLETED",
+            nextCycleCode: "EDUCATION_V2_P1_A_SECOND",
+          },
+          nodes: [{ status: "completed" }],
+        },
+        {
+          path: {
+            id: "cycle-2",
+            code: "EDUCATION_V2_P1_A_SECOND",
+            routeStatus: "ACTIVE",
+            nextCycleCode: "EDUCATION_V2_P1_A_THIRD",
+          },
+          nodes: [{ status: "completed" }],
+        },
+      ],
+      routeContinuation: { futureCycles: [{ publicationApproved: true, graphAvailable: true }] },
+    };
+    expect(await runInContext("recoverCompletedP1CycleOnLearningPathLoad(data)", context)).toBe(
+      fresh,
+    );
+    expect(reconcile).toHaveBeenCalledExactlyOnceWith("cycle-2");
+    context.data.routeContinuation.futureCycles[0].publicationApproved = false;
+    reconcile.mockClear();
+    expect(await runInContext("recoverCompletedP1CycleOnLearningPathLoad(data)", context)).toBe(
+      context.data,
+    );
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
   it("returns first, waits for movement, then starts exactly once with the exact source link", async () => {
     const h = harness();
     h.complete();

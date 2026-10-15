@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+import {
+  LEARNING_ROUTE_CYCLES,
+  learningRouteCycle,
+  nextLearningRouteCycle,
+  upcomingLearningRouteCycles,
+  matchesLearningRouteGraph,
+  validateLearningRouteCatalog,
+  type LearningRouteCycle,
+} from "../src/curriculum/learning-route-catalog.js";
+import { resolveLearningPathNodeStatuses } from "../src/modules/learning-path/service.js";
+import { selectPublishedPathCandidates } from "../src/modules/learning-path/service.js";
+
+function graph(cycle: LearningRouteCycle) {
+  return {
+    code: cycle.pathCode,
+    version: cycle.version,
+    units: cycle.units.map((unit) => ({
+      code: unit.code,
+      status: "PUBLISHED",
+      steps: unit.steps.map(({ key }, index) => {
+        const step = cycle.manifest.steps.find((item) => item.stableKey === key)!;
+        return {
+          id: `${cycle.pathCode}:${key}`,
+          stableKey: `${cycle.programId}:${key}`,
+          position: index + 1,
+          type: step.type,
+          status: "PUBLISHED",
+          isActive: true,
+          prerequisiteStepId: step.prerequisiteKeys[0]
+            ? `${cycle.pathCode}:${step.prerequisiteKeys[0]}`
+            : null,
+          completionRule: {},
+          contentVersionId: step.content?.versionId ?? null,
+          exerciseTemplateVersionId: step.exercise?.versionId ?? null,
+          assessmentId: step.assessment?.versionId ?? null,
+        };
+      }),
+    })),
+  };
+}
+
+describe("versioned learning routes", () => {
+  it("chains real authored cycles without changing the publication decision or route family", () => {
+    expect(validateLearningRouteCatalog()).toEqual([]);
+    const a = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
+    expect(a.map((cycle) => cycle.manifest.steps.length)).toEqual([9, 9, 7]);
+    expect(nextLearningRouteCycle(a[0]!.pathCode)?.pathCode).toBe(a[1]!.pathCode);
+    expect(nextLearningRouteCycle(a[1]!.pathCode)?.pathCode).toBe(a[2]!.pathCode);
+    expect(upcomingLearningRouteCycles(a[0]!.pathCode).map((cycle) => cycle.sequence)).toEqual([
+      2, 3,
+    ]);
+    expect(a[2]!.publicationApproved()).toBe(false);
+    expect(nextLearningRouteCycle(a[2]!.pathCode)).toBeNull();
+    expect(nextLearningRouteCycle("unknown-route")).toBeNull();
+    expect(learningRouteCycle(a[0]!.pathCode)?.scopeCode).toBe("G8_12");
+  });
+
+  it("accepts every complete source graph, including the seven-station continuation", () => {
+    for (const cycle of LEARNING_ROUTE_CYCLES)
+      expect(matchesLearningRouteGraph(graph(cycle))).toBe(true);
+  });
+
+  it.each([
+    "version",
+    "order",
+    "unit",
+    "prerequisite",
+    "content",
+    "template",
+    "assessment",
+    "published",
+  ])("rejects a wrong %s in an otherwise published graph", (kind) => {
+    const cycle = LEARNING_ROUTE_CYCLES.find((item) => item.sequence === 2)!;
+    const candidate = graph(cycle);
+    const steps = candidate.units.flatMap((unit) => unit.steps);
+    if (kind === "version") candidate.version++;
+    if (kind === "order") candidate.units[0]!.steps.reverse();
+    if (kind === "unit") candidate.units[0]!.code = "unrelated-unit";
+    if (kind === "prerequisite") steps[1]!.prerequisiteStepId = "another-student-step";
+    if (kind === "content")
+      steps.find((step) => step.contentVersionId)!.contentVersionId = "wrong-version";
+    if (kind === "template")
+      steps.find((step) => step.exerciseTemplateVersionId)!.exerciseTemplateVersionId =
+        "wrong-version";
+    if (kind === "assessment")
+      steps.find((step) => step.assessmentId)!.assessmentId = "wrong-version";
+    if (kind === "published") steps[0]!.status = "DRAFT";
+    expect(matchesLearningRouteGraph(candidate)).toBe(false);
+  });
+
+  it("rejects a cross-family, cross-scope or missing continuation in the authoring contract", () => {
+    const a = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.sequence === 1 && cycle.routeFamily === "A",
+    )!;
+    for (const next of [
+      "missing",
+      LEARNING_ROUTE_CYCLES.find((cycle) => cycle.routeFamily === "B")!.pathCode,
+    ]) {
+      expect(
+        validateLearningRouteCatalog(
+          LEARNING_ROUTE_CYCLES.map((cycle) =>
+            cycle === a ? { ...cycle, nextPathCode: next } : cycle,
+          ),
+        ).length,
+      ).toBeGreaterThan(0);
+    }
+    const candidates = LEARNING_ROUTE_CYCLES.map((cycle) =>
+      cycle.sequence === 2 ? { ...cycle, scopeCode: "different-scope" } : cycle,
+    );
+    expect(validateLearningRouteCatalog(candidates).length).toBeGreaterThan(0);
+  });
+
+  it("opens station 41 after 40 completions and continues beyond 200 with no numeric ceiling", () => {
+    for (const completed of [39, 40, 199, 239]) {
+      const statuses = resolveLearningPathNodeStatuses(
+        Array.from({ length: 250 }, (_, index) => ({
+          id: `synthetic-${index + 1}`,
+          prerequisiteIds: index ? [`synthetic-${index}`] : [],
+          eligible: true,
+          completed: index < completed,
+        })),
+      );
+      expect(statuses.get(`synthetic-${completed + 1}`)).toBe("active");
+      expect([...statuses.values()].filter((status) => status === "active")).toHaveLength(1);
+      expect(statuses.get(`synthetic-${completed + 2}`)).toBe("locked");
+    }
+  });
+
+  it("retains all completed cycles in source order before the active cycle", () => {
+    const cycles = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
+    const candidates = [...cycles].reverse().map((cycle) => ({
+      code: cycle.pathCode,
+      area: "READING_COMPREHENSION",
+      tenantId: null,
+      enrolled: true,
+      activeEnrollment: cycle.sequence === 3,
+      completedEnrollment: cycle.sequence < 3,
+      version: cycle.version,
+    }));
+    expect(selectPublishedPathCandidates(candidates, "tenant").map((cycle) => cycle.code)).toEqual(
+      cycles.map((cycle) => cycle.pathCode),
+    );
+  });
+});

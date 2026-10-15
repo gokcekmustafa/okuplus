@@ -70,6 +70,26 @@ function officialNeed(family: AdaptiveRouteFamily, complete = true) {
 }
 
 describe("P0 to P1 route selection", () => {
+  it("does not select a later published cycle as the student's initial route", () => {
+    const future: RouteSelectionCandidate = {
+      ...candidates[0]!,
+      id: "cycle-2",
+      code: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12",
+      version: 2,
+    };
+    expect(
+      selectP1Route({
+        levelId: "level-1",
+        measurement: measurement(),
+        candidates: [future, ...candidates],
+      }).recommendedPathId,
+    ).toBe("p1-a");
+    expect(
+      selectP1Route({ levelId: "level-1", measurement: measurement(), candidates: [future] })
+        .recommendedPathId,
+    ).toBeNull();
+  });
+
   it("balanced final measurement selects the published P1-A candidate", () => {
     const result = selectP1Route({ levelId: "level-1", measurement: measurement(), candidates });
 

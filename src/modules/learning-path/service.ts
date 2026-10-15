@@ -6,6 +6,12 @@ import {
 } from "../../curriculum/academic-reading-p0.js";
 import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor, type StudentActor } from "../student-learning/policy.js";
+import { resolveTrainingRuntimeConfig } from "../training/exercise-contract.js";
+import {
+  learningRouteCycle,
+  matchesLearningRouteGraph,
+  upcomingLearningRouteCycles,
+} from "../../curriculum/learning-route-catalog.js";
 
 export type LearningPathActor = StudentActor;
 
@@ -26,6 +32,17 @@ type PathStepRow = PrismaTypes.LearningStepGetPayload<{
     exerciseTemplateVersionId: true;
     assessmentId: true;
     completionRule: true;
+    contentVersion: {
+      select: { status: true; content: { select: { status: true; deletedAt: true } } };
+    };
+    exerciseTemplateVersion: {
+      select: {
+        status: true;
+        config: true;
+        template: { select: { status: true; deletedAt: true } };
+      };
+    };
+    assessment: { select: { status: true; deletedAt: true } };
   };
 }>;
 
@@ -34,6 +51,7 @@ type PathUnitRow = {
   code: string;
   title: string;
   position: number;
+  status: string;
   steps: PathStepRow[];
 };
 
@@ -42,9 +60,11 @@ type PublishedPath = {
   tenantId: string | null;
   code: string;
   version: number;
+  levelId: string | null;
   title: string;
   area: string;
   enrolled?: boolean;
+  activeEnrollment?: boolean;
   completedEnrollment?: boolean;
   progressCount?: number;
   completedProgressCount?: number;
@@ -68,6 +88,7 @@ export type LearningPathEvidenceStep = {
 export type LearningPathSessionEvidence = {
   learningStepId: string | null;
   templateVersionId: string;
+  deviceInfo?: unknown;
 };
 
 export type LearningPathStepEvidence = {
@@ -106,6 +127,13 @@ export function resolveLearningPathStepEvidence(
 
   const sessionCounts = new Map<string, number>();
   for (const session of sessions) {
+    const source =
+      session.deviceInfo &&
+      typeof session.deviceInfo === "object" &&
+      !Array.isArray(session.deviceInfo)
+        ? (session.deviceInfo as Record<string, unknown>).source
+        : null;
+    if (source === "INDEPENDENT_TRAINING" || source === "LEARNING_PATH_REPLAY") continue;
     // Sessions created before learningStepId was persisted can still be
     // recovered when their template belongs to exactly one step in this path.
     // A shared template remains intentionally ambiguous and is never used to
@@ -184,6 +212,7 @@ const PATH_SELECT = {
   tenantId: true,
   code: true,
   version: true,
+  levelId: true,
   title: true,
   area: true,
   units: {
@@ -194,6 +223,7 @@ const PATH_SELECT = {
       code: true,
       title: true,
       position: true,
+      status: true,
       steps: {
         where: { status: "PUBLISHED" as const, isActive: true },
         orderBy: { position: "asc" as const },
@@ -213,6 +243,17 @@ const PATH_SELECT = {
           exerciseTemplateVersionId: true,
           assessmentId: true,
           completionRule: true,
+          contentVersion: {
+            select: { status: true, content: { select: { status: true, deletedAt: true } } },
+          },
+          exerciseTemplateVersion: {
+            select: {
+              status: true,
+              config: true,
+              template: { select: { status: true, deletedAt: true } },
+            },
+          },
+          assessment: { select: { status: true, deletedAt: true } },
         },
       },
     },
@@ -293,19 +334,21 @@ async function findPublishedPaths(tx: PrismaTypes.TransactionClient, actor: Lear
     progressByPath.set(pathId, current);
   }
 
-  const candidates = rows.map((row) => {
-    const progress = progressByPath.get(row.id) ?? { total: 0, completed: 0 };
-    return {
-      ...row,
-      enrolled: row.enrollments.length > 0,
-      activeEnrollment: row.enrollments.some((enrollment) => enrollment.routeStatus === "ACTIVE"),
-      completedEnrollment: row.enrollments.some(
-        (enrollment) => enrollment.routeStatus === "COMPLETED",
-      ),
-      progressCount: progress.total,
-      completedProgressCount: progress.completed,
-    } as PublishedPath;
-  });
+  const candidates = rows
+    .filter((row) => learningRouteCycle(row.code)?.publicationApproved() !== false)
+    .map((row) => {
+      const progress = progressByPath.get(row.id) ?? { total: 0, completed: 0 };
+      return {
+        ...row,
+        enrolled: row.enrollments.length > 0,
+        activeEnrollment: row.enrollments.some((enrollment) => enrollment.routeStatus === "ACTIVE"),
+        completedEnrollment: row.enrollments.some(
+          (enrollment) => enrollment.routeStatus === "COMPLETED",
+        ),
+        progressCount: progress.total,
+        completedProgressCount: progress.completed,
+      } as PublishedPath;
+    });
   return selectPublishedPathCandidates(candidates, actor.tenantId);
 }
 
@@ -473,14 +516,11 @@ export function selectPublishedPathCandidates<T extends PublishedPathSelectionCa
       (areaOrder.get(a.area) ?? Number.MAX_SAFE_INTEGER) -
         (areaOrder.get(b.area) ?? Number.MAX_SAFE_INTEGER) ||
       aHistorical - bHistorical ||
+      (learningRouteCycle(a.code)?.sequence ?? 0) - (learningRouteCycle(b.code)?.sequence ?? 0) ||
       a.area.localeCompare(b.area) ||
       a.code.localeCompare(b.code)
     );
   });
-}
-
-async function findPublishedPath(tx: PrismaTypes.TransactionClient, actor: LearningPathActor) {
-  return (await findPublishedPaths(tx, actor))[0] ?? null;
 }
 
 function flattenSteps(path: PublishedPath) {
@@ -508,21 +548,16 @@ function levelEligible(
   return true;
 }
 
-async function readPathState(
+/** One evidence read per table for the entire route, regardless of its cycle count. */
+async function readPathStates(
   tx: PrismaTypes.TransactionClient,
   actor: LearningPathActor,
-  selectedPath?: PublishedPath,
+  paths: readonly PublishedPath[],
   contentEvidenceStepIds?: ReadonlySet<string>,
-): Promise<{
-  path: PublishedPath;
-  currentLevel: { id: string; code: string; name: string; displayOrder: number } | null;
-  progress: Map<string, StepProgressRow>;
-} | null> {
+): Promise<ReadPathState[]> {
   assertStudent(actor);
-  const path = selectedPath ?? (await findPublishedPath(tx, actor));
-  if (!path) return null;
-
-  const pathSteps = flattenSteps(path);
+  if (!paths.length) return [];
+  const pathSteps = paths.flatMap(flattenSteps);
   const pathStepIds = pathSteps.map((step) => step.id);
   const templateVersionIds = pathSteps
     .map((step) => step.exerciseTemplateVersionId)
@@ -565,7 +600,7 @@ async function readPathState(
         where: {
           tenantId: actor.tenantId,
           studentId: actor.userId,
-          learningStep: { unit: { pathId: path.id } },
+          learningStepId: { in: pathStepIds },
         },
         select: { learningStepId: true, status: true, completedAt: true },
       }),
@@ -587,7 +622,7 @@ async function readPathState(
               assessmentId: null,
               trainingSessionItem: { is: null },
             },
-            select: { learningStepId: true, templateVersionId: true },
+            select: { learningStepId: true, templateVersionId: true, deviceInfo: true },
           })
         : Promise.resolve([]),
       contentVersionIds.length
@@ -641,7 +676,7 @@ async function readPathState(
     new Set(completedByContent.keys()),
   );
 
-  const progress = new Map(
+  const progress = new Map<string, StepProgressRow>(
     progressRows.map((row) => {
       const step = stepById.get(row.learningStepId);
       const evidence = stepEvidence.get(row.learningStepId);
@@ -680,11 +715,50 @@ async function readPathState(
     }
   }
 
-  return {
-    path,
-    currentLevel,
-    progress,
-  };
+  return paths.map((path) => {
+    const finalized = path.completedEnrollment && matchesLearningRouteGraph(path);
+    const scoped = new Map<string, StepProgressRow>();
+    for (const step of flattenSteps(path)) {
+      const saved = progress.get(step.id);
+      if (saved) scoped.set(step.id, finalized ? { ...saved, status: "COMPLETED" } : saved);
+      else if (finalized)
+        scoped.set(step.id, {
+          learningStepId: step.id,
+          status: "COMPLETED",
+          completedAt: null,
+          sessionCount: 0,
+          accuracy: null,
+        });
+    }
+    return { path, currentLevel, progress: scoped };
+  });
+}
+
+function stepArtifactsReady(step: PathStepRow): boolean {
+  const contentReady = Boolean(
+    step.contentVersionId &&
+    step.contentVersion?.status === "PUBLISHED" &&
+    step.contentVersion.content.status === "PUBLISHED" &&
+    step.contentVersion.content.deletedAt === null,
+  );
+  const templateReady = Boolean(
+    step.exerciseTemplateVersionId &&
+    step.exerciseTemplateVersion?.status === "PUBLISHED" &&
+    step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
+    step.exerciseTemplateVersion.template.deletedAt === null &&
+    resolveTrainingRuntimeConfig("TRAINING", step.exerciseTemplateVersion.config).status ===
+      "READY",
+  );
+  if (step.type === "TEACHING") return contentReady;
+  if (step.type === "SMALL_STUDY") return contentReady || templateReady;
+  if (step.type === "PRACTICE" || step.type === "REINFORCEMENT") return templateReady;
+  if (step.type === "ASSESSMENT")
+    return Boolean(
+      step.assessmentId &&
+      step.assessment?.status === "PUBLISHED" &&
+      step.assessment.deletedAt === null,
+    );
+  return step.type === "MEASUREMENT" || step.type === "NEXT_LEARNING";
 }
 
 function prerequisiteIdsForStep(
@@ -776,11 +850,16 @@ function toNodes(
   guidedStepsByStableKey: ReadonlyMap<string, PathStepRow>,
 ) {
   const steps = flattenSteps(path);
+  const graphReady = !learningRouteCycle(path.code) || matchesLearningRouteGraph(path);
   const statuses = resolveLearningPathNodeStatuses(
     steps.map((step, index) => ({
       id: step.id,
       prerequisiteIds: prerequisiteIdsForStep(steps, index, guidedStepsByStableKey),
-      eligible: levelEligible(step, currentLevel),
+      eligible:
+        graphReady &&
+        levelEligible(step, currentLevel) &&
+        stepArtifactsReady(step) &&
+        (!path.code.startsWith(P1_PATH_PREFIX) || path.activeEnrollment === true),
       completed: completedIds.has(step.id),
     })),
     completedIds,
@@ -799,6 +878,8 @@ function toNodes(
       code: step.stableKey,
       label: step.title,
       status,
+      availability:
+        graphReady && stepArtifactsReady(step) ? ("READY" as const) : ("UNAVAILABLE" as const),
       progress: saved ? { sessionCount: saved.sessionCount, accuracy: saved.accuracy } : null,
       templateVersionId: step.exerciseTemplateVersionId,
       contentVersionId: step.contentVersionId,
@@ -863,11 +944,7 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
           )
           .map((step) => step.id),
       );
-      const states = (
-        await Promise.all(
-          paths.map((path) => readPathState(tx, actor, path, contentEvidenceStepIds)),
-        )
-      ).filter((state): state is NonNullable<typeof state> => Boolean(state));
+      const states = await readPathStates(tx, actor, paths, contentEvidenceStepIds);
       if (!states.length) return null;
       const scopes = new Map<
         string,
@@ -905,6 +982,13 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
           code: state.path.code,
           title: state.path.title,
           area: state.path.area,
+          routeStatus: state.path.activeEnrollment
+            ? "ACTIVE"
+            : state.path.completedEnrollment
+              ? "COMPLETED"
+              : null,
+          cycleSequence: learningRouteCycle(state.path.code)?.sequence ?? null,
+          nextCycleCode: learningRouteCycle(state.path.code)?.nextPathCode ?? null,
         },
         currentLevel: state.currentLevel
           ? {
@@ -925,9 +1009,97 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
         projections.find((projection) =>
           projection.nodes.some((node) => node.status === "active"),
         ) ?? projections[0];
+      const currentPath =
+        paths.find((path) => path.activeEnrollment && learningRouteCycle(path.code)) ??
+        [...paths]
+          .reverse()
+          .find((path) => path.completedEnrollment && learningRouteCycle(path.code));
+      const upcoming = currentPath ? upcomingLearningRouteCycles(currentPath.code) : [];
+      const released = [] as typeof upcoming;
+      for (const cycle of upcoming) {
+        if (!cycle.publicationApproved()) break;
+        released.push(cycle);
+      }
+      const futureRows =
+        released.length && currentPath
+          ? await tx.learningPath.findMany({
+              where: {
+                status: "PUBLISHED",
+                deletedAt: null,
+                area: currentPath.area as "READING_COMPREHENSION",
+                OR: released.map((cycle) => ({ code: cycle.pathCode, version: cycle.version })),
+                AND: [
+                  { OR: [{ tenantId: null }, { tenantId: actor.tenantId }] },
+                  { OR: [{ levelId: null }, { levelId: currentPath.levelId }] },
+                ],
+              },
+              select: PATH_SELECT,
+              orderBy: [
+                { tenantId: { sort: "desc", nulls: "last" } },
+                { levelId: { sort: "desc", nulls: "last" } },
+                { id: "asc" },
+              ],
+            })
+          : [];
+      const upcomingPaths = [] as typeof projections;
+      for (const cycle of released) {
+        if (paths.some((path) => path.code === cycle.pathCode)) continue;
+        const future = futureRows.find(
+          (path) =>
+            path.code === cycle.pathCode &&
+            matchesLearningRouteGraph(path) &&
+            flattenSteps(path).every(stepArtifactsReady),
+        );
+        if (!future) break;
+        upcomingPaths.push({
+          path: {
+            id: future.id,
+            code: future.code,
+            title: future.title,
+            area: future.area,
+            routeStatus: null,
+            cycleSequence: cycle.sequence,
+            nextCycleCode: cycle.nextPathCode,
+          },
+          currentLevel: primary!.currentLevel,
+          ...toNodes(future, null, new Map(), new Set(), new Map()),
+        });
+        for (const node of upcomingPaths.at(-1)!.nodes) {
+          node.status = "locked";
+          node.isCurrent = false;
+        }
+      }
+      const routeCompleted = projections.reduce(
+        (sum, projection) => sum + projection.overallProgress.completed,
+        0,
+      );
+      const routeTotal = [...projections, ...upcomingPaths].reduce(
+        (sum, projection) => sum + projection.nodes.length,
+        0,
+      );
       return {
         ...primary,
         paths: projections,
+        upcomingPaths,
+        routeProgress: {
+          completed: routeCompleted,
+          total: routeTotal,
+          percent: routeTotal ? Math.floor((routeCompleted / routeTotal) * 100) : 0,
+        },
+        routeContinuation: currentPath
+          ? {
+              currentPathCode: currentPath.code,
+              nextPathCode: learningRouteCycle(currentPath.code)?.nextPathCode ?? null,
+              futureCycles: upcoming.map((cycle) => ({
+                pathCode: cycle.pathCode,
+                title: cycle.title,
+                sequence: cycle.sequence,
+                stationCount: cycle.manifest.steps.length,
+                publicationApproved: cycle.publicationApproved(),
+                graphAvailable: upcomingPaths.some((path) => path.path.code === cycle.pathCode),
+              })),
+            }
+          : null,
         source: "PERSISTED_CURRICULUM" as const,
       };
     });
@@ -984,6 +1156,7 @@ type LearningPathNavigationNode = {
   type: string;
   label: string;
   status: "completed" | "active" | "locked";
+  availability?: "READY" | "UNAVAILABLE";
   templateVersionId: string | null;
   contentVersionId: string | null;
   assessmentId: string | null;
@@ -1008,7 +1181,7 @@ function navigationStep(
 function isNavigationTarget(
   node: LearningPathNavigationNode | undefined,
 ): node is LearningPathNavigationNode & { status: "completed" | "active" } {
-  return Boolean(node && node.status !== "locked");
+  return Boolean(node && node.status !== "locked" && node.availability !== "UNAVAILABLE");
 }
 
 /**
@@ -1069,7 +1242,8 @@ export async function assertLearningStepAccessible(actor: LearningPathActor, ste
     .flatMap((projection) => projection.nodes)
     .find((item) => item.id === stepId);
   if (!node) throw forbiddenError("Bu öğrenme adımı bu öğrenci için kullanılabilir değil");
-  if (node.status === "locked") throw forbiddenError("Bu öğrenme adımı henüz açık değil");
+  if (node.status === "locked" || node.availability === "UNAVAILABLE")
+    throw forbiddenError("Bu öğrenme adımı henüz açık değil");
   return node;
 }
 
@@ -1086,6 +1260,7 @@ export async function assertLearningContentAccessible(
   const path = await getStudentLearningPath(actor);
   if (!path) return;
   const node = (path.paths ?? [path])
+    .concat(path.upcomingPaths ?? [])
     .flatMap((projection) => projection.nodes)
     .find((item) => item.contentVersionId === contentVersionId);
   if (node?.status === "locked") {

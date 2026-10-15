@@ -1955,6 +1955,25 @@ dialog::backdrop {
 .app .learning-path-step-card.is-pending .learning-path-step-index {
   position: relative;
 }
+
+.student-shell .learning-map-v6-step:not(.is-current) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 142px;
+}
+.student-shell .learning-route-pending {
+  display: grid;
+  gap: 6px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--ui-line);
+  border-radius: 18px;
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+}
+.student-shell .learning-route-pending span {
+  color: var(--ui-muted);
+  font-size: 13px;
+}
 .app .learning-path-step-card.is-pending .learning-path-step-index::after {
   position: absolute;
   inset: -4px;

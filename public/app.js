@@ -2719,6 +2719,7 @@ function learningPathVisualStatus(status) {
 
 function learningPathEntriesFromData(data) {
   var groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
+  groups = groups.concat(Array.isArray(data?.upcomingPaths) ? data.upcomingPaths : []);
   return groups.flatMap(function (group) {
     var groupNodes = Array.isArray(group?.nodes) ? group.nodes : [];
     return groupNodes.filter(Boolean).map(function (node) {
@@ -2951,12 +2952,13 @@ function learningPathExerciseContextLabel(node) {
 
 function learningPathCourseModulesFromData(data) {
   const groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
-  const total = groups.reduce(
+  const routeGroups = groups.concat(Array.isArray(data?.upcomingPaths) ? data.upcomingPaths : []);
+  const total = routeGroups.reduce(
     (count, group) => count + (Array.isArray(group?.nodes) ? group.nodes.length : 0),
     0,
   );
   let position = 0;
-  return groups
+  return routeGroups
     .map((group, index) => {
       const path = group?.path || group || {};
       const nodes = (Array.isArray(group?.nodes) ? group.nodes : [])
@@ -3179,7 +3181,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
   var progress = {
     completed: completed,
     total: nodes.length,
-    percent: nodes.length ? Math.round((completed / nodes.length) * 100) : 0,
+    percent: nodes.length ? Math.floor((completed / nodes.length) * 100) : 0,
   };
   var percent = Number(progress.percent || 0);
   var route = learningPathRouteGeometry(entries.length);
@@ -3205,10 +3207,14 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var visualStatus = learningPathVisualStatus(node.status);
       var kind = learningPathMapKind(node);
       var label = node.label || node.code || "Öğrenme adımı";
-      var statusLabel = learningPathStatusLabel(visualStatus);
+      var statusLabel =
+        node.availability === "UNAVAILABLE"
+          ? "İçerik hazırlanıyor"
+          : learningPathStatusLabel(visualStatus);
       var areaLabel = learningPathAreaLabel(entry.area);
       var stepNumber = index + 1;
-      var disabled = visualStatus === "locked" ? " disabled" : "";
+      var disabled =
+        visualStatus === "locked" || node.availability === "UNAVAILABLE" ? " disabled" : "";
       var current = currentNode?.id === node.id ? ' aria-current="step"' : "";
       var aria =
         "İstasyon " +
@@ -3224,8 +3230,12 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       var isCurrent = currentNode?.id === node.id;
       var actionLabel = learningPathActionLabel(node, visualStatus);
       var lockMarkup =
-        visualStatus === "locked"
-          ? '<span class="learning-map-v6-lock" aria-label="Bu durak henüz açılmadı" title="Bu durak henüz açılmadı">🔒</span>'
+        visualStatus === "locked" || node.availability === "UNAVAILABLE"
+          ? '<span class="learning-map-v6-lock" aria-label="' +
+            escapeHtml(statusLabel) +
+            '" title="' +
+            escapeHtml(statusLabel) +
+            '">🔒</span>'
           : "";
       var characterMarkup = isCurrent
         ? '<span class="learning-map-v6-character"><img src="/assets/learning-roadmap-student.png" alt="" aria-hidden="true" /></span>'
@@ -3382,6 +3392,7 @@ async function loadLearningPath() {
     pathGroups = pathGroups.filter(function (group) {
       return group && typeof group === "object";
     });
+    pathGroups = pathGroups.concat(Array.isArray(data.upcomingPaths) ? data.upcomingPaths : []);
     var nodes = pathGroups.flatMap(function (group) {
       return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });
@@ -3391,6 +3402,15 @@ async function loadLearningPath() {
     }
     learningPathPhase = "learning-path-map";
     renderLearningPathMap(pathGroups, data.currentLevel);
+    const pendingCycle = data.routeContinuation?.futureCycles?.find(
+      (cycle) => !cycle.graphAvailable,
+    );
+    if (pendingCycle) {
+      container.insertAdjacentHTML?.(
+        "beforeend",
+        `<aside class="learning-route-pending" role="status"><strong>${escapeHtml(pendingCycle.title)}</strong><span>${escapeHtml(String(pendingCycle.stationCount))} istasyon · Yeni bölüm yayına hazırlanıyor.</span></aside>`,
+      );
+    }
   } catch (error) {
     if (
       scope !== insightScope() ||
@@ -4427,7 +4447,7 @@ function p1CycleTransitionReviewMessage(result) {
     case "CURRENT_CYCLE_NOT_COMPLETED":
       return "Bu öğrenme döngüsünün tüm adımları henüz tamamlanmadı. İlerlemen korunuyor; eksik adımlar tamamlandığında yeniden kontrol edilecek.";
     case "NEXT_CYCLE_UNAVAILABLE":
-      return "Bu öğrenme döngüsü tamamlandı. Sonraki döngü uzman incelemesi ve yayın hazırlığı tamamlandığında açılacak; ilerlemen korunuyor.";
+      return "Bu öğrenme döngüsü tamamlandı. Sonraki bölüm yayınlandığında yoluna buradan devam edeceksin; ilerlemen korunuyor.";
     default:
       return "Bu öğrenme döngüsünün sonraki adımı şu anda hazır değil. İlerlemen korunuyor; daha sonra yeniden kontrol edilecek.";
   }
@@ -4621,23 +4641,22 @@ async function completeLearningPathTerminalStep() {
 }
 
 async function recoverCompletedP1CycleOnLearningPathLoad(data) {
+  const plannedNext = data?.routeContinuation?.futureCycles?.[0];
+  if (plannedNext && (!plannedNext.publicationApproved || !plannedNext.graphAvailable)) return data;
   const groups =
     Array.isArray(data?.paths) && data.paths.length
       ? data.paths
       : data?.path
         ? [{ path: data.path, nodes: data.nodes || [] }]
         : [];
-  const hasAssignedNextCycle = groups.some(function (group) {
-    const code = String(group?.path?.code || "");
-    return code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
-  });
-  if (hasAssignedNextCycle) return data;
-
-  const completedInitialCycle = groups.find(function (group) {
+  const completedCycle = [...groups].reverse().find(function (group) {
     const code = String(group?.path?.code || "");
     const nodes = Array.isArray(group?.nodes) ? group.nodes : [];
     return (
-      code === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12" &&
+      code.startsWith("EDUCATION_V2_P1_") &&
+      group.path.nextCycleCode &&
+      ["ACTIVE", "COMPLETED"].includes(group.path.routeStatus) &&
+      !groups.some((candidate) => candidate?.path?.code === group.path.nextCycleCode) &&
       group?.path?.id &&
       nodes.length > 0 &&
       nodes.every(function (node) {
@@ -4645,10 +4664,10 @@ async function recoverCompletedP1CycleOnLearningPathLoad(data) {
       })
     );
   });
-  if (!completedInitialCycle) return data;
+  if (!completedCycle) return data;
 
   try {
-    const result = await reconcileP1ToNextCycle(completedInitialCycle.path.id);
+    const result = await reconcileP1ToNextCycle(completedCycle.path.id);
     if (result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED") {
       return await insightApi("learning-path");
     }
@@ -12911,11 +12930,7 @@ async function finishGuidedExerciseCompletion(originalSession, node, isCurrent, 
   const replay =
     originalSession.deviceInfo?.source === "LEARNING_PATH_REPLAY" || node?.status === "completed";
   let nextCycleTransition = exerciseSession.nextLearningCycle || null;
-  if (
-    !nextStep &&
-    !replay &&
-    node?.learningPathCode === "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12"
-  ) {
+  if (!nextStep && !replay && String(node?.learningPathCode || "").startsWith("EDUCATION_V2_P1_")) {
     try {
       nextCycleTransition ||= await reconcileP1ToNextCycle(node.learningPathId);
     } catch {
@@ -18019,7 +18034,7 @@ async function insightApi(path) {
 }
 function renderHomeInsights(path) {
   if (isPlatformUser || !path.today) return;
-  const p = path.overallProgress;
+  const p = path.routeProgress || path.overallProgress;
   $("home-insights-values").innerHTML =
     `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#star"></use></svg> <strong>${path.today.totalPoints}</strong> GP</span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#flame"></use></svg> <strong>${path.today.currentStreak}</strong> gün</span>${p ? `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#chart"></use></svg> <strong>${p.completed}/${p.total}</strong> adım</span>` : ""}`;
   $("home-insights").classList.remove("hidden");

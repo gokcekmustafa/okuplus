@@ -6,6 +6,18 @@ import {
 import { resolveP0LinearCompletion } from "../src/modules/student-learning/p1-transition.js";
 
 describe("learning path completion regression", () => {
+  it.each(["INDEPENDENT_TRAINING", "LEARNING_PATH_REPLAY"])(
+    "does not turn %s sessions into new station completion evidence",
+    (source) => {
+      const evidence = resolveLearningPathStepEvidence(
+        [{ id: "step", exerciseTemplateVersionId: "template", contentVersionId: null }],
+        [{ learningStepId: null, templateVersionId: "template", deviceInfo: { source } }],
+        new Set(),
+      );
+      expect(evidence.get("step")).toMatchObject({ completed: false, sessionCount: 0 });
+    },
+  );
+
   it("binds a shared template session to its exact learning step", () => {
     const evidence = resolveLearningPathStepEvidence(
       [

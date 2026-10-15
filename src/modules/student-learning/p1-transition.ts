@@ -6,19 +6,13 @@ import {
 } from "../../curriculum/academic-reading-p0.js";
 import {
   EDUCATION_V2_P1_A_LEVEL_CODE,
-  EDUCATION_V2_P1_A_PROGRAM_ID,
-  EDUCATION_V2_P1_A_PATH_VERSION,
-  EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PATH_CODE_PREFIX,
 } from "../../curriculum/education-v2-p1-a-program.js";
 import {
-  EDUCATION_V2_P1_A_CYCLE_V2_ID,
-  EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST,
-  EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
-  EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
-  isEducationV2P1ACycleV2ProductionAssignmentEnabled,
-} from "../../curriculum/education-v2-p1-a-cycle-v2-program.js";
-import { buildEducationV2P1ALearningCycleManifest } from "../../curriculum/learning-cycle-manifest.js";
+  LEARNING_ROUTE_CYCLES,
+  matchesLearningRouteGraph,
+  nextLearningRouteCycle,
+} from "../../curriculum/learning-route-catalog.js";
 import { EDUCATION_V2_P0_PATH_SCOPE_CODE } from "../../curriculum/education-v2-p0-program.js";
 import {
   assertTeacherClassAccess,
@@ -44,7 +38,6 @@ const P0_LEGACY_PATH_PREFIX = "EDU-V2-P0-";
 const P0_CANONICAL_PATH_VERSION = 1;
 const P1_PATH_PREFIX = "EDUCATION_V2_P1_";
 export const P1_A_INITIAL_PATH_CODE = `${EDUCATION_V2_P1_A_PATH_CODE_PREFIX}${EDUCATION_V2_P1_A_LEVEL_CODE}`;
-const P1_A_NEXT_CYCLE_PATH_CODE = "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12";
 export const P1_CYCLE_TRANSITION_POLICY_VERSION = "P1_CYCLE_TRANSITION_V1" as const;
 const P0_PATH_AREAS = ["FAST_READING", "READING_COMPREHENSION", "COMMON"] as const;
 const P0_CANONICAL_STEP_COUNT =
@@ -319,8 +312,16 @@ function isP2002(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
+async function lockLearningRoute(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  studentId: string,
+) {
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`learning-route:${tenantId}:${studentId}`}, 0))`;
+}
+
 export function nextP1CyclePathCode(pathCode: string): string | null {
-  return pathCode === P1_A_INITIAL_PATH_CODE ? P1_A_NEXT_CYCLE_PATH_CODE : null;
+  return nextLearningRouteCycle(pathCode)?.pathCode ?? null;
 }
 
 /**
@@ -338,9 +339,13 @@ export async function resolveP1CycleTransitionStep(
   if (!assessmentId && !input.learningStepId) return null;
 
   return withTenantContext(actor, async (tx) => {
-    const currentPath = await tx.learningPath.findFirst({
+    const currentPaths = await tx.learningPath.findMany({
       where: {
-        code: P1_A_INITIAL_PATH_CODE,
+        OR: LEARNING_ROUTE_CYCLES.map((cycle) => ({
+          code: cycle.pathCode,
+          version: cycle.version,
+        })),
+        AND: [{ OR: [{ tenantId: null }, { tenantId: actor.tenantId }] }],
         status: "PUBLISHED",
         deletedAt: null,
         enrollments: {
@@ -354,13 +359,13 @@ export async function resolveP1CycleTransitionStep(
       orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
       select: { id: true },
     });
-    if (!currentPath) return null;
+    if (!currentPaths.length) return null;
 
     const stepScope = {
       type: "ASSESSMENT" as const,
       status: "PUBLISHED" as const,
       isActive: true,
-      unit: { pathId: currentPath.id, status: "PUBLISHED" as const },
+      unit: { pathId: { in: currentPaths.map((path) => path.id) }, status: "PUBLISHED" as const },
     };
     const step = input.learningStepId
       ? await tx.learningStep.findFirst({
@@ -369,19 +374,20 @@ export async function resolveP1CycleTransitionStep(
             ...(assessmentId ? { assessmentId } : {}),
             ...stepScope,
           },
-          select: { id: true },
+          select: { id: true, unit: { select: { pathId: true } } },
         })
       : null;
-    const assessmentStep =
-      step ??
-      (assessmentId
-        ? await tx.learningStep.findFirst({
-            where: { assessmentId, ...stepScope },
-            select: { id: true },
-          })
-        : null);
+    if (step) return { learningStepId: step.id, learningPathId: step.unit.pathId };
+    const matches = assessmentId
+      ? await tx.learningStep.findMany({
+          where: { assessmentId, ...stepScope },
+          select: { id: true, unit: { select: { pathId: true } } },
+          take: 2,
+        })
+      : [];
+    const assessmentStep = matches.length === 1 ? matches[0] : null;
     return assessmentStep
-      ? { learningStepId: assessmentStep.id, learningPathId: currentPath.id }
+      ? { learningStepId: assessmentStep.id, learningPathId: assessmentStep.unit.pathId }
       : null;
   });
 }
@@ -618,7 +624,7 @@ async function loadP0State(
             sessionType: "PRACTICE",
             trainingSessionItem: { is: null },
           },
-          select: { learningStepId: true, templateVersionId: true },
+          select: { learningStepId: true, templateVersionId: true, deviceInfo: true },
         })
       : Promise.resolve([]),
     contentIds.length
@@ -709,7 +715,9 @@ async function loadCandidates(
     where: {
       status: "PUBLISHED",
       deletedAt: null,
-      code: { startsWith: P1_PATH_PREFIX },
+      OR: LEARNING_ROUTE_CYCLES.filter(
+        (cycle) => cycle.sequence === 1 && cycle.publicationApproved(),
+      ).map((cycle) => ({ code: cycle.pathCode, version: cycle.version })),
       AND: [
         { OR: [{ tenantId: null }, { tenantId: actor.tenantId }] },
         ...(levelId ? [{ OR: [{ levelId: null }, { levelId }] }] : []),
@@ -723,10 +731,21 @@ async function loadCandidates(
       status: true,
       units: {
         where: { status: "PUBLISHED" },
+        orderBy: { position: "asc" },
         select: {
+          code: true,
+          status: true,
           steps: {
             where: { status: "PUBLISHED", isActive: true },
+            orderBy: { position: "asc" },
             select: {
+              id: true,
+              stableKey: true,
+              position: true,
+              status: true,
+              isActive: true,
+              prerequisiteStepId: true,
+              completionRule: true,
               type: true,
               contentVersionId: true,
               exerciseTemplateVersionId: true,
@@ -750,10 +769,7 @@ async function loadCandidates(
   });
   return paths.flatMap((path) => {
     const steps = path.units.flatMap((unit) => unit.steps);
-    const curriculumReady =
-      path.units.length > 0 &&
-      path.units.every((unit) => unit.steps.length > 0) &&
-      steps.every(isReadyP1CandidateStep);
+    const curriculumReady = matchesLearningRouteGraph(path) && steps.every(isReadyP1CandidateStep);
     return curriculumReady
       ? [
           {
@@ -774,6 +790,7 @@ async function reconcileInTransaction(
   actor: P1StudentActor,
   input: P1TransitionInput,
 ): Promise<P1TransitionResult> {
+  await lockLearningRoute(tx, actor.tenantId, actor.userId);
   const p0 = await loadP0State(tx, actor, input.p0LearningPathId);
   if (!p0) throw notFoundError("P0 öğrenme yolu bulunamadı");
   if (!p0.canonicalGraphReady) {
@@ -973,94 +990,8 @@ type P1CycleGraph = {
   }>;
 };
 
-function p1CycleShape(pathCode: string): {
-  version: number;
-  unitCodes: readonly string[];
-  steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[];
-} | null {
-  const persistedStepShape = (
-    programId: string,
-    steps: readonly { stableKey: string; type: string; prerequisiteKeys: readonly string[] }[],
-  ) =>
-    steps.map((step) => ({
-      ...step,
-      stableKey: `${programId}:${step.stableKey}`,
-      prerequisiteKeys: step.prerequisiteKeys.map((key) => `${programId}:${key}`),
-    }));
-
-  if (pathCode === P1_A_INITIAL_PATH_CODE) {
-    const manifest = buildEducationV2P1ALearningCycleManifest();
-    return {
-      version: EDUCATION_V2_P1_A_PATH_VERSION,
-      unitCodes: EDUCATION_V2_P1_A_PROGRAM.path.units.map((unit) => unit.code),
-      // P1-A provisioning persists stable keys as `${programId}:${stepKey}`.
-      // The runtime graph check must validate that immutable storage contract,
-      // not the authoring-only manifest key.
-      steps: persistedStepShape(EDUCATION_V2_P1_A_PROGRAM_ID, manifest.steps),
-    };
-  }
-  if (pathCode === P1_A_NEXT_CYCLE_PATH_CODE) {
-    return {
-      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
-      unitCodes: EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.units.map((unit) => unit.code),
-      steps: persistedStepShape(
-        EDUCATION_V2_P1_A_CYCLE_V2_ID,
-        EDUCATION_V2_P1_A_CYCLE_V2_MANIFEST.steps,
-      ),
-    };
-  }
-  return null;
-}
-
 function hasExpectedP1CycleGraph(path: P1CycleGraph): boolean {
-  const shape = p1CycleShape(path.code);
-  if (!shape || path.version !== shape.version || path.units.length !== shape.unitCodes.length) {
-    return false;
-  }
-  const actualUnitCodes = path.units.map((unit) => unit.code);
-  if (
-    actualUnitCodes.some((code, index) => code !== shape.unitCodes[index]) ||
-    path.units.some((unit) => unit.status !== "PUBLISHED")
-  ) {
-    return false;
-  }
-
-  const steps = path.units.flatMap((unit) => unit.steps);
-  const expectedSteps = new Map(shape.steps.map((step) => [step.stableKey, step]));
-  const actualKeys = steps.map((step) => step.stableKey);
-  if (
-    steps.length !== expectedSteps.size ||
-    actualKeys.some((key) => !expectedSteps.has(key)) ||
-    new Set(actualKeys).size !== actualKeys.length ||
-    steps.some((step) => step.status !== "PUBLISHED" || !step.isActive)
-  ) {
-    return false;
-  }
-
-  const actualByKey = new Map(steps.map((step) => [step.stableKey, step]));
-  return shape.steps.every((expected) => {
-    const actual = actualByKey.get(expected.stableKey);
-    if (!actual || actual.type !== expected.type || expected.prerequisiteKeys.length > 1) {
-      return false;
-    }
-    const expectedPrerequisiteId = expected.prerequisiteKeys[0]
-      ? (actualByKey.get(expected.prerequisiteKeys[0])?.id ?? null)
-      : null;
-    // P1-A's published seed stores the cross-unit prerequisite in the
-    // immutable completion-rule contract while the legacy column is reset at
-    // each unit boundary. Validate the union of both persisted contracts so
-    // existing published graphs remain usable without weakening the graph
-    // check or rewriting production rows.
-    const actualPrerequisiteIds = new Set([
-      ...(actual.prerequisiteStepId ? [actual.prerequisiteStepId] : []),
-      ...prerequisiteIds(actual.completionRule),
-    ]);
-    const expectedPrerequisiteIds = expectedPrerequisiteId ? [expectedPrerequisiteId] : [];
-    return (
-      actualPrerequisiteIds.size === expectedPrerequisiteIds.length &&
-      expectedPrerequisiteIds.every((id) => actualPrerequisiteIds.has(id))
-    );
-  });
+  return matchesLearningRouteGraph(path);
 }
 
 function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
@@ -1109,7 +1040,7 @@ async function isP1CycleComplete(
             sessionType: "PRACTICE",
             trainingSessionItem: { is: null },
           },
-          select: { learningStepId: true, templateVersionId: true },
+          select: { learningStepId: true, templateVersionId: true, deviceInfo: true },
         })
       : Promise.resolve([]),
     contentIds.length
@@ -1168,20 +1099,25 @@ async function isP1CycleComplete(
 async function loadNextP1Cycle(
   tx: Prisma.TransactionClient,
   actor: P1StudentActor,
-  current: { area: string; levelId: string | null },
+  current: { code: string; area: string; levelId: string | null },
 ) {
+  const next = nextLearningRouteCycle(current.code);
+  if (!next) return null;
   return tx.learningPath.findFirst({
     where: {
-      code: P1_A_NEXT_CYCLE_PATH_CODE,
-      version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+      code: next.pathCode,
+      version: next.version,
       area: current.area as "READING_COMPREHENSION",
       status: "PUBLISHED",
       deletedAt: null,
       OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
-      ...(current.levelId
-        ? { AND: [{ OR: [{ levelId: null }, { levelId: current.levelId }] }] }
-        : {}),
+      AND: [{ OR: [{ levelId: null }, { levelId: current.levelId }] }],
     },
+    orderBy: [
+      { tenantId: { sort: "desc", nulls: "last" } },
+      { levelId: { sort: "desc", nulls: "last" } },
+      { id: "asc" },
+    ],
     select: {
       id: true,
       code: true,
@@ -1238,8 +1174,10 @@ export async function reconcileP1ToNextCycle(
   input: { p1LearningPathId: string },
 ): Promise<P1CycleTransitionResult> {
   assertStudentActor(actor);
+  let expectedNext: { pathCode: string; version: number; fromPathId: string } | null = null;
   try {
     return await withTenantContext(actor, async (tx) => {
+      await lockLearningRoute(tx, actor.tenantId, actor.userId);
       const enrollmentSelect = {
         id: true,
         routeStatus: true,
@@ -1321,9 +1259,15 @@ export async function reconcileP1ToNextCycle(
       }
 
       const nextCode = nextP1CyclePathCode(enrollment.learningPath.code);
-      if (!nextCode) {
+      const nextCycle = nextLearningRouteCycle(enrollment.learningPath.code);
+      if (!nextCode || !nextCycle) {
         return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
       }
+      expectedNext = {
+        pathCode: nextCode,
+        version: nextCycle.version,
+        fromPathId: enrollment.learningPath.id,
+      };
 
       // A completed or reassigned enrollment is historical state. Before
       // returning, look up the associated next-cycle enrollment so a replay
@@ -1332,10 +1276,17 @@ export async function reconcileP1ToNextCycle(
       const associatedNextPath = await tx.learningPath.findFirst({
         where: {
           code: nextCode,
-          version: EDUCATION_V2_P1_A_CYCLE_V2_VERSION,
+          version: nextCycle.version,
+          area: enrollment.learningPath.area,
           deletedAt: null,
           OR: [{ tenantId: null }, { tenantId: actor.tenantId }],
+          AND: [{ OR: [{ levelId: null }, { levelId: enrollment.learningPath.levelId }] }],
         },
+        orderBy: [
+          { tenantId: { sort: "desc", nulls: "last" } },
+          { levelId: { sort: "desc", nulls: "last" } },
+          { id: "asc" },
+        ],
         select: { id: true, status: true },
       });
       const existingAssociatedNext = associatedNextPath
@@ -1379,7 +1330,7 @@ export async function reconcileP1ToNextCycle(
         return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
       }
 
-      if (canRecoverCompletedCycle) {
+      {
         const conflictingActiveP1 = await tx.studentLearningPath.findFirst({
           where: {
             tenantId: actor.tenantId,
@@ -1400,7 +1351,8 @@ export async function reconcileP1ToNextCycle(
       // record; use it only to replay a missing next-cycle assignment. Active
       // enrollments still require the full evidence check below.
       const currentCompleted =
-        enrollment.routeStatus === "COMPLETED" ||
+        (enrollment.routeStatus === "COMPLETED" &&
+          hasExpectedP1CycleGraph(enrollment.learningPath)) ||
         (await isP1CycleComplete(tx, actor, enrollment.learningPath));
       if (!currentCompleted) {
         return p1CycleReviewResult(enrollment.id, "CURRENT_CYCLE_NOT_COMPLETED", false);
@@ -1408,7 +1360,7 @@ export async function reconcileP1ToNextCycle(
 
       const nextPath = await loadNextP1Cycle(tx, actor, enrollment.learningPath);
       if (
-        !isEducationV2P1ACycleV2ProductionAssignmentEnabled() ||
+        !nextCycle.publicationApproved() ||
         !nextPath ||
         nextPath.code !== nextCode ||
         !hasExpectedP1CycleGraph(nextPath) ||
@@ -1456,21 +1408,18 @@ export async function reconcileP1ToNextCycle(
       }
 
       const now = new Date();
-      await tx.studentLearningPath.updateMany({
-        where: {
-          tenantId: actor.tenantId,
-          studentId: actor.userId,
-          routeStatus: "ACTIVE",
-          learningPath: { code: { startsWith: P1_PATH_PREFIX } },
-          id: { not: enrollment.id },
-        },
-        data: { routeStatus: "REASSIGNED" },
-      });
       if (enrollment.routeStatus === "ACTIVE") {
-        await tx.studentLearningPath.update({
-          where: { id: enrollment.id },
+        const completed = await tx.studentLearningPath.updateMany({
+          where: {
+            id: enrollment.id,
+            tenantId: actor.tenantId,
+            studentId: actor.userId,
+            routeStatus: "ACTIVE",
+          },
           data: { routeStatus: "COMPLETED", completedAt: now, currentStepId: null },
         });
+        if (completed.count !== 1)
+          return p1CycleReviewResult(enrollment.id, "NOT_APPLICABLE", false);
       }
       // Use a unique create for the first assignment rather than an upsert.
       // If two approved retries race, PostgreSQL lets only one create win;
@@ -1508,13 +1457,26 @@ export async function reconcileP1ToNextCycle(
     });
   } catch (error) {
     if (!isP2002(error)) throw error;
+    const expected = expectedNext as {
+      pathCode: string;
+      version: number;
+      fromPathId: string;
+    } | null;
+    if (!expected) throw error;
     const active = await withTenantContext(actor, (tx) =>
       tx.studentLearningPath.findFirst({
         where: {
           tenantId: actor.tenantId,
           studentId: actor.userId,
           routeStatus: "ACTIVE",
-          learningPath: { code: P1_A_NEXT_CYCLE_PATH_CODE },
+          learningPath: {
+            code: expected.pathCode,
+            version: expected.version,
+            status: "PUBLISHED",
+            deletedAt: null,
+          },
+          selectionPolicyVersion: P1_CYCLE_TRANSITION_POLICY_VERSION,
+          selectionReason: { path: ["fromLearningPathId"], equals: expected.fromPathId },
         },
         select: { id: true, learningPathId: true },
       }),
@@ -1547,6 +1509,7 @@ export async function overrideP1Route(
 
   return withTenantContext(actor, async (tx) => {
     await assertTeacherClassAccess(actor, input.classId, input.studentId, tx);
+    await lockLearningRoute(tx, tenantId, input.studentId);
     const p0 = await loadP0State(tx, { userId: input.studentId, tenantId }, input.p0LearningPathId);
     if (!p0?.canonicalGraphReady || !p0.levelScopeReady || !p0.completed) {
       throw validationError("P0 öğrenme yolu grafiği veya seviye kapsamı henüz hazır değil");

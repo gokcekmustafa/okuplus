@@ -1,7 +1,10 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
-const transitionTestState = vi.hoisted(() => ({ publicationApproved: false }));
+const transitionTestState = vi.hoisted(() => ({
+  publicationApproved: false,
+  cycle3Approved: false,
+}));
 
 vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (importOriginal) => {
   const actual =
@@ -15,11 +18,38 @@ vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (import
   };
 });
 
+vi.mock("../src/curriculum/learning-route-catalog.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/curriculum/learning-route-catalog.js")>();
+  const decorate = (cycle: ReturnType<typeof actual.learningRouteCycle>) =>
+    cycle?.sequence === 3
+      ? { ...cycle, publicationApproved: () => transitionTestState.cycle3Approved }
+      : cycle;
+  return {
+    ...actual,
+    learningRouteCycle: (code: string) => decorate(actual.learningRouteCycle(code)),
+    nextLearningRouteCycle: (code: string) => decorate(actual.nextLearningRouteCycle(code)),
+    upcomingLearningRouteCycles: (code: string) =>
+      actual.upcomingLearningRouteCycles(code).map((cycle) => decorate(cycle)!),
+  };
+});
+
 import {
   reconcileP1ToNextCycle,
   resolveP1CycleTransitionStep,
 } from "../src/modules/student-learning/p1-transition.js";
 import type { StudentActor } from "../src/modules/student-learning/policy.js";
+import {
+  getStudentLearningPath,
+  assertLearningStepAccessible,
+  assertLearningContentAccessible,
+} from "../src/modules/learning-path/service.js";
+import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_3_ID,
+} from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
+import type { P1AProgram } from "../src/curriculum/education-v2-p1-a-program.js";
 import {
   EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PROGRAM_ID,
@@ -32,7 +62,7 @@ import {
 const ID_PREFIX = "c2510000-0000-7000-8000-";
 const id = (suffix: number) => `${ID_PREFIX}${String(suffix).padStart(12, "0")}`;
 
-const PATH_IDS = { initial: id(1), next: id(2) };
+const PATH_IDS = { initial: id(1), next: id(2), third: id(3) };
 const ACTOR_EMAILS = [
   "p1-transition-1@example.test",
   "p1-transition-2@example.test",
@@ -41,6 +71,7 @@ const ACTOR_EMAILS = [
   "p1-transition-5@example.test",
   "p1-transition-6@example.test",
   "p1-transition-7@example.test",
+  "p1-transition-8@example.test",
 ];
 const ACTOR_IDS = {
   complete: id(10),
@@ -50,6 +81,7 @@ const ACTOR_IDS = {
   blocked: id(14),
   concurrent: id(15),
   recovery: id(16),
+  cycle2: id(18),
 };
 const TENANT_IDS = {
   complete: "",
@@ -59,6 +91,7 @@ const TENANT_IDS = {
   blocked: "",
   concurrent: "",
   recovery: "",
+  cycle2: "",
 };
 
 type ActorFixture = {
@@ -116,10 +149,11 @@ async function createPublishedArtifact(
   kind: "CONTENT" | "TEMPLATE" | "ASSESSMENT",
   index: number,
   templateConfig = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises[0]!.contract,
+  sourceVersionId?: string,
 ) {
   if (kind === "CONTENT") {
     const contentId = id(100 + index);
-    const versionId = id(200 + index);
+    const versionId = sourceVersionId ?? id(200 + index);
     await prisma.content.create({
       data: {
         id: contentId,
@@ -152,7 +186,7 @@ async function createPublishedArtifact(
 
   if (kind === "TEMPLATE") {
     const templateId = id(300 + index);
-    const versionId = id(400 + index);
+    const versionId = sourceVersionId ?? id(400 + index);
     await prisma.exerciseTemplate.create({
       data: {
         id: templateId,
@@ -176,7 +210,7 @@ async function createPublishedArtifact(
     return { exerciseTemplateVersionId: versionId };
   }
 
-  const assessmentId = id(500 + index);
+  const assessmentId = sourceVersionId ?? id(500 + index);
   await prisma.assessment.create({
     data: {
       id: assessmentId,
@@ -190,23 +224,19 @@ async function createPublishedArtifact(
   return { assessmentId };
 }
 
-async function createPath(
-  pathId: string,
-  programId: typeof EDUCATION_V2_P1_A_PROGRAM_ID | typeof EDUCATION_V2_P1_A_CYCLE_V2_ID,
-  program: typeof EDUCATION_V2_P1_A_PROGRAM | typeof EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
-) {
+async function createPath(pathId: string, programId: string, program: P1AProgram) {
   await prisma.learningPath.create({
     data: {
       id: pathId,
       code: program.path.code,
       title: program.path.title,
       area: "READING_COMPREHENSION",
-      version: programId === EDUCATION_V2_P1_A_PROGRAM_ID ? 1 : 2,
+      version: learningRouteCycle(program.path.code)!.version,
       status: "PUBLISHED",
     },
   });
 
-  let artifactIndex = pathId === PATH_IDS.initial ? 0 : 50;
+  let artifactIndex = Object.values(PATH_IDS).indexOf(pathId) * 50;
   let previousStepId: string | null = null;
   const stepIdByKey = new Map<string, string>();
   for (const [unitIndex, unit] of program.path.units.entries()) {
@@ -228,12 +258,35 @@ async function createPath(
         if (!prerequisiteId) throw new Error(`Missing fixture prerequisite: ${key}`);
         return prerequisiteId;
       });
-      const artifact =
-        sourceStep.type === "TEACHING"
-          ? await createPublishedArtifact("CONTENT", artifactIndex++)
-          : sourceStep.type === "ASSESSMENT"
-            ? await createPublishedArtifact("ASSESSMENT", artifactIndex++)
-            : await createPublishedArtifact("TEMPLATE", artifactIndex++);
+      const expected = learningRouteCycle(program.path.code)!.manifest.steps.find(
+        (step) => step.stableKey === sourceStep.key,
+      )!;
+      const artifact = {
+        ...(expected.content
+          ? await createPublishedArtifact(
+              "CONTENT",
+              artifactIndex++,
+              undefined,
+              expected.content.versionId,
+            )
+          : {}),
+        ...(expected.exercise
+          ? await createPublishedArtifact(
+              "TEMPLATE",
+              artifactIndex++,
+              undefined,
+              expected.exercise.versionId,
+            )
+          : {}),
+        ...(expected.assessment
+          ? await createPublishedArtifact(
+              "ASSESSMENT",
+              artifactIndex++,
+              undefined,
+              expected.assessment.versionId,
+            )
+          : {}),
+      };
       await prisma.learningStep.create({
         data: {
           id: stepId,
@@ -264,6 +317,7 @@ async function createActor(
   userId: string,
   email: string,
   fixtureName: keyof typeof TENANT_IDS,
+  startingPathId = PATH_IDS.initial,
 ): Promise<ActorFixture> {
   await prisma.user.create({
     data: { id: userId, email, displayName: "P1 geçiş test öğrencisi", status: "ACTIVE" },
@@ -274,7 +328,7 @@ async function createActor(
     data: {
       tenantId: context.tenantId,
       studentId: userId,
-      learningPathId: PATH_IDS.initial,
+      learningPathId: startingPathId,
       routeStatus: "ACTIVE",
       selectionPolicyVersion: "P1_TEST_FIXTURE",
     },
@@ -286,9 +340,13 @@ async function createActor(
   };
 }
 
-async function completeInitialCycle(fixture: ActorFixture, includeAssessmentResult: boolean) {
+async function completeInitialCycle(
+  fixture: ActorFixture,
+  includeAssessmentResult: boolean,
+  pathId = PATH_IDS.initial,
+) {
   const steps = await prisma.learningStep.findMany({
-    where: { unit: { pathId: PATH_IDS.initial } },
+    where: { unit: { pathId } },
     orderBy: [{ unit: { position: "asc" } }, { position: "asc" }],
     select: {
       id: true,
@@ -311,7 +369,9 @@ async function completeInitialCycle(fixture: ActorFixture, includeAssessmentResu
               ? 500
               : fixture.actor.userId === ACTOR_IDS.recovery
                 ? 600
-                : 0;
+                : fixture.actor.userId === ACTOR_IDS.cycle2
+                  ? 800
+                  : 0;
   for (const [index, step] of steps.entries()) {
     if (step.type !== "ASSESSMENT") {
       await prisma.studentLearningStepProgress.create({
@@ -371,6 +431,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
   let blockedFixture: ActorFixture;
   let concurrentFixture: ActorFixture;
   let recoveryFixture: ActorFixture;
+  let cycle2Fixture: ActorFixture;
   let blockedNextEnrollmentId = "";
 
   beforeAll(async () => {
@@ -382,6 +443,11 @@ describe.sequential("P1 learning cycle transition integration", () => {
       EDUCATION_V2_P1_A_CYCLE_V2_ID,
       EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
     );
+    await createPath(
+      PATH_IDS.third,
+      EDUCATION_V2_P1_A_CYCLE_3_ID,
+      EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+    );
     completeFixture = await createActor(ACTOR_IDS.complete, ACTOR_EMAILS[0]!, "complete");
     incompleteFixture = await createActor(ACTOR_IDS.incomplete, ACTOR_EMAILS[1]!, "incomplete");
     unavailableFixture = await createActor(ACTOR_IDS.unavailable, ACTOR_EMAILS[2]!, "unavailable");
@@ -389,6 +455,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     blockedFixture = await createActor(ACTOR_IDS.blocked, ACTOR_EMAILS[4]!, "blocked");
     concurrentFixture = await createActor(ACTOR_IDS.concurrent, ACTOR_EMAILS[5]!, "concurrent");
     recoveryFixture = await createActor(ACTOR_IDS.recovery, ACTOR_EMAILS[6]!, "recovery");
+    cycle2Fixture = await createActor(ACTOR_IDS.cycle2, ACTOR_EMAILS[7]!, "cycle2", PATH_IDS.next);
     await completeInitialCycle(completeFixture, true);
     await completeInitialCycle(incompleteFixture, false);
     await completeInitialCycle(unavailableFixture, true);
@@ -396,6 +463,16 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await completeInitialCycle(blockedFixture, true);
     await completeInitialCycle(concurrentFixture, true);
     await completeInitialCycle(recoveryFixture, true);
+    await completeInitialCycle(cycle2Fixture, true, PATH_IDS.next);
+    await prisma.studentLearningPath.create({
+      data: {
+        tenantId: cycle2Fixture.actor.tenantId,
+        studentId: cycle2Fixture.actor.userId,
+        learningPathId: PATH_IDS.initial,
+        routeStatus: "COMPLETED",
+        completedAt: new Date(),
+      },
+    });
     const blockedNext = await prisma.studentLearningPath.create({
       data: {
         tenantId: blockedFixture.actor.tenantId,
@@ -421,6 +498,143 @@ describe.sequential("P1 learning cycle transition integration", () => {
       transitionTestState.publicationApproved = false;
     }
   }
+
+  it("keeps Cycle 3 closed even when its complete graph is published in the isolated database", async () => {
+    await withPublicationApproval(async () => {
+      const result = await reconcileP1ToNextCycle(cycle2Fixture.actor, {
+        p1LearningPathId: PATH_IDS.next,
+      });
+      expect(result).toMatchObject({
+        outcome: "REVIEW_REQUIRED",
+        readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
+      });
+      const path = await getStudentLearningPath(cycle2Fixture.actor);
+      expect(path?.paths.map((item) => item.path.code)).toEqual([
+        EDUCATION_V2_P1_A_PROGRAM.path.code,
+        EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.code,
+      ]);
+      expect(path?.paths[0]?.nodes.every((node) => node.status === "completed")).toBe(true);
+      expect(path?.upcomingPaths).toEqual([]);
+      expect(path?.routeContinuation?.futureCycles[0]).toMatchObject({
+        stationCount: 7,
+        publicationApproved: false,
+        graphAvailable: false,
+      });
+    });
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: cycle2Fixture.actor.tenantId,
+          studentId: cycle2Fixture.actor.userId,
+          learningPathId: PATH_IDS.third,
+        },
+      }),
+    ).toBe(0);
+  });
+
+  it("continues Cycle 2 to Cycle 3 once, keeps the historical route, and never unlocks a preview", async () => {
+    transitionTestState.cycle3Approved = true;
+    try {
+      await withPublicationApproval(async () => {
+        const beforeProgress = await prisma.studentLearningStepProgress.findMany({
+          where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
+          orderBy: { id: "asc" },
+        });
+        const beforeResults = await prisma.assessmentResult.findMany({
+          where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
+          orderBy: { id: "asc" },
+        });
+        const preview = await getStudentLearningPath(cycle2Fixture.actor);
+        expect(preview?.upcomingPaths).toHaveLength(1);
+        expect(preview?.upcomingPaths[0]?.nodes).toHaveLength(7);
+        expect(
+          preview?.upcomingPaths[0]?.nodes.every(
+            (node) => node.status === "locked" && !node.isCurrent,
+          ),
+        ).toBe(true);
+        const first = preview!.upcomingPaths[0]!.nodes[0]!;
+        await expect(assertLearningStepAccessible(cycle2Fixture.actor, first.id)).rejects.toThrow();
+        await expect(
+          assertLearningContentAccessible(cycle2Fixture.actor, first.contentVersionId!),
+        ).rejects.toThrow();
+        const outcomes = await Promise.all(
+          [1, 2].map(() =>
+            reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.next }),
+          ),
+        );
+        expect(outcomes.map((result) => result.outcome).sort()).toEqual([
+          "ALREADY_ASSIGNED",
+          "ASSIGNED",
+        ]);
+        const path = await getStudentLearningPath(cycle2Fixture.actor);
+        expect(path?.paths.map((item) => item.path.cycleSequence)).toEqual([1, 2, 3]);
+        expect(
+          path?.paths
+            .slice(0, 2)
+            .flatMap((item) => item.nodes)
+            .every((node) => node.status === "completed"),
+        ).toBe(true);
+        expect(path?.paths[2]?.nodes[0]).toMatchObject({
+          id: first.id,
+          status: "active",
+          availability: "READY",
+        });
+        expect(path?.paths[2]?.nodes.slice(1).every((node) => node.status === "locked")).toBe(true);
+        await expect(
+          assertLearningStepAccessible(cycle2Fixture.actor, first.id),
+        ).resolves.toMatchObject({ status: "active" });
+        await reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.initial });
+        expect(
+          await prisma.studentLearningPath.count({
+            where: {
+              tenantId: cycle2Fixture.actor.tenantId,
+              studentId: cycle2Fixture.actor.userId,
+              routeStatus: "ACTIVE",
+            },
+          }),
+        ).toBe(1);
+        expect(
+          await prisma.studentLearningPath.findFirst({
+            where: {
+              tenantId: cycle2Fixture.actor.tenantId,
+              studentId: cycle2Fixture.actor.userId,
+              routeStatus: "ACTIVE",
+            },
+            select: { learningPathId: true },
+          }),
+        ).toEqual({ learningPathId: PATH_IDS.third });
+        expect(
+          await prisma.studentLearningStepProgress.findMany({
+            where: {
+              tenantId: cycle2Fixture.actor.tenantId,
+              studentId: cycle2Fixture.actor.userId,
+            },
+            orderBy: { id: "asc" },
+          }),
+        ).toEqual(beforeProgress);
+        expect(
+          await prisma.assessmentResult.findMany({
+            where: {
+              tenantId: cycle2Fixture.actor.tenantId,
+              studentId: cycle2Fixture.actor.userId,
+            },
+            orderBy: { id: "asc" },
+          }),
+        ).toEqual(beforeResults);
+        const assessmentStep = await prisma.learningStep.findFirstOrThrow({
+          where: { unit: { pathId: PATH_IDS.next }, type: "ASSESSMENT" },
+        });
+        expect(
+          await resolveP1CycleTransitionStep(cycle2Fixture.actor, {
+            learningStepId: null,
+            assessmentId: assessmentStep.assessmentId,
+          }),
+        ).toEqual({ learningStepId: assessmentStep.id, learningPathId: PATH_IDS.next });
+      });
+    } finally {
+      transitionTestState.cycle3Approved = false;
+    }
+  });
 
   it("does not assign a fully published next graph while publication permission is closed", async () => {
     const beforeProgress = await prisma.studentLearningStepProgress.count({

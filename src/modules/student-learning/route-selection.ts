@@ -1,4 +1,5 @@
 import type { MeasurementSkillResult } from "../measurements/service.js";
+import { learningRouteCycle } from "../../curriculum/learning-route-catalog.js";
 import {
   hasCompleteAdaptiveRouteEvidence,
   hasReadingComprehensionEvidence,
@@ -171,6 +172,7 @@ function findCandidate(
       (candidate) =>
         candidate.status === "PUBLISHED" &&
         candidate.curriculumReady !== false &&
+        (learningRouteCycle(candidate.code)?.sequence ?? 1) === 1 &&
         routeFamilyFromPathCode(candidate.code) === family &&
         (candidate.levelId === null || candidate.levelId === levelId),
     ) ?? null
