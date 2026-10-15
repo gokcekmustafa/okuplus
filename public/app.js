@@ -4266,8 +4266,11 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
   const stepTypeLabel = learningStep?.type === "SMALL_STUDY" ? "Küçük çalışma" : "Öğretim";
   const progressLabel = learningPathProgressLabel(learningStep);
   const navigation = normalizeLearningPathNavigation(serverNavigation, learningStep);
+  const canNavigateAdjacentSteps =
+    String(learningStep?.status || "").toLowerCase() === "completed" ||
+    lesson?.completion?.completed === true;
   const navigationMarkup =
-    navigation.previousStep || navigation.nextStep
+    canNavigateAdjacentSteps && (navigation.previousStep || navigation.nextStep)
       ? `<nav class="lesson-navigation" aria-label="Öğrenme yolu gezinmesi">
           ${navigation.previousStep ? '<button type="button" class="btn btn-secondary" data-learning-step-previous><span class="btn-label">Önceki</span></button>' : ""}
           ${navigation.nextStep ? '<button type="button" class="btn btn-primary" data-learning-step-next><span class="btn-label">Sonraki</span></button>' : ""}
@@ -12697,11 +12700,14 @@ function renderLearningPathExerciseNavigation() {
   if (!nav) return;
   const navigation =
     typeof activeLearningStepNavigation !== "undefined" ? activeLearningStepNavigation : null;
+  const isCompletedStep =
+    String(activeLearningStepNode?.status || "").toLowerCase() === "completed";
   const visible =
     isPlatformUser === false &&
     typeof learningPathEntryMode !== "undefined" &&
     learningPathEntryMode &&
     Boolean(exerciseSession?.learningStepId) &&
+    isCompletedStep &&
     Boolean(navigation?.previousStep || navigation?.nextStep);
   if (!visible) {
     nav.innerHTML = "";
@@ -13122,6 +13128,7 @@ function renderExerciseResult() {
       typeof learningPathEntryMode !== "undefined" &&
       learningPathEntryMode &&
       Boolean(exerciseSession.learningStepId) &&
+      String(activeLearningStepNode?.status || "").toLowerCase() === "completed" &&
       typeof activeLearningStepNavigation !== "undefined" &&
       Boolean(activeLearningStepNavigation?.previousStep || activeLearningStepNavigation?.nextStep);
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));

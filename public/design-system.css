@@ -1952,20 +1952,6 @@ dialog::backdrop {
 .app.student-shell #learning-path-card .learning-map-v6-node.is-pending .learning-map-v6-marker {
   animation: none;
 }
-.app.student-shell
-  #learning-path-card
-  .learning-map-v6-node.is-pending
-  .learning-map-v6-marker-wrap::after {
-  position: absolute;
-  inset: 1px;
-  content: "";
-  pointer-events: none;
-  border: 3px solid transparent;
-  border-top-color: var(--ui-brand);
-  border-right-color: var(--ui-teal);
-  border-radius: 24px;
-  animation: ui-loading-ring 900ms linear infinite;
-}
 .app .learning-path-step-card.is-pending .learning-path-step-index {
   position: relative;
 }
@@ -2139,10 +2125,7 @@ dialog::backdrop {
     #learning-path-card
     .learning-map-v6-node.is-pending
     .learning-map-v6-marker::after,
-  .app.student-shell
-    #learning-path-card
-    .learning-map-v6-node.is-pending
-    .learning-map-v6-marker-wrap::after {
+  .app.student-shell #learning-path-card .learning-map-v6-node.is-pending .learning-map-v6-marker {
     animation: none;
   }
   .app.student-shell #page-exercise label.answer-card:active,

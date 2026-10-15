@@ -73,6 +73,28 @@ describe("student lesson UI", () => {
     expect(html).toContain("Sonraki");
   });
 
+  it("hides adjacent navigation while the current lesson is still active", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({id:'lesson-last',title:'Son istasyon',objective:'Tamamla',explanation:'Anlatım',workedExample:'Örnek',guidedPractice:'Uygula',completion:{completed:false}},{id:'step-last',type:'TEACHING',status:'active',unitTitle:'Son ünite'},{previousStep:{id:'step-before',type:'TEACHING',status:'completed',title:'Önceki'},nextStep:null})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).not.toContain('class="lesson-navigation"');
+    expect(html).not.toContain("data-learning-step-previous");
+    expect(html).not.toContain("data-learning-step-next");
+    expect(html).toContain("data-learning-step-complete");
+  });
+
+  it("keeps the terminal checkpoint free of previous and next buttons", () => {
+    const h = harness();
+    h.run(`renderLearningPathTerminalStep({learningPathPosition:40,learningPathTotal:40})`);
+    const html = h.get("lesson-detail").innerHTML;
+    expect(html).toContain("Bu öğrenme döngüsünü tamamladın");
+    expect(html).toContain("data-learning-terminal-complete");
+    expect(html).not.toContain("data-learning-step-previous");
+    expect(html).not.toContain("data-learning-step-next");
+  });
+
   it("does not show a second replay CTA for a completed lesson", () => {
     const h = harness();
     h.run(

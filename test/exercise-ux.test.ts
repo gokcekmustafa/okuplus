@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+const designSystem = readFileSync(new URL("../public/design-system.css", import.meta.url), "utf8");
 const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const exerciseCode = source.slice(
   source.indexOf("function exerciseApi("),
@@ -209,6 +210,28 @@ describe("exercise UX state from production frontend", () => {
     expect(source).toContain('button.matches(".learning-map-v6-node")');
     expect(styles).toContain(".learning-map-v6-node.is-pending .learning-map-v6-marker");
     expect(styles).toContain("okuplus-map-v6-loading-fill");
+    expect(styles).toContain("animation: okuplus-map-v6-loading-fill 1.15s ease-in-out infinite");
+    expect(designSystem).not.toContain(".learning-map-v6-marker-wrap::after");
+  });
+
+  it("shows exercise navigation only when replaying a completed Learning Path station", () => {
+    const h = harness();
+    h.context.learningPathEntryMode = true;
+    h.context.exerciseSession.learningStepId = "active-step";
+    h.context.activeLearningStepNavigation = {
+      previousStep: { id: "previous-step", status: "completed" },
+      nextStep: { id: "next-step", status: "active" },
+    };
+    h.context.activeLearningStepNode = { id: "active-step", status: "active" };
+
+    h.run("renderLearningPathExerciseNavigation()");
+    expect(h.get("exercise-learning-path-navigation").innerHTML).toBe("");
+
+    h.context.activeLearningStepNode.status = "completed";
+    h.run("renderLearningPathExerciseNavigation()");
+    const html = h.get("exercise-learning-path-navigation").innerHTML;
+    expect(html).toContain("data-learning-path-previous");
+    expect(html).toContain("data-learning-path-next");
   });
 
   it("keeps answered but unscored items pending even when summary flag is false", () => {
@@ -256,6 +279,7 @@ describe("exercise UX state from production frontend", () => {
     const h = harness();
     h.context.learningPathEntryMode = true;
     h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.activeLearningStepNode = { id: "step-2", status: "completed" };
     h.context.activeLearningStepNavigation = {
       previousStep: { id: "step-1", status: "completed" },
       nextStep: { id: "step-3", status: "active" },
@@ -277,6 +301,7 @@ describe("exercise UX state from production frontend", () => {
     const h = harness();
     h.context.learningPathEntryMode = true;
     h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.activeLearningStepNode = { id: "step-2", status: "completed" };
     h.context.activeLearningStepNavigation = {
       previousStep: { id: "step-1", status: "completed" },
       nextStep: null,
@@ -291,6 +316,7 @@ describe("exercise UX state from production frontend", () => {
     const h = harness();
     h.context.learningPathEntryMode = true;
     h.context.exerciseSession = { id: "session", status: "IN_PROGRESS", learningStepId: "step-2" };
+    h.context.activeLearningStepNode = { id: "step-2", status: "completed" };
     h.context.exerciseAttempts = new Map();
     h.context.activeLearningStepNavigation = {
       previousStep: { id: "step-1", status: "completed" },
