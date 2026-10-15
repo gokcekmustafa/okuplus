@@ -150,7 +150,7 @@ describe("P1 transition foundation contracts", () => {
     expect(EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
     expect(isEducationV2P1ACycleV2ProductionAssignmentEnabled()).toBe(true);
     expect(await readFile(new URL("../public/app.js", import.meta.url), "utf8")).toContain(
-      'exerciseSession.deviceInfo?.source !== "LEARNING_PATH_REPLAY"',
+      'originalSession.deviceInfo?.source === "LEARNING_PATH_REPLAY"',
     );
   });
 

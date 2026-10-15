@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
@@ -445,6 +445,35 @@ describe("exercise UX state from production frontend", () => {
           `finishGuidedExerciseCompletion(exerciseSession, null, () => true, ${kind === "daily"})`,
         ),
       ).toBe(false);
+    },
+  );
+
+  it.each(["server-source", "completed-node"])(
+    "does not reconcile a replay identified by %s",
+    async (evidence) => {
+      const h = harness();
+      h.context.originalSession = {
+        id: "session",
+        status: "IN_PROGRESS",
+        learningStepId: "step-31",
+        ...(evidence === "server-source" ? { deviceInfo: { source: "LEARNING_PATH_REPLAY" } } : {}),
+      };
+      h.context.exerciseSession = { id: "session", status: "COMPLETED", learningStepId: "step-31" };
+      h.context.node = {
+        id: "step-31",
+        status: evidence === "completed-node" ? "completed" : "active",
+        learningPathId: "p1",
+        learningPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_G8_12",
+      };
+      h.context.reconcileP1ToNextCycle = vi.fn();
+      h.context.returnToLearningPathAfterGuidedExercise = vi.fn();
+      await h.run("finishGuidedExerciseCompletion(originalSession, node, () => true, false)");
+      expect(h.context.reconcileP1ToNextCycle).not.toHaveBeenCalled();
+      expect(h.context.returnToLearningPathAfterGuidedExercise).toHaveBeenCalledExactlyOnceWith(
+        h.context.node,
+        null,
+        true,
+      );
     },
   );
 
