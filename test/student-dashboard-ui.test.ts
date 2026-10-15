@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const app = readFileSync("public/app.js", "utf8").replace(/\r\n/gu, "\n");
@@ -30,7 +31,6 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain("Dersi tamamla");
     expect(app).toContain("nextStep");
     expect(app).toContain("learningPathEntryMode");
-    expect(app).toContain('var disabled = visualStatus === "locked" ? " disabled" : "";');
     expect(app).not.toContain('if (visualStatus === "completed") return "Tekrar et";');
     expect(app).toContain('class="learning-map-v6-completed-state"');
     expect(app).toContain('fetch("/account/entitlements"');
@@ -38,6 +38,57 @@ describe("student dashboard release 0.4", () => {
     expect(app).toContain("function renderTodayData(data, scope)");
     expect(app).toContain("if (data.today) renderTodayData(data.today, scope);");
     expect(app).toContain("summary?.sessionCount");
+  });
+
+  it("renders only completed and active ready stations as clickable", () => {
+    const container = { innerHTML: "", querySelectorAll: () => [] };
+    const context = createContext({
+      $: (id: string) => (id === "learning-path" ? container : { textContent: "0" }),
+      escapeHtml: (value: unknown) => String(value).replaceAll("<", "&lt;"),
+      learningPathContinuation: null,
+      insightsIdentity: "student:tenant",
+      uiMotion: {
+        enhanceRoadmap: () => Promise.resolve({ cancelled: false }),
+        enhanceProgress() {},
+      },
+      continueAfterLearningPathMotion() {},
+    });
+    runInContext(
+      app.slice(
+        app.indexOf("function learningPathStatusLabel("),
+        app.indexOf("function returnToLearningPathAfterStep("),
+      ) +
+        app.slice(
+          app.indexOf("function learningPathAreaLabel("),
+          app.indexOf("async function loadLearningPath()"),
+        ),
+      context,
+    );
+    context.groups = [
+      {
+        path: { area: "READING_COMPREHENSION" },
+        nodes: [
+          { id: "completed", status: "completed", type: "TEACHING", availability: "READY" },
+          { id: "current", status: "active", type: "TEACHING", availability: "READY" },
+          { id: "future", status: "locked", type: "TEACHING", availability: "READY" },
+          { id: "unavailable", status: "completed", type: "TEACHING", availability: "UNAVAILABLE" },
+        ],
+      },
+    ];
+    runInContext("renderLearningPathMap(groups, {name:'Mevcut seviye'})", context);
+    const button = (id: string) =>
+      container.innerHTML.match(new RegExp(`<button[^>]*data-node-id="${id}"[^>]*>`))?.[0] ?? "";
+    expect(button("completed")).not.toContain(" disabled");
+    expect(button("current")).toContain('aria-current="step"');
+    expect(button("current")).not.toContain(" disabled");
+    expect(button("future")).toContain(" disabled");
+    expect(button("unavailable")).toContain(" disabled");
+    expect(container.innerHTML).toContain("İçerik hazırlanıyor");
+    context.groups[0].nodes[1].status = "completed";
+    runInContext("renderLearningPathMap(groups, {name:'Mevcut seviye'})", context);
+    expect(button("current")).toContain('aria-current="step"');
+    expect(button("future")).not.toContain('aria-current="step"');
+    expect(button("unavailable")).not.toContain('aria-current="step"');
   });
 
   it("uses the Learning Path response for the dashboard today card", () => {

@@ -3172,9 +3172,13 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       learningPathTotal: entries.length,
     };
   });
-  var currentNode = nodes.find(function (node) {
-    return node.status === "active";
-  });
+  var currentNode =
+    nodes.find(function (node) {
+      return node.status === "active";
+    }) ||
+    [...nodes].reverse().find(function (node) {
+      return node.status === "completed" && node.availability !== "UNAVAILABLE";
+    });
   var completed = nodes.filter(function (node) {
     return node.status === "completed";
   }).length;
