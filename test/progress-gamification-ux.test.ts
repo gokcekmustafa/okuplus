@@ -32,6 +32,7 @@ function harness(missingIds: string[] = []) {
   const lookup = (id: string) => (missing.has(id) ? null : get(id));
   const storage = new Map<string, string>();
   const context = createContext({
+    uiMotion: { reset() {}, enhanceProgress() {}, enhanceAwards() {} },
     $: lookup,
     escapeHtml: (s: string) => s.replaceAll("<", "&lt;"),
     getStoredTokens: () => ({ accessToken: "token", tenantId: "personal" }),

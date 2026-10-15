@@ -8,6 +8,42 @@ const escapeHtml = runInNewContext(
 ) as (value: unknown) => string;
 
 describe("shared UI presentation preserves state and accessibility", () => {
+  it("preserves station icons and announces a valid busy state while loading", () => {
+    const helper = source.slice(
+      source.indexOf("function setAsyncButtonState("),
+      source.indexOf("const PREMIUM_LIMIT_FEATURES"),
+    );
+    const setState = runInNewContext(`${helper}; setAsyncButtonState`);
+    for (const kind of [".learning-map-v6-node", ".learning-path-step-card"]) {
+      const attributes = new Map<string, string>();
+      const action = { textContent: "Başla →" };
+      const icon = {};
+      const button = {
+        dataset: {} as Record<string, string>,
+        disabled: false,
+        get textContent() {
+          return "İstasyon 32 Başla →";
+        },
+        set textContent(_text: string) {
+          throw new Error("Station content must be preserved");
+        },
+        matches: (selector: string) => selector === kind,
+        querySelector: (selector: string) =>
+          selector === ".learning-map-v6-action" ? action : selector === "img" ? icon : null,
+        setAttribute: (name: string, value: string) => attributes.set(name, value),
+        removeAttribute: (name: string) => attributes.delete(name),
+        classList: { toggle() {} },
+      };
+      setState(button, true, "Başlatılıyor…");
+      expect(button.querySelector("img")).toBe(icon);
+      expect(attributes.get("aria-busy")).toBe("true");
+      expect(button.disabled).toBe(true);
+      setState(button, false, "Başlatılıyor…");
+      expect(attributes.has("aria-busy")).toBe(false);
+      expect(button.disabled).toBe(false);
+      expect(action.textContent).toBe("Başla →");
+    }
+  });
   it("renders metric values and labels safely with a decorative, known icon", () => {
     const metric = source.slice(
       source.indexOf("function insightMetric("),

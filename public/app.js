@@ -1,4 +1,7 @@
 // OkuPratik — minimal SPA (vanilla JS)
+import { createUiMotion, loadingSkeleton } from "./ui-motion.js";
+
+const uiMotion = createUiMotion();
 // Web'de access + refresh token localStorage'da tutulur. Native kabukta
 // tokenlar uygulamanın secure-storage köprüsünde tutulur.
 // Sayfa yenilendiğinde /auth/me ile doğrulanır; 401 ise /auth/refresh denenir.
@@ -224,7 +227,7 @@ function setAsyncButtonState(button, busy, pendingLabel) {
     } else if (label) {
       label.textContent = pendingLabel;
       label.classList.remove("hidden");
-    } else {
+    } else if (!button.matches(".learning-path-step-card")) {
       button.textContent = pendingLabel;
     }
   } else if (button.dataset.idleLabel) {
@@ -237,11 +240,13 @@ function setAsyncButtonState(button, busy, pendingLabel) {
     } else if (label) {
       label.textContent = button.dataset.idleLabel;
       label.classList.remove("hidden");
-    } else button.textContent = button.dataset.idleLabel;
+    } else if (!button.matches(".learning-path-step-card"))
+      button.textContent = button.dataset.idleLabel;
     delete button.dataset.idleLabel;
   }
   button.disabled = busy;
-  button.toggleAttribute("aria-busy", busy);
+  if (busy) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
   button.classList.toggle("is-pending", busy);
   button.querySelector(".btn-spinner")?.classList.toggle("hidden", !busy);
 }
@@ -329,6 +334,7 @@ function showCelebration({
   kind = "success",
   key,
   major = false,
+  duration,
 }) {
   if (key) {
     try {
@@ -351,8 +357,10 @@ function showCelebration({
   layer.classList.toggle("celebration-major", major);
   layer.classList.remove("hidden");
   playRewardSound(kind);
-  if (major && typeof navigator.vibrate === "function") navigator.vibrate([18, 24, 18]);
-  if (major && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (major && !reduceMotion && typeof navigator.vibrate === "function")
+    navigator.vibrate([18, 24, 18]);
+  if (major && !reduceMotion) {
     const particles = $("celebration-particles");
     particles.replaceChildren();
     for (let i = 0; i < 18; i++) {
@@ -363,7 +371,10 @@ function showCelebration({
       particles.appendChild(particle);
     }
   }
-  celebrationTimer = setTimeout(hideCelebration, major ? 4200 : 2200);
+  celebrationTimer = setTimeout(
+    hideCelebration,
+    Number.isFinite(duration) ? Math.min(4200, Math.max(800, duration)) : major ? 4200 : 2200,
+  );
 }
 
 function presentationText(value) {
@@ -379,9 +390,14 @@ function presentationText(value) {
 function hideCelebration() {
   const layer = $("celebration-layer");
   if (!layer) return;
+  const restoreFocus = layer.contains(document.activeElement);
   layer.classList.add("hidden");
   $("celebration-particles")?.replaceChildren();
-  if (celebrationLastFocus && typeof celebrationLastFocus.focus === "function")
+  if (
+    restoreFocus &&
+    celebrationLastFocus?.isConnected !== false &&
+    typeof celebrationLastFocus?.focus === "function"
+  )
     celebrationLastFocus.focus({ preventScroll: true });
   celebrationLastFocus = null;
 }
@@ -3240,18 +3256,19 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       if (node) void startLearningPathNode(node, el);
     });
   }
-  if (currentNode) {
-    const activeButton = container.querySelector(
-      `.learning-map-v6-step.is-current .learning-map-v6-node`,
-    );
-    if (activeButton) {
-      requestAnimationFrame(() => {
-        const rect = activeButton.getBoundingClientRect();
-        const inViewport = rect.top >= 72 && rect.bottom <= window.innerHeight - 48;
-        if (!inViewport) activeButton.scrollIntoView({ block: "center", behavior: "auto" });
-      });
-    }
-  }
+  uiMotion.enhanceRoadmap(container, nodes, insightsIdentity, (milestone) => {
+    showCelebration({
+      icon: "✓",
+      eyebrow: milestone === "cycle" ? "DÖNGÜ TAMAMLANDI" : "ÜNİTE TAMAMLANDI",
+      title:
+        milestone === "cycle" ? "Öğrenme döngüsünü tamamladın!" : "Bir üniteyi daha tamamladın!",
+      detail: "İlerlemen kaydedildi. Öğrenme yoluna buradan devam edebilirsin.",
+      kind: "milestone",
+      major: true,
+      duration: 1600,
+    });
+  });
+  uiMotion.enhanceProgress(container, "roadmap");
 }
 
 async function loadLearningPath() {
@@ -3265,7 +3282,12 @@ async function loadLearningPath() {
   var learningPathPhase = "request";
   container.setAttribute("aria-busy", "true");
   retryEl?.classList.add("hidden");
-  container.innerHTML = '<p class="muted" style="text-align:center">Öğrenme yolun yükleniyor…</p>';
+  if (
+    !container.querySelector(".learning-map-v6") ||
+    !uiMotion.hasRoadmap(container, insightsIdentity)
+  )
+    container.innerHTML =
+      '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
   try {
     var data = await insightApi("learning-path");
     data = await recoverCompletedP1CycleOnLearningPathLoad(data);
@@ -3545,7 +3567,7 @@ function renderTrainingActivities() {
     }
   }
   if (trainingActivitiesState === "loading" || trainingActivitiesState === "error") {
-    grid.innerHTML = "";
+    grid.innerHTML = trainingActivitiesState === "loading" ? loadingSkeleton("training") : "";
     return;
   }
   if (!trainingActivities.length) {
@@ -4797,6 +4819,7 @@ function canAccessPage(page) {
 }
 
 function navigate(page) {
+  uiMotion.cancel();
   if (!PAGES.includes(page)) return;
   if (!canAccessPage(page)) {
     const fallback = roleHomePage();
@@ -13311,6 +13334,7 @@ function renderExerciseQuestion() {
       container.dataset.questionVersionId = renderedQuestionVersionId;
       container.dataset.questionType = type;
       container.innerHTML = html;
+      uiMotion.enter(container, `${exerciseSession?.id || ""}:${renderedQuestionVersionId}`);
       if (!exerciseQuestionTelemetry.has(q.questionVersionId)) {
         exerciseQuestionTelemetry.set(q.questionVersionId, {
           exposureStartedAt: new Date().toISOString(),
@@ -13450,6 +13474,7 @@ function showExerciseFeedback(data) {
   el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${feedbackText ? `<div>${escapeHtml(feedbackText)}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
   el.style.display = "block";
+  uiMotion.enter(el, data.id);
   exerciseAwaitingNext = true;
   lockExerciseInputs(true);
   setExerciseSubmitButtonState(
@@ -13656,16 +13681,6 @@ async function handleExerciseSubmitAttempt() {
     if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
       recordPilotTelemetry("QUESTION_ANSWERED", { sessionId, questionVersionId });
     showExerciseFeedback(data);
-    if (data.isCorrect === false && !isFastReadingExercise() && !isDailyTrainingExercise()) {
-      showCelebration({
-        icon: "💡",
-        eyebrow: "DEVAM ET",
-        title: "Tekrar düşün!",
-        detail: exerciseFeedbackText(data.feedback) || "Bu cevap öğrenmenin bir parçası.",
-        kind: "wrong",
-        key: "attempt-" + data.id,
-      });
-    }
     if (isPlatformUser === false) {
       void refreshExerciseGamification().then(() => {
         if (
@@ -13837,11 +13852,14 @@ async function handleExerciseComplete() {
         detail: newBadge
           ? newBadge.description || "Emeğin görünür oldu."
           : isAssessment
-            ? "Gerçek sonuçların kaydedildi; öğrenme yolundaki bir sonraki adımın hazır."
-            : "Öğrenme yolunda bir adım daha.",
+            ? "Sonuçların kaydedildi; Ölçme ve Değerlendirme alanından inceleyebilirsin."
+            : exerciseMode === "activity"
+              ? "Bağımsız antrenmanın kaydedildi."
+              : "Çalışman kaydedildi.",
         reward,
         kind: newBadge ? "badge" : "completion",
-        major: true,
+        major: Boolean(newBadge || isAssessment),
+        duration: newBadge || isAssessment ? 2200 : 1400,
         key: "completion-" + exerciseSession.id,
       });
     }
@@ -17808,6 +17826,7 @@ function insightRequestCache() {
   return globalThis.__okuInsightRequests;
 }
 function resetInsights() {
+  uiMotion.reset();
   progressRequest++;
   gamificationRequest++;
   historyRequest++;
@@ -18025,6 +18044,7 @@ function renderProgressList(items, trainingSkills) {
       ${progress ? `<dl class="insight-facts"><div><dt>Egzersiz</dt><dd class="skill-sessions">${sessionCount ?? 0}</dd></div><div><dt>Puanlanan cevap</dt><dd class="skill-attempts">${attemptCount ?? 0}</dd></div>${exposureCount !== undefined ? `<div><dt>Farklı çalışma</dt><dd>${exposureCount}</dd></div>` : `<div><dt>Doğru</dt><dd class="skill-correct">${progress.correctCount}</dd></div>`}${responseTimeFact}</dl>${lastActivityAt ? `<time class="muted skill-last-activity">Son çalışma: ${escapeHtml(insightDate(lastActivityAt))}</time>` : ""}` : `<p class="muted skill-no-data">Çalıştığında gerçek ilerleme verin burada görünecek.</p>`}
     </article>`;
   }).join("");
+  uiMotion.enhanceProgress($("progress-skills"), "skills");
 }
 function developmentJourneySummary(skills) {
   const supported = (skills || []).find(
@@ -18331,6 +18351,8 @@ function renderGamification(data) {
         )
         .join("")
     : '<p class="muted">Henüz puan hareketi yok.</p>';
+  uiMotion.enhanceAwards($("gamification-badges"), "badges");
+  uiMotion.enhanceAwards($("gamification-trophies"), "trophies");
 }
 async function loadGamification() {
   const run = ++gamificationRequest,

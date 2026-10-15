@@ -1947,11 +1947,216 @@ dialog::backdrop {
   }
 }
 
+/* Motion is short-lived and compositor-friendly. No idle route pulse or count-up. */
+.app.student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-marker,
+.app.student-shell #learning-path-card .learning-map-v6-node.is-pending .learning-map-v6-marker {
+  animation: none;
+}
+.app.student-shell
+  #learning-path-card
+  .learning-map-v6-node.is-pending
+  .learning-map-v6-marker-wrap::after {
+  position: absolute;
+  inset: 1px;
+  content: "";
+  pointer-events: none;
+  border: 3px solid transparent;
+  border-top-color: var(--ui-brand);
+  border-right-color: var(--ui-teal);
+  border-radius: 24px;
+  animation: ui-loading-ring 900ms linear infinite;
+}
+.app .learning-path-step-card.is-pending .learning-path-step-index {
+  position: relative;
+}
+.app .learning-path-step-card.is-pending .learning-path-step-index::after {
+  position: absolute;
+  inset: -4px;
+  border: 2px solid transparent;
+  border-top-color: var(--ui-brand);
+  border-radius: 50%;
+  content: "";
+  animation: ui-loading-ring 900ms linear infinite;
+}
+.app.student-shell #learning-path-card .learning-map-v6-progress i,
+.app .insight-bar > span {
+  transform-origin: left center;
+  transition: none;
+}
+.app #exercise-current-question > *,
+.app .insight-stat strong,
+.app .badge-new {
+  animation: none;
+}
+.app.student-shell #page-exercise label.answer-card {
+  transition:
+    border-color 130ms ease,
+    background-color 130ms ease,
+    transform 100ms ease;
+}
+.app.student-shell #page-exercise label.answer-card:not([aria-disabled="true"]):active {
+  transform: scale(0.99);
+}
+.app.student-shell #page-exercise label.answer-card::after {
+  transition:
+    transform 130ms ease,
+    color 130ms ease;
+}
+.app.student-shell #page-exercise label.answer-card.selected::after {
+  transform: scale(1.12);
+}
+.app .completion-card {
+  animation: ui-completion-in 220ms ease-out;
+}
+.motion-skeleton {
+  pointer-events: none;
+  animation: ui-skeleton-pulse 1.8s ease-in-out infinite alternate;
+}
+.motion-skeleton-training {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.motion-skeleton-card {
+  padding: 20px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-surface);
+  border-radius: 20px;
+  min-height: 200px;
+}
+.motion-skeleton-card i,
+.motion-skeleton-card span {
+  display: block;
+  background: var(--ui-line);
+  border-radius: 8px;
+}
+.motion-skeleton-card i {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 20px;
+}
+.motion-skeleton-card span {
+  height: 12px;
+  margin-top: 14px;
+}
+.motion-skeleton-card span:last-child {
+  width: 65%;
+}
+.motion-skeleton-map {
+  max-width: 720px;
+  margin: 18px auto;
+}
+.motion-skeleton-map .motion-skeleton-card {
+  position: relative;
+  min-height: 100px;
+  border: 0;
+  background: transparent;
+  padding: 14px 20px 14px 90px;
+}
+.motion-skeleton-map .motion-skeleton-card i {
+  position: absolute;
+  left: 14px;
+  top: 18px;
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+}
+.motion-skeleton-map .motion-skeleton-card:nth-child(even) {
+  margin-left: 30px;
+}
+.celebration-layer {
+  pointer-events: none;
+}
+.celebration-toast {
+  pointer-events: auto;
+}
+.celebration-layer[data-kind="milestone"] {
+  place-items: start end;
+  padding-top: 76px;
+}
+.celebration-layer[data-kind="milestone"] .celebration-toast {
+  width: min(310px, 100%);
+  padding: 18px;
+  border: 1px solid var(--ui-line);
+  box-shadow: var(--ui-shadow);
+}
+.celebration-layer[data-kind="milestone"] .celebration-icon {
+  width: 34px;
+  height: 34px;
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.celebration-layer[data-kind="milestone"] h2 {
+  font-size: 19px;
+}
+.celebration-layer[data-kind="milestone"] .celebration-detail {
+  font-size: 12px;
+}
+.celebration-layer[data-kind="milestone"] .celebration-reward:empty {
+  display: none;
+}
+@keyframes ui-loading-ring {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ui-skeleton-pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+@keyframes ui-completion-in {
+  from {
+    opacity: 0.6;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 1100px) {
+  .motion-skeleton-training {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .motion-skeleton-training {
+    grid-template-columns: 1fr;
+  }
+  .motion-skeleton-card {
+    min-height: 170px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-skeleton,
+  .app .learning-path-step-card.is-pending .learning-path-step-index::after,
+  .app.student-shell
+    #learning-path-card
+    .learning-map-v6-node.is-pending
+    .learning-map-v6-marker::after,
+  .app.student-shell
+    #learning-path-card
+    .learning-map-v6-node.is-pending
+    .learning-map-v6-marker-wrap::after {
+    animation: none;
+  }
+  .app.student-shell #page-exercise label.answer-card:active,
+  .app.student-shell #page-exercise label.answer-card.selected::after {
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .app *,
   .login-shell *,
   .guest-diagnostic-mode * {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }

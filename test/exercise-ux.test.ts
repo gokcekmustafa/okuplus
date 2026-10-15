@@ -32,6 +32,7 @@ function harness() {
     return elements.get(id)!;
   };
   const context = createContext({
+    uiMotion: { enter() {} },
     $: get,
     escapeHtml: (value: string) => value.replaceAll("<", "&lt;"),
     exerciseSession: { id: "session", status: "IN_PROGRESS" },
@@ -135,7 +136,7 @@ describe("exercise UX state from production frontend", () => {
     expect(h.run('exerciseFeedbackText("Bu kez olmadı.")')).toBe("");
   });
 
-  it("does not pass structured feedback objects to the retry celebration", async () => {
+  it("keeps wrong-answer feedback inline without opening a retry overlay", async () => {
     const h = harness();
     let detail: unknown = null;
     h.context.showCelebration = (payload: { detail?: unknown }) => {
@@ -163,7 +164,8 @@ describe("exercise UX state from production frontend", () => {
 
     await h.run("handleExerciseSubmitAttempt()");
 
-    expect(detail).toBe("Kısa açıklama");
+    expect(detail).toBeNull();
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Kısa açıklama");
     expect(String(detail)).not.toContain("[object Object]");
   });
 
