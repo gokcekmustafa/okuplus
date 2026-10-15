@@ -177,7 +177,12 @@ describe("fast-reading training v1", () => {
     expect(app).toContain('role="radio"');
     expect(app).toContain('tabindex="0"');
     expect(app).toContain("data-exercise-opt hidden");
-    expect(app).toContain("data.isCorrect === false && !isFastReadingExercise()");
-    expect(app).toContain("showExerciseFeedback(data)");
+    const submitHandler = app.slice(
+      app.indexOf("async function handleExerciseSubmitAttempt()"),
+      app.indexOf("async function handleExerciseComplete()"),
+    );
+    // All families now keep corrective feedback inline, including fast reading.
+    expect(submitHandler).not.toContain("showCelebration(");
+    expect(submitHandler).toContain("showExerciseFeedback(data)");
   });
 });

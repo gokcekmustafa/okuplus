@@ -136,13 +136,15 @@ describe("exercise UX state from production frontend", () => {
     expect(h.run('exerciseFeedbackText("Bu kez olmadı.")')).toBe("");
   });
 
-  it("keeps wrong-answer feedback inline without opening a retry overlay", async () => {
-    const h = harness();
-    let detail: unknown = null;
-    h.context.showCelebration = (payload: { detail?: unknown }) => {
-      detail = payload.detail;
-    };
-    h.run(`
+  it.each([false, true])(
+    "keeps wrong-answer feedback inline without an overlay (fast reading: %s)",
+    async (fastReading) => {
+      const h = harness();
+      let detail: unknown = null;
+      h.context.showCelebration = (payload: { detail?: unknown }) => {
+        detail = payload.detail;
+      };
+      h.run(`
       exerciseRequest = null;
       crypto = { randomUUID: () => "request-id" };
       $("exercise-current-question").dataset = { questionVersionId: "q1", questionType: "OPEN_ENDED" };
@@ -162,12 +164,15 @@ describe("exercise UX state from production frontend", () => {
       isDailyTrainingExercise = () => false;
     `);
 
-    await h.run("handleExerciseSubmitAttempt()");
+      h.context.isFastReadingExercise = () => fastReading;
 
-    expect(detail).toBeNull();
-    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Kısa açıklama");
-    expect(String(detail)).not.toContain("[object Object]");
-  });
+      await h.run("handleExerciseSubmitAttempt()");
+
+      expect(detail).toBeNull();
+      expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Kısa açıklama");
+      expect(String(detail)).not.toContain("[object Object]");
+    },
+  );
 
   it("encodes session and question identifiers before placing them in request paths", () => {
     expect(source).toContain("`/questions/${encodeURIComponent(questionVersionId)}/attempts`");
