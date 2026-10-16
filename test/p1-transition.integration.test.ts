@@ -26,6 +26,7 @@ import {
   getStudentLearningPath,
   assertLearningStepAccessible,
   assertLearningContentAccessible,
+  completeLearningStepForSession,
 } from "../src/modules/learning-path/service.js";
 import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
 import {
@@ -327,6 +328,7 @@ async function completeInitialCycle(
   fixture: ActorFixture,
   includeAssessmentResult: boolean,
   pathId = PATH_IDS.initial,
+  assessmentScore = 1,
 ) {
   const steps = await prisma.learningStep.findMany({
     where: { unit: { pathId } },
@@ -398,7 +400,7 @@ async function completeInitialCycle(
           tenantId: fixture.actor.tenantId,
           studentId: fixture.actor.userId,
           assessmentId: step.assessmentId,
-          score: 1,
+          score: assessmentScore,
           metrics: { source: "synthetic-integration-test" },
         },
       });
@@ -446,7 +448,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await completeInitialCycle(blockedFixture, true);
     await completeInitialCycle(concurrentFixture, true);
     await completeInitialCycle(recoveryFixture, true);
-    await completeInitialCycle(cycle2Fixture, true, PATH_IDS.next);
+    await completeInitialCycle(cycle2Fixture, true, PATH_IDS.next, 0.4);
     await prisma.studentLearningPath.create({
       data: {
         tenantId: cycle2Fixture.actor.tenantId,
@@ -484,6 +486,15 @@ describe.sequential("P1 learning cycle transition integration", () => {
 
   it("continues a completed Cycle 2 student into the published Cycle 3 graph exactly once", async () => {
     await withPublicationApproval(async () => {
+      const assessmentStep = await prisma.learningStep.findFirstOrThrow({
+        where: { unit: { pathId: PATH_IDS.next }, type: "ASSESSMENT" },
+        select: { id: true, assessmentId: true },
+      });
+      await completeLearningStepForSession(cycle2Fixture.actor, {
+        templateVersionId: "cycle-2-assessment",
+        assessmentId: assessmentStep.assessmentId,
+        learningStepId: assessmentStep.id,
+      });
       const beforeProgress = await prisma.studentLearningStepProgress.findMany({
         where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
         orderBy: { id: "asc" },
@@ -493,6 +504,13 @@ describe.sequential("P1 learning cycle transition integration", () => {
         orderBy: { id: "asc" },
       });
       const preview = await getStudentLearningPath(cycle2Fixture.actor);
+      const completedCycle2 = preview?.paths.find(
+        (projection) => projection.path.code === EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.code,
+      );
+      expect(completedCycle2?.nodes.every((node) => node.status === "completed")).toBe(true);
+      expect(
+        completedCycle2?.nodes.find((node) => node.type === "ASSESSMENT")?.progress?.accuracy,
+      ).toBe(0.4);
       expect(preview?.routeContinuation?.futureCycles[0]).toMatchObject({
         pathCode: EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.code,
         stationCount: 7,
@@ -575,9 +593,6 @@ describe.sequential("P1 learning cycle transition integration", () => {
           orderBy: { id: "asc" },
         }),
       ).toEqual(beforeResults);
-      const assessmentStep = await prisma.learningStep.findFirstOrThrow({
-        where: { unit: { pathId: PATH_IDS.next }, type: "ASSESSMENT" },
-      });
       expect(
         await resolveP1CycleTransitionStep(cycle2Fixture.actor, {
           learningStepId: null,

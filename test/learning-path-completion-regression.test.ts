@@ -4,8 +4,38 @@ import {
   resolveLearningPathStepEvidence,
 } from "../src/modules/learning-path/service.js";
 import { resolveP0LinearCompletion } from "../src/modules/student-learning/p1-transition.js";
+import { assessmentResultCompletesLearningStep } from "../src/modules/student-learning/assessment-completion-policy.js";
+import { EDUCATION_V2_P1_A_PROGRAM } from "../src/curriculum/education-v2-p1-a-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_3_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
 
 describe("learning path completion regression", () => {
+  it.each([
+    EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.code,
+    EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.code,
+  ])("counts a recorded %s assessment as completion without discarding its score", (pathCode) => {
+    expect(assessmentResultCompletesLearningStep(pathCode, true, 0.4, { minimumScore: 0.75 })).toBe(
+      true,
+    );
+    expect(
+      assessmentResultCompletesLearningStep(pathCode, false, null, { minimumScore: 0.75 }),
+    ).toBe(false);
+  });
+
+  it("keeps the configured score threshold for the initial P1-A cycle and unrelated routes", () => {
+    expect(
+      assessmentResultCompletesLearningStep(EDUCATION_V2_P1_A_PROGRAM.path.code, true, 0.4, {
+        minimumScore: 0.75,
+      }),
+    ).toBe(false);
+    expect(
+      assessmentResultCompletesLearningStep("OTHER_ROUTE", true, 0.4, { minimumScore: 0.75 }),
+    ).toBe(false);
+    expect(
+      assessmentResultCompletesLearningStep("OTHER_ROUTE", true, 0.8, { minimumScore: 0.75 }),
+    ).toBe(true);
+  });
+
   it.each(["INDEPENDENT_TRAINING", "LEARNING_PATH_REPLAY"])(
     "does not turn %s sessions into new station completion evidence",
     (source) => {

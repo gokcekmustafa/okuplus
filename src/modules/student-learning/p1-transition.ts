@@ -22,6 +22,7 @@ import { resolveLearningPathStepEvidence } from "../learning-path/service.js";
 import { readSkillResults } from "../measurements/service.js";
 import { resolveTrainingRuntimeConfig } from "../training/exercise-contract.js";
 import { withTenantContext } from "../tenant/index.js";
+import { assessmentResultCompletesLearningStep } from "./assessment-completion-policy.js";
 import { assertStudentActor, type StudentActor } from "./policy.js";
 import {
   P1_ROUTE_SELECTION_POLICY_VERSION,
@@ -994,10 +995,6 @@ function hasExpectedP1CycleGraph(path: P1CycleGraph): boolean {
   return matchesLearningRouteGraph(path);
 }
 
-function cycleMinimumScore(rule: Prisma.JsonValue): number | null {
-  return minimumScore(rule);
-}
-
 async function isP1CycleComplete(
   tx: Prisma.TransactionClient,
   actor: P1StudentActor,
@@ -1088,8 +1085,7 @@ async function isP1CycleComplete(
   for (const step of steps) {
     if (!step.assessmentId || !latestResults.has(step.assessmentId)) continue;
     const score = latestResults.get(step.assessmentId) ?? null;
-    const threshold = cycleMinimumScore(step.completionRule);
-    if (threshold === null || (score !== null && score >= threshold)) {
+    if (assessmentResultCompletesLearningStep(path.code, true, score, step.completionRule)) {
       evidenceCompleted.add(step.id);
     }
   }

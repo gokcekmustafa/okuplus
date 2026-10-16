@@ -33,6 +33,10 @@ metinden üretilmiş dolgu döngüler eklenmemiştir.
 - İlerleme kanıtları tüm atanmış döngüler için toplu okunur. Öğrenci ve tenant
   filtreleri her kanıt sorgusunda bulunur. Belirsiz eski içerik/şablon
   eşleşmeleri tamamlanma kanıtı sayılmaz.
+- P1-A'nın ikinci ve sonraki devam döngülerinde kayıtlı değerlendirme sonucu
+  istasyonun tamamlanma kanıtıdır; puan, yeterlik analizi için saklanır ve
+  tek başına sonraki döngüye geçişi engellemez. İlk döngü ile diğer ölçme ve
+  değerlendirme akışlarının kendi puanlama kuralları değişmez.
 - Sonraki yayımlanmış grafik haritada kilitli önizleme olabilir. Bu önizleme
   öğrenci ataması değildir ve sunucu erişimi vermez. Kaynak yayın izni olmayan
   gerçek aday yalnızca yayın bekleyen bölüm bilgisiyle gösterilir.

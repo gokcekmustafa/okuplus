@@ -12,6 +12,7 @@ import {
   matchesLearningRouteGraph,
   upcomingLearningRouteCycles,
 } from "../../curriculum/learning-route-catalog.js";
+import { assessmentResultCompletesLearningStep } from "../student-learning/assessment-completion-policy.js";
 
 export type LearningPathActor = StudentActor;
 
@@ -527,6 +528,7 @@ function flattenSteps(path: PublishedPath) {
   return path.units.flatMap((unit) =>
     unit.steps.map((step) => ({
       ...step,
+      pathCode: path.code,
       unit: {
         id: unit.id,
         code: unit.code,
@@ -681,7 +683,7 @@ async function readPathStates(
       const step = stepById.get(row.learningStepId);
       const evidence = stepEvidence.get(row.learningStepId);
       const assessmentCompleted = step?.assessmentId
-        ? assessmentResultCompletesStep(step, latestAssessment)
+        ? assessmentResultCompletesStep(step, latestAssessment, step.pathCode)
         : false;
       const sessionCount = evidence?.sessionCount ?? (assessmentCompleted ? 1 : 0);
       const accuracy = step?.assessmentId
@@ -702,7 +704,7 @@ async function readPathStates(
     if (progress.has(step.id)) continue;
     const evidence = stepEvidence.get(step.id);
     const assessmentCompleted = step.assessmentId
-      ? assessmentResultCompletesStep(step, latestAssessment)
+      ? assessmentResultCompletesStep(step, latestAssessment, step.pathCode)
       : false;
     if (evidence?.completed || assessmentCompleted) {
       progress.set(step.id, {
@@ -902,20 +904,18 @@ function toNodes(
   };
 }
 
-function minimumScoreFromCompletionRule(rule: PrismaTypes.JsonValue): number | null {
-  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
-  const value = (rule as Record<string, unknown>).minimumScore;
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 function assessmentResultCompletesStep(
   step: PathStepRow,
   results: Map<string, number | null>,
+  pathCode: string,
 ): boolean {
-  if (!step.assessmentId || !results.has(step.assessmentId)) return false;
-  const minimumScore = minimumScoreFromCompletionRule(step.completionRule);
-  const score = results.get(step.assessmentId) ?? null;
-  return minimumScore === null || (score !== null && score >= minimumScore);
+  if (!step.assessmentId) return false;
+  return assessmentResultCompletesLearningStep(
+    pathCode,
+    results.has(step.assessmentId),
+    results.get(step.assessmentId) ?? null,
+    step.completionRule,
+  );
 }
 
 export async function getStudentLearningPath(actor: LearningPathActor) {
@@ -1438,8 +1438,16 @@ export async function completeLearningStepForSession(
       }),
     );
     if (!result) return;
-    const minimumScore = minimumScoreFromCompletionRule(node.completionRule);
-    if (minimumScore !== null && (result.score === null || result.score < minimumScore)) return;
+    if (
+      !assessmentResultCompletesLearningStep(
+        node.learningPathCode,
+        true,
+        result.score,
+        node.completionRule,
+      )
+    ) {
+      return;
+    }
   }
 
   await completeLearningStep(actor, node.id);

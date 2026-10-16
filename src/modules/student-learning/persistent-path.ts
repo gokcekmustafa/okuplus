@@ -11,6 +11,7 @@ import {
 } from "../../curriculum/academic-reading-p0.js";
 import { withTenantContext } from "../tenant/index.js";
 import type { AcademicProgramResponse } from "./academic-program.js";
+import { assessmentResultCompletesLearningStep } from "./assessment-completion-policy.js";
 
 export type PersistentLearningActor = {
   userId: string;
@@ -50,11 +51,13 @@ type StepRow = {
 
 type PathRow = {
   id: string;
+  code: string;
   area: "FAST_READING" | "READING_COMPREHENSION" | "COMMON";
   units: Array<{ steps: StepRow[] }>;
 };
 
 type CompletionEvidenceStep = Pick<StepRow, "id" | "type" | "completionRule"> & {
+  pathCode: string;
   prerequisiteStepId: string | null;
   contentVersionId: string | null;
   exerciseTemplateVersionId: string | null;
@@ -134,8 +137,8 @@ function statusForStep(
   return areLearningStepPrerequisitesComplete(step.completionRule, completed) ? "ACTIVE" : "LOCKED";
 }
 
-function allSteps(path: PathRow): StepRow[] {
-  return path.units.flatMap((unit) => unit.steps);
+function allSteps(path: PathRow): Array<StepRow & { pathCode: string }> {
+  return path.units.flatMap((unit) => unit.steps.map((step) => ({ ...step, pathCode: path.code })));
 }
 
 function stepByType(steps: StepRow[], type: StepRow["type"]): StepRow | undefined {
@@ -198,6 +201,7 @@ export async function getPersistentAcademicProgram(
         orderBy: [{ area: "asc" }, { version: "desc" }],
         select: {
           id: true,
+          code: true,
           area: true,
           units: {
             orderBy: { position: "asc" },
@@ -391,12 +395,6 @@ export async function getPersistentAcademicProgram(
   }
 }
 
-function minimumScoreFromCompletionRule(rule: Prisma.JsonValue): number | null {
-  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
-  const value = (rule as Record<string, unknown>).minimumScore;
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
 async function completedStepIdsFromEvidence(
   db: PrismaNamespace.TransactionClient,
   actor: PersistentLearningActor,
@@ -493,9 +491,8 @@ async function completedStepIdsFromEvidence(
       continue;
     }
     if (step.assessmentId && latestAssessmentScore.has(step.assessmentId)) {
-      const minimumScore = minimumScoreFromCompletionRule(step.completionRule);
       const score = latestAssessmentScore.get(step.assessmentId) ?? null;
-      if (minimumScore === null || (score !== null && score >= minimumScore)) {
+      if (assessmentResultCompletesLearningStep(step.pathCode, true, score, step.completionRule)) {
         completed.add(step.id);
       }
     }
@@ -517,7 +514,7 @@ async function completedStepIdsFromEvidence(
 }
 
 async function publishedCompletionEvidenceSteps(actor: PersistentLearningActor) {
-  return prisma.learningStep.findMany({
+  const rows = await prisma.learningStep.findMany({
     where: {
       unit: {
         path: {
@@ -552,8 +549,10 @@ async function publishedCompletionEvidenceSteps(actor: PersistentLearningActor) 
       contentVersionId: true,
       exerciseTemplateVersionId: true,
       assessmentId: true,
+      unit: { select: { path: { select: { code: true } } } },
     },
-  }) as Promise<CompletionEvidenceStep[]>;
+  });
+  return rows.map(({ unit, ...step }) => ({ ...step, pathCode: unit.path.code }));
 }
 
 function publishedLearningPathScope(actor: PersistentLearningActor): Prisma.LearningPathWhereInput {
@@ -674,7 +673,14 @@ export async function completeLearningStep(
     await withTenantContext(actor, async (tx) => {
       const step = await tx.learningStep.findUnique({
         where: { id: stepId },
-        select: { id: true, type: true, prerequisiteStepId: true, completionRule: true },
+        select: {
+          id: true,
+          type: true,
+          prerequisiteStepId: true,
+          completionRule: true,
+          assessmentId: true,
+          unit: { select: { path: { select: { code: true } } } },
+        },
       });
       if (!step) return;
       const progress = await tx.studentLearningStepProgress.findUnique({
@@ -700,23 +706,39 @@ export async function completeLearningStep(
               contentVersionId: true,
               exerciseTemplateVersionId: true,
               assessmentId: true,
+              unit: { select: { path: { select: { code: true } } } },
             },
           })
         : [];
-      const completed = await completedStepIdsFromEvidence(tx, actor, prerequisiteSteps);
+      const completed = await completedStepIdsFromEvidence(
+        tx,
+        actor,
+        prerequisiteSteps.map(({ unit, ...prerequisite }) => ({
+          ...prerequisite,
+          pathCode: unit.path.code,
+        })),
+      );
       if (!prerequisites.every((id) => completed.has(id))) {
         throw validationError("Bu öğrenme adımı için ön koşullar tamamlanmamış");
       }
-      const rule = step.completionRule;
-      if (step.type === "ASSESSMENT" && rule && typeof rule === "object" && !Array.isArray(rule)) {
-        const minimumScore = (rule as { minimumScore?: unknown }).minimumScore;
-        const score =
-          evidence && typeof evidence === "object" && !Array.isArray(evidence)
-            ? (evidence as { averageScore?: unknown }).averageScore
-            : null;
+      const pathCode = step.unit.path.code;
+      if (step.type === "ASSESSMENT" && step.assessmentId) {
+        const assessmentResult = await tx.assessmentResult.findFirst({
+          where: {
+            tenantId: actor.tenantId!,
+            studentId: actor.userId,
+            assessmentId: step.assessmentId,
+          },
+          orderBy: { completedAt: "desc" },
+          select: { score: true },
+        });
         if (
-          typeof minimumScore === "number" &&
-          (typeof score !== "number" || score < minimumScore)
+          !assessmentResultCompletesLearningStep(
+            pathCode,
+            Boolean(assessmentResult),
+            assessmentResult?.score ?? null,
+            step.completionRule,
+          )
         ) {
           return;
         }
