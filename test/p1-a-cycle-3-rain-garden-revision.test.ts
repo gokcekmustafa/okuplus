@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4,
+  p1ACycle3Id,
   p1ACycle3QuestionVersionId,
 } from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
 import {
@@ -11,9 +12,19 @@ import {
 
 describe("Cycle 3 rain-garden station version 4 candidate", () => {
   it("preserves the published v3 question and creates distinct unreleased v4 identifiers", () => {
+    const sourceContent = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.content.find(
+      (item) => item.key === EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.contentKey,
+    );
     const exercise = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.exercises.find(
       (item) => item.key === "p1a-v3-evidence-practice",
     );
+    expect(sourceContent?.key).toBe("p1a-v3-evidence-practice");
+    expect(EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.contentKey).toBe(exercise?.contentKey);
+    expect(EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.exerciseKey).toBe(exercise?.key);
+    expect(EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.templateVersionId).toBe(
+      p1ACycle3Id("templateVersion", `${exercise?.key}-v4`),
+    );
+    expect(sourceContent?.body).toContain("yağmur bahçesine dönüştürüldü");
     expect(exercise?.questions.map((item) => item.correctOptionId)).toEqual(["a", "d", "c"]);
     expect(EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.publicationApproved).toBe(false);
     expect(EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4.editorialReviewStatus).toBe(
@@ -48,9 +59,10 @@ describe("Cycle 3 rain-garden station version 4 candidate", () => {
       "Bir bölümü toprağa geçer; başka bir bölümü",
     );
     expect(revision.questions[2]?.options.find((item) => item.id === "a")?.text).toBe(
-      "Su, bahçeye iki ayrı yoldan katkı sağlar",
+      "Su, toprağa geçerek ve bitkileri besleyerek katkı sağlar",
     );
     expect(revision.questions[1]?.explanation).toContain("iki ayrı sonucu birbirinden ayırır");
+    expect(revision.questions.map((item) => item.correctOptionId)).toEqual(["b", "c", "a"]);
   });
 
   it("passes mechanical cue checks while remaining blocked for editorial review", () => {

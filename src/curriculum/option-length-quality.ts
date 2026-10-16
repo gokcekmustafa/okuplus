@@ -28,10 +28,19 @@ export type OptionLengthQuality = {
 
 export type MultipleChoiceQualityQuestion = {
   key: string;
+  /** Stable identity shared by immutable source and revision versions. */
+  sourceQuestionId?: string;
+  /** Authoritative source/version key; null means the source declares no version. */
+  sourceVersionId?: string | null;
+  sourceVersionStatus?:
+    "SOURCE_CURRENT" | "UNRELEASED_CANDIDATE" | "REVISION_CANDIDATE" | "VERSION_UNDECLARED";
   options: readonly { id: string; text: string }[];
   correctOptionId: string;
   prompt?: string;
   contentKey?: string;
+  sourceText?: string;
+  explanation?: string;
+  hint?: string;
   skillCode?: string;
   editorialReviewStatus?: "REVIEW_REQUIRED" | "VERIFIED";
 };

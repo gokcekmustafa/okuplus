@@ -6,6 +6,8 @@ import {
 import {
   CANONICAL_PLACEMENT_ITEM_BANK_REVISION_CANDIDATE,
   validateCanonicalPlacementItemBankRevisionCandidate,
+  CANONICAL_PLACEMENT_ITEM_BANK_REVIEW_CANDIDATE,
+  validateCanonicalPlacementItemBankReviewCandidate,
 } from "../src/curriculum/canonical-placement-item-bank-revisions.js";
 import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
 
@@ -170,6 +172,79 @@ describe("canonical placement item bank v1", () => {
       const source = sourceByIdForPlacement(question.key);
       expect(question.correctOptionId).toBe(source.correctAnswer.correctOptionIds[0]);
     }
+  });
+
+  it("keeps the seven non-MC corrections in a new closed v1.0.3 candidate", () => {
+    const candidate = CANONICAL_PLACEMENT_ITEM_BANK_REVIEW_CANDIDATE;
+    const nonMultipleChoiceQuestions = CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST.questions.filter(
+      (question) => question.questionType !== "MULTIPLE_CHOICE",
+    );
+    expect(nonMultipleChoiceQuestions).toHaveLength(27);
+    expect(candidate.manifestVersion).toBe("1.0.3");
+    expect(candidate.lifecycle).toBe("DESIGN_ONLY");
+    expect(candidate.productionAssignmentEnabled).toBe(false);
+    expect(candidate.publicationApproved).toBe(false);
+    expect(candidate.editorialReviewStatus).toBe("REVIEW_REQUIRED");
+    expect(validateCanonicalPlacementItemBankReviewCandidate(candidate)).toEqual(candidate);
+
+    const priorById = new Map(
+      CANONICAL_PLACEMENT_ITEM_BANK_REVISION_CANDIDATE.questions.map((question) => [
+        question.stableQuestionId,
+        question,
+      ]),
+    );
+    const candidateById = new Map(
+      candidate.questions.map((question) => [question.stableQuestionId, question]),
+    );
+    const changedIds = [...candidateById].flatMap(([id, question]) =>
+      JSON.stringify(question) === JSON.stringify(priorById.get(id)) ? [] : [id],
+    );
+    expect(changedIds).toEqual([
+      "PLV1-Q003",
+      "PLV1-Q006",
+      "PLV1-Q007",
+      "PLV1-Q019",
+      "PLV1-Q022",
+      "PLV1-Q024",
+      "PLV1-Q031",
+    ]);
+    expect(
+      nonMultipleChoiceQuestions.filter((question) =>
+        changedIds.includes(question.stableQuestionId),
+      ),
+    ).toHaveLength(7);
+
+    const byId = (id: string) =>
+      candidate.questions.find((question) => question.stableQuestionId === id)!;
+    expect(byId("PLV1-Q003").correctAnswer).toMatchObject({
+      type: "FILL_BLANK",
+      blanks: [{ acceptedAnswers: ["sınamayı"] }],
+    });
+    expect(byId("PLV1-Q006").correctAnswer).toMatchObject({
+      type: "MATCHING",
+      pairs: [
+        { leftId: "l1", rightId: "r2" },
+        { leftId: "l2", rightId: "r1" },
+        { leftId: "l3", rightId: "r3" },
+        { leftId: "l4", rightId: "r4" },
+      ],
+    });
+    expect(byId("PLV1-Q007").correctAnswer).toMatchObject({
+      type: "FILL_BLANK",
+      blanks: [{ acceptedAnswers: ["koşulları göz önünde bulundurarak"] }],
+    });
+    expect(byId("PLV1-Q019").correctAnswer).toMatchObject({
+      type: "FILL_BLANK",
+      blanks: [{ acceptedAnswers: ["desteklediğini"] }],
+    });
+    expect(byId("PLV1-Q022").options.find((option) => option.id === "l4")?.text).toContain(
+      "daha uzun bir çalışma",
+    );
+    expect(byId("PLV1-Q024").correctAnswer).toEqual({ type: "TRUE_FALSE", answer: false });
+    expect(byId("PLV1-Q031").correctAnswer).toMatchObject({
+      type: "FILL_BLANK",
+      blanks: [{ acceptedAnswers: ["denge"] }],
+    });
   });
 });
 

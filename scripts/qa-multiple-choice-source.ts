@@ -1,4 +1,8 @@
-import { MULTIPLE_CHOICE_SOURCE_PACKAGES } from "../src/curriculum/multiple-choice-source-catalog.js";
+import {
+  collectUniqueMultipleChoiceQuestions,
+  MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS,
+  MULTIPLE_CHOICE_SOURCE_PACKAGES,
+} from "../src/curriculum/multiple-choice-source-catalog.js";
 import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
 
 const packages = MULTIPLE_CHOICE_SOURCE_PACKAGES.map((source) => {
@@ -30,6 +34,17 @@ const designOnlyPackages = packages.filter((item) => item.sourceStatus === "DESI
 const notYetReleasedPackages = packages.filter(
   (item) => item.sourceStatus === "UNRELEASED_CANDIDATE",
 );
+const uniqueQuestions = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
+const uniqueQuestionVersionEntryCount = uniqueQuestions.reduce(
+  (total, item) => total + item.versions.length,
+  0,
+);
+const uniqueDeclaredQuestionVersionCount = uniqueQuestions.reduce(
+  (total, item) =>
+    total + item.versions.filter((version) => typeof version.sourceVersionId === "string").length,
+  0,
+);
+const detailedReview = process.argv.includes("--details");
 
 console.log(
   JSON.stringify(
@@ -37,6 +52,26 @@ console.log(
       scope: "SOURCE_CATALOG_ONLY",
       productionGraph: "NOT_VERIFIED",
       totalPackageCount: packages.length,
+      catalogQuestionPackageEntries: packages.reduce(
+        (total, item) => total + item.questionCount,
+        0,
+      ),
+      uniqueSourceQuestionCount: uniqueQuestions.length,
+      uniqueQuestionVersionEntryCount,
+      duplicateQuestionVersionPackageReferences:
+        packages.reduce((total, item) => total + item.questionCount, 0) -
+        uniqueQuestionVersionEntryCount,
+      uniqueDeclaredQuestionVersionCount,
+      uniqueSourceQuestionsWithMultipleVersions: uniqueQuestions.filter(
+        (item) => item.versions.length > 1,
+      ).length,
+      catalogQuestionVersionsWithUndeclaredVersion: uniqueQuestions.reduce(
+        (total, item) =>
+          total +
+          item.versions.filter((version) => version.sourceVersionStatus === "VERSION_UNDECLARED")
+            .length,
+        0,
+      ),
       currentSourceQuestionCount: sourcePackages.reduce(
         (total, item) => total + item.questionCount,
         0,
@@ -70,8 +105,32 @@ console.log(
         0,
       ),
       packages,
+      coverageGaps: MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS,
+      ...(detailedReview
+        ? {
+            questionReviewRecords: uniqueQuestions.map((item) => ({
+              sourceQuestionId: item.sourceQuestionId,
+              versions: item.versions.map((question) => ({
+                versionId: question.sourceVersionId,
+                versionStatus: question.sourceVersionStatus ?? null,
+                editorialStatus: question.editorialReviewStatus ?? "REVIEW_REQUIRED",
+                contentKey: question.contentKey ?? null,
+                skillCode: question.skillCode ?? null,
+                sourceText: question.sourceText ?? null,
+                prompt: question.prompt ?? null,
+                options: question.options.map((option) => ({
+                  id: option.id,
+                  text: option.text,
+                  isCorrect: option.id === question.correctOptionId,
+                })),
+                explanation: question.explanation ?? null,
+                hint: question.hint ?? null,
+              })),
+            })),
+          }
+        : {}),
       interpretation:
-        "Length, answer-position and lexical-repeat metrics are review signals; they do not prove semantic correctness. Questions without VERIFIED editorial status remain blocked from a new package release.",
+        "Length, answer-position and lexical-repeat metrics are review signals; they do not prove semantic correctness. Use --details for source/prompt/options/key/explanation dossiers. Database-backed Training questions remain outside this static catalog. Non-MC placement items are reviewed separately in docs/QUESTION_BANK_QA_COVERAGE.md. Questions without VERIFIED editorial status remain blocked from a new package release.",
     },
     null,
     2,

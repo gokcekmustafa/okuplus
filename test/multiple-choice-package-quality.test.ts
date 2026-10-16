@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MULTIPLE_CHOICE_SOURCE_PACKAGES } from "../src/curriculum/multiple-choice-source-catalog.js";
+import {
+  collectUniqueMultipleChoiceQuestions,
+  MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS,
+  MULTIPLE_CHOICE_SOURCE_PACKAGES,
+} from "../src/curriculum/multiple-choice-source-catalog.js";
 import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
 
 describe("multiple-choice package quality", () => {
@@ -13,6 +17,7 @@ describe("multiple-choice package quality", () => {
     expect(keys).toContain("OKU-8G8-FIRST-REAL-CURRICULUM:aksam-isigi-ve-beden-saati");
     expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1");
     expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1:1.0.2");
+    expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1:1.0.3");
 
     const reports = MULTIPLE_CHOICE_SOURCE_PACKAGES.map((source) => ({
       source,
@@ -157,5 +162,118 @@ describe("multiple-choice package quality", () => {
     expect(report.correctPositionCounts).toEqual({ A: 8, B: 0, C: 0, D: 0 });
     expect(report.maxCorrectPositionRatio).toBe(1);
     expect(report.needsEditorialReview).toBe(true);
+  });
+
+  it("retains text, key, explanation and immutable version IDs in a deduplicated audit dossier", () => {
+    const unique = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
+    expect(unique).toHaveLength(189);
+    const allVersions = unique.flatMap((item) => item.versions);
+    expect(allVersions).toHaveLength(327);
+    expect(
+      allVersions.filter((version) => typeof version.sourceVersionId === "string"),
+    ).toHaveLength(300);
+    expect(
+      MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
+        (total, source) => total + source.questions.length,
+        0,
+      ) - allVersions.length,
+    ).toBe(57);
+    expect(
+      allVersions.every(
+        (version) =>
+          version.sourceQuestionId && version.prompt && version.sourceText && version.explanation,
+      ),
+    ).toBe(true);
+    const p0Question = unique.find((item) =>
+      item.sourceQuestionId.endsWith(":fast-chunking-practice:fast-chunking-practice-1"),
+    );
+    expect(p0Question?.versions).toHaveLength(2);
+    expect(
+      p0Question?.versions.every(
+        (version) =>
+          version.sourceVersionId && version.sourceText && version.explanation && version.prompt,
+      ),
+    ).toBe(true);
+    expect(p0Question?.versions.map((version) => version.sourceVersionStatus)).toContain(
+      "REVISION_CANDIDATE",
+    );
+
+    const firstReal = unique.find((item) =>
+      item.sourceQuestionId.includes("FIRST-REAL-CURRICULUM"),
+    );
+    expect(firstReal?.versions[0]?.sourceVersionId).toBeNull();
+    expect(firstReal?.versions[0]?.sourceVersionStatus).toBe("VERSION_UNDECLARED");
+    expect(MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS.map((gap) => gap.code)).toContain(
+      "RUNTIME_TRAINING_BANK_NOT_ENUMERATED",
+    );
+    expect(MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS.map((gap) => gap.code)).toContain(
+      "ACADEMIC_P0_IS_LEARNING_CONTRACT_NOT_QUESTION_BANK",
+    );
+    expect(MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS.map((gap) => gap.code)).not.toContain(
+      "CYCLE3_RAIN_GARDEN_CANDIDATE_CONTENT_KEY_NOT_IN_BASE_PROGRAM",
+    );
+
+    const rainGardenQuestions = unique.filter((item) =>
+      item.sourceQuestionId.includes("p1a-v3-evidence-practice:p1a-v3-evidence-practice-"),
+    );
+    expect(
+      rainGardenQuestions.some((item) =>
+        item.versions.some(
+          (version) =>
+            version.sourceVersionId?.endsWith("-v4") &&
+            version.contentKey === "p1a-v3-evidence-practice" &&
+            version.sourceText?.includes("yağmur bahçesine dönüştürüldü"),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("merges identical version references but rejects conflicting definitions for one immutable version", () => {
+    const base = {
+      key: "q-1",
+      sourceQuestionId: "pack:exercise:q-1",
+      sourceVersionId: "question-v1",
+      sourceVersionStatus: "REVISION_CANDIDATE" as const,
+      prompt: "Metne göre ne oldu?",
+      contentKey: "passage-1",
+      skillCode: "RC_DETAIL",
+      options: [
+        { id: "a", text: "Doğru" },
+        { id: "b", text: "Yanlış" },
+      ],
+      correctOptionId: "a",
+      explanation: "Metin bu bilgiyi açıkça veriyor.",
+    };
+
+    const merged = collectUniqueMultipleChoiceQuestions([
+      { key: "first-reference", status: "VERSIONED_REVISION_CANDIDATE", questions: [base] },
+      {
+        key: "second-reference",
+        status: "VERSIONED_REVISION_CANDIDATE",
+        questions: [{ ...base, sourceText: "Kaynak metin." }],
+      },
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.versions).toHaveLength(1);
+    expect(merged[0]?.versions[0]?.sourceText).toBe("Kaynak metin.");
+
+    expect(() =>
+      collectUniqueMultipleChoiceQuestions([
+        { key: "first-reference", status: "VERSIONED_REVISION_CANDIDATE", questions: [base] },
+        {
+          key: "second-reference",
+          status: "VERSIONED_REVISION_CANDIDATE",
+          questions: [
+            {
+              ...base,
+              options: [
+                { id: "a", text: "Başka metin" },
+                { id: "b", text: "Yanlış" },
+              ],
+            },
+          ],
+        },
+      ]),
+    ).toThrow("değişmez soru sürümü çakışan içerikle kataloglandı");
   });
 });
