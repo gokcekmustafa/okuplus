@@ -16,7 +16,10 @@ import {
   trainingRuntimeVersionSelect,
   validateTrainingRuntimeGraphRow,
 } from "../training/runtime.js";
-import { decideTrainingAttempt } from "../training/retry-policy.js";
+import {
+  decideTrainingAttempt,
+  shouldEnforceStudentAttemptLimit,
+} from "../training/retry-policy.js";
 import {
   ENTITLEMENT_FEATURES,
   entitlementLimitMessage,
@@ -830,6 +833,7 @@ export async function createAttempt(
         tenantId: true,
         studentId: true,
         templateVersionId: true,
+        learningStepId: true,
         context: true,
         sessionType: true,
         status: true,
@@ -916,6 +920,12 @@ export async function createAttempt(
     actor.platformRole === null &&
     session.assessmentId === null &&
     isTrainingVersionConfig(session.templateVersion.config);
+  const enforceAttemptLimit = shouldEnforceStudentAttemptLimit({
+    isStudent: actor.platformRole === null,
+    learningStepId: session.learningStepId,
+    assessmentId: session.assessmentId,
+    isTrainingVersion: isTrainingVersionConfig(session.templateVersion.config),
+  });
 
   // 4) Attempt kaydı - transaction güvenliği
   try {
@@ -923,10 +933,10 @@ export async function createAttempt(
     const attempt = await prisma.$transaction(async (tx) => {
       let previousAttempts: Array<{ isCorrect: boolean | null }> = [];
       let responseOrder = 1 as 1 | 2;
-      if (isStudentTrainingAttempt) {
+      if (enforceAttemptLimit) {
         await tx.$queryRaw`
           SELECT 1::int AS acquired
-          FROM pg_advisory_xact_lock(hashtextextended(${`training-attempt:${sessionId}:${questionVersionId}`}, 0))
+          FROM pg_advisory_xact_lock(hashtextextended(${`student-attempt:${sessionId}:${questionVersionId}`}, 0))
         `;
 
         // Both checks are protected by the same advisory lock. Fetch the
@@ -1095,13 +1105,9 @@ export async function createAttempt(
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === "P2002") {
-        // Training retries are idempotent: return the durable result instead
-        // of making the client reconcile a harmless duplicate as an error.
-        if (
-          session.assessmentId === null &&
-          isTrainingConfigCandidate(session.templateVersion.config) &&
-          isTrainingVersionConfig(session.templateVersion.config)
-        ) {
+        // Capped student attempts are idempotent: return the durable result
+        // instead of counting a harmless network replay as another answer.
+        if (enforceAttemptLimit) {
           const existing = await prisma.attempt.findUnique({
             where: { sessionId_clientAttemptId: { sessionId, clientAttemptId } },
             select: ATTEMPT_RESULT_SELECT,

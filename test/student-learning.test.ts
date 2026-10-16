@@ -19,6 +19,9 @@ const TMPL_ID = "8e000000-0000-7000-8000-0000000000e1";
 const TMPL_VID = "8e000000-0000-7000-8000-0000000000e2";
 const LEVEL_ID = "8e000000-0000-7000-8000-0000000000f1";
 const ASSM_ID = "8e000000-0000-7000-8000-0000000000a1";
+const RETRY_PATH_ID = "8e000000-0000-7000-8000-0000000000f2";
+const RETRY_UNIT_ID = "8e000000-0000-7000-8000-0000000000f3";
+const RETRY_STEP_ID = "8e000000-0000-7000-8000-0000000000f4";
 const ORG_ID = "8e000000-0000-7000-8000-0000000000b2";
 const BRANCH_ID = "8e000000-0000-7000-8000-0000000000c3";
 const YEAR_ID = "8e000000-0000-7000-8000-0000000000c4";
@@ -51,6 +54,10 @@ async function cleanup() {
     where: { session: { studentId: { in: uIds } } },
   });
   await prisma.exerciseSession.deleteMany({ where: { studentId: { in: uIds } } });
+  await prisma.studentLearningStepProgress.deleteMany({
+    where: { learningStep: { unit: { pathId: RETRY_PATH_ID } } },
+  });
+  await prisma.learningPath.deleteMany({ where: { id: RETRY_PATH_ID } });
   await prisma.studentProgress.deleteMany({ where: { studentId: { in: uIds } } });
   await prisma.pointEvent.deleteMany({ where: { studentId: { in: uIds } } });
   await prisma.studentStreak.deleteMany({ where: { studentId: { in: uIds } } });
@@ -213,6 +220,41 @@ describe.sequential("student learning", () => {
         type: "PLACEMENT",
         status: "PUBLISHED",
         config: { templateId: TMPL_ID, templateVersionId: TMPL_VID },
+      },
+    });
+    await prisma.learningPath.create({
+      data: {
+        id: RETRY_PATH_ID,
+        code: "STUDENT_ATTEMPT_RETRY_PATH",
+        title: "Öğrenme yolu deneme sınırı testi",
+        area: "READING_COMPREHENSION",
+        levelId: LEVEL_ID,
+        version: 1,
+        status: "PUBLISHED",
+      },
+    });
+    await prisma.learningUnit.create({
+      data: {
+        id: RETRY_UNIT_ID,
+        pathId: RETRY_PATH_ID,
+        code: "STUDENT_ATTEMPT_RETRY_UNIT",
+        title: "Değerlendirme",
+        position: 1,
+        status: "PUBLISHED",
+      },
+    });
+    await prisma.learningStep.create({
+      data: {
+        id: RETRY_STEP_ID,
+        unitId: RETRY_UNIT_ID,
+        stableKey: "STUDENT_ATTEMPT_RETRY_ASSESSMENT",
+        title: "Öğrenme yolu değerlendirmesi",
+        position: 1,
+        type: "ASSESSMENT",
+        status: "PUBLISHED",
+        isActive: true,
+        assessmentId: ASSM_ID,
+        completionRule: {},
       },
     });
     await prisma.tenant.create({
@@ -416,6 +458,128 @@ describe.sequential("student learning", () => {
     });
     expect(today.json().data.completedToday).toBeGreaterThanOrEqual(1);
     expect(today.json().data.nextAction.type).not.toBe("RESUME_SESSION");
+  });
+  it("limits a learning-path assessment to two actual answers and preserves idempotent replay", async () => {
+    const session = await prisma.exerciseSession.create({
+      data: {
+        tenantId: personalTenantId,
+        studentId: userId,
+        templateVersionId: TMPL_VID,
+        learningStepId: RETRY_STEP_ID,
+        assessmentId: ASSM_ID,
+        context: "ASSESSMENT",
+        sessionType: "ASSESSMENT",
+        status: "IN_PROGRESS",
+      },
+      select: { id: true },
+    });
+    const submit = (clientAttemptId: string, answer: boolean) =>
+      app.inject({
+        method: "POST",
+        url: `/student/questions/${QV_ID}/attempts`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { sessionId: session.id, answer, clientAttemptId },
+      });
+
+    const first = await submit("path-assessment-first", false);
+    expect(first.statusCode).toBe(200);
+    expect(first.json().data.responseOrder).toBe(1);
+
+    const replay = await submit("path-assessment-first", false);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().data.id).toBe(first.json().data.id);
+    expect(replay.json().data.responseOrder).toBe(1);
+
+    const second = await submit("path-assessment-second", false);
+    expect(second.statusCode).toBe(200);
+    expect(second.json().data.responseOrder).toBe(2);
+
+    const reloaded = await app.inject({
+      method: "GET",
+      url: `/student/sessions/${session.id}`,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(reloaded.statusCode).toBe(200);
+    expect(
+      reloaded
+        .json()
+        .data.attempts.filter((attempt: any) => attempt.questionVersionId === QV_ID)
+        .map((attempt: any) => attempt.responseOrder),
+    ).toEqual([1, 2]);
+
+    const third = await submit("path-assessment-third", true);
+    expect(third.statusCode).toBe(400);
+    expect(third.json().error.message).toContain("en fazla iki cevap hakkı");
+    expect(
+      await prisma.attempt.count({ where: { sessionId: session.id, questionVersionId: QV_ID } }),
+    ).toBe(2);
+  });
+  it("accepts a correct second learning-path assessment answer and then closes the question", async () => {
+    const session = await prisma.exerciseSession.create({
+      data: {
+        tenantId: personalTenantId,
+        studentId: userId,
+        templateVersionId: TMPL_VID,
+        learningStepId: RETRY_STEP_ID,
+        assessmentId: ASSM_ID,
+        context: "ASSESSMENT",
+        sessionType: "ASSESSMENT",
+        status: "IN_PROGRESS",
+      },
+      select: { id: true },
+    });
+    const submit = (clientAttemptId: string, answer: boolean) =>
+      app.inject({
+        method: "POST",
+        url: `/student/questions/${QV_ID}/attempts`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { sessionId: session.id, answer, clientAttemptId },
+      });
+
+    const first = await submit("path-assessment-correct-first", false);
+    const second = await submit("path-assessment-correct-second", true);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json().data).toMatchObject({ responseOrder: 2, isCorrect: true });
+    expect((await submit("path-assessment-after-correct", false)).statusCode).toBe(400);
+    expect(
+      await prisma.attempt.count({ where: { sessionId: session.id, questionVersionId: QV_ID } }),
+    ).toBe(2);
+  });
+  it("serializes concurrent learning-path answers and never stores a third attempt", async () => {
+    const session = await prisma.exerciseSession.create({
+      data: {
+        tenantId: personalTenantId,
+        studentId: userId,
+        templateVersionId: TMPL_VID,
+        learningStepId: RETRY_STEP_ID,
+        assessmentId: ASSM_ID,
+        context: "ASSESSMENT",
+        sessionType: "ASSESSMENT",
+        status: "IN_PROGRESS",
+      },
+      select: { id: true },
+    });
+    const responses = await Promise.all(
+      ["concurrent-one", "concurrent-two", "concurrent-three"].map((clientAttemptId) =>
+        app.inject({
+          method: "POST",
+          url: `/student/questions/${QV_ID}/attempts`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          payload: { sessionId: session.id, answer: false, clientAttemptId },
+        }),
+      ),
+    );
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 200, 400]);
+    expect(
+      responses
+        .filter((response) => response.statusCode === 200)
+        .map((response) => response.json().data.responseOrder)
+        .sort(),
+    ).toEqual([1, 2]);
+    expect(
+      await prisma.attempt.count({ where: { sessionId: session.id, questionVersionId: QV_ID } }),
+    ).toBe(2);
   });
   it("11 no available content still returns NO_CONTENT not error", async () => {
     // delete all published template versions to simulate no content, then restore? For this test we just check that endpoint doesn't throw 500 when no personal exercise

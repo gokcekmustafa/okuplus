@@ -1,5 +1,24 @@
 export const MAX_TRAINING_ATTEMPTS_PER_QUESTION = 2;
 
+export type AttemptLimitContext = {
+  isStudent: boolean;
+  learningStepId: string | null;
+  assessmentId: string | null;
+  isTrainingVersion: boolean;
+};
+
+/**
+ * Learning-path attempts are capped even when the step is an assessment and
+ * its template does not use the independent-training config contract. Keep
+ * the existing cap for recognized student training sessions as well.
+ */
+export function shouldEnforceStudentAttemptLimit(context: AttemptLimitContext): boolean {
+  if (!context.isStudent) return false;
+  return (
+    context.learningStepId !== null || (context.assessmentId === null && context.isTrainingVersion)
+  );
+}
+
 export type TrainingAttemptState = {
   isCorrect: boolean | null;
 };
