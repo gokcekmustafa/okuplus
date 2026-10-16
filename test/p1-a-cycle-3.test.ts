@@ -17,7 +17,11 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
 import { buildEducationV2P1ALearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 import { validateLearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
-import { assessOptionLengthQuality } from "../src/curriculum/option-length-quality.js";
+import {
+  assessMultipleChoicePackageQuality,
+  assessOptionLengthQuality,
+} from "../src/curriculum/option-length-quality.js";
+import { QUESTION_BANK_VERSIONED_REVISION_CANDIDATES } from "../src/curriculum/question-bank-versioned-revisions.js";
 
 describe("Education V2 P1-A cycle 3 authoring contract", () => {
   it("uses a seven-step, two-unit cycle driven by its learning goals", () => {
@@ -153,7 +157,7 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     expect(question?.correctOptionId).toBe("b");
   });
 
-  it("keeps correct-option positions balanced and without clear length cues", () => {
+  it("keeps source answer positions balanced and records length fixes in an unreleased revision", () => {
     const questions = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.exercises.flatMap(
       (exercise) => exercise.questions,
     );
@@ -177,8 +181,10 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
       ]),
     );
     expect(
-      questions.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
-    ).toHaveLength(0);
+      questions
+        .filter((question) => assessOptionLengthQuality(question)?.clearOutlier)
+        .map((question) => question.key),
+    ).toEqual(["p1a-v3-evidence-reinforcement-2", "p1a-v3-assessment-1"]);
     expect(
       questions.filter((question) => {
         const correct = question.options.find((option) => option.id === question.correctOptionId);
@@ -191,6 +197,17 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
         );
       }),
     ).toHaveLength(0);
+
+    const candidate = QUESTION_BANK_VERSIONED_REVISION_CANDIDATES.find(
+      (item) => item.baseProgramVersion === 3 && item.revisionKind === "QUESTION_CONTENT",
+    )!;
+    const report = assessMultipleChoicePackageQuality(candidate.questions, {
+      minimumQuestionCount: 1,
+    });
+    expect(report.clearLengthOutlierCount).toBe(0);
+    expect(report.correctUniqueLongestRatio).toBeLessThanOrEqual(0.5);
+    expect(report.correctUniqueShortestRatio).toBeLessThanOrEqual(0.5);
+    expect(candidate.publicationApproved).toBe(false);
   });
 
   it("keeps immutable cycle-3 identifiers separate from v1/v2 and validates the manifest", () => {

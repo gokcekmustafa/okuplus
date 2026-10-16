@@ -31,9 +31,23 @@ describe("P1-B/C/D curriculum manifests", () => {
     )) {
       expect(candidate.cycleVersion).toBe(2);
       expect(candidate.publicationApproved).toBe(false);
+      expect(candidate.editorialReviewStatus).toBe("REVIEW_REQUIRED");
       expect(candidate.editorialProvenance?.contentOrigin).toBe("ORIGINAL_FICTION");
       expect(candidate.learningOutcome.statement.length).toBeGreaterThan(30);
     }
+  });
+
+  it("does not allow candidate publication until package metrics and editorial review pass", () => {
+    const candidate = structuredClone(
+      EDUCATION_V2_P1_BCD_PROGRAMS.find((program) => program.sequence === 2)!,
+    );
+    candidate.publicationApproved = true;
+    expect(validateP1BCDProgram(candidate)).toContain(
+      "yayın öncesi soru paketi kalite ölçütleri ve editoryal inceleme tamamlanmalı",
+    );
+
+    candidate.editorialReviewStatus = "VERIFIED";
+    expect(validateP1BCDProgram(candidate)).toEqual([]);
   });
 
   it("has a linear teach, practice, reinforcement and assessment sequence", () => {

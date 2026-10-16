@@ -741,6 +741,65 @@ const program: P1AProgram = {
 
 export const EDUCATION_V2_P1_A_CYCLE_3_PROGRAM = program;
 
+/** A corrected, unpublished template/question revision for Cycle 3 station 43. */
+export const EDUCATION_V2_P1_A_CYCLE_3_RAIN_GARDEN_REVISION_V4 = {
+  sourceCycleVersion: EDUCATION_V2_P1_A_CYCLE_3_VERSION,
+  revisionVersion: 4,
+  publicationApproved: false,
+  editorialReviewStatus: "REVIEW_REQUIRED" as const,
+  contentKey: "p1a-v3-rain-garden-evidence",
+  exerciseKey: "p1a-v3-evidence-practice",
+  templateVersionId: p1ACycle3Id("templateVersion", "p1a-v3-evidence-practice-v4"),
+  questionVersionId(questionKey: string) {
+    return p1ACycle3Id("questionVersion", `p1a-v3-evidence-practice-${questionKey}-v4`);
+  },
+  skillCode: "RC_INFERENCE",
+  questions: [
+    question(
+      "p1a-v3-evidence-practice-1",
+      "Çukur alanlar yağmur suyunu ne kadar süre tuttu?",
+      [
+        ["a", "Yağış sürdüğü sürece"],
+        ["b", "Yalnızca kısa bir süre"],
+        ["c", "Toprak tamamen dolana dek"],
+        ["d", "Bitkiler köklenene kadar"],
+      ],
+      "b",
+      "Metin, çukur alanların yağmur suyunu kısa süre tuttuğunu açıkça söylüyor.",
+      "İlk cümlede çukur alanların suyu ne kadar tuttuğu belirtiliyor.",
+      4,
+    ),
+    question(
+      "p1a-v3-evidence-practice-2",
+      "Çukur alanların suyu tutmasının ardından metinde hangi neden-sonuç ilişkisi veriliyor?",
+      [
+        ["a", "Bütün su çukurda kalır, sonra yeniden yağmur olur"],
+        ["b", "Suyun tamamı toprağa geçer; bitkilerden söz edilmez"],
+        ["c", "Bir bölümü toprağa geçer; başka bir bölümü bitkileri besler"],
+        ["d", "Su hızla akar, çukurlar boş kalır ve bitkiler susuz kalır"],
+      ],
+      "c",
+      "Metin iki ayrı sonucu birbirinden ayırır: suyun bir bölümü toprağa geçer, başka bir bölümü yeni bitkileri besler.",
+      "Noktalı virgülden sonraki iki ayrı su sonucunu birlikte oku.",
+      4.5,
+    ),
+    question(
+      "p1a-v3-evidence-practice-3",
+      "Suyun iki ayrı sonucunu birlikte düşününce yağmur bahçesiyle ilgili hangi çıkarım desteklenir?",
+      [
+        ["a", "Su, bahçeye iki ayrı yoldan katkı sağlar"],
+        ["b", "Bahçe, yağmuru her durumda bütünüyle depolar"],
+        ["c", "Çukurlar, bitkileri topraktan bağımsız besler"],
+        ["d", "Su, yalnızca toprağa geçerek bitkilere ulaşır"],
+      ],
+      "a",
+      "Ayrı su bölümlerinin toprağa geçmesi ve bitkileri beslemesi, bahçenin iki farklı katkısını destekler.",
+      "Metindeki iki ayrı sonuçtan ortak işlevi çıkar; suyun aynı bölümünü iki kez kullanma.",
+      4.5,
+    ),
+  ],
+};
+
 export function validateP1ACycle3Program(candidate: P1AProgram = program): string[] {
   const errors: string[] = [];
   const contentKeys = new Set(candidate.content.map((item) => item.key));

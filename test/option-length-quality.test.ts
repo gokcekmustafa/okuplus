@@ -1,33 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { EDUCATION_V2_P0_PROGRAM } from "../src/curriculum/education-v2-p0-program.js";
-import { EDUCATION_V2_P1_A_PROGRAM } from "../src/curriculum/education-v2-p1-a-program.js";
-import { EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
-import { EDUCATION_V2_P1_BCD_PROGRAMS } from "../src/curriculum/education-v2-p1-bcd-program.js";
-import { FIRST_REAL_CURRICULUM_PACK } from "../src/curriculum/first-real-pack.js";
+import { MULTIPLE_CHOICE_SOURCE_PACKAGES } from "../src/curriculum/multiple-choice-source-catalog.js";
 import {
+  assessMultipleChoicePackageQuality,
   assessOptionLengthQuality,
   normalizedOptionLength,
 } from "../src/curriculum/option-length-quality.js";
 
-type EducationQuestion = {
-  key: string;
-  options: readonly { id: string; text: string }[];
-  correctOptionId: string;
-};
-
-function educationQuestions(): EducationQuestion[] {
-  return [
-    ...EDUCATION_V2_P0_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
-    ...EDUCATION_V2_P1_A_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
-    ...EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap((exercise) => exercise.questions),
-    ...EDUCATION_V2_P1_BCD_PROGRAMS.flatMap((program) =>
-      program.exercises.flatMap((exercise) => exercise.questions),
-    ),
-  ];
-}
-
 describe("multiple-choice option length quality", () => {
-  it("normalizes whitespace and punctuation without requiring equal text lengths", () => {
+  it("normalizes whitespace and punctuation without requiring mechanically equal lengths", () => {
     expect(normalizedOptionLength("  Kanıt-ilişkisidir! ")).toBe(
       normalizedOptionLength("Kanıt ilişkisidir"),
     );
@@ -43,8 +23,8 @@ describe("multiple-choice option length quality", () => {
     ).toBe(false);
   });
 
-  it("flags a clear correct-answer length cue for editorial review", () => {
-    const quality = assessOptionLengthQuality({
+  it("flags a clear long or short correct-answer length cue for editorial review", () => {
+    const long = assessOptionLengthQuality({
       correctOptionId: "a",
       options: [
         { id: "a", text: "Metindeki bütün kanıtları birlikte değerlendiren açıklama" },
@@ -53,25 +33,58 @@ describe("multiple-choice option length quality", () => {
         { id: "d", text: "Yanlış" },
       ],
     });
+    const short = assessOptionLengthQuality({
+      correctOptionId: "a",
+      options: [
+        { id: "a", text: "Evet" },
+        { id: "b", text: "Başka makul yanıt" },
+        { id: "c", text: "Uygun olmayan başka bir açıklama" },
+        { id: "d", text: "Metinle uyuşmayan seçenek" },
+      ],
+    });
 
-    expect(quality?.correctIsLongest).toBe(true);
-    expect(quality?.clearOutlier).toBe(true);
+    expect(long?.correctUniqueLongest).toBe(true);
+    expect(long?.clearOutlier).toBe(true);
+    expect(short?.correctUniqueShortest).toBe(true);
+    expect(short?.clearOutlier).toBe(true);
   });
 
-  it("keeps all current MC source manifests free of clear length outliers", () => {
-    const education = educationQuestions();
-    const independent = FIRST_REAL_CURRICULUM_PACK.contents
-      .flatMap((content) => content.questions)
-      .filter((question) => question.type === "MULTIPLE_CHOICE")
-      .map((question) => ({
-        options: question.options,
-        correctOptionId: question.correctAnswer.correctOptionIds[0]!,
-      }));
-
-    const all = [...education, ...independent];
-    expect(all).toHaveLength(164);
+  it("audits every multiple-choice source and protects unreleased/corrected packages", () => {
+    const currentSources = MULTIPLE_CHOICE_SOURCE_PACKAGES.filter(
+      (item) => item.status === "SOURCE_CURRENT",
+    );
+    expect(currentSources.flatMap((item) => item.questions)).toHaveLength(144);
+    const designOnly = MULTIPLE_CHOICE_SOURCE_PACKAGES.filter(
+      (item) => item.status === "DESIGN_ONLY_CANDIDATE",
+    );
+    expect(designOnly).toHaveLength(1);
+    expect(designOnly[0]!.questions.length).toBeGreaterThan(0);
+    expect(assessMultipleChoicePackageQuality(designOnly[0]!.questions).needsEditorialReview).toBe(
+      true,
+    );
     expect(
-      all.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
-    ).toHaveLength(0);
+      currentSources
+        .flatMap((item) => item.questions)
+        .filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
+    ).toHaveLength(6);
+
+    const releaseCandidates = MULTIPLE_CHOICE_SOURCE_PACKAGES.filter((item) =>
+      ["UNRELEASED_CANDIDATE", "VERSIONED_REVISION_CANDIDATE"].includes(item.status),
+    );
+    expect(releaseCandidates.length).toBeGreaterThan(0);
+    for (const source of releaseCandidates) {
+      const report = assessMultipleChoicePackageQuality(source.questions, {
+        minimumQuestionCount: 1,
+      });
+      if (source.revisionKind !== "OPTION_ORDER_ONLY") {
+        expect(report.correctUniqueLongestRatio).toBeLessThanOrEqual(0.5);
+        expect(report.correctUniqueShortestRatio).toBeLessThanOrEqual(0.5);
+      }
+      expect(report.maxCorrectPositionRatio).toBeLessThanOrEqual(0.45);
+      expect(report.clearLengthOutlierCount).toBe(0);
+      expect(report.repeatedSkillQuestionPairs).toEqual([]);
+      expect(report.editorialReviewQuestionKeys).toEqual(source.questions.map((item) => item.key));
+      expect(report.needsEditorialReview).toBe(true);
+    }
   });
 });

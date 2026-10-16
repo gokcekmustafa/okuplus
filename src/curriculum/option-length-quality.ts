@@ -14,10 +14,15 @@ export type OptionLengthQuality = {
   correctOptionId: string;
   correctLength: number;
   longestWrongLength: number;
+  shortestWrongLength: number;
   wrongMedianLength: number;
   margin: number;
+  shortestMargin: number;
   ratioToWrongMedian: number;
   correctIsLongest: boolean;
+  correctIsShortest: boolean;
+  correctUniqueLongest: boolean;
+  correctUniqueShortest: boolean;
   clearOutlier: boolean;
 };
 
@@ -25,6 +30,18 @@ export type MultipleChoiceQualityQuestion = {
   key: string;
   options: readonly { id: string; text: string }[];
   correctOptionId: string;
+  prompt?: string;
+  contentKey?: string;
+  skillCode?: string;
+  editorialReviewStatus?: "REVIEW_REQUIRED" | "VERIFIED";
+};
+
+export type RepeatedSkillQuestionPair = {
+  firstKey: string;
+  secondKey: string;
+  contentKey: string;
+  skillCode: string;
+  promptSimilarity: number;
 };
 
 export type MultipleChoicePackageQuality = {
@@ -33,14 +50,19 @@ export type MultipleChoicePackageQuality = {
   maxCorrectPositionRatio: number;
   correctUniqueLongestCount: number;
   correctUniqueLongestRatio: number;
+  correctUniqueShortestCount: number;
+  correctUniqueShortestRatio: number;
   correctLongestOrTiedCount: number;
   correctLongestOrTiedRatio: number;
   clearLengthOutlierCount: number;
+  repeatedSkillQuestionPairs: RepeatedSkillQuestionPair[];
+  editorialReviewQuestionKeys: string[];
   questionReports: Array<{
     key: string;
     correctPosition: string | null;
     correctIsLongest: boolean;
     correctUniqueLongest: boolean;
+    correctUniqueShortest: boolean;
     clearLengthOutlier: boolean;
   }>;
   needsEditorialReview: boolean;
@@ -48,6 +70,7 @@ export type MultipleChoicePackageQuality = {
 
 export const MULTIPLE_CHOICE_MAX_POSITION_RATIO_REVIEW = 0.45;
 export const MULTIPLE_CHOICE_UNIQUE_LONGEST_RATIO_REVIEW = 0.5;
+export const MULTIPLE_CHOICE_UNIQUE_SHORTEST_RATIO_REVIEW = 0.5;
 
 export const OPTION_LENGTH_CLEAR_MARGIN = 8;
 export const OPTION_LENGTH_CLEAR_RATIO = 1.2;
@@ -75,24 +98,65 @@ export function assessOptionLengthQuality(
   const correctLength = normalizedOptionLength(correct.text);
   const wrongLengths = wrong.map((option) => normalizedOptionLength(option.text));
   const longestWrongLength = Math.max(...wrongLengths);
+  const shortestWrongLength = Math.min(...wrongLengths);
   const wrongMedianLength = median(wrongLengths);
   const margin = correctLength - longestWrongLength;
+  const shortestMargin = shortestWrongLength - correctLength;
   const ratioToWrongMedian = wrongMedianLength > 0 ? correctLength / wrongMedianLength : Infinity;
   const correctIsLongest = margin >= 0;
+  const correctIsShortest = shortestMargin >= 0;
+  const correctUniqueLongest = margin > 0;
+  const correctUniqueShortest = shortestMargin > 0;
+  const shortestRatio =
+    correctLength > 0
+      ? shortestWrongLength / correctLength
+      : shortestWrongLength > 0
+        ? Infinity
+        : 1;
 
   return {
     correctOptionId: question.correctOptionId,
     correctLength,
     longestWrongLength,
+    shortestWrongLength,
     wrongMedianLength,
     margin,
+    shortestMargin,
     ratioToWrongMedian,
     correctIsLongest,
+    correctIsShortest,
+    correctUniqueLongest,
+    correctUniqueShortest,
     clearOutlier:
-      correctIsLongest &&
-      margin >= OPTION_LENGTH_CLEAR_MARGIN &&
-      ratioToWrongMedian >= OPTION_LENGTH_CLEAR_RATIO,
+      (correctUniqueLongest &&
+        margin >= OPTION_LENGTH_CLEAR_MARGIN &&
+        ratioToWrongMedian >= OPTION_LENGTH_CLEAR_RATIO) ||
+      (correctUniqueShortest &&
+        shortestMargin >= OPTION_LENGTH_CLEAR_MARGIN &&
+        shortestRatio >= OPTION_LENGTH_CLEAR_RATIO),
   };
+}
+
+function normalizedPromptTokens(prompt: string): Set<string> {
+  return new Set(
+    prompt
+      .normalize("NFKC")
+      .toLocaleLowerCase("tr-TR")
+      .replace(/[^\p{Letter}\p{Number}]+/gu, " ")
+      .trim()
+      .split(/\s+/u)
+      .filter((token) => token.length > 1),
+  );
+}
+
+function promptSimilarity(left: string, right: string): number {
+  const leftTokens = normalizedPromptTokens(left);
+  const rightTokens = normalizedPromptTokens(right);
+  const union = new Set([...leftTokens, ...rightTokens]);
+  if (union.size === 0) return 1;
+  let intersectionSize = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) intersectionSize += 1;
+  return intersectionSize / union.size;
 }
 
 /**
@@ -107,14 +171,17 @@ export function assessMultipleChoicePackageQuality(
   options: {
     maxPositionRatio?: number;
     uniqueLongestRatio?: number;
+    uniqueShortestRatio?: number;
     minimumQuestionCount?: number;
   } = {},
 ): MultipleChoicePackageQuality {
   const maxPositionRatio = options.maxPositionRatio ?? MULTIPLE_CHOICE_MAX_POSITION_RATIO_REVIEW;
   const uniqueLongestRatio =
     options.uniqueLongestRatio ?? MULTIPLE_CHOICE_UNIQUE_LONGEST_RATIO_REVIEW;
+  const uniqueShortestRatio =
+    options.uniqueShortestRatio ?? MULTIPLE_CHOICE_UNIQUE_SHORTEST_RATIO_REVIEW;
   const minimumQuestionCount = options.minimumQuestionCount ?? 8;
-  const correctPositionCounts: Record<string, number> = {};
+  const correctPositionCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0 };
   const questionReports = questions.map((question) => {
     const position = question.options.findIndex((option) => option.id === question.correctOptionId);
     const correctPosition = position >= 0 ? String.fromCharCode(65 + position) : null;
@@ -122,17 +189,43 @@ export function assessMultipleChoicePackageQuality(
       correctPositionCounts[correctPosition] = (correctPositionCounts[correctPosition] ?? 0) + 1;
     }
     const lengthQuality = assessOptionLengthQuality(question);
-    const correctUniqueLongest = Boolean(
-      lengthQuality && lengthQuality.correctLength > lengthQuality.longestWrongLength,
-    );
+    const correctUniqueLongest = lengthQuality?.correctUniqueLongest ?? false;
     return {
       key: question.key,
       correctPosition,
       correctIsLongest: lengthQuality?.correctIsLongest ?? false,
       correctUniqueLongest,
+      correctUniqueShortest: lengthQuality?.correctUniqueShortest ?? false,
       clearLengthOutlier: lengthQuality?.clearOutlier ?? false,
     };
   });
+  const repeatedSkillQuestionPairs: RepeatedSkillQuestionPair[] = [];
+  for (let leftIndex = 0; leftIndex < questions.length; leftIndex += 1) {
+    const left = questions[leftIndex]!;
+    if (!left.prompt || !left.contentKey || !left.skillCode) continue;
+    for (let rightIndex = leftIndex + 1; rightIndex < questions.length; rightIndex += 1) {
+      const right = questions[rightIndex]!;
+      if (
+        !right.prompt ||
+        left.contentKey !== right.contentKey ||
+        left.skillCode !== right.skillCode
+      )
+        continue;
+      const similarity = promptSimilarity(left.prompt, right.prompt);
+      if (similarity >= 0.8) {
+        repeatedSkillQuestionPairs.push({
+          firstKey: left.key,
+          secondKey: right.key,
+          contentKey: left.contentKey,
+          skillCode: left.skillCode,
+          promptSimilarity: Math.round(similarity * 100) / 100,
+        });
+      }
+    }
+  }
+  const editorialReviewQuestionKeys = questions
+    .filter((question) => question.editorialReviewStatus !== "VERIFIED")
+    .map((question) => question.key);
   const questionCount = questions.length;
   const positionTotal = Object.values(correctPositionCounts).reduce(
     (total, count) => total + count,
@@ -151,6 +244,11 @@ export function assessMultipleChoicePackageQuality(
   ).length;
   const correctUniqueLongestRatio =
     questionCount > 0 ? correctUniqueLongestCount / questionCount : 0;
+  const correctUniqueShortestCount = questionReports.filter(
+    (question) => question.correctUniqueShortest,
+  ).length;
+  const correctUniqueShortestRatio =
+    questionCount > 0 ? correctUniqueShortestCount / questionCount : 0;
   const correctLongestOrTiedRatio =
     questionCount > 0 ? correctLongestOrTiedCount / questionCount : 0;
 
@@ -160,14 +258,21 @@ export function assessMultipleChoicePackageQuality(
     maxCorrectPositionRatio,
     correctUniqueLongestCount,
     correctUniqueLongestRatio,
+    correctUniqueShortestCount,
+    correctUniqueShortestRatio,
     correctLongestOrTiedCount,
     correctLongestOrTiedRatio,
     clearLengthOutlierCount,
+    repeatedSkillQuestionPairs,
+    editorialReviewQuestionKeys,
     questionReports,
     needsEditorialReview:
-      questionCount >= minimumQuestionCount &&
-      (maxCorrectPositionRatio > maxPositionRatio ||
-        correctUniqueLongestRatio > uniqueLongestRatio ||
-        clearLengthOutlierCount > 0),
+      editorialReviewQuestionKeys.length > 0 ||
+      repeatedSkillQuestionPairs.length > 0 ||
+      (questionCount >= minimumQuestionCount &&
+        (maxCorrectPositionRatio > maxPositionRatio ||
+          correctUniqueLongestRatio > uniqueLongestRatio ||
+          correctUniqueShortestRatio > uniqueShortestRatio ||
+          clearLengthOutlierCount > 0)),
   };
 }

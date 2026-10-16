@@ -14,7 +14,11 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
 import { validateLearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 import { buildEducationV2P1ALearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
-import { assessOptionLengthQuality } from "../src/curriculum/option-length-quality.js";
+import {
+  assessMultipleChoicePackageQuality,
+  assessOptionLengthQuality,
+} from "../src/curriculum/option-length-quality.js";
+import { QUESTION_BANK_VERSIONED_REVISION_CANDIDATES } from "../src/curriculum/question-bank-versioned-revisions.js";
 
 describe("Education V2 P1-A cycle 2 authoring contract", () => {
   it("contains nine original, ordered steps across two units", () => {
@@ -153,13 +157,31 @@ describe("Education V2 P1-A cycle 2 authoring contract", () => {
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(2);
   });
 
-  it("keeps v2 options free of clear correct-answer length cues", () => {
+  it("records known v2 source cues and provides a clean, separate question revision", () => {
     const questions = EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.exercises.flatMap(
       (exercise) => exercise.questions,
     );
     expect(
-      questions.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
-    ).toHaveLength(0);
+      questions
+        .filter((question) => assessOptionLengthQuality(question)?.clearOutlier)
+        .map((question) => question.key),
+    ).toEqual([
+      "p1a-v2-evidence-practice-2",
+      "p1a-v2-structure-reinforcement-2",
+      "p1a-v2-transfer-practice-2",
+      "p1a-v2-assessment-4",
+    ]);
+
+    const candidate = QUESTION_BANK_VERSIONED_REVISION_CANDIDATES.find(
+      (item) => item.baseProgramVersion === 2 && item.revisionKind === "QUESTION_CONTENT",
+    )!;
+    const report = assessMultipleChoicePackageQuality(candidate.questions, {
+      minimumQuestionCount: 1,
+    });
+    expect(report.clearLengthOutlierCount).toBe(0);
+    expect(report.correctUniqueLongestRatio).toBeLessThanOrEqual(0.5);
+    expect(report.correctUniqueShortestRatio).toBeLessThanOrEqual(0.5);
+    expect(candidate.publicationApproved).toBe(false);
   });
 
   it("does not leave a correct option as the sole longest choice", () => {

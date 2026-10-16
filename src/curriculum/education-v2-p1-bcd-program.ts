@@ -8,6 +8,7 @@ import type {
   ProgramExercise,
   ProgramQuestion,
 } from "./education-v2-p0-program.js";
+import { assessMultipleChoicePackageQuality } from "./option-length-quality.js";
 
 /**
  * P1-B/C/D are authored as separate, pre-built route packages. Their
@@ -51,6 +52,7 @@ export type P1BCDProgram = {
   cycleVersion: number;
   sequence: number;
   publicationApproved: boolean;
+  editorialReviewStatus?: "REVIEW_REQUIRED" | "VERIFIED";
   learningOutcome: {
     key: string;
     statement: string;
@@ -183,6 +185,7 @@ type RouteSpec = {
   sequence?: number;
   stepPrefix?: string;
   publicationApproved?: boolean;
+  editorialReviewStatus?: P1BCDProgram["editorialReviewStatus"];
   learningOutcome?: P1BCDProgram["learningOutcome"];
   editorialProvenance?: P1BCDProgram["editorialProvenance"];
   programId: string;
@@ -224,6 +227,11 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
     cycleVersion: spec.cycleVersion ?? 1,
     sequence: spec.sequence ?? 1,
     publicationApproved: spec.publicationApproved ?? (spec.sequence ?? 1) === 1,
+    ...(spec.editorialReviewStatus
+      ? { editorialReviewStatus: spec.editorialReviewStatus }
+      : (spec.sequence ?? 1) > 1
+        ? { editorialReviewStatus: "REVIEW_REQUIRED" as const }
+        : {}),
     learningOutcome: spec.learningOutcome ?? EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family],
     ...(spec.editorialProvenance ? { editorialProvenance: spec.editorialProvenance } : {}),
     ageBand: "13–17",
@@ -1711,10 +1719,10 @@ function buildP1BCDCycle2Programs(): P1BCDProgram[] {
             {
               prompt: "Dinleyicilerin sözünden hangi ölçülü çıkarım yapılabilir?",
               options: [
-                "Programın süresinin dinleyiciler için fazla kısa bulunması",
-                "Anlatım sırası takip edilebilir bulundu",
-                "Ekin'in yayında hiç not kullanmadığının söylenmesi",
-                "Radyodaki kaydın herkes tarafından dinlendiğinin belirtilmesi",
+                "Programın süresinin kısa bulunduğu",
+                "Anlatım sırası kolayca takip edilebildi",
+                "Ekin'in yayında not kullandığı",
+                "Dinleyicilerin yeni bir bölüm istediği",
               ],
               correctIndex: 1,
               explanation:
@@ -1973,10 +1981,10 @@ function buildP1BCDCycle2Programs(): P1BCDProgram[] {
             {
               prompt: "‘Kapatıldı’ sözcüğü bağlamda ne anlatıyor?",
               options: [
-                "İşaretlerin izleyicilere açıkça gösterilmesi",
-                "Zeminin gösteri başlamadan önce kaldırılması",
+                "İşaretlerin izleyiciye açık bırakılması",
+                "Zeminin gösteri öncesinde kaldırılması",
                 "İşaretlerin görünmesi engellendi",
-                "Perde ve dekorun gösteriden sonra değiştirilmesi",
+                "Perde ve dekorun gösteri sonrasında değişmesi",
               ],
               correctIndex: 2,
               explanation:
@@ -1984,12 +1992,13 @@ function buildP1BCDCycle2Programs(): P1BCDProgram[] {
               hint: "‘İzleyicilerin göremeyeceği biçimde’ bölümünü düşün.",
             },
             {
-              prompt: "İşaretlerin gösteri günü kapatılmasının en açık amacı nedir?",
+              prompt:
+                "İşaretlerin prova ve gösteri günlerinde farklı biçimde kullanılması neyi gösterir?",
               options: [
-                "Oyuncuların sahnedeki işaretleri kullanmasını engellemek",
-                "İzleyicilerin dikkatini işaretlerden uzak tutmak",
-                "Zemindeki dekorun izleyiciye farklı görünmesini sağlamak",
-                "Prova süresini daha kısa hâle getirmek",
+                "İşaretlerin yalnızca gösteri dekorunu değiştirmek için kullanıldığını",
+                "Oyuncular provada onlardan yararlanır; izleyiciler gösteride görmez",
+                "Prova bitince oyuncuların sahnedeki yerinin rastgele belirlendiğini",
+                "Oyuncular provada onları ezberler, gösteride işaretler kaldırılır",
               ],
               correctIndex: 1,
               explanation: "Metin, izleyicilerin işaretleri görmemesini özellikle belirtiyor.",
@@ -2202,6 +2211,35 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
     ) {
       errors.push("yeni döngü için özgün içerik/provenance ve kaynak kaydı gerekli");
     }
+    const questions = program.exercises.flatMap((exercise) =>
+      exercise.questions.map((item) => ({
+        key: item.key,
+        prompt: item.prompt,
+        contentKey: exercise.contentKey,
+        skillCode: exercise.skillCode,
+        options: item.options,
+        correctOptionId: item.correctOptionId,
+        editorialReviewStatus: program.editorialReviewStatus,
+      })),
+    );
+    const quality = assessMultipleChoicePackageQuality(questions);
+    if (quality.clearLengthOutlierCount > 0) {
+      const keys = quality.questionReports
+        .filter((item) => item.clearLengthOutlier)
+        .map((item) => item.key)
+        .join(", ");
+      errors.push(`yeni döngüde doğru cevap için belirgin uzunluk ipucu var: ${keys}`);
+    }
+    if (quality.correctUniqueLongestRatio > 0.5)
+      errors.push("yeni döngüde doğru cevap sistematik biçimde tek başına en uzun");
+    if (quality.correctUniqueShortestRatio > 0.5)
+      errors.push("yeni döngüde doğru cevap sistematik biçimde tek başına en kısa");
+    if (quality.maxCorrectPositionRatio > 0.45)
+      errors.push("yeni döngüde doğru seçenek konumu dengesiz");
+    if (quality.repeatedSkillQuestionPairs.length > 0)
+      errors.push("yeni döngüde aynı içerik/beceride yinelenen soru adayı var");
+    if (program.publicationApproved && quality.needsEditorialReview)
+      errors.push("yayın öncesi soru paketi kalite ölçütleri ve editoryal inceleme tamamlanmalı");
   }
   const mappedOutcomeKeys = new Set<string>();
   const recordUsage = (usage: Map<string, number>, key: string | undefined) => {

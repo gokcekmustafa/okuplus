@@ -30,6 +30,61 @@ veya otomatik atamaya açılmış değildir; mevcut korumalı B/C/D seed'i yaln�
 yayın kararı verilmiş ilk döngüleri işler. Boş istasyon veya aynı metinden
 üretilmiş dolgu döngüler eklenmemiştir.
 
+## Soru bankası kalite denetimi
+
+`npm run qa:question-bank`, P0/P1-A/P1-B/C/D rota programlarının, bağımsız
+ilk gerçek içerik paketinin ve canonical placement bankasının çoktan seçmeli
+soru kaynaklarını, ayrıca yayımlanmamış sürüm adaylarını tarar. Raporun
+`currentSourceQuestionCount`, yayımlanmamış
+adayları ve revizyon adaylarını ayrı sayması önemlidir; revizyon adayları
+mevcut soruların kopya/yeniden yazılmış sürümlerini içerdiğinden toplamları
+benzersiz soru sayısı değildir. Üretim grafiği hakkında sonuç üretmez. Doğru
+cevabın tek başına en uzun veya en kısa olduğu durumlar,
+belirgin uzunluk aykırılıkları, A/B/C/D konum dağılımı, aynı içerik ve beceride
+yüksek sözcüksel benzerlik gösteren soru çiftleri ve doğrulanmış editoryal
+inceleme durumu raporlanır.
+
+Uzunluk aykırılığı, doğru seçeneğin yanlış seçeneklerden en az 8 normalize
+karakter daha uzun veya kısa ve yanlış seçeneklerin medyanına göre en az 1,2
+kat farklı olmasıdır. Paket için doğru konum oranının %45'i, doğru seçeneğin
+tek başına en uzun/kısa olma oranının %50'yi aşması inceleme sinyali üretir
+(en az 8 soruluk paketlerde). Aynı içerik ve beceride Jaccard sözcük benzerliği
+%80 ve üstü olan soru kökleri yalnızca tekrar adayıdır; bu ölçüm semantik
+tekrarı kanıtlamaz. Eşiklerin hiçbiri doğru cevabın anlamını doğrulamaz veya
+öğrenme ölçütü değildir. Yeni B/C/D paketlerinde kalite sinyalleri ve
+`editorialReviewStatus=VERIFIED` tamamlanmadan yayın onayı doğrulamadan geçmez.
+
+Cycle 3'ün 43. istasyonundaki yağmur bahçesi alıştırması için doğru cevabı
+ayrı su bölümlerini karıştırmayan üç soruluk v4 template/soru sürüm adayı
+hazırlandı: açık bilgiyi bulma, neden-sonuç ilişkisi ve iki ayrıntıdan sınırlı
+çıkarım. Yayımlanmış v3 soru anahtarları ve öğrenci geçmişi değiştirilmedi;
+v4 adayı yayımlanmamış ve editoryal inceleme bekliyor. Ayrıca A Cycle 2'deki
+dört, Cycle 3'teki iki uzunluk aykırılığı için tam paket düzeyinde yeni
+template/question version adayları oluşturuldu; eski sürüm ve cevap anahtarları
+korundu. Bu revizyon adayları mevcut kaynakta görülen altı aykırılığın yerine
+geçmiş veya production'a bağlanmış değildir. P0, A ilk döngüsü ve B/C/D ilk
+döngülerindeki A/B konum yığılmaları için cevap kimliklerini ve seçenek
+metinlerini değiştirmeyen, dengeli sıraya sahip ayrı soru/template sürüm
+adayları üretildi. Bu adaylar da yalnızca seçenek konumunu düzeltir; uzunluk
+örüntüsü veya semantik kalite onayı sayılmaz. Placement bankasının mevcut
+DESIGN_ONLY v1.0.1 sürümü değişmedi; dört MC uzunluk aykırılığı ve tamamı B
+konumunda olan dokuz MC madde için ayrı v1.0.2 tasarım adayı hazırlandı. Bu
+adayda doğru konumlar A/B/C/D = 3/2/2/2, belirgin uzunluk aykırılığı sıfırdır;
+`publicationApproved=false`, `productionAssignmentEnabled=false` ve
+`editorialReviewStatus=REVIEW_REQUIRED` olarak kalır. Stable question ID'leri
+ve `correctOptionIds` korunur.
+
+Son kaynak denetiminde 144 mevcut rota kaynağı sorusu, 36 yayımlanmamış B/C/D
+Cycle 2 sorusu, 9 placement DESIGN_ONLY sorusu ve 129 sürümlü revizyon adayı
+soru girdisi taranır. Revizyon paketleri mevcut soruları tekrar içerdiğinden
+129 benzersiz yeni soru değildir. Mevcut A Cycle 2/3 kaynaklarında altı
+belirgin uzunluk aykırılığı; placement v1.0.1 tasarım kaynağında dört
+aykırılık bulunur. Aday sürümler bu mekanik aykırılıkları kaldırır, fakat eski
+rota ve placement sürümleri değişmez. İlk P0/A/B/C/D kaynaklarında doğru
+cevap konumları dengesizdir; dengeli konum adayları hazırlanmış olsa da
+`editorialReviewStatus=REVIEW_REQUIRED` olduklarından yayımlanamaz. Hiçbir
+otomatik metrik içerik doğruluğunun editoryal incelemesini ikame etmez.
+
 ## Çalışma ve erişim
 
 - Tamamlanmış döngüler haritada kalır ve kaynak sırasıyla gösterilir. Kaynak

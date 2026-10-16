@@ -22,6 +22,7 @@
     "qa:curriculum-catalog": "tsx scripts/qa-curriculum-catalog.ts",
     "qa:curriculum-fixtures": "tsx scripts/qa-curriculum-fixtures.ts",
     "qa:learning-cycles": "tsx scripts/qa-learning-cycle-readiness.ts",
+    "qa:question-bank": "tsx scripts/qa-multiple-choice-source.ts",
     "content:validate-manifest": "tsx scripts/validate-content-manifest.ts",
     "provision:education-v2-p0-learning-path": "tsx scripts/provision-education-v2-p0-learning-path.ts",
     "audit:education-v2-p0-staging": "tsx scripts/audit-education-v2-p0-staging.ts",
