@@ -10,6 +10,7 @@ import {
 } from "../src/curriculum/learning-route-catalog.js";
 import { resolveLearningPathNodeStatuses } from "../src/modules/learning-path/service.js";
 import { selectPublishedPathCandidates } from "../src/modules/learning-path/service.js";
+import { buildEducationV2P0LearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 
 function graph(cycle: LearningRouteCycle) {
   return {
@@ -54,6 +55,23 @@ describe("versioned learning routes", () => {
     expect(nextLearningRouteCycle(a[2]!.pathCode)).toBeNull();
     expect(nextLearningRouteCycle("unknown-route")).toBeNull();
     expect(learningRouteCycle(a[0]!.pathCode)?.scopeCode).toBe("G8_12");
+  });
+
+  it("places Cycle 3 station one at the source position immediately after station 40", () => {
+    const p0Steps = buildEducationV2P0LearningCycleManifest().steps.length;
+    const aCycles = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
+    const priorAStationCount = aCycles
+      .filter((cycle) => cycle.sequence < 3)
+      .reduce((count, cycle) => count + cycle.manifest.steps.length, 0);
+    const cycle3 = aCycles.find((cycle) => cycle.sequence === 3)!;
+
+    expect(p0Steps + priorAStationCount).toBe(40);
+    expect(p0Steps + priorAStationCount + 1).toBe(41);
+    expect(nextLearningRouteCycle(aCycles.find((cycle) => cycle.sequence === 2)!.pathCode)).toBe(
+      cycle3,
+    );
+    expect(cycle3.manifest.steps).toHaveLength(7);
+    expect(cycle3.publicationApproved()).toBe(false);
   });
 
   it("accepts every complete source graph, including the seven-station continuation", () => {

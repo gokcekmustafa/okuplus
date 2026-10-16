@@ -29,7 +29,7 @@ export const EDUCATION_V2_P1_A_CYCLE_3_PATH_CODE =
   "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12";
 export const EDUCATION_V2_P1_A_CYCLE_3_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_3_TECHNICAL_COMPLETION_SCORE = 0.75;
-export const EDUCATION_V2_P1_A_CYCLE_3_STATUS = "EXPERT_REVIEW_REQUIRED" as const;
+export const EDUCATION_V2_P1_A_CYCLE_3_STATUS = "OWNER_RELEASE_REQUIRED" as const;
 
 export const CYCLE_3_LEARNING_OUTCOMES = [
   {
@@ -165,17 +165,29 @@ const content = (
   skillCode: string,
 ): ProgramContent => ({ key, title, body, difficulty, skillCode });
 
-const evidenceTeaching = content(
-  "p1a-v3-evidence-teaching",
-  "Kanıtın iddiayı nasıl desteklediğini gör",
-  [
-    "Bir metinde bilgi bulunması, o bilginin her zaman kanıt olduğu anlamına gelmez.",
-    "Önce yazarın iddiasını belirle; sonra ayrıntının bu iddiayı doğrudan mı, dolaylı mı desteklediğini sor.",
-    "Bir ayrıntı yalnızca konuya değiniyor, fakat iddiayı açıklamıyorsa güçlü kanıt sayılmaz. Kanıt ile sonuç arasındaki bağı metindeki ifadelerle kur.",
-  ].join("\n\n"),
-  4,
-  "RC_INFERENCE",
-);
+const evidenceTeaching: ProgramContent = {
+  ...content(
+    "p1a-v3-evidence-teaching",
+    "Kanıtın iddiayı nasıl desteklediğini gör",
+    [
+      "Bir metinde bilgi bulunması, o bilginin her zaman kanıt olduğu anlamına gelmez.",
+      "Önce yazarın iddiasını belirle; sonra ayrıntının bu iddiayı doğrudan mı, dolaylı mı desteklediğini sor.",
+      "Bir ayrıntı yalnızca konuya değiniyor, fakat iddiayı açıklamıyorsa güçlü kanıt sayılmaz. Kanıt ile sonuç arasındaki bağı metindeki ifadelerle kur.",
+    ].join("\n\n"),
+    4,
+    "RC_INFERENCE",
+  ),
+  lesson: {
+    objective: "Metindeki iddiayı, onu destekleyen ayrıntıdan ayırmak.",
+    explanation:
+      "Önce yazarın temel iddiasını bul. Sonra ayrıntının bu iddiayı gerçekten gösterip göstermediğini sor. Aynı konudan söz eden her bilgi, tek başına kanıt değildir.",
+    workedExample:
+      "Atölyedeki araçlara etiket yapıştırıldı. Ekip, aradığı aracı rafta daha çabuk buldu. İddia: etiketler araçları bulmayı kolaylaştırdı. Kanıt: ekibin aradığı araca daha çabuk ulaşması.",
+    guidedPractice:
+      "Şimdi dene: Kütüphanede raflara numara verildi ve ziyaretçiler aradığı bölümü daha çabuk buldu. Numara vermenin işe yaradığını gösteren ayrıntıyı kendi cümlenle söyle.",
+    nextExerciseKey: "p1a-v3-evidence-study",
+  },
+};
 
 const evidenceStudy = content(
   "p1a-v3-evidence-study",
@@ -195,23 +207,36 @@ const evidencePractice = content(
 
 const evidenceReinforcement = content(
   "p1a-v3-evidence-reinforcement",
-  "Kanıtı geri çağır",
-  "Otobüs durağına yerleştirilen açık renkli çatı, yazın güneş ışığının bir bölümünü geri yansıttı. Altındaki banklar yine de açıkta kaldı; bu nedenle durakta bekleyenler yalnızca çatının altında daha serin bir alan bulabildi.",
+  "Sahne işaretlerinin etkisini kanıtla",
+  "Drama kulübü, oyuncuların sahneye çıkış sırasını zemindeki çizgilerle belirledi. Prova sırasında oyuncular sıralarını daha az karıştırdı; oyunun süresi ise aynı kaldı.",
   4,
   "RC_DETAIL",
 );
 
-const transferTeaching = content(
-  "p1a-v3-transfer-teaching",
-  "Anlam kurma yaklaşımını yeni metne taşı",
-  [
-    "Yeni bir metne geçtiğinde önce metnin türünü değil, iddia ile kanıt arasındaki anlam bağını ara.",
-    "Bilgilendirici metinlerde açıklanan bir sonuç, anlatı metinlerinde ise karakterin seçimi veya olayın değişimi aynı akıl yürütmeyi gerektirebilir.",
-    "Metni özetlerken kanıtın neyi gösterdiğini ve bunun ana düşünceye nasıl bağlandığını birlikte söyle.",
-  ].join("\n\n"),
-  4,
-  "RC_MAIN_IDEA",
-);
+const transferTeaching: ProgramContent = {
+  ...content(
+    "p1a-v3-transfer-teaching",
+    "Anlam kurma yaklaşımını yeni metne taşı",
+    [
+      "Yeni bir metne geçtiğinde önce metnin türünü değil, iddia ile kanıt arasındaki anlam bağını ara.",
+      "Bilgilendirici metinlerde açıklanan bir sonuç, anlatı metinlerinde ise karakterin seçimi veya olayın değişimi aynı akıl yürütmeyi gerektirebilir.",
+      "Metni özetlerken kanıtın neyi gösterdiğini ve bunun ana düşünceye nasıl bağlandığını birlikte söyle.",
+    ].join("\n\n"),
+    4,
+    "RC_MAIN_IDEA",
+  ),
+  lesson: {
+    objective:
+      "Bilgilendirici ve anlatı metinlerinde düzenleme ile sonucu kanıt üzerinden ilişkilendirmek.",
+    explanation:
+      "Metin türü değişse de önce yapılan değişikliği, sonra metinde gözlenen sonucu bul. Bilgilendirici metin bir düzenlemeyi açıklayabilir; anlatı metni bir kişinin eylemini izletebilir.",
+    workedExample:
+      "Bilgilendirici metin: Bisiklet yoluna yansıtıcı çizgiler eklendi; akşam kullananlar yolun sınırını daha kolay gördü. Anlatı: Eren kartlarını konuya göre ayırdı; aradığı kartı daha hızlı buldu. Her iki metinde de düzenleme ile gözlenen sonucu eşleştir.",
+    guidedPractice:
+      "Şimdi dene: Örnekteki iki metinde düzenlemeden sonra neyin kolaylaştığını ayrı ayrı bul. Her sonuç için metinden bir kanıt göster.",
+    nextExerciseKey: "p1a-v3-transfer-practice",
+  },
+};
 
 const transferPractice = content(
   "p1a-v3-transfer-practice",
@@ -224,7 +249,12 @@ const transferPractice = content(
 const assessmentContent = content(
   "p1a-v3-assessment",
   "Kanıt ve aktarım kontrolü",
-  "Kıyıdaki yürüyüş yolu, yağmurdan sonra bazı bölümlerde çamurlaşıyordu. Belediye, suyu kenardaki bitkilere yönlendiren küçük kanallar açtı. Bir süre sonra yolun sorunlu bölümleri daha çabuk kururken bitkilerin çevresindeki toprak nemli kaldı.",
+  [
+    "Bilgilendirici metin",
+    "Kent müzesinde ziyaretçiler bazı sergi nesnelerinin ne işe yaradığını karıştırıyordu. Müze, nesnelerin yanına kısa kullanım açıklamaları ekledi. Sonraki gözlemde doğru eşleştirmeler daha sık görüldü.",
+    "Anlatı metni",
+    "Mina, okulun kuş gözlem ekibiyle tuttuğu çizelgede günleri ve kuş türlerini karıştırıyordu. Sütunlara başlık ekleyip her gözlemi ayrı satıra yazdı. Sonraki hafta ekip, gördüklerini aynı sırayla kaydedip karşılaştırabildi.",
+  ].join("\n\n"),
   5,
   "RC_INFERENCE",
 );
@@ -323,7 +353,7 @@ const exercises: ProgramExercise[] = [
           ["a", "Arsanın boş kalması, mahalledeki yolları uzatıyor"],
           ["b", "Bitkilerin büyümesi, yağmurun hiç yağmamasına yol açıyor"],
           ["c", "Çukurların dolması, toprağın bütün gün kuru kalmasını sağlıyor"],
-          ["d", "Su, toprağa ve bitkilere ulaşır"],
+          ["d", "Çukurlar suyu tutar; su toprağa ve bitkilere ulaşır"],
         ],
         "d",
         "Metin, çukur alanların suyu kısa süre tutmasından sonra suyun toprağa ve bitkilere ulaşmasını bağlıyor.",
@@ -336,7 +366,7 @@ const exercises: ProgramExercise[] = [
         [
           ["a", "Mahalledeki bütün arsalar artık yağmur bahçesine dönüştürüldü"],
           ["b", "Bahçe, her yağışta bütün mahalleyi kesinlikle korur"],
-          ["c", "Bahçe, yağmur suyunun bir kısmını yararlı bir yöne aktarabilir"],
+          ["c", "Bahçe suyun bir bölümünü toprağa ve bitkilere ulaştırabilir"],
           ["d", "Bitkiler, yağmur yağmadan da aynı miktarda suya ulaşır"],
         ],
         "c",
@@ -348,58 +378,58 @@ const exercises: ProgramExercise[] = [
   },
   {
     key: "p1a-v3-evidence-reinforcement",
-    title: "Kanıtı geri çağır",
+    title: "Sahne işaretlerinin etkisini kanıtla",
     templateType: "MIXED",
     contentKey: evidenceReinforcement.key,
     skillCode: "RC_DETAIL",
     contract: contract(
-      "Kanıtı geri çağır",
+      "Sahne işaretlerinin etkisini kanıtla",
       "DETAIL_EVIDENCE",
       "RC_DETAIL",
       "DEVELOPING",
-      "Bir ayrıntının iddiayı destekleyip desteklemediğini yeni bir kısa metinde kontrol et.",
+      "Bir düzenlemenin etkisini yeni bir kısa metindeki gözlemle kontrol et.",
     ),
     questions: [
       question(
         "p1a-v3-evidence-reinforcement-1",
-        "Çatının hangi etkisi metinde doğrudan anlatılmıştır?",
+        "Zemindeki çizgiler hangi amaçla kullanılmıştır?",
         [
-          ["a", "Bankların bütün gün kapalı bir odada kalması"],
-          ["b", "Güneş ışığının bir bölümünün geri yansıtılması"],
-          ["c", "Durağın bulunduğu yolun tamamen değişmesi"],
-          ["d", "Bekleyenlerin her zaman aynı saatte gelmesi"],
+          ["a", "Oyuncuların sahneye hangi taraftan çıkacağını göstermek"],
+          ["b", "Oyuncuların sahneye çıkış sırasını göstermek"],
+          ["c", "Sahne süresini uzatıp yeni bölümler eklemek"],
+          ["d", "Dekorları prova yapılmadan yerleştirmek"],
         ],
         "b",
-        "Metin, açık renkli çatının güneş ışığının bir bölümünü geri yansıttığını doğrudan söylüyor.",
-        "Çatının ışıkla ilgili doğrudan etkisini bul.",
+        "Metin, zemindeki çizgilerin oyuncuların sahneye çıkış sırasını belirlemek için kullanıldığını söylüyor.",
+        "Çizgilerin oyunculara hangi sırayı gösterdiğini bul.",
         4,
       ),
       question(
         "p1a-v3-evidence-reinforcement-2",
-        "Metne göre bankların durumu nasıldır?",
+        "Metne göre oyuncuların sıraları karıştırması nasıl değişmiştir?",
         [
-          ["a", "Banklar çatının altında olmadığı için bütünüyle korunmamıştır"],
-          ["b", "Banklar her mevsimde kapalı bir alanda tutulmuştur"],
-          ["c", "Banklar durağın dışına taşınarak başka yerde kullanılmıştır"],
-          ["d", "Banklar çatının ışığı tamamen kesmesiyle soğumuştur"],
+          ["a", "Daha az karıştırmışlardır"],
+          ["b", "Her provada daha çok karıştırmışlardır"],
+          ["c", "Sıraları karıştırmadan oyunun süresini uzatmışlardır"],
+          ["d", "Sıraları değiştirip çizgileri kaldırmışlardır"],
         ],
         "a",
-        "Metin, bankların açıkta kaldığını ve serin alanın yalnızca çatının altında bulunduğunu belirtiyor.",
-        "Bankların çatının neresinde kaldığına dikkat et.",
+        "Metne göre oyuncular prova sırasında çıkış sıralarını daha az karıştırdı.",
+        "Prova sırasında gözlenen değişikliği metnin son bölümünde ara.",
         4,
       ),
       question(
         "p1a-v3-evidence-reinforcement-3",
         "Metnin desteklediği en sınırlı sonuç hangisidir?",
         [
-          ["a", "Açık renkli çatılar bütün durakları serinletir"],
-          ["b", "Çatı, duraktaki herkes için aynı korumayı sağlar"],
-          ["c", "Çatı altında bekleyenler için daha serin bir alan oluşabilir"],
-          ["d", "Bankların açıkta kalması çatının hiçbir işe yaramadığını gösterir"],
+          ["a", "Oyuncular artık prova yapmadan sahneye çıkabilir"],
+          ["b", "Çizgiler her oyunun süresini kesin olarak kısaltır"],
+          ["c", "Çizgiler çıkış sırasını izlemeyi kolaylaştırabilir"],
+          ["d", "Kulüp dekorları çizgilerin rengine göre değiştirmiştir"],
         ],
         "c",
-        "Çatı yalnızca altında kalan alan için serinlik sağlıyor; metin daha geniş bir sonuç vermiyor.",
-        "Sonucun çatının altında kalan alanla sınırlı olduğunu unutma.",
+        "Metin, bu prova düzeninde çizgilerin sırayı izlemeyi kolaylaştırdığını destekliyor; her oyuna ilişkin kesin bir sonuç vermiyor.",
+        "Sonucu anlatılan prova düzeniyle sınırlı tut.",
         4,
       ),
     ],
@@ -425,7 +455,7 @@ const exercises: ProgramExercise[] = [
           ["a", "Gösterinin günü ve saati son anda iptal edilmiştir"],
           ["b", "İlk afişin renkleri ziyaretçilerin dikkatini çekmiştir"],
           ["c", "Programda yalnızca tek bir etkinlik bulunduğu anlaşılmıştır"],
-          ["d", "İlk tasarım uzaktan okunmadığı için bilgileri yeniden düzenlemiştir"],
+          ["d", "İlk tasarımın yazıları uzaktan okunmuyordu"],
         ],
         "d",
         "İlk tasarımın uzaktan okunmaması, başlığın büyütülmesine ve bilgilerin bölünmesine neden oluyor.",
@@ -451,7 +481,7 @@ const exercises: ProgramExercise[] = [
         "Bu anlatıda kanıt-sonuç ilişkisini en iyi açıklayan seçenek hangisidir?",
         [
           ["a", "Afişin rengi değiştiği için herkes gösteriye katılmıştır"],
-          ["b", "Okunabilirlik sorunu giderilince programı izlemek kolaylaşmıştır"],
+          ["b", "Yazılar okununca programı izlemek kolaylaştı"],
           ["c", "Ziyaretçiler programı bilmediği için afiş hazırlanmıştır"],
           ["d", "Başlık büyüdüğü için gösterinin süresi uzamıştır"],
         ],
@@ -478,58 +508,58 @@ const exercises: ProgramExercise[] = [
     questions: [
       question(
         "p1a-v3-assessment-1",
-        "Kanalların açılmasıyla ilgili doğrudan sonuç hangisidir?",
+        "Açıklamalar eklendikten sonra hangi doğrudan sonuç gözlenmiştir?",
         [
-          ["a", "Yürüyüş yolunun bütün bölümleri aynı anda yenilenmiştir"],
-          ["b", "Belediye kıyıdaki bitkileri başka bir yere taşımıştır"],
-          ["c", "Yol kurur, bitki çevresi nemli kalır"],
-          ["d", "Yağmurdan sonra kıyıdaki yol artık hiç kullanılmamıştır"],
+          ["a", "Müzedeki bütün eserler başka bir salona taşınmıştır"],
+          ["b", "Ziyaretçiler açıklamaları görmeden sergiyi tamamlamıştır"],
+          ["c", "Doğru eşleştirme sayısı artmıştır"],
+          ["d", "Sergi nesnelerinin kullanım amacı değişmiştir"],
         ],
         "c",
-        "Metin, kanalların açılmasından sonra yolun kuruduğunu ve bitki çevresinin nemli kaldığını birlikte veriyor.",
-        "Kanalların açılmasından sonra gözlenen iki sonucu bul.",
+        "Metin, kısa kullanım açıklamaları eklendikten sonra doğru eşleştirmelerin daha sık görüldüğünü bildiriyor.",
+        "Açıklamalar eklendikten sonra yapılan gözlemi seç.",
         5,
       ),
       question(
         "p1a-v3-assessment-2",
         "Metindeki neden-sonuç zinciri hangisidir?",
         [
-          ["a", "Bitkilerin taşınması, kanalların kapanmasına neden olmuştur"],
-          ["b", "Yolun kuru kalması, yağmurdan önce kanalların açılmasını sağlamıştır"],
-          ["c", "Yağmur, belediyenin kıyıdaki bütün bitkileri kaldırmasına yol açmıştır"],
-          ["d", "Kanallar suyu yönlendirmiş, yol kururken bitki çevresi nemli kalmıştır"],
+          ["a", "Müze açıklamaları kaldırdı; doğru eşleştirmeler daha az görüldü"],
+          ["b", "Nesnelerin işlevi değişti; açıklamalar aynı kaldı"],
+          ["c", "Doğru eşleştirmeler arttı; ardından kısa açıklamalar eklendi"],
+          ["d", "Kısa açıklamalar eklendi; doğru eşleştirmeler daha sık görüldü"],
         ],
         "d",
-        "Kanalların suyu yönlendirmesi, yol ile bitki çevresinde gözlenen iki farklı sonucu açıklıyor.",
-        "Önce yapılan düzenlemeyi, sonra iki sonucu sıraya koy.",
+        "Kısa açıklamaların eklenmesinden sonra nesne ve işlevlerin doğru eşleştirilmesi daha sık gözlendi.",
+        "Önce müzenin ne yaptığını, sonra hangi sonucun arttığını sırala.",
         5,
       ),
       question(
         "p1a-v3-assessment-3",
         "Metne dayalı en sınırlı çıkarım hangisidir?",
         [
-          ["a", "Kanallar suyu iki alana yönlendirebilir"],
-          ["b", "Bu yöntem her kıyı yolundaki bütün sorunları kesinlikle çözer"],
-          ["c", "Belediye artık kıyıdaki yolları hiç onarmayacaktır"],
-          ["d", "Bitkiler yalnızca kanallar açıldığında yaşamını sürdürebilir"],
+          ["a", "Kısa açıklamalar nesnelerin işlevini anlamaya yardım edebilir"],
+          ["b", "Bu yöntem her müzede bütün ziyaretçilerin yanılmasını önler"],
+          ["c", "Açıklamalar sergideki nesnelerin değerini kesin olarak artırır"],
+          ["d", "Ziyaretçiler müzedeki her ayrıntıyı açıklamasız da hatırlar"],
         ],
         "a",
-        "Metin, tek bir kıyı yolundaki gözleme dayanarak suyun iki alana farklı etkiler sağladığını gösteriyor.",
-        "Çıkarımı metindeki tek örneğin desteklediği sınırda tut.",
+        "Bu metin, eklenen kısa açıklamaların bu sergide nesnelerin işlevini anlamaya yardım edebileceğini destekliyor; tüm müzeler için kesinlik vermiyor.",
+        "Çıkarımı anlatılan tek sergi gözlemiyle sınırla.",
         5,
       ),
       question(
         "p1a-v3-assessment-4",
-        "Bu metindeki kanıtı başka bir metne aktarırken hangi yöntem izlenmelidir?",
+        "İki metindeki düzenlemelerin işe yaradığını hangi kanıtlar gösterir?",
         [
-          ["a", "Yeni metne aynı yer ve kişileri eklemek"],
-          ["b", "Düzenleme ile sonucu ilişkilendirmek"],
-          ["c", "Yeni metnin konusunu okumadan benzer bir cevap seçmek"],
-          ["d", "Yalnızca en uzun ayrıntıyı ana düşünce kabul etmek"],
+          ["a", "Açıklamalar eklendi; çizelge de hafta boyunca dolduruldu"],
+          ["b", "Açıklamalar eşleştirmeyi; başlıklar karşılaştırmayı kolaylaştırdı"],
+          ["c", "Önce eşleştirme ve karşılaştırma kolaylaştı, sonra düzenleme yapıldı"],
+          ["d", "İki metindeki değişiklikler yalnızca görünüşü etkiledi"],
         ],
         "b",
-        "Aktarım, eski metni kopyalamak değil; yeni metindeki düzenleme ve sonucu kanıtla ilişkilendirmektir.",
-        "Yer ve kişiler değil, kanıt-sonuç ilişkisi taşınır.",
+        "Bilgilendirici metinde açıklamalar eşleştirmeyi; anlatıda başlıklar gözlemleri karşılaştırmayı kolaylaştırdı. İkisinde de değişiklik ile sonucu eşleştirdin.",
+        "Her metinde yapılan değişikliği, ardından görülen sonuçla eşleştir.",
         5,
       ),
     ],
@@ -541,8 +571,8 @@ const exercises: ProgramExercise[] = [
  * explicit: a question is not considered evidence for an outcome merely
  * because its exercise happens to use the same broad skill code.
  *
- * The map is an authoring contract, not psychometric validation. Expert
- * review is still required before Cycle 3 can become canonical.
+ * The map is an authoring contract, not psychometric validation. The product
+ * owner still controls whether this candidate is released.
  */
 export const CYCLE_3_EXERCISE_OUTCOME_KEYS = {
   "p1a-v3-evidence-study": ["P1A_V3_EVIDENCE_STRENGTH"],
@@ -735,6 +765,28 @@ export function validateP1ACycle3Program(candidate: P1AProgram = program): strin
     stepKeys.add(step.key);
     if (step.contentKey)
       usedContent.set(step.contentKey, (usedContent.get(step.contentKey) ?? 0) + 1);
+    if (step.type === "TEACHING") {
+      const lesson = step.contentKey ? contentByKey.get(step.contentKey)?.lesson : undefined;
+      const nextStep = pathSteps[index + 1];
+      if (!lesson) {
+        errors.push(`Öğretim içeriğinde yapılandırılmış ders eksik: ${step.key}`);
+      } else {
+        if (
+          !lesson.objective.trim() ||
+          !lesson.explanation.trim() ||
+          !lesson.workedExample.trim() ||
+          !lesson.guidedPractice.trim()
+        ) {
+          errors.push(`Öğretim içeriği eksik: ${step.key}`);
+        }
+        if (
+          !candidate.exercises.some((exercise) => exercise.key === lesson.nextExerciseKey) ||
+          nextStep?.exerciseKey !== lesson.nextExerciseKey
+        ) {
+          errors.push(`Öğretim ve sonraki alıştırma bağlantısı geçersiz: ${step.key}`);
+        }
+      }
+    }
     if (step.exerciseKey)
       usedExercises.set(step.exerciseKey, (usedExercises.get(step.exerciseKey) ?? 0) + 1);
     if (step.assessmentKey) {

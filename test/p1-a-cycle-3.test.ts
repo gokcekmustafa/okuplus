@@ -51,6 +51,25 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     }
   });
 
+  it("gives each teaching station a worked example and guided task linked to its next exercise", () => {
+    const steps = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.units.flatMap((unit) => unit.steps);
+    const teachingSteps = steps.filter((step) => step.type === "TEACHING");
+    expect(teachingSteps).toHaveLength(2);
+
+    for (const step of teachingSteps) {
+      const content = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.content.find(
+        (item) => item.key === step.contentKey,
+      );
+      const lesson = content?.lesson;
+      expect(lesson?.objective).toBeTruthy();
+      expect(lesson?.explanation).toBeTruthy();
+      expect(lesson?.workedExample).toBeTruthy();
+      expect(lesson?.guidedPractice).toContain("Şimdi dene");
+      expect(lesson?.nextExerciseKey).toBe(steps[steps.indexOf(step) + 1]?.exerciseKey);
+    }
+    expect(validateP1ACycle3Program()).toEqual([]);
+  });
+
   it("keeps every question explicitly bound to the outcome it is intended to measure", () => {
     const exercises = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.exercises;
     const questionMap = CYCLE_3_QUESTION_OUTCOME_KEYS as Record<
@@ -106,6 +125,32 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     ).toBe(true);
   });
 
+  it("measures transfer on an unseen pair of informational and narrative texts", () => {
+    const program = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM;
+    const assessment = program.exercises.find((exercise) => exercise.key === "p1a-v3-assessment");
+    const assessmentContent = program.content.find((item) => item.key === assessment?.contentKey);
+    const question = assessment?.questions.find((item) => item.key === "p1a-v3-assessment-4");
+    const correctOption = question?.options.find(
+      (option) => option.id === question.correctOptionId,
+    );
+
+    expect(assessmentContent?.body).toContain("Bilgilendirici metin");
+    expect(assessmentContent?.body).toContain("Anlatı metni");
+    expect(
+      program.exercises.some(
+        (exercise) =>
+          exercise.key !== assessment?.key && exercise.contentKey === assessment?.contentKey,
+      ),
+    ).toBe(false);
+    expect(question?.prompt).toContain("İki metindeki");
+    expect(CYCLE_3_QUESTION_OUTCOME_KEYS["p1a-v3-assessment"]["p1a-v3-assessment-4"]).toContain(
+      "P1A_V3_GENRE_TRANSFER",
+    );
+    expect(correctOption?.text).toContain("Açıklamalar");
+    expect(correctOption?.text).toContain("başlıklar");
+    expect(question?.correctOptionId).toBe("b");
+  });
+
   it("keeps correct-option positions balanced and without clear length cues", () => {
     const questions = EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.exercises.flatMap(
       (exercise) => exercise.questions,
@@ -132,6 +177,18 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     expect(
       questions.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
     ).toHaveLength(0);
+    expect(
+      questions.filter((question) => {
+        const correct = question.options.find((option) => option.id === question.correctOptionId);
+        return (
+          correct &&
+          question.options.filter((option) => option.text.length > correct.text.length).length ===
+            0 &&
+          question.options.filter((option) => option.text.length === correct.text.length).length ===
+            1
+        );
+      }),
+    ).toHaveLength(0);
   });
 
   it("keeps immutable cycle-3 identifiers separate from v1/v2 and validates the manifest", () => {
@@ -157,7 +214,7 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
   });
 
   it("keeps the candidate closed and outside canonical readiness", () => {
-    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("EXPERT_REVIEW_REQUIRED");
+    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("OWNER_RELEASE_REQUIRED");
     expect(EDUCATION_V2_P1_A_CYCLE_3_MANIFEST.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(buildEducationV2P1ALearningCycleManifest().cycleVersion).toBe(1);
     expect(buildEducationV2P1ALearningCycleManifest().cycleId).not.toBe(
@@ -178,6 +235,28 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     expect(errors).toContain("Kazanım içerikle uyumsuz: evidence-small-study-v3 -> RC_DETAIL");
     expect(errors).toContain(
       "Bilinmeyen cycle 3 prerequisite: evidence-small-study-v3 -> missing-step",
+    );
+  });
+
+  it("rejects teaching without a structured lesson or its linked next exercise", () => {
+    const missingLesson = structuredClone(EDUCATION_V2_P1_A_CYCLE_3_PROGRAM);
+    const teachingContent = missingLesson.content.find(
+      (item) => item.key === "p1a-v3-evidence-teaching",
+    );
+    if (!teachingContent) throw new Error("Cycle 3 öğretim içeriği eksik");
+    delete teachingContent.lesson;
+    expect(validateP1ACycle3Program(missingLesson)).toContain(
+      "Öğretim içeriğinde yapılandırılmış ders eksik: evidence-teaching-v3",
+    );
+
+    const mismatchedExercise = structuredClone(EDUCATION_V2_P1_A_CYCLE_3_PROGRAM);
+    const transferContent = mismatchedExercise.content.find(
+      (item) => item.key === "p1a-v3-transfer-teaching",
+    );
+    if (!transferContent?.lesson) throw new Error("Cycle 3 aktarım dersi eksik");
+    transferContent.lesson.nextExerciseKey = "missing-exercise";
+    expect(validateP1ACycle3Program(mismatchedExercise)).toContain(
+      "Öğretim ve sonraki alıştırma bağlantısı geçersiz: transfer-teaching-v3",
     );
   });
 
