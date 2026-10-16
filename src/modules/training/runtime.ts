@@ -51,6 +51,7 @@ const mainIdeaVersionSelect = {
         select: {
           id: true,
           contentId: true,
+          version: true,
           title: true,
           body: true,
           status: true,
@@ -70,6 +71,7 @@ const mainIdeaVersionSelect = {
         select: {
           id: true,
           questionId: true,
+          version: true,
           contentVersionId: true,
           prompt: true,
           options: true,

@@ -20,6 +20,7 @@ import {
   CANONICAL_PLACEMENT_ITEM_BANK_REVIEW_CANDIDATE,
 } from "./canonical-placement-item-bank-revisions.js";
 import { QUESTION_BANK_VERSIONED_REVISION_CANDIDATES } from "./question-bank-versioned-revisions.js";
+import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "./education-v2-p1-800-draft-cycles.js";
 import type { MultipleChoiceQualityQuestion } from "./option-length-quality.js";
 
 export type MultipleChoiceSourcePackage = {
@@ -357,6 +358,31 @@ const versionedRevisionPackages: MultipleChoiceSourcePackage[] =
     questions: candidate.questions,
   }));
 
+const expansionDraftPackages: MultipleChoiceSourcePackage[] = EDUCATION_V2_P1_800_DRAFT_CYCLES.map(
+  (cycle) => ({
+    key: `${cycle.programId}:SOURCE_QUESTIONS`,
+    status: "UNRELEASED_CANDIDATE",
+    revisionKind: "QUESTION_CONTENT",
+    questions: cycle.sourceStations.flatMap((station) =>
+      station.questions.map((question) => ({
+        key: question.key,
+        sourceQuestionId: `${cycle.programId}:${station.key}:${question.key}`,
+        sourceVersionId: question.versionId,
+        sourceVersionStatus: "UNRELEASED_CANDIDATE" as const,
+        prompt: question.prompt,
+        contentKey: station.key,
+        sourceText: station.text,
+        explanation: question.explanation,
+        hint: question.hint,
+        skillCode: station.skillCodes.join("+") || undefined,
+        options: question.options,
+        correctOptionId: question.correctOptionId,
+        editorialReviewStatus: "REVIEW_REQUIRED" as const,
+      })),
+    ),
+  }),
+);
+
 /**
  * Enumerates every source package actually used by the learning-route catalog
  * and the independent first-real content pack. It is source QA only; it does
@@ -370,13 +396,14 @@ export const MULTIPLE_CHOICE_SOURCE_PACKAGES: readonly MultipleChoiceSourcePacka
   placementReviewCandidatePackage,
   rainGardenRevisionPackage,
   ...versionedRevisionPackages,
+  ...expansionDraftPackages,
 ];
 
 export const MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS = [
   {
     code: "RUNTIME_TRAINING_BANK_NOT_ENUMERATED",
     detail:
-      "Bağımsız Antrenman soruları statik repo paketinden değil, yayımlanmış veritabanı şablon/soru sürümlerinden yükleniyor.",
+      "Bağımsız Antrenman soruları statik repo paketinden değil, yayımlanmış veritabanı şablon/soru sürümlerinden yükleniyor; korumalı canlı envanter workflow'u çalıştırılmadığı için soru içeriği ve semantiği henüz incelenmedi.",
   },
   {
     code: "FIRST_REAL_PACK_VERSION_UNDECLARED",

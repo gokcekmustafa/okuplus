@@ -18,6 +18,12 @@ describe("multiple-choice package quality", () => {
     expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1");
     expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1:1.0.2");
     expect(keys).toContain("OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1:1.0.3");
+    for (const routeFamily of ["A", "B", "C", "D"] as const) {
+      const sequence = routeFamily === "A" ? 4 : 3;
+      expect(keys).toContain(
+        `EDU_V2_P1_${routeFamily}_EXPANSION_${sequence}_PROGRAM:SOURCE_QUESTIONS`,
+      );
+    }
 
     const reports = MULTIPLE_CHOICE_SOURCE_PACKAGES.map((source) => ({
       source,
@@ -53,6 +59,11 @@ describe("multiple-choice package quality", () => {
     expect(newCandidates.map(({ source }) => source.status)).toContain(
       "VERSIONED_REVISION_CANDIDATE",
     );
+    expect(
+      reports
+        .filter(({ source }) => source.key.includes("_EXPANSION_"))
+        .reduce((total, { report }) => total + report.questionCount, 0),
+    ).toBe(60);
     for (const { source, report } of newCandidates) {
       expect(report.clearLengthOutlierCount, source.key).toBe(0);
     }
@@ -166,12 +177,12 @@ describe("multiple-choice package quality", () => {
 
   it("retains text, key, explanation and immutable version IDs in a deduplicated audit dossier", () => {
     const unique = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
-    expect(unique).toHaveLength(189);
+    expect(unique).toHaveLength(249);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(327);
+    expect(allVersions).toHaveLength(387);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(300);
+    ).toHaveLength(360);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,

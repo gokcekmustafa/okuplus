@@ -1,0 +1,81 @@
+name: Manual production Antrenman question inventory (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_audit:
+        description: "Type TRAINING_QUESTION_INVENTORY_READ_ONLY_AUDIT to allow the protected read-only audit"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-training-question-inventory-audit
+  cancel-in-progress: false
+
+jobs:
+  production-training-question-inventory-audit:
+    name: Audit published Antrenman question inventory
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      APP_ENV: production
+      NODE_ENV: production
+      DB_FINGERPRINT_ENVIRONMENT: PRODUCTION
+      PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
+      PRODUCTION_DB_APPROVED_PROVIDER: ${{ vars.PRODUCTION_DB_APPROVED_PROVIDER }}
+      PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+      PRODUCTION_DB_APPROVED_PORT: ${{ vars.PRODUCTION_DB_APPROVED_PORT }}
+      PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
+      PRODUCTION_DB_APPROVED_USER: ${{ vars.PRODUCTION_DB_APPROVED_USER }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+
+    steps:
+      - name: Checkout master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Verify protected master release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Verify protected audit gate
+        env:
+          TRAINING_INVENTORY_AUDIT_CONFIRMATION: ${{ inputs.confirm_audit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${APP_ENV}" = "production"
+          test "${NODE_ENV}" = "production"
+          test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
+          test "${TRAINING_INVENTORY_AUDIT_CONFIRMATION}" = "TRAINING_QUESTION_INVENTORY_READ_ONLY_AUDIT"
+          test -n "${PRODUCTION_DATABASE_URL}"
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
+          test -n "${PRODUCTION_DB_APPROVED_PROVIDER}"
+          test -n "${PRODUCTION_DB_APPROVED_HOST}"
+          test -n "${PRODUCTION_DB_APPROVED_PORT}"
+          test -n "${PRODUCTION_DB_APPROVED_DATABASE}"
+          test -n "${PRODUCTION_DB_APPROVED_USER}"
+
+      - name: Audit published Antrenman versions (SELECT only)
+        env:
+          TRAINING_INVENTORY_AUDIT_CONFIRMATION: ${{ inputs.confirm_audit }}
+        run: npx tsx scripts/audit-training-question-inventory-production.ts

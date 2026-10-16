@@ -16,6 +16,11 @@ import {
   isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-3-program.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
+import {
+  EDUCATION_V2_P1_800_CATEGORY_TARGETS,
+  EDUCATION_V2_P1_800_DRAFT_CYCLES,
+  type EducationV2P1ExpansionCategory,
+} from "./education-v2-p1-800-draft-cycles.js";
 
 /** A route is an explicit chain of immutable content releases, not a level reassessment. */
 export type LearningRouteCycle = {
@@ -29,6 +34,7 @@ export type LearningRouteCycle = {
   units: readonly { code: string; steps: readonly { key: string }[] }[];
   manifest: LearningCycleManifest;
   nextPathCode: string | null;
+  authoredStationCategories?: readonly EducationV2P1ExpansionCategory[];
   /** Source permission; a PUBLISHED database graph is a separate requirement. */
   publicationApproved: () => boolean;
 };
@@ -36,7 +42,7 @@ export type LearningRouteCycle = {
 const initialManifest = buildEducationV2P1ALearningCycleManifest();
 const bcdManifests = buildEducationV2P1BCDLearningCycleManifests();
 
-export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
+const BASE_LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
   {
     pathCode: EDUCATION_V2_P1_A_PROGRAM.path.code,
     programId: EDUCATION_V2_P1_A_PROGRAM.programId,
@@ -98,6 +104,21 @@ export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
   }),
 ];
 
+const linkedBaseCycles = BASE_LEARNING_ROUTE_CYCLES.map((cycle) => {
+  if (cycle.nextPathCode) return cycle;
+  const draftNext = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+    (candidate) =>
+      candidate.routeFamily === cycle.routeFamily && candidate.sequence === cycle.sequence + 1,
+  );
+  return draftNext ? { ...cycle, nextPathCode: draftNext.pathCode } : cycle;
+});
+
+/** Drafts extend source-chain metadata only; publication stays explicitly closed. */
+export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
+  ...linkedBaseCycles,
+  ...EDUCATION_V2_P1_800_DRAFT_CYCLES,
+];
+
 const cyclesByCode = new Map(LEARNING_ROUTE_CYCLES.map((cycle) => [cycle.pathCode, cycle]));
 export function learningRouteCycle(pathCode: string): LearningRouteCycle | null {
   return cyclesByCode.get(pathCode) ?? null;
@@ -135,7 +156,10 @@ export type LearningRouteCoverage = {
   releasedSourceStationCount: number;
   targetStationCount: number;
   remainingAuthoredStations: number;
-  categoryDistribution: "NOT_CLASSIFIED";
+  categoryDistribution: "NOT_CLASSIFIED" | "PARTIALLY_CLASSIFIED";
+  categoryCounts: Record<EducationV2P1ExpansionCategory, number>;
+  unclassifiedStationCount: number;
+  categoryTargets: typeof EDUCATION_V2_P1_800_CATEGORY_TARGETS;
   productionGraph: "NOT_VERIFIED";
 };
 
@@ -153,13 +177,27 @@ export function summarizeLearningRouteCoverage(
       (count, cycle) => count + (cycle.publicationApproved() ? cycle.manifest.steps.length : 0),
       0,
     );
+    const categoryCounts = Object.fromEntries(
+      Object.keys(EDUCATION_V2_P1_800_CATEGORY_TARGETS).map((category) => [category, 0]),
+    ) as Record<EducationV2P1ExpansionCategory, number>;
+    let classifiedStationCount = 0;
+    for (const cycle of routeCycles) {
+      for (const category of cycle.authoredStationCategories ?? []) {
+        categoryCounts[category] += 1;
+        classifiedStationCount += 1;
+      }
+    }
     return {
       routeFamily,
       authoredStationCount,
       releasedSourceStationCount,
       targetStationCount: LEARNING_ROUTE_STATION_TARGET,
       remainingAuthoredStations: Math.max(0, LEARNING_ROUTE_STATION_TARGET - authoredStationCount),
-      categoryDistribution: "NOT_CLASSIFIED",
+      categoryDistribution:
+        classifiedStationCount === 0 ? "NOT_CLASSIFIED" : "PARTIALLY_CLASSIFIED",
+      categoryCounts,
+      unclassifiedStationCount: Math.max(0, authoredStationCount - classifiedStationCount),
+      categoryTargets: EDUCATION_V2_P1_800_CATEGORY_TARGETS,
       productionGraph: "NOT_VERIFIED",
     };
   });
