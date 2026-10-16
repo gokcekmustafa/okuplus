@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
+import { lessonMetadataSchema, parseLessonMetadata } from "../src/modules/lessons/contract.js";
 
 const validLesson = () => ({
   lessonType: "LEARNING_LESSON",
@@ -83,6 +83,34 @@ describe("published learning lesson contract", () => {
       programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2",
       routeFamily: "P1-A-CYCLE-2",
     });
+  });
+
+  it("accepts only the published Cycle 3 content-only lesson envelope", () => {
+    const cycle3Lesson = {
+      ...validLesson(),
+      contractVersion: 3,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-3",
+      routeFamily: "P1-A-CYCLE-3",
+      exerciseTemplateVersionId: null,
+    };
+
+    expect(parseLessonMetadata(cycle3Lesson)).toMatchObject({
+      contractVersion: 3,
+      programId: "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-3",
+      routeFamily: "P1-A-CYCLE-3",
+      exerciseTemplateVersionId: null,
+    });
+    expect(lessonMetadataSchema.safeParse(cycle3Lesson).success).toBe(true);
+
+    const unknownProgramV3 = { ...cycle3Lesson, programId: "UNRECOGNIZED-PROGRAM" };
+    expect(parseLessonMetadata(unknownProgramV3)).toBeNull();
+    expect(lessonMetadataSchema.safeParse(unknownProgramV3).success).toBe(false);
+    expect(
+      parseLessonMetadata({
+        ...cycle3Lesson,
+        exerciseTemplateVersionId: "unexpected-template",
+      }),
+    ).toBeNull();
   });
 
   it("reads the already-published Cycle 2 content-only teaching envelope safely", () => {

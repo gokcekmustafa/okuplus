@@ -4,6 +4,8 @@ export const LESSON_METADATA_TYPE = "LEARNING_LESSON" as const;
 const LEGACY_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE" as const;
 const CYCLE_2_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-2" as const;
 const CYCLE_2_P1_A_ROUTE_FAMILY = "P1-A-CYCLE-2" as const;
+const CYCLE_3_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-3" as const;
+const CYCLE_3_P1_A_ROUTE_FAMILY = "P1-A-CYCLE-3" as const;
 
 const lessonMetadataKeys = [
   "lessonType",
@@ -55,17 +57,17 @@ const academicMeasurementSignalSchema = z.enum([
   "TRANSFER",
 ]);
 
-export const lessonMetadataSchema = z
+const lessonMetadataBaseSchema = z
   .object({
     lessonType: z.literal(LESSON_METADATA_TYPE),
-    contractVersion: z.union([z.literal(1), z.literal(2)]),
+    contractVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     // Curriculum metadata may carry a stable authoring envelope. These fields
     // are optional so older P0 lesson versions remain valid, but they are
     // still validated instead of being silently accepted as arbitrary data.
     programId: z.string().trim().min(1).max(120).optional(),
     // Versioned P1-A cycles keep their route family in the lesson envelope so
     // the published content can be resolved without weakening the contract.
-    routeFamily: z.enum(["P1-A", "P1-A-CYCLE-2"]).optional(),
+    routeFamily: z.enum(["P1-A", "P1-A-CYCLE-2", "P1-A-CYCLE-3"]).optional(),
     skillCode: z.string().trim().min(1).max(80),
     objective: z.string().trim().min(1).max(500),
     explanation: z.string().trim().min(1).max(5000),
@@ -104,10 +106,29 @@ export const lessonMetadataSchema = z
   })
   .strict();
 
+export const lessonMetadataSchema = lessonMetadataBaseSchema.superRefine((metadata, context) => {
+  if (metadata.contractVersion !== 3) return;
+
+  // Cycle 3's immutable published content uses its program version (3) as
+  // contractVersion. Keep that compatibility scoped to its lesson envelope.
+  if (
+    metadata.programId !== CYCLE_3_P1_A_PROGRAM_ID ||
+    metadata.routeFamily !== CYCLE_3_P1_A_ROUTE_FAMILY ||
+    metadata.lessonType !== LESSON_METADATA_TYPE ||
+    metadata.exerciseTemplateVersionId !== null
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["contractVersion"],
+      message: "Version 3 is reserved for the canonical Cycle 3 content-only lesson envelope",
+    });
+  }
+});
+
 // The first immutable Cycle 2 teaching versions used the full passage as the
 // objective fallback. Keep that already-published shape readable without
 // widening the contract for newly-authored lesson metadata.
-const legacyCycle2LessonMetadataSchema = lessonMetadataSchema.extend({
+const legacyCycle2LessonMetadataSchema = lessonMetadataBaseSchema.extend({
   objective: z.string().trim().min(1).max(5000),
 });
 
