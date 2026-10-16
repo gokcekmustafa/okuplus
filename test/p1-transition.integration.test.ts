@@ -3,7 +3,6 @@ import { prisma } from "../src/lib/prisma.js";
 import { provisionPersonalContext } from "../src/modules/tenant/index.js";
 const transitionTestState = vi.hoisted(() => ({
   publicationApproved: false,
-  cycle3Approved: false,
 }));
 
 vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (importOriginal) => {
@@ -15,22 +14,6 @@ vi.mock("../src/curriculum/education-v2-p1-a-cycle-v2-program.js", async (import
     ...actual,
     isEducationV2P1ACycleV2ProductionAssignmentEnabled: () =>
       transitionTestState.publicationApproved,
-  };
-});
-
-vi.mock("../src/curriculum/learning-route-catalog.js", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../src/curriculum/learning-route-catalog.js")>();
-  const decorate = (cycle: ReturnType<typeof actual.learningRouteCycle>) =>
-    cycle?.sequence === 3
-      ? { ...cycle, publicationApproved: () => transitionTestState.cycle3Approved }
-      : cycle;
-  return {
-    ...actual,
-    learningRouteCycle: (code: string) => decorate(actual.learningRouteCycle(code)),
-    nextLearningRouteCycle: (code: string) => decorate(actual.nextLearningRouteCycle(code)),
-    upcomingLearningRouteCycles: (code: string) =>
-      actual.upcomingLearningRouteCycles(code).map((cycle) => decorate(cycle)!),
   };
 });
 
@@ -499,141 +482,109 @@ describe.sequential("P1 learning cycle transition integration", () => {
     }
   }
 
-  it("keeps Cycle 3 closed even when its complete graph is published in the isolated database", async () => {
+  it("continues a completed Cycle 2 student into the published Cycle 3 graph exactly once", async () => {
     await withPublicationApproval(async () => {
-      const result = await reconcileP1ToNextCycle(cycle2Fixture.actor, {
-        p1LearningPathId: PATH_IDS.next,
+      const beforeProgress = await prisma.studentLearningStepProgress.findMany({
+        where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
+        orderBy: { id: "asc" },
       });
-      expect(result).toMatchObject({
-        outcome: "REVIEW_REQUIRED",
-        readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
+      const beforeResults = await prisma.assessmentResult.findMany({
+        where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
+        orderBy: { id: "asc" },
       });
-      const path = await getStudentLearningPath(cycle2Fixture.actor);
-      expect(path?.paths.map((item) => item.path.code)).toEqual([
-        EDUCATION_V2_P1_A_PROGRAM.path.code,
-        EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM.path.code,
-      ]);
-      expect(path?.paths[0]?.nodes.every((node) => node.status === "completed")).toBe(true);
-      expect(path?.upcomingPaths).toEqual([]);
-      expect(path?.routeContinuation?.futureCycles[0]).toMatchObject({
+      const preview = await getStudentLearningPath(cycle2Fixture.actor);
+      expect(preview?.routeContinuation?.futureCycles[0]).toMatchObject({
+        pathCode: EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.code,
         stationCount: 7,
-        publicationApproved: false,
-        graphAvailable: false,
+        publicationApproved: true,
+        graphAvailable: true,
       });
+      expect(preview?.upcomingPaths).toHaveLength(1);
+      expect(preview?.upcomingPaths[0]?.nodes).toHaveLength(7);
+      expect(
+        preview?.upcomingPaths[0]?.nodes.every(
+          (node) => node.status === "locked" && !node.isCurrent,
+        ),
+      ).toBe(true);
+      const first = preview!.upcomingPaths[0]!.nodes[0]!;
+      await expect(assertLearningStepAccessible(cycle2Fixture.actor, first.id)).rejects.toThrow();
+      await expect(
+        assertLearningContentAccessible(cycle2Fixture.actor, first.contentVersionId!),
+      ).rejects.toThrow();
+      const outcomes = await Promise.all(
+        [1, 2].map(() =>
+          reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.next }),
+        ),
+      );
+      expect(outcomes.map((result) => result.outcome).sort()).toEqual([
+        "ALREADY_ASSIGNED",
+        "ASSIGNED",
+      ]);
+      const path = await getStudentLearningPath(cycle2Fixture.actor);
+      expect(path?.paths.map((item) => item.path.cycleSequence)).toEqual([1, 2, 3]);
+      expect(
+        path?.paths
+          .slice(0, 2)
+          .flatMap((item) => item.nodes)
+          .every((node) => node.status === "completed"),
+      ).toBe(true);
+      expect(path?.paths[2]?.nodes[0]).toMatchObject({
+        id: first.id,
+        status: "active",
+        availability: "READY",
+      });
+      expect(path?.paths[2]?.nodes.slice(1).every((node) => node.status === "locked")).toBe(true);
+      await expect(
+        assertLearningStepAccessible(cycle2Fixture.actor, first.id),
+      ).resolves.toMatchObject({ status: "active" });
+      await reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.initial });
+      expect(
+        await prisma.studentLearningPath.count({
+          where: {
+            tenantId: cycle2Fixture.actor.tenantId,
+            studentId: cycle2Fixture.actor.userId,
+            routeStatus: "ACTIVE",
+          },
+        }),
+      ).toBe(1);
+      expect(
+        await prisma.studentLearningPath.findFirst({
+          where: {
+            tenantId: cycle2Fixture.actor.tenantId,
+            studentId: cycle2Fixture.actor.userId,
+            routeStatus: "ACTIVE",
+          },
+          select: { learningPathId: true },
+        }),
+      ).toEqual({ learningPathId: PATH_IDS.third });
+      expect(
+        await prisma.studentLearningStepProgress.findMany({
+          where: {
+            tenantId: cycle2Fixture.actor.tenantId,
+            studentId: cycle2Fixture.actor.userId,
+          },
+          orderBy: { id: "asc" },
+        }),
+      ).toEqual(beforeProgress);
+      expect(
+        await prisma.assessmentResult.findMany({
+          where: {
+            tenantId: cycle2Fixture.actor.tenantId,
+            studentId: cycle2Fixture.actor.userId,
+          },
+          orderBy: { id: "asc" },
+        }),
+      ).toEqual(beforeResults);
+      const assessmentStep = await prisma.learningStep.findFirstOrThrow({
+        where: { unit: { pathId: PATH_IDS.next }, type: "ASSESSMENT" },
+      });
+      expect(
+        await resolveP1CycleTransitionStep(cycle2Fixture.actor, {
+          learningStepId: null,
+          assessmentId: assessmentStep.assessmentId,
+        }),
+      ).toEqual({ learningStepId: assessmentStep.id, learningPathId: PATH_IDS.next });
     });
-    expect(
-      await prisma.studentLearningPath.count({
-        where: {
-          tenantId: cycle2Fixture.actor.tenantId,
-          studentId: cycle2Fixture.actor.userId,
-          learningPathId: PATH_IDS.third,
-        },
-      }),
-    ).toBe(0);
-  });
-
-  it("continues Cycle 2 to Cycle 3 once, keeps the historical route, and never unlocks a preview", async () => {
-    transitionTestState.cycle3Approved = true;
-    try {
-      await withPublicationApproval(async () => {
-        const beforeProgress = await prisma.studentLearningStepProgress.findMany({
-          where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
-          orderBy: { id: "asc" },
-        });
-        const beforeResults = await prisma.assessmentResult.findMany({
-          where: { tenantId: cycle2Fixture.actor.tenantId, studentId: cycle2Fixture.actor.userId },
-          orderBy: { id: "asc" },
-        });
-        const preview = await getStudentLearningPath(cycle2Fixture.actor);
-        expect(preview?.upcomingPaths).toHaveLength(1);
-        expect(preview?.upcomingPaths[0]?.nodes).toHaveLength(7);
-        expect(
-          preview?.upcomingPaths[0]?.nodes.every(
-            (node) => node.status === "locked" && !node.isCurrent,
-          ),
-        ).toBe(true);
-        const first = preview!.upcomingPaths[0]!.nodes[0]!;
-        await expect(assertLearningStepAccessible(cycle2Fixture.actor, first.id)).rejects.toThrow();
-        await expect(
-          assertLearningContentAccessible(cycle2Fixture.actor, first.contentVersionId!),
-        ).rejects.toThrow();
-        const outcomes = await Promise.all(
-          [1, 2].map(() =>
-            reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.next }),
-          ),
-        );
-        expect(outcomes.map((result) => result.outcome).sort()).toEqual([
-          "ALREADY_ASSIGNED",
-          "ASSIGNED",
-        ]);
-        const path = await getStudentLearningPath(cycle2Fixture.actor);
-        expect(path?.paths.map((item) => item.path.cycleSequence)).toEqual([1, 2, 3]);
-        expect(
-          path?.paths
-            .slice(0, 2)
-            .flatMap((item) => item.nodes)
-            .every((node) => node.status === "completed"),
-        ).toBe(true);
-        expect(path?.paths[2]?.nodes[0]).toMatchObject({
-          id: first.id,
-          status: "active",
-          availability: "READY",
-        });
-        expect(path?.paths[2]?.nodes.slice(1).every((node) => node.status === "locked")).toBe(true);
-        await expect(
-          assertLearningStepAccessible(cycle2Fixture.actor, first.id),
-        ).resolves.toMatchObject({ status: "active" });
-        await reconcileP1ToNextCycle(cycle2Fixture.actor, { p1LearningPathId: PATH_IDS.initial });
-        expect(
-          await prisma.studentLearningPath.count({
-            where: {
-              tenantId: cycle2Fixture.actor.tenantId,
-              studentId: cycle2Fixture.actor.userId,
-              routeStatus: "ACTIVE",
-            },
-          }),
-        ).toBe(1);
-        expect(
-          await prisma.studentLearningPath.findFirst({
-            where: {
-              tenantId: cycle2Fixture.actor.tenantId,
-              studentId: cycle2Fixture.actor.userId,
-              routeStatus: "ACTIVE",
-            },
-            select: { learningPathId: true },
-          }),
-        ).toEqual({ learningPathId: PATH_IDS.third });
-        expect(
-          await prisma.studentLearningStepProgress.findMany({
-            where: {
-              tenantId: cycle2Fixture.actor.tenantId,
-              studentId: cycle2Fixture.actor.userId,
-            },
-            orderBy: { id: "asc" },
-          }),
-        ).toEqual(beforeProgress);
-        expect(
-          await prisma.assessmentResult.findMany({
-            where: {
-              tenantId: cycle2Fixture.actor.tenantId,
-              studentId: cycle2Fixture.actor.userId,
-            },
-            orderBy: { id: "asc" },
-          }),
-        ).toEqual(beforeResults);
-        const assessmentStep = await prisma.learningStep.findFirstOrThrow({
-          where: { unit: { pathId: PATH_IDS.next }, type: "ASSESSMENT" },
-        });
-        expect(
-          await resolveP1CycleTransitionStep(cycle2Fixture.actor, {
-            learningStepId: null,
-            assessmentId: assessmentStep.assessmentId,
-          }),
-        ).toEqual({ learningStepId: assessmentStep.id, learningPathId: PATH_IDS.next });
-      });
-    } finally {
-      transitionTestState.cycle3Approved = false;
-    }
   });
 
   it("does not assign a fully published next graph while publication permission is closed", async () => {

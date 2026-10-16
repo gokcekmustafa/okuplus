@@ -13,6 +13,7 @@ import {
 import {
   EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
+  isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-3-program.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 
@@ -73,9 +74,7 @@ export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
     units: EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.units,
     manifest: EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
     nextPathCode: null,
-    // No publication decision has been recorded for this authored candidate.
-    // Enabling it requires an explicit product-owner release, never an env/request flag.
-    publicationApproved: () => false,
+    publicationApproved: () => isEducationV2P1ACycle3ProductionAssignmentEnabled(),
   },
   ...EDUCATION_V2_P1_BCD_PROGRAMS.map((program, index): LearningRouteCycle => ({
     pathCode: program.path.code,

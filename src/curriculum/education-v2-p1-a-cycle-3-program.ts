@@ -15,12 +15,12 @@ import {
 } from "./learning-cycle-manifest.js";
 
 /**
- * P1-A cycle 3 authoring package.
+ * P1-A cycle 3 authoring and release package.
  *
- * This is a new, source-only candidate. It is deliberately not imported by
- * the canonical readiness builder, provisioner or route selector. Its focus
- * is evidence strength and transfer across text types, which extends the
- * structure/relations work in cycles 1 and 2 without changing those cycles.
+ * The product owner has explicitly approved this immutable source release.
+ * Production assignment still requires its separately provisioned, complete
+ * PUBLISHED database graph. Its focus is evidence strength and transfer across
+ * text types, extending cycles 1 and 2 without changing those cycles.
  */
 export const EDUCATION_V2_P1_A_CYCLE_3_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE-CYCLE-3";
 export const EDUCATION_V2_P1_A_CYCLE_3_VERSION = 3;
@@ -29,7 +29,18 @@ export const EDUCATION_V2_P1_A_CYCLE_3_PATH_CODE =
   "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12";
 export const EDUCATION_V2_P1_A_CYCLE_3_AGE_BAND = "13–17";
 export const EDUCATION_V2_P1_A_CYCLE_3_TECHNICAL_COMPLETION_SCORE = 0.75;
-export const EDUCATION_V2_P1_A_CYCLE_3_STATUS = "OWNER_RELEASE_REQUIRED" as const;
+export type EducationV2P1ACycle3SourceStatus = "PUBLISHED";
+/** Product-owner publication decision for this immutable release package. */
+export const EDUCATION_V2_P1_A_CYCLE_3_STATUS: EducationV2P1ACycle3SourceStatus = "PUBLISHED";
+/** A published database graph never substitutes for this explicit release decision. */
+export const EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED = true as const;
+
+export function isEducationV2P1ACycle3ProductionAssignmentEnabled(): boolean {
+  return (
+    EDUCATION_V2_P1_A_CYCLE_3_STATUS === "PUBLISHED" &&
+    EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED
+  );
+}
 
 export const CYCLE_3_LEARNING_OUTCOMES = [
   {

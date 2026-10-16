@@ -12,10 +12,10 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 ## Gerçek içerik kapsamı
 
-| Rota            | Hazırlanmış döngüler        | P1 istasyonları                    | Yayın kararı                                    |
-| --------------- | --------------------------- | ---------------------------------- | ----------------------------------------------- |
-| A / G8_12       | İlk döngü, Cycle 2, Cycle 3 | 9 + 9 + 7                          | İlk ikisi açık; Cycle 3 için karar kaydedilmedi |
-| B, C, D / G8_12 | Her ailede mevcut ilk döngü | Kaynak manifestteki gerçek uzunluk | Mevcut ölçüm ve yayın kuralları korunur         |
+| Rota            | Hazırlanmış döngüler        | P1 istasyonları                    | Yayın kararı                                                                                        |
+| --------------- | --------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A / G8_12       | İlk döngü, Cycle 2, Cycle 3 | 9 + 9 + 7                          | Üç kaynak sürümünün de ürün sahibi yayın kararı kayıtlı; veritabanı grafiği ayrıca PUBLISHED olmalı |
+| B, C, D / G8_12 | Her ailede mevcut ilk döngü | Kaynak manifestteki gerçek uzunluk | Mevcut ölçüm ve yayın kuralları korunur                                                             |
 
 P0'ın 22 istasyonu korunur. A rotasında kaynakta toplam 47 gerçek istasyon
 vardır; bunların son yedisi Cycle 3 adayıdır. Yüzlerce yayımlanmış içerik mevcut
@@ -53,15 +53,17 @@ metinden üretilmiş dolgu döngüler eklenmemiştir.
    veya öğrenci başına seed gerekmez.
 3. `npm run qa:learning-cycles` kaynak kapsamını ve yayın izinlerini raporlar.
    Bu rapor production içeriğini `NOT_VERIFIED` olarak tutar.
-4. Ürün sahibinin ilgili sürüm için açık yayın kararını kaydedin. Mevcut korumalı
-   provision sürecinde hedef fingerprint'i, salt okunur plan, çakışma kontrolü
-   ve doğrulanmış yedek/geri dönüş kanıtıyla yalnızca yeni grafiği uygulayın.
-   Öğrenci ilerlemesi veya toplu atama yazmayın.
+4. İlgili sürümün açık ürün sahibi yayın kararını kaynakta kaydedin. Mevcut
+   korumalı provision sürecinde hedef fingerprint'i, salt okunur plan, çakışma
+   kontrolü ve doğrulanmış yedek/geri dönüş kanıtıyla yalnızca yeni grafiği
+   uygulayın. Öğrenci ilerlemesi veya toplu atama yazmayın.
 5. Onaylı test hesabıyla gerçek geçiş ayrıca doğrulanır. İzole PostgreSQL testi
    production öğrenci akışının kanıtı değildir.
 
-Bu değişiklik Cycle 3 yayın izni vermez, production grafiği oluşturmaz ve yeni
-akademik eşik, sınıf/yaş eşlemesi veya uzman onayı şartı eklemez. 41. istasyonun
-canlıya açılması için Cycle 3'ün yedi istasyonlu gerçek grafiğinin ürün sahibi
-yayın kararı ve korumalı veri uygulaması gerekir. Daha uzun rota için ayrıca
-yeni, gerçek ve sürümlenmiş içerik paketleri hazırlanmalıdır.
+Cycle 3 kaynak sürümü ürün sahibi tarafından açıkça yayımlanmıştır. Bu kaynak
+kararı production grafiğini oluşturmaz veya yayımlamaz: uygun öğrencilerin
+atanabilmesi için hem kaynak izni hem de eksiksiz PUBLISHED veritabanı grafiği
+gerekir. Yedi istasyonlu grafik production'da zaten uygulanmıştır; önceki Cycle
+2 rotasını tamamlayan öğrenci normal devam servisiyle 41. istasyona atanabilir.
+Yeni akademik eşik, sınıf/yaş eşlemesi veya uzman onayı şartı eklenmez. Daha uzun
+rota için yeni, gerçek ve sürümlenmiş içerik paketleri hazırlanmalıdır.

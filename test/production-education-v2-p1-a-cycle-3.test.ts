@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_3_STATUS,
+  isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
 import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
 
@@ -77,10 +79,12 @@ describe("protected Cycle 3 production provision", () => {
     expect(workflow).toContain("CYCLE3_GRAPH_POSTCONDITION=EXISTING");
   });
 
-  it("does not open Cycle 3 assignment eligibility as a side effect of graph provisioning", () => {
+  it("records the explicit source release separately from graph provisioning and student assignment", () => {
     const cycle = learningRouteCycle(EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.code);
-    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("OWNER_RELEASE_REQUIRED");
-    expect(cycle?.publicationApproved()).toBe(false);
+    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycle3ProductionAssignmentEnabled()).toBe(true);
+    expect(cycle?.publicationApproved()).toBe(true);
     expect(workflow).toContain("STUDENT_ASSIGNMENTS_AND_PROGRESS=NOT_TOUCHED");
     expect(seeder).not.toContain("studentLearningPath");
     expect(seeder).not.toContain("studentLearningStep");

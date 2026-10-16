@@ -42,7 +42,7 @@ function graph(cycle: LearningRouteCycle) {
 }
 
 describe("versioned learning routes", () => {
-  it("chains real authored cycles without changing the publication decision or route family", () => {
+  it("chains authored cycles in route order and respects their explicit release decisions", () => {
     expect(validateLearningRouteCatalog()).toEqual([]);
     const a = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
     expect(a.map((cycle) => cycle.manifest.steps.length)).toEqual([9, 9, 7]);
@@ -51,7 +51,7 @@ describe("versioned learning routes", () => {
     expect(upcomingLearningRouteCycles(a[0]!.pathCode).map((cycle) => cycle.sequence)).toEqual([
       2, 3,
     ]);
-    expect(a[2]!.publicationApproved()).toBe(false);
+    expect(a[2]!.publicationApproved()).toBe(true);
     expect(nextLearningRouteCycle(a[2]!.pathCode)).toBeNull();
     expect(nextLearningRouteCycle("unknown-route")).toBeNull();
     expect(learningRouteCycle(a[0]!.pathCode)?.scopeCode).toBe("G8_12");
@@ -71,7 +71,7 @@ describe("versioned learning routes", () => {
       cycle3,
     );
     expect(cycle3.manifest.steps).toHaveLength(7);
-    expect(cycle3.publicationApproved()).toBe(false);
+    expect(cycle3.publicationApproved()).toBe(true);
   });
 
   it("accepts every complete source graph, including the seven-station continuation", () => {

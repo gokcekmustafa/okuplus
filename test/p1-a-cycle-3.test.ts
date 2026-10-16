@@ -5,8 +5,10 @@ import {
   CYCLE_3_QUESTION_OUTCOME_KEYS,
   EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
   EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_3_STATUS,
   buildEducationV2P1ACycle3LearningCycleManifest,
+  isEducationV2P1ACycle3ProductionAssignmentEnabled,
   p1ACycle3ContentVersionId,
   p1ACycle3QuestionVersionId,
   p1ACycle3TemplateVersionId,
@@ -213,8 +215,10 @@ describe("Education V2 P1-A cycle 3 authoring contract", () => {
     );
   });
 
-  it("keeps the candidate closed and outside canonical readiness", () => {
-    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("OWNER_RELEASE_REQUIRED");
+  it("records Cycle 3's explicit release without changing first-cycle readiness", () => {
+    expect(EDUCATION_V2_P1_A_CYCLE_3_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_3_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycle3ProductionAssignmentEnabled()).toBe(true);
     expect(EDUCATION_V2_P1_A_CYCLE_3_MANIFEST.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(buildEducationV2P1ALearningCycleManifest().cycleVersion).toBe(1);
     expect(buildEducationV2P1ALearningCycleManifest().cycleId).not.toBe(
