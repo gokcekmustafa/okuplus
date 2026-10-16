@@ -10,7 +10,7 @@ describe("learning cycle publication readiness", () => {
     const report = auditCanonicalEducationV2LearningCycleReadiness();
 
     expect(report.status).toBe("NOT_VERIFIED");
-    expect(report.cycles.map((cycle) => cycle.stepCount)).toEqual([22, 9, 5, 5, 5]);
+    expect(report.cycles.map((cycle) => cycle.stepCount)).toEqual([22, 9, 5, 5, 5, 5, 5, 5]);
     expect(report.cycles.every((cycle) => cycle.sourceValidation === "PASS")).toBe(true);
     expect(report.cycles.every((cycle) => cycle.publishedGraph === "NOT_VERIFIED")).toBe(true);
     expect(report.automaticAssignment.p1BCD).toBe("CLOSED_UNTIL_CALIBRATED");

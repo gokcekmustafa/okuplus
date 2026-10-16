@@ -12,16 +12,23 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 ## Gerçek içerik kapsamı
 
-| Rota            | Hazırlanmış döngüler        | P1 istasyonları                    | Yayın kararı                                                                                        |
-| --------------- | --------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
-| A / G8_12       | İlk döngü, Cycle 2, Cycle 3 | 9 + 9 + 7                          | Üç kaynak sürümünün de ürün sahibi yayın kararı kayıtlı; veritabanı grafiği ayrıca PUBLISHED olmalı |
-| B, C, D / G8_12 | Her ailede mevcut ilk döngü | Kaynak manifestteki gerçek uzunluk | Mevcut ölçüm ve yayın kuralları korunur                                                             |
+| Rota      | Hazırlanmış döngüler        | P1 istasyonları | Yayın kararı                                                                       |
+| --------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| A / G8_12 | İlk döngü, Cycle 2, Cycle 3 | 9 + 9 + 7 = 25  | Üç kaynak sürümünün kararı kayıtlı; production grafiği ayrıca PUBLISHED olmalıdır  |
+| B / G8_12 | İlk döngü, Cycle 2 adayı    | 5 + 5 = 10      | İlk döngü mevcut kararını korur; ikinci döngü kaynakta hazır, yayın izni kapalıdır |
+| C / G8_12 | İlk döngü, Cycle 2 adayı    | 5 + 5 = 10      | İlk döngü mevcut kararını korur; ikinci döngü kaynakta hazır, yayın izni kapalıdır |
+| D / G8_12 | İlk döngü, Cycle 2 adayı    | 5 + 5 = 10      | İlk döngü mevcut kararını korur; ikinci döngü kaynakta hazır, yayın izni kapalıdır |
 
-P0'ın 22 istasyonu korunur. A rotasında kaynakta toplam 47 gerçek istasyon
-vardır; bunların son yedisi Cycle 3 adayıdır. Yüzlerce yayımlanmış içerik mevcut
-değildir. 250 istasyonlu sentetik regresyon testi yazılım kapasitesini kontrol
-eder; 250 hazırlanmış eğitim içeriğinin kanıtı değildir. Boş istasyon veya aynı
-metinden üretilmiş dolgu döngüler eklenmemiştir.
+P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. Şu an kaynakta
+A=25, B=10, C=10, D=10 olmak üzere 55 gerçek P1 istasyonu vardır; her rotanın
+200 hedefine ulaşması için sırasıyla 175, 190, 190 ve 190 özgün istasyon daha
+hazırlanmalıdır. B/C/D Cycle 2 paketlerindeki metinler özgün kurmacadır ve dış
+olgusal iddia içermez. Öğrenme hedefleri MEB program çerçevesiyle, Türkçe yazım
+kontrolü TDK'nın 2026 Yazım Kılavuzu'yla ilişkilendirilmiştir. Bu kaynak
+referansları insan editör incelemesinin yerine geçmez. Bu adaylar yayımlanmış
+veya otomatik atamaya açılmış değildir; mevcut korumalı B/C/D seed'i yalnızca
+yayın kararı verilmiş ilk döngüleri işler. Boş istasyon veya aynı metinden
+üretilmiş dolgu döngüler eklenmemiştir.
 
 ## Çalışma ve erişim
 

@@ -10,7 +10,7 @@ import {
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
 import {
-  EDUCATION_V2_P1_BCD_PROGRAMS,
+  EDUCATION_V2_P1_BCD_RELEASED_PROGRAMS,
   p1BCDContentVersionId,
   p1BCDId,
   p1BCDTemplateId,
@@ -138,7 +138,7 @@ async function verifyTarget(
 }
 
 function programs(): readonly P1BCDProgram[] {
-  return EDUCATION_V2_P1_BCD_PROGRAMS;
+  return EDUCATION_V2_P1_BCD_RELEASED_PROGRAMS;
 }
 
 function planRecords(program: P1BCDProgram, skillByCode: ReadonlyMap<string, string>): Plan[] {
@@ -320,7 +320,7 @@ async function createContentGraph(
       data: {
         id: plan.contentVersionId,
         contentId: content.id,
-        version: 1,
+        version: program.cycleVersion,
         title: plan.content.title,
         body: plan.content.body,
         wordCount: wordCount(plan.content.body),
@@ -339,6 +339,7 @@ async function createContentGraph(
           completionLabel: "Dersi tamamladım",
           area: "READING_COMPREHENSION",
           routeFamily: `P1-${plan.program.routeFamily}`,
+          editorialProvenance: plan.program.editorialProvenance ?? null,
         }),
         status: "DRAFT",
       },

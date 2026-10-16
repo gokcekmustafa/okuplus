@@ -1,4 +1,5 @@
 import {
+  FAST_READING_RENDERERS,
   parseTrainingExerciseVersionConfig,
   type TrainingExerciseVersionConfig,
 } from "../modules/training/exercise-contract.js";
@@ -47,6 +48,30 @@ export type P1BCDPathStep = {
 export type P1BCDProgram = {
   programId: string;
   routeFamily: P1BCDRouteFamily;
+  cycleVersion: number;
+  sequence: number;
+  publicationApproved: boolean;
+  learningOutcome: {
+    key: string;
+    statement: string;
+    targetSkillCodes: readonly string[];
+  };
+  editorialProvenance?: {
+    contentOrigin: "ORIGINAL_FICTION";
+    factualClaimPolicy: "NO_EXTERNAL_FACTUAL_CLAIMS";
+    curriculumReferences: readonly {
+      name: string;
+      url: string;
+      verifiedAt: string;
+      supports: string;
+    }[];
+    languageReference: {
+      name: string;
+      url: string;
+      verifiedAt: string;
+      supports: string;
+    };
+  };
   ageBand: string;
   content: ProgramContent[];
   exercises: ProgramExercise[];
@@ -105,7 +130,9 @@ function exerciseContract(
 ): TrainingExerciseVersionConfig {
   const contractFamily: TrainingExerciseVersionConfig["family"] =
     family === "FLUENCY"
-      ? "PHRASE_CHUNKING"
+      ? competency === "FAST_RECOGNITION"
+        ? "RAPID_RECOGNITION"
+        : "PHRASE_CHUNKING"
       : family === "INFERENCE"
         ? "INFERENCE"
         : family === "MIXED"
@@ -143,8 +170,8 @@ function exerciseContract(
       maximumDifficulty: "CHALLENGING",
     },
     rendererKey:
-      contractFamily === "PHRASE_CHUNKING"
-        ? "QUESTION_PHRASE_CHUNKING"
+      contractFamily in FAST_READING_RENDERERS
+        ? FAST_READING_RENDERERS[contractFamily as keyof typeof FAST_READING_RENDERERS]
         : "QUESTION_MULTIPLE_CHOICE",
     settings: { optionCount: 4, mobileLayout: "STACKED", title },
   });
@@ -152,6 +179,12 @@ function exerciseContract(
 
 type RouteSpec = {
   family: P1BCDRouteFamily;
+  cycleVersion?: number;
+  sequence?: number;
+  stepPrefix?: string;
+  publicationApproved?: boolean;
+  learningOutcome?: P1BCDProgram["learningOutcome"];
+  editorialProvenance?: P1BCDProgram["editorialProvenance"];
   programId: string;
   pathCode: string;
   title: string;
@@ -176,15 +209,23 @@ function makeProgram(spec: RouteSpec): P1BCDProgram {
     spec.reinforcementExercise,
     spec.assessmentExercise,
   ];
-  const assessmentKey = `${spec.family.toLowerCase()}-assessment`;
-  const teachKey = `${spec.family.toLowerCase()}-teach`;
-  const studyKey = `${spec.family.toLowerCase()}-study`;
-  const practiceKey = `${spec.family.toLowerCase()}-practice`;
-  const reinforcementKey = `${spec.family.toLowerCase()}-reinforcement`;
-  const learningOutcomeKey = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family].key;
+  const stepPrefix = spec.stepPrefix ?? spec.family.toLowerCase();
+  const assessmentKey = `${stepPrefix}-assessment`;
+  const teachKey = `${stepPrefix}-teach`;
+  const studyKey = `${stepPrefix}-study`;
+  const practiceKey = `${stepPrefix}-practice`;
+  const reinforcementKey = `${stepPrefix}-reinforcement`;
+  const learningOutcomeKey = (
+    spec.learningOutcome ?? EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family]
+  ).key;
   return {
     programId: spec.programId,
     routeFamily: spec.family,
+    cycleVersion: spec.cycleVersion ?? 1,
+    sequence: spec.sequence ?? 1,
+    publicationApproved: spec.publicationApproved ?? (spec.sequence ?? 1) === 1,
+    learningOutcome: spec.learningOutcome ?? EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family],
+    ...(spec.editorialProvenance ? { editorialProvenance: spec.editorialProvenance } : {}),
     ageBand: "13–17",
     content,
     exercises,
@@ -1150,7 +1191,959 @@ export const EDUCATION_V2_P1_BCD_PROGRAMS: readonly P1BCDProgram[] = [
       ],
     },
   }),
+  ...buildP1BCDCycle2Programs(),
 ];
+
+type AuthoredQuestionSpec = {
+  prompt: string;
+  options: [string, string, string, string];
+  correctIndex: 0 | 1 | 2 | 3;
+  explanation: string;
+  hint: string;
+};
+
+type AuthoredExerciseSpec = {
+  contentKey: string;
+  title: string;
+  templateType: ProgramExercise["templateType"];
+  skillCode: string;
+  instructions: string;
+  questions: [AuthoredQuestionSpec, AuthoredQuestionSpec, AuthoredQuestionSpec];
+};
+
+type AuthoredCycle2Spec = {
+  family: P1BCDRouteFamily;
+  programId: string;
+  pathCode: string;
+  title: string;
+  unitCode: string;
+  unitTitle: string;
+  outcome: string;
+  sourceReferences: NonNullable<P1BCDProgram["editorialProvenance"]>;
+  teaching: {
+    title: string;
+    body: string;
+    objective: string;
+    explanation: string;
+    example: string;
+    guided: string;
+  };
+  study: { title: string; body: string; skillCode: string };
+  practice: { title: string; body: string; skillCode: string };
+  reinforcement: { title: string; body: string; skillCode: string };
+  assessment: { title: string; body: string; skillCode: string };
+  exercises: [
+    AuthoredExerciseSpec,
+    AuthoredExerciseSpec,
+    AuthoredExerciseSpec,
+    AuthoredExerciseSpec,
+  ];
+};
+
+function buildAuthoredP1BCDCycle2(spec: AuthoredCycle2Spec): P1BCDProgram {
+  const prefix = `p1${spec.family.toLowerCase()}2`;
+  const contentKeys = {
+    teaching: `${prefix}-teach`,
+    study: `${prefix}-study`,
+    practice: `${prefix}-practice`,
+    reinforcement: `${prefix}-reinforcement`,
+    assessment: `${prefix}-assessment`,
+  };
+  const authoredContent = (
+    key: string,
+    title: string,
+    body: string,
+    skillCode: string,
+    difficulty: number,
+  ): ProgramContent => ({ key, title, body, skillCode, difficulty });
+  const exercises = spec.exercises.map((exercise, exerciseIndex): ProgramExercise => ({
+    key: `${prefix}-${["study", "practice", "reinforcement", "assessment"][exerciseIndex]}`,
+    title: exercise.title,
+    templateType: exercise.templateType,
+    contentKey: exercise.contentKey,
+    skillCode: exercise.skillCode,
+    contract: exerciseContract(
+      exercise.title,
+      exercise.templateType,
+      exercise.skillCode,
+      exercise.instructions,
+    ),
+    questions: exercise.questions.map((item, questionIndex) => {
+      const correctText = item.options[item.correctIndex];
+      const distractors = item.options.filter((_, index) => index !== item.correctIndex);
+      const correctPosition = (exerciseIndex * 3 + questionIndex) % item.options.length;
+      let distractorIndex = 0;
+      const positionedOptions = item.options.map((_, optionIndex) => {
+        if (optionIndex === correctPosition) return correctText;
+        const distractor = distractors[distractorIndex];
+        distractorIndex += 1;
+        if (!distractor) throw new Error(`${prefix}: çeldirici kaynağı eksik`);
+        return distractor;
+      });
+      return question(
+        `${prefix}-${["study", "practice", "reinforcement", "assessment"][exerciseIndex]}-${questionIndex + 1}`,
+        item.prompt,
+        positionedOptions.map((text, optionIndex) => [String.fromCharCode(97 + optionIndex), text]),
+        String.fromCharCode(97 + correctPosition),
+        item.explanation,
+        item.hint,
+        3 + exerciseIndex * 0.25,
+      );
+    }),
+  }));
+  const [studyExercise, practiceExercise, reinforcementExercise, assessmentExercise] = exercises;
+  if (!studyExercise || !practiceExercise || !reinforcementExercise || !assessmentExercise)
+    throw new Error(`${spec.programId}: dört uygulama paketi gerekli`);
+  return makeProgram({
+    family: spec.family,
+    cycleVersion: 2,
+    sequence: 2,
+    stepPrefix: prefix,
+    publicationApproved: false,
+    learningOutcome: {
+      key: `P1${spec.family}_CYCLE_2_${spec.family === "B" ? "FLUENCY" : spec.family === "C" ? "EVIDENCE" : "CONTEXT"}`,
+      statement: spec.outcome,
+      targetSkillCodes: EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[spec.family].targetSkillCodes,
+    },
+    editorialProvenance: spec.sourceReferences,
+    programId: spec.programId,
+    pathCode: spec.pathCode,
+    title: spec.title,
+    unitCode: spec.unitCode,
+    unitTitle: spec.unitTitle,
+    teach: {
+      ...authoredContent(
+        contentKeys.teaching,
+        spec.teaching.title,
+        spec.teaching.body,
+        "RC_DETAIL",
+        3,
+      ),
+      lesson: {
+        objective: spec.teaching.objective,
+        explanation: spec.teaching.explanation,
+        workedExample: spec.teaching.example,
+        guidedPractice: spec.teaching.guided,
+        nextExerciseKey: studyExercise.key,
+      },
+    },
+    study: authoredContent(
+      contentKeys.study,
+      spec.study.title,
+      spec.study.body,
+      spec.study.skillCode,
+      3,
+    ),
+    practice: authoredContent(
+      contentKeys.practice,
+      spec.practice.title,
+      spec.practice.body,
+      spec.practice.skillCode,
+      3.25,
+    ),
+    reinforcement: authoredContent(
+      contentKeys.reinforcement,
+      spec.reinforcement.title,
+      spec.reinforcement.body,
+      spec.reinforcement.skillCode,
+      3.5,
+    ),
+    assessment: authoredContent(
+      contentKeys.assessment,
+      spec.assessment.title,
+      spec.assessment.body,
+      spec.assessment.skillCode,
+      3.75,
+    ),
+    studyExercise,
+    practiceExercise,
+    reinforcementExercise,
+    assessmentExercise,
+  });
+}
+
+function buildP1BCDCycle2Programs(): P1BCDProgram[] {
+  return [
+    buildAuthoredP1BCDCycle2({
+      family: "B",
+      programId: "OKU-EDUCATION-V2-P1-B-FLUENCY-MEANING-CYCLE-2",
+      pathCode: "EDUCATION_V2_P1_B_FLUENCY_MEANING_CYCLE_2_G8_12",
+      title: "P1-B · Akıcılık ve anlamı koruma 2",
+      unitCode: "P1_B_FLUENCY_MEANING_CYCLE_2",
+      unitTitle: "Cümle akışını ve anlamı birlikte izle",
+      outcome:
+        "Noktalama, anlam grupları ve cümle ilişkilerini izleyerek akıcı okurken anlamı korur.",
+      sourceReferences: {
+        contentOrigin: "ORIGINAL_FICTION",
+        factualClaimPolicy: "NO_EXTERNAL_FACTUAL_CLAIMS",
+        curriculumReferences: [
+          {
+            name: "MEB, Türk Dili ve Edebiyatı Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/turk-dili-ve-edebiyati-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "Lise düzeyindeki Türk Dili ve Edebiyatı program çerçevesi; bu paket mevcut P1-B akıcılık kazanımını cümle akışı ve anlamı koruma bağlamında ilerletir.",
+          },
+          {
+            name: "MEB, Ortaokul Türkçe Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/ortaokul-turkce-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "5–8. sınıf Türkçe program çerçevesi; okuma, anlam oluşturma ve akıcı okuma bağlamı.",
+          },
+        ],
+        languageReference: {
+          name: "Türk Dil Kurumu, 2026 Yazım Kılavuzu",
+          url: "https://yazim.tdk.gov.tr/content/00-ana-sayfa.html",
+          verifiedAt: "2026-10-17",
+          supports: "Türkçe yazım ve noktalama kontrolü; kılavuzun 2026 baskısı esas alınmıştır.",
+        },
+      },
+      teaching: {
+        title: "Durakları anlam için kullan",
+        body: "Akıcı okuma, sözcükleri aceleyle geçmek değil, cümlenin anlamını kuracak grupları ve durakları birlikte izlemektir. Virgül, nokta ve bağlaçlar okuma ritmine ipucu verir; her virgülde aynı uzunlukta beklemek gerekmez. Önce cümlenin hangi parçalarının birlikte anlam taşıdığını bul, sonra doğal duraklarla oku. Bir cümle anlaşılmaz hâle gelirse hızını düşürüp grupları yeniden birleştir.",
+        objective:
+          "Noktalama ve anlam gruplarını kullanarak cümlenin akışını ve anlamını birlikte korumak.",
+        explanation:
+          "Durak, anlamı bölmek için değil; cümledeki düşünce parçalarını ayırıp yeniden bağlamak için kullanılır.",
+        example:
+          "‘Ece haritayı açtı, kısa yolu buldu ve ekibe yönü gösterdi.’ Eylem sırası üç parçadır; virgül ilk iki parçayı ayırırken ‘ve’ son parçayı bağlar.",
+        guided:
+          "Bir sonraki çalışmada cümleyi anlam gruplarına ayır; durakların ardından kimin ne yaptığını kendi sözlerinle yeniden kur.",
+      },
+      study: {
+        title: "Cümle gruplarını izle",
+        body: "Okulun tiyatro kulübü prova saatini değiştirdi. Duru, yeni saati panoda görünce arkadaşlarına haber verdi; böylece kimse eski saatte salona gelmedi. Grup, kısa bir kontrol listesi hazırlayıp sonraki provada kullandı.",
+        skillCode: "FAST_CHUNKING",
+      },
+      practice: {
+        title: "Akışı bozmadan sırayı kur",
+        body: "Bir ekip sergi için önce nesneleri seçti, sonra açıklama kartları yazdı. Kartları yerleştirince ziyaretçiler eserleri karıştırmadan izleyebildi. Ekip, son turda kartların okunaklı olup olmadığını birlikte kontrol etti.",
+        skillCode: "FAST_RECOGNITION",
+      },
+      reinforcement: {
+        title: "Durakları yeniden değerlendir",
+        body: "Mert, otobüs durağındaki duyuruyu hızlıca okudu ama saati yanlış anladı. Metne yeniden döndü: ‘Toplantı 14.00'te başlayacak; kapılar 13.30'da açılacak.’ İki saati ayrı gruplar hâlinde okuyunca hangisinin başlangıç, hangisinin giriş zamanı olduğunu ayırdı.",
+        skillCode: "RC_DETAIL",
+      },
+      assessment: {
+        title: "Akıcılık ve anlamı birlikte kontrol et",
+        body: "Atölye görevlisi kutuları etiketledi, ardından araçları kullanım sırasına göre dizdi. Yeni gelenler aradıkları parçayı daha az duraksayarak buldu. Görevli, düzenin işe yarayıp yaramadığını anlamak için bir sonraki çalışmada katılımcılardan kısa geri bildirim aldı.",
+        skillCode: "FAST_CHUNKING",
+      },
+      exercises: [
+        {
+          contentKey: "p1b2-study",
+          title: "Anlam gruplarını bul",
+          templateType: "FLUENCY",
+          skillCode: "FAST_CHUNKING",
+          instructions: "Cümle parçalarını ve aralarındaki anlam bağını koruyarak oku.",
+          questions: [
+            {
+              prompt: "Duru'nun arkadaşlarına haber vermesinin doğrudan sonucu ne oldu?",
+              options: [
+                "Prova saati panodan kaldırıldı",
+                "Kimse eski saatte salona gelmedi",
+                "Kulüp yeni bir oyun seçti",
+                "Kontrol listesi unutuldu",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Metin, haber vermenin ardından kimsenin eski saatte gelmediğini açıkça söylüyor.",
+              hint: "‘Böylece’ sözcüğünden sonraki sonucu bul.",
+            },
+            {
+              prompt:
+                "‘Grup, kısa bir kontrol listesi hazırlayıp sonraki provada kullandı’ cümlesinde hangi iki eylem birlikte anlatılıyor?",
+              options: [
+                "Listeyi yazma ve sonra kullanma",
+                "Panoyu görme ve arkadaşına haber verme",
+                "Prova saatini seçme ve değiştirme",
+                "Salona gelme ve oyunu oynama",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Cümle, listenin hazırlanmasını ve sonraki provada kullanılmasını aynı sırada veriyor.",
+              hint: "‘Hazırlayıp’ eki iki eylemi nasıl bağlıyor?",
+            },
+            {
+              prompt: "Metindeki olayların doğru sırası hangisidir?",
+              options: [
+                "Saat değişir, ekip listeyi hazırlar, Duru daha sonra panoya bakar",
+                "Duru saati panoda görür, listeyi kullanır, saat daha sonra değişir",
+                "Saat değişir, Duru panoda görür ve haber verir, liste hazırlanır",
+                "Duru listeyi hazırlar, arkadaşlarına haber verir, saat sonra değişir",
+              ],
+              correctIndex: 2,
+              explanation:
+                "Önce saat değişir; Duru bunu görüp haber verir; ardından grup liste hazırlar.",
+              hint: "İlk cümleden başlayıp eylemleri sırayla izle.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1b2-practice",
+          title: "Eylem sırasını akıcı izle",
+          templateType: "FLUENCY",
+          skillCode: "FAST_RECOGNITION",
+          instructions: "Eylem gruplarını sıralı okuyup metnin anlamını koru.",
+          questions: [
+            {
+              prompt: "Açıklama kartları ne zaman yazılmıştır?",
+              options: [
+                "Nesneler seçildikten sonra",
+                "Ziyaretçiler sergiyi bitirince",
+                "Son kontrol tamamlanmadan önce nesneler seçilmeden",
+                "Ekip geri bildirim aldıktan sonra",
+              ],
+              correctIndex: 0,
+              explanation:
+                "‘Önce... sonra...’ sırası kartların nesne seçiminden sonra yazıldığını gösteriyor.",
+              hint: "Metindeki ‘önce’ ve ‘sonra’ ifadelerini takip et.",
+            },
+            {
+              prompt:
+                "Ziyaretçilerin eserleri karıştırmadan izlemesine hangi düzenleme yardım etti?",
+              options: [
+                "Eserlerin kaldırılması",
+                "Açıklama kartlarının yerleştirilmesi",
+                "Prova saatinin değiştirilmesi",
+                "Kutuların etiketlenmesi",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Kartların yerleştirilmesinden sonra ziyaretçilerin eserleri karıştırmadığı belirtiliyor.",
+              hint: "Sonucu doğrudan önceleyen eylemi bul.",
+            },
+            {
+              prompt: "Ekip son turda neyi kontrol etti?",
+              options: [
+                "Nesnelerin fiyatını",
+                "Ziyaretçi sayısını",
+                "Kartların okunaklılığını",
+                "Serginin süresini",
+              ],
+              correctIndex: 2,
+              explanation:
+                "Son cümlede kartların okunaklı olup olmadığının kontrol edildiği yazıyor.",
+              hint: "Son cümledeki ‘olup olmadığını’ ifadesine dön.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1b2-reinforcement",
+          title: "İki zamanı karıştırmadan oku",
+          templateType: "MIXED",
+          skillCode: "RC_DETAIL",
+          instructions: "Zaman ve görev bildiren bilgi gruplarını ayır.",
+          questions: [
+            {
+              prompt: "Toplantı hangi saatte başlayacak?",
+              options: ["13.00'te", "13.30'da", "14.00'te", "Saat belirtilmemiş"],
+              correctIndex: 2,
+              explanation:
+                "İlk saat toplantı başlangıcını, ikinci saat kapıların açılmasını bildiriyor.",
+              hint: "‘Toplantı’ sözcüğünün bağlı olduğu saati seç.",
+            },
+            {
+              prompt: "Kapılar için verilen bilgi nedir?",
+              options: [
+                "13.30'da açılacak",
+                "14.00'te kapanacak",
+                "Toplantıdan sonra açılacak",
+                "Bir gün önce açılacak",
+              ],
+              correctIndex: 0,
+              explanation: "Metin kapıların 13.30'da açılacağını belirtiyor.",
+              hint: "İkinci zaman grubunu bul.",
+            },
+            {
+              prompt: "Mert metni neden yeniden okudu?",
+              options: [
+                "Durağı bulamadığı için",
+                "Saatleri karıştırdığı için",
+                "Duyuruyu kendisi yazdığı için",
+                "Otobüsü kaçırdığı için",
+              ],
+              correctIndex: 1,
+              explanation: "İlk okumada saati yanlış anladığını fark edip metne döndü.",
+              hint: "İlk cümlenin Mert'le ilgili bölümüne bak.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1b2-assessment",
+          title: "Yeni metinde akış ve anlamı ölç",
+          templateType: "FLUENCY",
+          skillCode: "FAST_CHUNKING",
+          instructions: "Cümle akışını izlerken her çıkarımı metindeki bilgiyle doğrula.",
+          questions: [
+            {
+              prompt: "Katılımcılar aradıkları parçayı nasıl buldu?",
+              options: [
+                "Kutuların renklerini ve yerlerini karşılaştırarak",
+                "Görevliye parçanın yerini sorarak",
+                "Etiket ve kullanım sırasından yararlanarak",
+                "Her parçayı kutulardan tek tek çıkararak",
+              ],
+              correctIndex: 2,
+              explanation:
+                "Araçlar etiketlenip kullanım sırasına dizildi; bu düzen aramayı kolaylaştırdı.",
+              hint: "İlk iki eylemin birlikte oluşturduğu düzeni düşün.",
+            },
+            {
+              prompt: "Görevli düzenin işe yarayıp yaramadığını nasıl öğrenecek?",
+              options: [
+                "Katılımcılardan geri bildirim alarak",
+                "Bütün araçları kaldırarak",
+                "Sergiyi kapatarak",
+                "Etiketleri değiştirmeden sayarak",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Metin, sonraki çalışmada kısa geri bildirim alınacağını açıkça söylüyor.",
+              hint: "Son cümledeki kontrol yöntemini bul.",
+            },
+            {
+              prompt: "Metnin ana düşüncesi hangisidir?",
+              options: [
+                "Atölyedeki etiket ve kutuların yalnızca görünüş için kullanılması",
+                "Düzenli etiketleme ve sıralamanın araçları bulmayı kolaylaştırması",
+                "Katılımcıların düzenli çalışmayı istemeyip atölyeden ayrılması",
+                "Geri bildirimlerin bütün katılımcılarca olumlu bulunduğunun anlaşılması",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Metnin tamamı düzenleme adımlarını ve bunların aramaya sağladığı katkıyı anlatıyor.",
+              hint: "Bütün cümleleri açıklayan ortak mesajı seç.",
+            },
+          ],
+        },
+      ],
+    }),
+    buildAuthoredP1BCDCycle2({
+      family: "C",
+      programId: "OKU-EDUCATION-V2-P1-C-INFERENCE-EVIDENCE-CYCLE-2",
+      pathCode: "EDUCATION_V2_P1_C_INFERENCE_EVIDENCE_CYCLE_2_G8_12",
+      title: "P1-C · Çıkarım ve kanıt 2",
+      unitCode: "P1_C_INFERENCE_EVIDENCE_CYCLE_2",
+      unitTitle: "Kanıttan ölçülü çıkarım yap",
+      outcome:
+        "Birden çok metin kanıtını birleştirerek çıkarım yapar ve kanıtın desteklemediği iddiaları ayıklar.",
+      sourceReferences: {
+        contentOrigin: "ORIGINAL_FICTION",
+        factualClaimPolicy: "NO_EXTERNAL_FACTUAL_CLAIMS",
+        curriculumReferences: [
+          {
+            name: "MEB, Türk Dili ve Edebiyatı Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/turk-dili-ve-edebiyati-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "Lise düzeyindeki programdaki okuma, metin analizi ve değerlendirme çerçevesi; paket mevcut P1-C kanıt ve çıkarım kazanımını çoklu kanıtla sınırlı çıkarıma taşır.",
+          },
+          {
+            name: "MEB, Ortaokul Türkçe Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/ortaokul-turkce-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "5–8. sınıf Türkçe program çerçevesi; yüzey/derin anlam, çıkarım ve yorumlama bağlamı.",
+          },
+        ],
+        languageReference: {
+          name: "Türk Dil Kurumu, 2026 Yazım Kılavuzu",
+          url: "https://yazim.tdk.gov.tr/content/00-ana-sayfa.html",
+          verifiedAt: "2026-10-17",
+          supports: "Türkçe yazım ve noktalama kontrolü; kılavuzun 2026 baskısı esas alınmıştır.",
+        },
+      },
+      teaching: {
+        title: "Çıkarımın sınırını koru",
+        body: "Çıkarım, metinde aynen yazmayan bir sonucu metindeki bilgilerden hareketle kurmaktır. Güvenilir bir çıkarım en az bir açık kanıta dayanır ve kanıtın izin verdiğinden daha ileri gitmez. Önce verilen bilgileri ayrı ayrı işaretle, sonra bu bilgilerin birlikte hangi sonucu desteklediğini söyle. Metnin söylemediği bir nedeni, niyeti veya kesinliği kendiliğinden ekleme.",
+        objective:
+          "İki metin bilgisini birleştirerek kanıtın desteklediği çıkarımı yapmak ve desteklenmeyen genellemeyi reddetmek.",
+        explanation:
+          "Çıkarım, metin kanıtıyla okuyucunun kurduğu sonuç arasındaki gerekçeli bağdır; tahmin tek başına yeterli değildir.",
+        example:
+          "Metinde salonun ışıkları kapatılıyor ve perdeler açılıyor; ardından duvardaki çizimlerin görünür olduğu belirtiliyor. Işığın değişmesi çizimleri görünür kılmış olabilir; metin, çizimlerin yeni yapıldığını söylemez.",
+        guided:
+          "Her alıştırmada önce iki kanıtı bul. Ardından yalnızca bu kanıtların birlikte desteklediği sonucu seç.",
+      },
+      study: {
+        title: "Kanıtı sonuçtan ayır",
+        body: "Okul radyosu için hazırlanan kısa kayıtta Ekin, konuşmadan önce metni iki kez okudu. Yayın sırasında notlarına yalnızca bölüm başlıklarını yazdı. Program bitince dinleyiciler, anlatılan sırayı rahatça takip ettiklerini söyledi.",
+        skillCode: "RC_DETAIL",
+      },
+      practice: {
+        title: "İki kanıtı birleştir",
+        body: "Sahil yürüyüşü için hazırlanan duyuruda başlangıç noktası bir çizimle gösterildi. Gönüllüler, çizimdeki yön işaretlerini izleyerek buluşma alanına ulaştı. Sonraki hafta aynı işaretler başka bir etkinlik duyurusunda da kullanıldı.",
+        skillCode: "RC_INFERENCE",
+      },
+      reinforcement: {
+        title: "Desteklenmeyen iddiayı ayıkla",
+        body: "Bir sınıf, proje panosuna taslakları ve son ürünleri yan yana astı. Ziyaretçiler, açıklama kartlarını okuyarak değişiklikleri fark etti. Panoyu gezenlerin bazıları, hangi kararın neden alındığını öğrencilere sordu.",
+        skillCode: "RC_DETAIL",
+      },
+      assessment: {
+        title: "Kanıt ve çıkarım kontrolü",
+        body: "Bir mahalle atölyesi, onarım öncesi ve sonrası nesnelerin fotoğraflarını aynı dosyada topladı. Katılımcılar, fotoğrafları tarih sırasına koyunca yapılan değişiklikleri daha kolay karşılaştırdı. Dosyayı hazırlayan ekip, fotoğrafların her ayrıntıyı tek başına açıklamadığını; bazı kararların atölye notlarında yer aldığını belirtti.",
+        skillCode: "RC_INFERENCE",
+      },
+      exercises: [
+        {
+          contentKey: "p1c2-study",
+          title: "Açık bilgi ve çıkarımı ayır",
+          templateType: "COMPREHENSION",
+          skillCode: "RC_DETAIL",
+          instructions: "Metinde açıkça verilen kanıtı, bu kanıtın desteklediği sonuçtan ayır.",
+          questions: [
+            {
+              prompt: "Ekin yayın öncesinde ne yaptı?",
+              options: [
+                "Metni iki kez okudu",
+                "Dinleyicilere soru sordu",
+                "Başlıkları değiştirdi",
+                "Kaydı yeniden başlattı",
+              ],
+              correctIndex: 0,
+              explanation: "İlk cümle Ekin'in metni iki kez okuduğunu açıkça belirtiyor.",
+              hint: "Yayın başlamadan önceki eylemi bul.",
+            },
+            {
+              prompt: "Dinleyicilerin sözünden hangi ölçülü çıkarım yapılabilir?",
+              options: [
+                "Programın süresinin dinleyiciler için fazla kısa bulunması",
+                "Anlatım sırası takip edilebilir bulundu",
+                "Ekin'in yayında hiç not kullanmadığının söylenmesi",
+                "Radyodaki kaydın herkes tarafından dinlendiğinin belirtilmesi",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Dinleyiciler sırayı rahat takip ettiklerini söylemiş; bu, anlatım düzeninin anlaşılır bulunduğunu destekler.",
+              hint: "Dinleyicilerin doğrudan bildirdiği sonucu kullan.",
+            },
+            {
+              prompt: "Metnin desteklemediği iddia hangisidir?",
+              options: [
+                "Ekin bölüm başlıklarını not etti",
+                "Yayın öncesinde metni okudu",
+                "Bütün dinleyiciler programı beğendi",
+                "Dinleyiciler anlatılan sırayı izledi",
+              ],
+              correctIndex: 2,
+              explanation:
+                "Metin yalnızca bazı dinleyicilerin sıra hakkındaki görüşünü aktarıyor; herkesin beğenisinden söz etmiyor.",
+              hint: "‘Dinleyiciler’ ifadesini ‘herkes’ diye genişletme.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1c2-practice",
+          title: "Birden çok kanıtla çıkarım yap",
+          templateType: "INFERENCE",
+          skillCode: "RC_INFERENCE",
+          instructions:
+            "Birden fazla açık bilgiyi birleştir; metnin sınırını aşan genellemelerden kaçın.",
+          questions: [
+            {
+              prompt: "Çizim ve yön işaretleri ne işe yaramış?",
+              options: [
+                "Duyurudaki başlangıç noktasının daha az görünür olmasına yol açmış",
+                "Gönüllülerin buluşma alanına ulaşmasını sağlamış",
+                "Etkinliğin başka bir tarihe alınmasını gerektirmiş",
+                "Sahil yolunun katılımcılara tamamen kapatılmasına neden olmuş",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Gönüllülerin işaretleri izleyerek buluşma alanına ulaştığı açıkça belirtiliyor.",
+              hint: "İşaretleri izleyen kişilerin sonucunu bul.",
+            },
+            {
+              prompt: "Aynı yön işaretlerinin sonraki duyuruda da kullanılması neyi destekler?",
+              options: [
+                "İşaretlerin farklı duyurularda da işe yarar bulunduğunu",
+                "İlk etkinliğin katılım azlığı nedeniyle iptal edildiğini",
+                "Her katılımcının aynı mahallede yaşamasının beklendiğini",
+                "Çizimin uzman bir tasarımcı tarafından hazırlandığını",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Tekrar kullanılması, ekibin işaretleri başka bir etkinlikte de yararlı bulduğunu düşündürür; metin bunun nedenini kesinleştirmez.",
+              hint: "Tekrar kullanımın desteklediği en dar sonucu seç.",
+            },
+            {
+              prompt: "Metinden kesin olarak çıkarılamayan bilgi hangisidir?",
+              options: [
+                "Duyuruda bir çizim vardı",
+                "Gönüllüler yön işaretlerini izledi",
+                "Etkinliğe tam olarak kaç kişinin katıldığı",
+                "Buluşma alanına ulaşıldı",
+              ],
+              correctIndex: 2,
+              explanation: "Katılımcı sayısı metinde verilmemiştir.",
+              hint: "Sayı bilgisi açıkça yazıyor mu?",
+            },
+          ],
+        },
+        {
+          contentKey: "p1c2-reinforcement",
+          title: "İddianın kapsamını sınırla",
+          templateType: "COMPREHENSION",
+          skillCode: "RC_DETAIL",
+          instructions:
+            "Kanıtla desteklenen kapsamı koru; kişilere veya nedenlere ilişkin ek varsayım yapma.",
+          questions: [
+            {
+              prompt: "Ziyaretçiler değişiklikleri nasıl fark etti?",
+              options: [
+                "Öğrencilerin sunumunu izleyerek",
+                "Açıklama kartlarını okuyarak",
+                "Taslakları eve götürerek",
+                "Projeyi yeniden yaparak",
+              ],
+              correctIndex: 1,
+              explanation:
+                "İkinci cümle, değişikliklerin açıklama kartlarıyla fark edildiğini söylüyor.",
+              hint: "‘... okuyarak’ yapısındaki eylemi ara.",
+            },
+            {
+              prompt: "Ziyaretçilerin bazı sorular sorması neyi gösterir?",
+              options: [
+                "Kararların nedenini merak ettiklerini",
+                "Bütün projeleri beğenmediklerini",
+                "Kartların okunamadığını",
+                "Panonun kapatıldığını",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Sorular, en azından bazı ziyaretçilerin kararların gerekçesini öğrenmek istediğini düşündürür.",
+              hint: "Soru konusu olan bilgiyi belirle.",
+            },
+            {
+              prompt: "Metne dayanarak hangi iddia söylenemez?",
+              options: [
+                "Taslak ve son ürünler birlikte sergilendi",
+                "Bazı ziyaretçiler kararların nedenini sordu",
+                "Bütün ziyaretçiler projeleri tamamen anladı",
+                "Kartlar değişiklikleri fark etmeye yardım etti",
+              ],
+              correctIndex: 2,
+              explanation: "Metin tüm ziyaretçilerin anladığına ilişkin bilgi vermiyor.",
+              hint: "‘Bazıları’ bilgisini tüm gruba yayma.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1c2-assessment",
+          title: "Yeni metinde kanıt zincirini ölç",
+          templateType: "INFERENCE",
+          skillCode: "RC_INFERENCE",
+          instructions: "Kanıtı, çıkarımı ve metnin açıklamadığı noktaları birlikte değerlendir.",
+          questions: [
+            {
+              prompt: "Fotoğrafları tarih sırasına koymak neyi kolaylaştırdı?",
+              options: [
+                "Atölyenin maliyetini hesaplamayı",
+                "Değişiklikleri karşılaştırmayı",
+                "Her kararı fotoğraftan açıklamayı",
+                "Katılımcı sayısını bulmayı",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Metin tarih sırasının yapılan değişiklikleri karşılaştırmayı kolaylaştırdığını söylüyor.",
+              hint: "İkinci cümlenin sonucuna dön.",
+            },
+            {
+              prompt: "Fotoğraflar hakkında ekibin belirttiği sınırlama nedir?",
+              options: [
+                "Fotoğraflar doğru bir tarih sırasına yerleştirilemez",
+                "Fotoğraflar her ayrıntıyı tek başına açıklamaz",
+                "Onarım sırasında nesnelerin hiçbir özelliği değişmemiştir",
+                "Atölye notlarının ekip tarafından kaybolduğu anlaşılmıştır",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Ekip, bazı kararların yalnızca atölye notlarında bulunduğunu belirtiyor.",
+              hint: "Son cümlenin ilk bölümünü oku.",
+            },
+            {
+              prompt: "Metinden yapılabilecek en güvenilir çıkarım hangisidir?",
+              options: [
+                "Fotoğraf kayıtları onarım sürecindeki her kararı tek başına açıklar",
+                "Fotoğraf ve notlar birlikte değişim sürecini anlamaya yardım eder",
+                "Bütün onarımların aynı sıra ve yöntemle yürütüldüğü görülür",
+                "Katılımcıların nesneleri atölyeden önce hiç görmediği anlaşılır",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Fotoğraflar değişimi karşılaştırmayı, notlar ise kararların bazı gerekçelerini anlamayı destekliyor.",
+              hint: "İki kaynak türünün metinde anlatılan görevlerini birleştir.",
+            },
+          ],
+        },
+      ],
+    }),
+    buildAuthoredP1BCDCycle2({
+      family: "D",
+      programId: "OKU-EDUCATION-V2-P1-D-VOCABULARY-CONTEXT-CYCLE-2",
+      pathCode: "EDUCATION_V2_P1_D_VOCABULARY_CONTEXT_CYCLE_2_G8_12",
+      title: "P1-D · Sözcük ve bağlam 2",
+      unitCode: "P1_D_VOCABULARY_CONTEXT_CYCLE_2",
+      unitTitle: "Sözcük anlamını bağlam ipuçlarıyla çöz",
+      outcome:
+        "Çok anlamlı sözcükleri, yakın ifadeleri ve cümle ilişkilerini kullanarak bağlama uygun anlamı belirler.",
+      sourceReferences: {
+        contentOrigin: "ORIGINAL_FICTION",
+        factualClaimPolicy: "NO_EXTERNAL_FACTUAL_CLAIMS",
+        curriculumReferences: [
+          {
+            name: "MEB, Türk Dili ve Edebiyatı Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/turk-dili-ve-edebiyati-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "Lise düzeyindeki metin tahlili çerçevesi; paket mevcut P1-D bağlamdan sözcük anlamı kazanımını çok anlamlı kullanımlara taşır.",
+          },
+          {
+            name: "MEB, Ortaokul Türkçe Dersi Öğretim Programı",
+            url: "https://tymm.meb.gov.tr/ogretim-programlari/ders/ortaokul-turkce-dersi",
+            verifiedAt: "2026-10-17",
+            supports:
+              "5–8. sınıf Türkçe program çerçevesi; bilinmeyen söz varlığını bağlamdan tahmin etme ve anlama.",
+          },
+        ],
+        languageReference: {
+          name: "Türk Dil Kurumu, 2026 Yazım Kılavuzu",
+          url: "https://yazim.tdk.gov.tr/content/00-ana-sayfa.html",
+          verifiedAt: "2026-10-17",
+          supports: "Türkçe yazım ve noktalama kontrolü; kılavuzun 2026 baskısı esas alınmıştır.",
+        },
+      },
+      teaching: {
+        title: "Sözcüğü cümle içinde sınayarak seç",
+        body: "Bir sözcüğün ilk akla gelen anlamı, her cümlede uygun olmayabilir. Önce sözcüğün çevresindeki eylem ve nesneleri incele; sonra olası anlamı cümleye geri koy. Cümle doğal ve tutarlı kalıyorsa seçim desteklenir. Birden çok anlam hâlâ mümkünse, paragraftaki sonraki bilgiye bak. Bağlam kanıtı yetmiyorsa kesin bir anlam uydurmak yerine belirsizliği koru.",
+        objective:
+          "Çok anlamlı bir sözcüğün bu cümledeki anlamını yakın bağlam kanıtlarıyla belirlemek.",
+        explanation:
+          "Bağlam, sözcüğün olası anlamlarını sınırlar; seçim hem cümleye hem paragrafın bütününe uymalıdır.",
+        example:
+          "‘Editör, metnin son taslağını gözden geçirdi.’ Buradaki ‘taslak’, tamamlanmış son metin değil, düzenlenmek üzere hazırlanmış metin biçimidir; ‘son’ sözcüğü bu kullanımın aşamasını gösterir.",
+        guided:
+          "Her soruda önce hedef sözcüğü çevreleyen ifadeleri belirle, sonra seçenekleri cümleye geri koyarak kontrol et.",
+      },
+      study: {
+        title: "Bağlamdaki anlam ipuçlarını bul",
+        body: "Sahne ekibi, dekorun yerini değiştirmeden önce zemine küçük işaretler koydu. Prova sırasında oyuncular, bu işaretlere bakarak sahnedeki duruşlarını ayarladı. Gösteri günü işaretler izleyicilerin göremeyeceği biçimde kapatıldı.",
+        skillCode: "RC_DETAIL",
+      },
+      practice: {
+        title: "Çok anlamlı sözcüğü cümlede çöz",
+        body: "Ela, sunumun taslağını arkadaşına gönderdi. Arkadaşı, ikinci bölümdeki örneğin düşünceyi daha açık gösterdiğini yazdı. Ela, son metni hazırlarken bu bölümü korudu ve tekrar eden iki cümleyi çıkardı.",
+        skillCode: "RC_DETAIL",
+      },
+      reinforcement: {
+        title: "Anlamı yakın ifadelerle doğrula",
+        body: "Kulüp, dönem sonunda yaptığı çalışmaları kısa bir bültende topladı. Editör, her haberin başına içeriği özetleyen bir başlık ekledi. Okurlar, ilgilendikleri bölümü başlıklardan seçip ilgili habere geçti.",
+        skillCode: "RC_DETAIL",
+      },
+      assessment: {
+        title: "Bağlamdan anlamı ölç",
+        body: "Atölyede kullanılan örnek parçalar ayrı kutulara yerleştirildi. Her kutuya parçanın hangi düzenekte denendiğini gösteren bir etiket takıldı. Ekip, notlarını incelerken ‘uygun’ sözcüğünün bazen parçanın ölçüsünü, bazen de deneme amacına uyduğunu belirten bir seçim olduğunu fark etti.",
+        skillCode: "RC_DETAIL",
+      },
+      exercises: [
+        {
+          contentKey: "p1d2-study",
+          title: "Sözcüğü yakın cümleyle açıkla",
+          templateType: "COMPREHENSION",
+          skillCode: "RC_DETAIL",
+          instructions: "Hedef sözcüğün anlamını çevresindeki eylem ve bilgilerle sınayın.",
+          questions: [
+            {
+              prompt: "Oyuncular işaretleri ne için kullandı?",
+              options: [
+                "Dekoru boyamak için",
+                "Sahnedeki duruşlarını ayarlamak için",
+                "İzleyici yerlerini seçmek için",
+                "Gösteri tarihini belirlemek için",
+              ],
+              correctIndex: 1,
+              explanation:
+                "Metin, oyuncuların işaretlere bakarak sahnedeki duruşlarını ayarladığını söylüyor.",
+              hint: "İkinci cümlede işaretlerin hangi eyleme yardım ettiğini bul.",
+            },
+            {
+              prompt: "‘Kapatıldı’ sözcüğü bağlamda ne anlatıyor?",
+              options: [
+                "İşaretlerin izleyicilere açıkça gösterilmesi",
+                "Zeminin gösteri başlamadan önce kaldırılması",
+                "İşaretlerin görünmesi engellendi",
+                "Perde ve dekorun gösteriden sonra değiştirilmesi",
+              ],
+              correctIndex: 2,
+              explanation:
+                "İşaretler izleyicilerin göremeyeceği hâle getirildi; bağlamdaki anlam görünürlüğü örtmektir.",
+              hint: "‘İzleyicilerin göremeyeceği biçimde’ bölümünü düşün.",
+            },
+            {
+              prompt: "İşaretlerin gösteri günü kapatılmasının en açık amacı nedir?",
+              options: [
+                "Oyuncuların sahnedeki işaretleri kullanmasını engellemek",
+                "İzleyicilerin dikkatini işaretlerden uzak tutmak",
+                "Zemindeki dekorun izleyiciye farklı görünmesini sağlamak",
+                "Prova süresini daha kısa hâle getirmek",
+              ],
+              correctIndex: 1,
+              explanation: "Metin, izleyicilerin işaretleri görmemesini özellikle belirtiyor.",
+              hint: "Cümlede kimin görmemesi hedefleniyor?",
+            },
+          ],
+        },
+        {
+          contentKey: "p1d2-practice",
+          title: "Sözcüğün anlamını metne geri koy",
+          templateType: "COMPREHENSION",
+          skillCode: "RC_DETAIL",
+          instructions: "Sözcüğün anlamını cümlenin ve paragrafın bütünüyle doğrula.",
+          questions: [
+            {
+              prompt: "‘Taslak’ sözcüğü Ela'nın cümlesinde neyi anlatıyor?",
+              options: [
+                "Düzenlenecek sunum metnini",
+                "Sunumda kullanılan sahneyi",
+                "Arkadaşının yazdığı başlığı",
+                "Çıkarılan iki cümleyi",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Arkadaşı taslağa yorum yapıyor; Ela da ardından son metni hazırlıyor. Bu sıra, taslağın düzenlenecek metin olduğunu gösterir.",
+              hint: "Taslağın ardından hangi metin hazırlanıyor?",
+            },
+            {
+              prompt: "Ela son metinde hangi değişiklikleri yaptı?",
+              options: [
+                "Örneği metinden çıkardı, başlığı sonradan değiştirdi",
+                "Örneği korudu, tekrar eden cümleleri çıkardı",
+                "Sunumun ikinci bölümünü ve bütün örneklerini sildi",
+                "Arkadaşının önerisini hiçbir değişiklik yapmadan aynen uyguladı",
+              ],
+              correctIndex: 1,
+              explanation: "Son cümle iki işlemi açıkça bildiriyor.",
+              hint: "Son cümledeki ‘korudu’ ve ‘çıkardı’ fiillerine bak.",
+            },
+            {
+              prompt: "Arkadaşının yorumu örnek için ne söylüyor?",
+              options: [
+                "Düşünceyi daha açık gösterdiğini",
+                "İkinci bölümde bulunmadığını",
+                "Sunumun süresini kısalttığını",
+                "Taslağın tamamını değiştirdiğini",
+              ],
+              correctIndex: 0,
+              explanation:
+                "Arkadaş, ikinci bölümdeki örneğin düşünceyi daha açık gösterdiğini yazıyor.",
+              hint: "Yorumdaki ‘daha açık’ ifadesinin neye bağlandığını bul.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1d2-reinforcement",
+          title: "Başlığın metindeki görevini bul",
+          templateType: "COMPREHENSION",
+          skillCode: "RC_DETAIL",
+          instructions: "Bir sözcüğün metindeki görevini, sonraki eylemlerle birlikte açıklayın.",
+          questions: [
+            {
+              prompt: "Başlıklar bültende hangi görevi üstleniyor?",
+              options: [
+                "Her haberin içeriğini özetliyor",
+                "Haberleri tarih sırasından çıkarıyor",
+                "Bülteni uzatıyor",
+                "Okurların haber yazmasını sağlıyor",
+              ],
+              correctIndex: 0,
+              explanation: "Başlıkların içeriği özetlediği doğrudan belirtiliyor.",
+              hint: "Başlığın ardından hangi açıklama geliyor?",
+            },
+            {
+              prompt: "Okurlar ilgilendikleri habere nasıl geçiyor?",
+              options: [
+                "Başlıklardan seçim yaparak",
+                "Editöre telefon ederek",
+                "Bülteni yeniden yazarak",
+                "Rastgele bir sayfa açarak",
+              ],
+              correctIndex: 0,
+              explanation: "Okurlar önce başlıklardan bölüm seçiyor, sonra ilgili habere geçiyor.",
+              hint: "Son cümledeki eylem sırasını izle.",
+            },
+            {
+              prompt: "‘Toplamak’ sözcüğü metinde hangi anlamda kullanılmıştır?",
+              options: [
+                "Çalışmaları bir araya getirmek",
+                "Bültendeki kâğıtları yerden almak",
+                "Okurları bir yerde buluşturmak",
+                "Haberleri silmek",
+              ],
+              correctIndex: 0,
+              explanation: "Çalışmalar bültende bir araya getirilmiştir.",
+              hint: "Nelerin bir bültende toplandığına bak.",
+            },
+          ],
+        },
+        {
+          contentKey: "p1d2-assessment",
+          title: "Yeni bağlamda anlamı doğrula",
+          templateType: "MIXED",
+          skillCode: "RC_DETAIL",
+          instructions: "Aynı sözcüğün farklı görevlerini bağlam ipuçlarıyla ayır.",
+          questions: [
+            {
+              prompt: "İlk ‘uygun’ kullanımı neyi anlatıyor?",
+              options: [
+                "Parçanın ölçüsünün denenecek düzeneğe uygun olmasını",
+                "Kutunun etiketinin hangi renkle yazıldığını",
+                "Ekibin çalışma saatinin deneme amacına göre değişmesini",
+                "Örnek parçaların kutulardan birine yerleştirilmesini",
+              ],
+              correctIndex: 0,
+              explanation: "İlk kullanım, parçanın ölçüsüyle ilişkilendirilmiş.",
+              hint: "Sözcüğün yanındaki ‘ölçü’ bilgisini kullan.",
+            },
+            {
+              prompt: "İkinci ‘uygun’ kullanımı hangi anlam ayrımını gösteriyor?",
+              options: [
+                "Parçanın deneme amacına uymasını",
+                "Parçanın kutuya sığmamasını",
+                "Etiketin yerini",
+                "Notların sırasını",
+              ],
+              correctIndex: 0,
+              explanation:
+                "İkinci kullanım parçanın ölçüsünden değil, deneme amacından söz ediyor.",
+              hint: "‘Bazen ... bazen ...’ yapısındaki iki karşılığı ayır.",
+            },
+            {
+              prompt: "Sözcüğün doğru anlamını seçmek için en sağlam yöntem hangisidir?",
+              options: [
+                "Her bağlamda sözcüğün ilk akla gelen anlamını seçmek",
+                "Sözcüğü cümleye geri koyup anlamı kontrol etmek",
+                "Açıklamalar arasında en uzun olanı düşünmeden işaretlemek",
+                "Sözcüğün sesine bakıp çevresindeki cümleleri yok saymak",
+              ],
+              correctIndex: 1,
+              explanation: "Anlamın cümle ve paragrafla tutarlı kalması bağlam kanıtını sınar.",
+              hint: "Seçtiğin anlamı yeniden cümlede dene.",
+            },
+          ],
+        },
+      ],
+    }),
+  ];
+}
+
+/** Only currently released source packages may be written by the legacy B/C/D seed. */
+export const EDUCATION_V2_P1_BCD_RELEASED_PROGRAMS = EDUCATION_V2_P1_BCD_PROGRAMS.filter(
+  (program) => program.publicationApproved,
+);
 
 export function p1BCDId(
   program: P1BCDProgram,
@@ -1190,8 +2183,26 @@ export function validateP1BCDProgram(program: P1BCDProgram): string[] {
   const steps = program.path.units.flatMap((unit) => unit.steps);
   const contentUsage = new Map<string, number>();
   const exerciseUsage = new Map<string, number>();
-  const expectedOutcomeKey = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily].key;
-  const expectedOutcome = EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily];
+  const expectedOutcomeKey = program.learningOutcome.key;
+  const expectedOutcome = program.learningOutcome;
+  if (!Number.isInteger(program.cycleVersion) || program.cycleVersion < 1)
+    errors.push("cycleVersion pozitif tam sayı olmalı");
+  if (!Number.isInteger(program.sequence) || program.sequence < 1)
+    errors.push("sequence pozitif tam sayı olmalı");
+  if (typeof program.publicationApproved !== "boolean")
+    errors.push("açık yayın izni boole değeri olmalı");
+  if (program.sequence > 1) {
+    const provenance = program.editorialProvenance;
+    if (
+      !provenance ||
+      provenance.contentOrigin !== "ORIGINAL_FICTION" ||
+      provenance.factualClaimPolicy !== "NO_EXTERNAL_FACTUAL_CLAIMS" ||
+      provenance.curriculumReferences.length === 0 ||
+      !provenance.languageReference.url.startsWith("https://")
+    ) {
+      errors.push("yeni döngü için özgün içerik/provenance ve kaynak kaydı gerekli");
+    }
+  }
   const mappedOutcomeKeys = new Set<string>();
   const recordUsage = (usage: Map<string, number>, key: string | undefined) => {
     if (key) usage.set(key, (usage.get(key) ?? 0) + 1);

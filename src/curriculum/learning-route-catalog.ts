@@ -76,19 +76,26 @@ export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
     nextPathCode: null,
     publicationApproved: () => isEducationV2P1ACycle3ProductionAssignmentEnabled(),
   },
-  ...EDUCATION_V2_P1_BCD_PROGRAMS.map((program, index): LearningRouteCycle => ({
-    pathCode: program.path.code,
-    programId: program.programId,
-    version: bcdManifests[index]!.cycleVersion,
-    sequence: 1,
-    routeFamily: program.routeFamily,
-    scopeCode: "G8_12",
-    title: program.path.title,
-    units: program.path.units,
-    manifest: bcdManifests[index]!,
-    nextPathCode: null,
-    publicationApproved: () => true,
-  })),
+  ...EDUCATION_V2_P1_BCD_PROGRAMS.map((program, index): LearningRouteCycle => {
+    const next = EDUCATION_V2_P1_BCD_PROGRAMS.find(
+      (candidate) =>
+        candidate.routeFamily === program.routeFamily &&
+        candidate.sequence === program.sequence + 1,
+    );
+    return {
+      pathCode: program.path.code,
+      programId: program.programId,
+      version: bcdManifests[index]!.cycleVersion,
+      sequence: program.sequence,
+      routeFamily: program.routeFamily,
+      scopeCode: "G8_12",
+      title: program.path.title,
+      units: program.path.units,
+      manifest: bcdManifests[index]!,
+      nextPathCode: next?.path.code ?? null,
+      publicationApproved: () => program.publicationApproved,
+    };
+  }),
 ];
 
 const cyclesByCode = new Map(LEARNING_ROUTE_CYCLES.map((cycle) => [cycle.pathCode, cycle]));
@@ -118,6 +125,44 @@ export function upcomingLearningRouteCycles(pathCode: string): LearningRouteCycl
     next = nextLearningRouteCycle(next.pathCode);
   }
   return result;
+}
+
+export const LEARNING_ROUTE_STATION_TARGET = 200;
+
+export type LearningRouteCoverage = {
+  routeFamily: "A" | "B" | "C" | "D";
+  authoredStationCount: number;
+  releasedSourceStationCount: number;
+  targetStationCount: number;
+  remainingAuthoredStations: number;
+  categoryDistribution: "NOT_CLASSIFIED";
+  productionGraph: "NOT_VERIFIED";
+};
+
+/** Source-only progress. It never implies a database graph was provisioned. */
+export function summarizeLearningRouteCoverage(
+  cycles: readonly LearningRouteCycle[] = LEARNING_ROUTE_CYCLES,
+): LearningRouteCoverage[] {
+  return (["A", "B", "C", "D"] as const).map((routeFamily) => {
+    const routeCycles = cycles.filter((cycle) => cycle.routeFamily === routeFamily);
+    const authoredStationCount = routeCycles.reduce(
+      (count, cycle) => count + cycle.manifest.steps.length,
+      0,
+    );
+    const releasedSourceStationCount = routeCycles.reduce(
+      (count, cycle) => count + (cycle.publicationApproved() ? cycle.manifest.steps.length : 0),
+      0,
+    );
+    return {
+      routeFamily,
+      authoredStationCount,
+      releasedSourceStationCount,
+      targetStationCount: LEARNING_ROUTE_STATION_TARGET,
+      remainingAuthoredStations: Math.max(0, LEARNING_ROUTE_STATION_TARGET - authoredStationCount),
+      categoryDistribution: "NOT_CLASSIFIED",
+      productionGraph: "NOT_VERIFIED",
+    };
+  });
 }
 
 export type LearningRouteGraph = {

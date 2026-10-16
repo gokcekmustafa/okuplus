@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   EDUCATION_V2_P1_BCD_PROGRAMS,
+  EDUCATION_V2_P1_BCD_RELEASED_PROGRAMS,
   validateP1BCDProgram,
 } from "../src/curriculum/education-v2-p1-bcd-program.js";
 
 describe("P1-B/C/D curriculum manifests", () => {
-  it("contains one real five-step route for each adaptive family", () => {
-    expect(EDUCATION_V2_P1_BCD_PROGRAMS.map((program) => program.routeFamily)).toEqual([
-      "B",
-      "C",
-      "D",
+  it("contains two authored five-step cycles per family while release remains explicit", () => {
+    expect(
+      EDUCATION_V2_P1_BCD_PROGRAMS.map((program) => `${program.routeFamily}:${program.sequence}`),
+    ).toEqual(["B:1", "C:1", "D:1", "B:2", "C:2", "D:2"]);
+    expect(EDUCATION_V2_P1_BCD_RELEASED_PROGRAMS.map((program) => program.sequence)).toEqual([
+      1, 1, 1,
     ]);
     for (const program of EDUCATION_V2_P1_BCD_PROGRAMS) {
       expect(validateP1BCDProgram(program)).toEqual([]);
@@ -23,6 +25,14 @@ describe("P1-B/C/D curriculum manifests", () => {
       expect(program.content.every((item) => !/lorem|placeholder|todo/i.test(item.body))).toBe(
         true,
       );
+    }
+    for (const candidate of EDUCATION_V2_P1_BCD_PROGRAMS.filter(
+      (program) => program.sequence === 2,
+    )) {
+      expect(candidate.cycleVersion).toBe(2);
+      expect(candidate.publicationApproved).toBe(false);
+      expect(candidate.editorialProvenance?.contentOrigin).toBe("ORIGINAL_FICTION");
+      expect(candidate.learningOutcome.statement.length).toBeGreaterThan(30);
     }
   });
 
@@ -40,6 +50,20 @@ describe("P1-B/C/D curriculum manifests", () => {
         true,
       );
       expect(steps.at(-1)?.assessmentKey).toBeTruthy();
+    }
+  });
+
+  it("balances source answer positions in each unreleased continuation package", () => {
+    for (const program of EDUCATION_V2_P1_BCD_PROGRAMS.filter((item) => item.sequence === 2)) {
+      const positionCounts = [0, 0, 0, 0];
+      for (const question of program.exercises.flatMap((exercise) => exercise.questions)) {
+        const position = question.options.findIndex(
+          (option) => option.id === question.correctOptionId,
+        );
+        expect(position).toBeGreaterThanOrEqual(0);
+        positionCounts[position] = (positionCounts[position] ?? 0) + 1;
+      }
+      expect(positionCounts).toEqual([3, 3, 3, 3]);
     }
   });
 

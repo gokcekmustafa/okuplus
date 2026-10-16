@@ -42,15 +42,9 @@ type CycleDefinition = {
 const CYCLE_DEFINITIONS: readonly CycleDefinition[] = [
   { routeFamily: "P0", build: buildEducationV2P0LearningCycleManifest },
   { routeFamily: "A", build: buildEducationV2P1ALearningCycleManifest },
-  ...(["B", "C", "D"] as const).map((routeFamily) => ({
-    routeFamily,
-    build: () => {
-      const manifest = buildEducationV2P1BCDLearningCycleManifests().find(
-        (candidate) => candidate.routeFamily === routeFamily,
-      );
-      if (!manifest) throw new Error(`P1-${routeFamily} manifesti bulunamadı.`);
-      return manifest;
-    },
+  ...buildEducationV2P1BCDLearningCycleManifests().map((manifest) => ({
+    routeFamily: manifest.routeFamily,
+    build: () => manifest,
   })),
 ];
 

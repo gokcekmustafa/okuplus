@@ -1,6 +1,7 @@
 import { auditCanonicalEducationV2LearningCycleReadiness } from "../src/curriculum/learning-cycle-readiness.js";
 import {
   LEARNING_ROUTE_CYCLES,
+  summarizeLearningRouteCoverage,
   validateLearningRouteCatalog,
 } from "../src/curriculum/learning-route-catalog.js";
 
@@ -13,6 +14,7 @@ console.log(
     {
       routeCatalog: errors.length ? "INVALID" : "PASS",
       production: "NOT_VERIFIED",
+      routeCoverage: summarizeLearningRouteCoverage(),
       cycles: LEARNING_ROUTE_CYCLES.map((cycle) => ({
         pathCode: cycle.pathCode,
         sequence: cycle.sequence,

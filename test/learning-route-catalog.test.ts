@@ -6,6 +6,7 @@ import {
   upcomingLearningRouteCycles,
   matchesLearningRouteGraph,
   validateLearningRouteCatalog,
+  summarizeLearningRouteCoverage,
   type LearningRouteCycle,
 } from "../src/curriculum/learning-route-catalog.js";
 import { resolveLearningPathNodeStatuses } from "../src/modules/learning-path/service.js";
@@ -42,6 +43,29 @@ function graph(cycle: LearningRouteCycle) {
 }
 
 describe("versioned learning routes", () => {
+  it("reports authored and released source counts separately from production publication", () => {
+    expect(summarizeLearningRouteCoverage()).toEqual([
+      {
+        routeFamily: "A",
+        authoredStationCount: 25,
+        releasedSourceStationCount: 25,
+        targetStationCount: 200,
+        remainingAuthoredStations: 175,
+        categoryDistribution: "NOT_CLASSIFIED",
+        productionGraph: "NOT_VERIFIED",
+      },
+      ...(["B", "C", "D"] as const).map((routeFamily) => ({
+        routeFamily,
+        authoredStationCount: 10,
+        releasedSourceStationCount: 5,
+        targetStationCount: 200,
+        remainingAuthoredStations: 190,
+        categoryDistribution: "NOT_CLASSIFIED" as const,
+        productionGraph: "NOT_VERIFIED" as const,
+      })),
+    ]);
+  });
+
   it("chains authored cycles in route order and respects their explicit release decisions", () => {
     expect(validateLearningRouteCatalog()).toEqual([]);
     const a = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
@@ -72,6 +96,24 @@ describe("versioned learning routes", () => {
     );
     expect(cycle3.manifest.steps).toHaveLength(7);
     expect(cycle3.publicationApproved()).toBe(true);
+  });
+
+  it("connects the authored B/C/D continuation cycles without granting release", () => {
+    for (const routeFamily of ["B", "C", "D"] as const) {
+      const cycles = LEARNING_ROUTE_CYCLES.filter(
+        (cycle) => cycle.routeFamily === routeFamily,
+      ).sort((left, right) => left.sequence - right.sequence);
+      expect(cycles.map((cycle) => cycle.sequence)).toEqual([1, 2]);
+      expect(nextLearningRouteCycle(cycles[0]!.pathCode)).toBe(cycles[1]);
+      expect(cycles[0]!.publicationApproved()).toBe(true);
+      expect(cycles[1]!.publicationApproved()).toBe(false);
+      expect(cycles[1]!.manifest.steps).toHaveLength(5);
+      expect(cycles[1]!.manifest.learningOutcomes[0]!.statement).not.toBe(
+        cycles[0]!.manifest.learningOutcomes[0]!.statement,
+      );
+      expect(upcomingLearningRouteCycles(cycles[0]!.pathCode)).toEqual([cycles[1]]);
+      expect(nextLearningRouteCycle(cycles[1]!.pathCode)).toBeNull();
+    }
   });
 
   it("accepts every complete source graph, including the seven-station continuation", () => {

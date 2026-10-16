@@ -69,7 +69,7 @@ describe("multiple-choice option length quality", () => {
       }));
 
     const all = [...education, ...independent];
-    expect(all).toHaveLength(128);
+    expect(all).toHaveLength(164);
     expect(
       all.filter((question) => assessOptionLengthQuality(question)?.clearOutlier),
     ).toHaveLength(0);

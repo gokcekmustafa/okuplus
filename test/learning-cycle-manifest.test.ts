@@ -15,7 +15,7 @@ describe("versioned learning cycle manifest", () => {
   it("mevcut P0 ve P1 manifestlerini deterministik biçimde doğrular", () => {
     const manifests = buildCanonicalEducationV2LearningCycleManifests();
 
-    expect(manifests.map((manifest) => manifest.steps.length)).toEqual([22, 9, 5, 5, 5]);
+    expect(manifests.map((manifest) => manifest.steps.length)).toEqual([22, 9, 5, 5, 5, 5, 5, 5]);
     expect(validateCanonicalEducationV2LearningCycles()).toEqual({ valid: true, errors: [] });
     expect(validateCanonicalEducationV2LearningCycles()).toEqual(
       validateCanonicalEducationV2LearningCycles(),

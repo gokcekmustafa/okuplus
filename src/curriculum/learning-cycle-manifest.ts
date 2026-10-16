@@ -22,7 +22,6 @@ import {
 } from "./education-v2-p1-a-program.js";
 import {
   EDUCATION_V2_P1_BCD_PROGRAMS,
-  EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES,
   p1BCDContentVersionId,
   p1BCDId,
   p1BCDTemplateVersionId,
@@ -1161,18 +1160,16 @@ export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleMani
     if (sourceErrors.length > 0) throw new Error(sourceErrors.join("; "));
     const learningOutcomes = [
       {
-        ...EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily],
-        targetSkillCodes: [
-          ...EDUCATION_V2_P1_BCD_LEARNING_OUTCOMES[program.routeFamily].targetSkillCodes,
-        ],
+        ...program.learningOutcome,
+        targetSkillCodes: [...program.learningOutcome.targetSkillCodes],
       },
     ];
     const steps = p1BCDStepManifest(program);
     return {
       schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
       cycleId: program.path.code,
-      cycleVersion: 1,
-      sequence: 1,
+      cycleVersion: program.cycleVersion,
+      sequence: program.sequence,
       routeFamily: program.routeFamily,
       targetSkillCodes: [...new Set(program.content.map((item) => item.skillCode))],
       learningOutcomes,
@@ -1211,9 +1208,9 @@ export function buildEducationV2P1BCDLearningCycleManifests(): LearningCycleMani
       steps,
       completion: {
         requiredStepKeys: steps.map((step) => step.stableKey),
-        checkpointStepKeys: ["b-assessment-step", "c-assessment-step", "d-assessment-step"].filter(
-          (key) => steps.some((step) => step.stableKey === key),
-        ),
+        checkpointStepKeys: steps
+          .filter((step) => step.type === "ASSESSMENT")
+          .map((step) => step.stableKey),
         requiresFinalMeasurement: false,
         nextCycle: "REVIEW_REQUIRED",
       },
