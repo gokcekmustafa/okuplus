@@ -12,16 +12,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 ## Gerçek içerik kapsamı
 
-| Rota      | Kaynakta hazırlanmış istasyon | Kaynakta yayın onaylı | 200 hedefine kalan | Son aday döngü aralığı |
-| --------- | ----------------------------: | --------------------: | -----------------: | ---------------------- |
-| A / G8_12 |                            80 |                    25 |                120 | Cycle 4–14             |
-| B / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
-| C / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
-| D / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
+| Rota      | Hazırlanmış toplam | Yayın onaylı | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
+| --------- | -----------------: | -----------: | -------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
+| A / G8_12 |                 80 |           25 |                   45 |                      70 |                        10 |                       130 |                       120 | Cycle 4–14     |
+| B / G8_12 |                 65 |            5 |                   45 |                      50 |                        15 |                       150 |                       135 | Cycle 3–13     |
+| C / G8_12 |                 65 |            5 |                   45 |                      50 |                        15 |                       150 |                       135 | Cycle 3–13     |
+| D / G8_12 |                 65 |            5 |                   45 |                      50 |                        15 |                       150 |                       135 | Cycle 3–13     |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
-kaynak QA çıktısına göre dört rotada toplam 275 istasyon kaynak kataloğunda
-hazırlanmıştır; her rotada 200'e ulaşmak için toplam 525 istasyon daha gerekir.
+QA çıktısına göre 275 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
+220'si (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
+taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
+incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
+580 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 525'tir.
+İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
 sayısı değildir. A Cycle 4–14 ve B/C/D Cycle 3–13 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.

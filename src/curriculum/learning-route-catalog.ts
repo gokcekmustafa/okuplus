@@ -157,6 +157,9 @@ export type LearningRouteCoverage = {
   authoredStationCount: number;
   releasedSourceStationCount: number;
   sourceVerifiedDraftStationCount: number;
+  sourceQualifiedStationCount: number;
+  sourceQualifiedRemainingStations: number;
+  authoredSourceReviewRequiredStationCount: number;
   targetStationCount: number;
   remainingAuthoredStations: number;
   categoryDistribution: "NOT_CLASSIFIED" | "PARTIALLY_CLASSIFIED";
@@ -184,6 +187,8 @@ export function summarizeLearningRouteCoverage(
       (count, cycle) => count + (cycle.sourceVerifiedStationCount ?? 0),
       0,
     );
+    const sourceQualifiedStationCount =
+      releasedSourceStationCount + sourceVerifiedDraftStationCount;
     const categoryCounts = Object.fromEntries(
       Object.keys(EDUCATION_V2_P1_800_CATEGORY_TARGETS).map((category) => [category, 0]),
     ) as Record<EducationV2P1ExpansionCategory, number>;
@@ -199,6 +204,15 @@ export function summarizeLearningRouteCoverage(
       authoredStationCount,
       releasedSourceStationCount,
       sourceVerifiedDraftStationCount,
+      sourceQualifiedStationCount,
+      sourceQualifiedRemainingStations: Math.max(
+        0,
+        LEARNING_ROUTE_STATION_TARGET - sourceQualifiedStationCount,
+      ),
+      authoredSourceReviewRequiredStationCount: Math.max(
+        0,
+        authoredStationCount - sourceQualifiedStationCount,
+      ),
       targetStationCount: LEARNING_ROUTE_STATION_TARGET,
       remainingAuthoredStations: Math.max(0, LEARNING_ROUTE_STATION_TARGET - authoredStationCount),
       categoryDistribution:

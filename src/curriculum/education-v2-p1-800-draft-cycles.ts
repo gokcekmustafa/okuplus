@@ -11885,7 +11885,7 @@ const routeDrafts: RouteDraft[] = [
         ["RC_EVIDENCE", "RC_SEQUENCE", "RC_LIMITS"],
         "Teleskopla yapılan gözlemi fiziksel açıklamadan ayırır ve ilk gözlem iddiasını kapsamıyla yorumlar.",
         "Gözlem aracı ile oluşum nedeni",
-        "James Webb Uzay Teleskobu'nun kızılötesi gözlemleri, Neptün atmosferinde aurorayla ilişkilendirilen izleri ortaya çıkardı. Gözlem aracı ışımayı ölçtü; auroranın fiziksel açıklaması ise gezegenin manyetik alanı ve atmosferdeki yüklü parçacık etkileşimleriyle ilgilidir. Neptün'ün manyetik alanı diğer gezegenlerinkine göre farklı bir yönelim gösterdiğinden aurora bölgelerinin konumu da alışılmış kutup beklentisinden ayrılabilir. “İlk kez gözlendi” ifadesi, olayın daha önce hiç var olmadığını değil, uygun araçlarla ilk kez saptandığını anlatır. Ölçüm ile yorumun sınırını ayırmak önemlidir.",
+        "James Webb Uzay Teleskobu'nun kızılötesi gözlemleri, Neptün atmosferinde aurorayla ilişkilendirilen izleri ortaya çıkardı. Gözlem aracı ışımayı ölçtü; auroranın fiziksel açıklaması ise gezegenin manyetik alanının yüklü parçacıkları atmosfere yönlendirmesi ve gazlarla etkileşimidir. Bu gözlem, Neptün çevresindeki parçacıkların atmosferde ışımaya katkı verebildiğine dair kanıt sundu. “İlk kez gözlendi” ifadesi, olayın daha önce hiç var olmadığını değil, uygun araçlarla ilk kez saptandığını anlatır. Ölçüm ile yorumun sınırını ayırmak önemlidir.",
         "TÜBİTAK Bilim Genç: Neptün'de İlk Kez Aurora Gözlendi",
         [
           q(

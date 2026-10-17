@@ -175,6 +175,15 @@ describe("800-istasyon müfredat genişleme adayları", () => {
         result.targetStationCount,
       );
       expect(result.sourceVerifiedDraftStationCount).toBe(45);
+      const sourceQualifiedCount =
+        result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 70 : 50);
+      expect(result.targetStationCount - sourceQualifiedCount).toBe(
+        routeFamily === "A" ? 130 : 150,
+      );
+      expect(result.authoredStationCount - sourceQualifiedCount).toBe(
+        routeFamily === "A" ? 10 : 15,
+      );
       expect(result.productionGraph).toBe("NOT_VERIFIED");
     }
   });
