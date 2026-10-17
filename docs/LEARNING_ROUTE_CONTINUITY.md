@@ -12,20 +12,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 ## Gerçek içerik kapsamı
 
-| Rota      | Önceki kaynak döngüleri       | Yeni kaynak adayları             | Toplam hazırlanmış P1 istasyonu |
-| --------- | ----------------------------- | -------------------------------- | ------------------------------- |
-| A / G8_12 | İlk döngü + Cycle 2 + Cycle 3 | Cycle 4 ve 5, toplam 10 istasyon | 35                              |
-| B / G8_12 | İlk döngü + Cycle 2 adayı     | Cycle 3 ve 4, toplam 10 istasyon | 20                              |
-| C / G8_12 | İlk döngü + Cycle 2 adayı     | Cycle 3 ve 4, toplam 10 istasyon | 20                              |
-| D / G8_12 | İlk döngü + Cycle 2 adayı     | Cycle 3 ve 4, toplam 10 istasyon | 20                              |
+| Rota      | Kaynakta hazırlanmış istasyon | Kaynakta yayın onaylı | 200 hedefine kalan | Son aday döngü aralığı |
+| --------- | ----------------------------: | --------------------: | -----------------: | ---------------------- |
+| A / G8_12 |                            60 |                    25 |                140 | Cycle 4–10             |
+| B / G8_12 |                            45 |                     5 |                155 | Cycle 3–9              |
+| C / G8_12 |                            45 |                     5 |                155 | Cycle 3–9              |
+| D / G8_12 |                            45 |                     5 |                155 | Cycle 3–9              |
 
-P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. Şu an kaynakta
-A=35, B=20, C=20, D=20 olmak üzere 95 gerçek kaynak P1 istasyonu vardır; her
-rotanın 200 hedefine ulaşması için sırasıyla 165, 180, 180 ve 180 özgün istasyon
-daha hazırlanmalıdır. Bu 95 istasyonun 40'ı sekiz adet beş istasyonlu genişleme
-adayındadır; bunlar sıralı kaynak zincirine bağlanmıştır ancak
-`DRAFT_NOT_RELEASED` ve yayına kapalıdır. A Cycle 4-5 ve B/C/D Cycle 3-4 adayları için
-öğrenci ataması veya production grafiği oluşturulmamıştır. B/C/D Cycle 2
+P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
+kaynak QA çıktısına göre dört rotada toplam 195 istasyon kaynak kataloğunda
+hazırlanmıştır; her rotada 200'e ulaşmak için toplam 605 istasyon daha gerekir.
+Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
+sayısı değildir. A Cycle 4–10 ve B/C/D Cycle 3–9 zincirleri `DRAFT_NOT_RELEASED`
+ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
+B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
 olgusal iddia içermez. Öğrenme hedefleri MEB program çerçevesiyle, Türkçe yazım
 kontrolü TDK'nın 2026 Yazım Kılavuzu'yla ilişkilendirilmiştir. Bu kaynak
@@ -38,8 +38,8 @@ yayın kararı verilmiş ilk döngüleri işler. Boş istasyon veya aynı metind
 
 Her rotanın planlanan hedefi: hızlı okuma 60, okuduğunu anlama 80, ortak
 stratejiler 20, bütünleşik uygulama 25 ve çoklu beceri değerlendirmesi 15
-istasyondur. Her rotaya iki beşli genişleme paketinde bu kategorilerden ikişer
-gerçek aday istasyon eklendi (A/B/C/D toplam 40). Daha önce hazırlanmış 55 istasyonun
+istasyondur. Güncel kaynak QA çıktısında bu kategorilerde A/B/C/D başına 35,
+toplam 140 istasyon sınıflandırılmıştır. Daha önce hazırlanmış 55 istasyonun
 bu kategori dağılımı henüz kaynak kayıtlarında sınıflandırılmadığından
 `summarizeLearningRouteCoverage()` bunları `unclassifiedStationCount` olarak
 gösterir; kategori hedeflerine kalan miktar tamamlanmış gibi hesaplanmaz.

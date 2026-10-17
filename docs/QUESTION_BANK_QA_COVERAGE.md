@@ -4,7 +4,7 @@ Bu envanter, `scripts/qa-multiple-choice-source.ts` ve `src/curriculum/multiple-
 
 ## Güncel kapsam kaydı — 17 Ekim 2026
 
-Statik QA kataloğu şu anda **549 benzersiz soru kimliği**, 687 tekilleştirilmiş soru/sürüm girdisi ve 660 açık sürüm kimliği içeriyor. Bunların 144'ü mevcut kaynak, 396'sı yayımlanmamış istasyon/şık revizyon adayı, 9'u tasarım adayıdır; tekrarlanan sürüm referansları benzersiz sayımlara eklenmez. Bu sayımlar denetim kapsamını gösterir, 549 sorunun tamamının insan tarafından semantik olarak onaylandığını göstermez. 189 eski statik soru kimliği için önceki editoryal inceleme kaydı aşağıda korunmuştur; sonradan eklenen 360 genişleme sorusunda otomatik uzunluk/konum ve kaynak bağlantısı kontrolleri var, ancak ayrı editoryal gözden geçirme hâlâ gereklidir.
+Statik QA kataloğu şu anda **609 benzersiz soru kimliği**, 747 tekilleştirilmiş soru/sürüm girdisi ve 720 açık sürüm kimliği içeriyor. Bunların 144'ü mevcut kaynak, 456'sı yayımlanmamış istasyon/şık revizyon adayı, 9'u tasarım adayıdır; tekrarlanan sürüm referansları benzersiz sayımlara eklenmez. Bu sayımlar denetim kapsamını gösterir, 609 sorunun tamamının insan tarafından semantik olarak onaylandığını göstermez. 189 eski statik soru kimliği için önceki editoryal inceleme kaydı aşağıda korunmuştur; sonradan eklenen 420 genişleme sorusunda otomatik uzunluk/konum ve kaynak bağlantısı kontrolleri var, ancak ayrı editoryal gözden geçirme hâlâ gereklidir.
 
 Bağımsız Antrenman için korumalı salt-okunur envanter workflow'u [Run #39034115550](https://github.com/gokcekmustafa/okuplus/actions/runs/39034115550) üzerinde 17 Ekim 2026'da başarılı oldu. Rapor `productionWrite=NO`, `semanticContentReview=NOT_PERFORMED` ve `INVENTORY_COMPLETE_REVIEW_REQUIRED` bildirdi. Altı bilinen Antrenman etkinliğine 45 yayımlanmış şablon sürümü eşlendi; bunların 42'si konfigürasyon ve çalışma grafiği bakımından öğrenci kullanımına uygundu ve bu kapsamdaki 129 soru bağlantısı incelendi. Eşlenmiş sorularda doğru seçenek konumları A=73, B=34, C=12, D=10; doğru seçeneğin tek başına en uzun olduğu 81, tek başına en kısa olduğu 18 kayıt bulundu. Ayrıca 12 yinelenen soru-sürüm referansı ve 13 normalize metin eşleşmesi belirlendi. Bu sayılar otomatik metadata sinyalleridir; soru kökü, seçenekler ve açıklamalar rapora özellikle alınmadığı için **Antrenman sorularının anlamsal doğruluğu insan tarafından incelenmedi**. Üç eşlenmiş şablon sürümünde çalışma grafiği geçersiz raporlandı; bu kayıtların yayın/erişim nedeni bu envanter raporundan çıkarılamaz. On aileye eşlenemeyen sürüm Antrenman faaliyeti olarak sınıflandırılmadı.
 
@@ -12,23 +12,23 @@ Bağımsız Antrenman için korumalı salt-okunur envanter workflow'u [Run #3903
 
 ## Kataloglanan statik çoktan seçmeli kaynaklar
 
-| Kaynak                                       | Soru sayısı | Durum                                                                 |
-| -------------------------------------------- | ----------: | --------------------------------------------------------------------- |
-| P0 başlangıç programı                        |          18 | Mevcut kaynak                                                         |
-| P1-A ilk döngü                               |          22 | Mevcut kaynak                                                         |
-| P1-A Cycle 2                                 |          22 | Mevcut kaynak                                                         |
-| P1-A Cycle 3                                 |          16 | Mevcut kaynak; istasyon 43 yağmur bahçesi v4 adayı yeniden üretilmedi |
-| P1-B ilk döngü                               |          13 | Mevcut kaynak                                                         |
-| P1-C ilk döngü                               |          13 | Mevcut kaynak                                                         |
-| P1-D ilk döngü                               |          13 | Mevcut kaynak                                                         |
-| P1-B/C/D Cycle 2 adayları                    |          36 | Yayımlanmamış aday                                                    |
-| İlk gerçek içerik paketi                     |          27 | Paket kaynağı; soru bazında sürüm tanımı yok                          |
-| Yerleştirme bankası çoktan seçmeli maddeleri |           9 | Tasarım kaynağı                                                       |
-| A/B/C/D yeni genişleme adayları              |         360 | Kaynaklı, yayımlanmamış; editoryal inceleme bekler                    |
-| **Önceki editoryal inceleme kapsamı**        |     **189** | Tarihsel semantik masa başı inceleme kaydı                            |
-| **Güncel benzersiz statik MC kimlikleri**    |     **549** | Katalog toplamı; 360 genişleme adayı dahil                            |
+| Kaynak                                       | Soru sayısı | Durum                                                  |
+| -------------------------------------------- | ----------: | ------------------------------------------------------ |
+| P0 başlangıç programı                        |          18 | Mevcut kaynak                                          |
+| P1-A ilk döngü                               |          22 | Mevcut kaynak                                          |
+| P1-A Cycle 2                                 |          22 | Mevcut kaynak                                          |
+| P1-A Cycle 3                                 |          16 | Mevcut kaynak; istasyon 43 için kapalı v4 adayı mevcut |
+| P1-B ilk döngü                               |          13 | Mevcut kaynak                                          |
+| P1-C ilk döngü                               |          13 | Mevcut kaynak                                          |
+| P1-D ilk döngü                               |          13 | Mevcut kaynak                                          |
+| P1-B/C/D Cycle 2 adayları                    |          36 | Yayımlanmamış aday                                     |
+| İlk gerçek içerik paketi                     |          27 | Paket kaynağı; soru bazında sürüm tanımı yok           |
+| Yerleştirme bankası çoktan seçmeli maddeleri |           9 | Tasarım kaynağı                                        |
+| A/B/C/D yeni genişleme adayları              |         420 | Kaynaklı, yayımlanmamış; editoryal inceleme bekler     |
+| **Önceki editoryal inceleme kapsamı**        |     **189** | Tarihsel semantik masa başı inceleme kaydı             |
+| **Güncel benzersiz statik MC kimlikleri**    |     **609** | Katalog toplamı; 420 genişleme adayı dahil             |
 
-Güncel QA çıktısındaki sürüm sayımı ek açıklama olmadan okunmamalıdır: 744 paket içi giriş, 687 tekilleştirilmiş soru/sürüm girdisine iner; bunların 660'ında açık sürüm kimliği bulunur, 27 ilk-gerçek-paket girdisinde bulunmaz. Paketler arası tekrarlar benzersiz soru veya sürüm olarak sayılmaz.
+Güncel QA çıktısındaki sürüm sayımı ek açıklama olmadan okunmamalıdır: 804 paket içi giriş, 747 tekilleştirilmiş soru/sürüm girdisine iner; bunların 720'sinde açık sürüm kimliği bulunur, 27 ilk-gerçek-paket girdisinde bulunmaz. Paketler arası tekrarlar benzersiz soru veya sürüm olarak sayılmaz.
 
 Katalog ayrıca mevcut P0, P1-A ilk döngü, B/C/D ilk döngüleri, Cycle 2, Cycle 3 ve yerleştirme revizyon adaylarını listeler. Bu aday satırları yeni benzersiz soru değildir; aynı kaynak kimliğinin farklı sürümleridir. 43. istasyonun yağmur bahçesi v4 adayı, Cycle 3'ün gerçek `p1a-v3-evidence-practice` içeriğine ve aynı anahtarlı alıştırmaya bağlıdır; yayımlanmış v3 sürümü değişmedi.
 
@@ -48,5 +48,5 @@ Katalog ayrıca mevcut P0, P1-A ilk döngü, B/C/D ilk döngüleri, Cycle 2, Cyc
 - Yerleştirme MC dışı 27 madde ayrı tür doğruluğu incelemesinden geçti. Düzeltme adayı 1.0.3'tür; kaynakta veya canlıda yayımlanmadı. Öğrenci ölçüm sonuçları okunmadı/değiştirilmedi.
 - İlk gerçek içerik paketindeki **27** MC sorunun kararlı kaynak kimliği var, ancak soru başına değişmez sürüm ID'si tanımlı değil. Sürüm değeri uydurulmadı.
 - `academic-reading-p0.ts` soru bankası değil; öğretim hedefi ve uygulama sözleşmeleri tanımlar. İçinde denetlenecek seçenekli soru kayıtları bulunmadığından MC soru sayımına eklenmedi.
-- QA uzunluk/şık konumu/tekrar ölçümleri yapısal uyarıdır, anlamsal doğruluğu kanıtlamaz. Raporlanan 6 mevcut kaynak uzunluk aykırılığı ve bunların 0 kalmış olduğu revizyon adayı metrikleridir; bunlar tek başına anlam doğruluğunu kanıtlamaz. 189 MC kimliğinin masa başı semantik incelemesi yapılmış olsa da otomatik araçla kesinleştirilemeyen pedagojik uygunluk ve kalibrasyon, ayrıca editoryal onay gerektirir; hiçbir aday otomatik olarak `VERIFIED` yapılmaz.
+- QA uzunluk/şık konumu/tekrar ölçümleri yapısal uyarıdır, anlamsal doğruluğu kanıtlamaz. Raporlanan 6 mevcut kaynak uzunluk aykırılığı ve yayımlanmamış adaylardaki 0 uzunluk aykırılığı, metriklerdir; bunlar tek başına anlam doğruluğunu kanıtlamaz. 189 MC kimliğinin masa başı semantik incelemesi yapılmış olsa da sonradan eklenen 420 sorunun editoryal incelemesi tamamlanmamıştır. Otomatik araçla kesinleştirilemeyen pedagojik uygunluk ve kalibrasyon ayrıca gözden geçirilmeli; hiçbir aday otomatik olarak `VERIFIED` yapılmaz.
 - Bu işte üretim grafiği, öğrenci cevapları ve puanlar değiştirilmedi. Canlı Antrenman envanteri yalnızca salt okunur metadata düzeyinde incelendi; soru içeriği/cevap anahtarları alınmadı ve semantik doğruluk hakkında sonuç çıkarılmadı.
