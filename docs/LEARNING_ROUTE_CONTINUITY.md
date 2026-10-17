@@ -14,20 +14,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Hazırlanmış toplam | Kaynakta yayın onaylı (üretim ayrı) | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
 | --------- | -----------------: | ----------------------------------: | --------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
-| A / G8_12 |                175 |                                  25 |                   140 |                     165 |                        10 |                        35 |                        25 | Cycle 4–33     |
-| B / G8_12 |                160 |                                   5 |                   140 |                     145 |                        15 |                        55 |                        40 | Cycle 3–32     |
-| C / G8_12 |                160 |                                   5 |                   140 |                     145 |                        15 |                        55 |                        40 | Cycle 3–32     |
-| D / G8_12 |                160 |                                   5 |                   140 |                     145 |                        15 |                        55 |                        40 | Cycle 3–32     |
+| A / G8_12 |                180 |                                  25 |                   145 |                     170 |                        10 |                        30 |                        20 | Cycle 4–34     |
+| B / G8_12 |                165 |                                   5 |                   145 |                     150 |                        15 |                        50 |                        35 | Cycle 3–33     |
+| C / G8_12 |                165 |                                   5 |                   145 |                     150 |                        15 |                        50 |                        35 | Cycle 3–33     |
+| D / G8_12 |                165 |                                   5 |                   145 |                     150 |                        15 |                        50 |                        35 | Cycle 3–33     |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 18 Ekim 2026
-QA çıktısına göre 655 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
-600'ü (rota başına kaynakta yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
+QA çıktısına göre 675 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
+620'si (rota başına kaynakta yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
 taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
 incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
-200 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 145'tir.
+180 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 125'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–33 ve B/C/D Cycle 3–32 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–34 ve B/C/D Cycle 3–33 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -80,6 +80,11 @@ soru sürümüyle A33/B32/C32/D32 taslaklarını ekledi. Kaynak sayfaları önce
 gruplarla eşleştirilerek tekrar kontrol edildi; tüm adaylar hâlâ taslak ve
 yayımlanmamış durumdadır. Otomatik uzunluk/konum ve manifest kontrolleri içerik
 doğruluğunun veya pedagojik uygunluğun editoryal onayı değildir.
+
+Group 29, NASA, NOAA, USGS ve Smithsonian kaynaklarından 20 yeni, önceki
+gruplarla çakışmayan kaynak sayfası ve 60 soru sürümü ekleyerek A34/B33/C33/D33
+taslaklarını Group 28'e bağlar. Bu adaylar yayımlanmamış kalır; kaynak ve
+otomatik kalite kontrolleri uzman editoryal incelemesinin yerine geçmez.
 
 ## Soru bankası kalite denetimi
 
