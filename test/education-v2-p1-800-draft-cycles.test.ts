@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(12);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(16);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -119,24 +119,24 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: 3,
-        READING_COMPREHENSION: 3,
-        COMMON_STRATEGIES: 3,
-        INTEGRATED_PRACTICE: 3,
-        MULTI_SKILL_ASSESSMENT: 3,
+        FAST_READING: 4,
+        READING_COMPREHENSION: 4,
+        COMMON_STRATEGIES: 4,
+        INTEGRATED_PRACTICE: 4,
+        MULTI_SKILL_ASSESSMENT: 4,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 40 : 25);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 45 : 30);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 160 : 175);
-      expect(result.sourceVerifiedDraftStationCount).toBe(5);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 155 : 170);
+      expect(result.sourceVerifiedDraftStationCount).toBe(10);
       expect(result.productionGraph).toBe("NOT_VERIFIED");
     }
   });
 
   it("only counts source-traceable stations as verified and ties every new station to its source", () => {
     for (const routeFamily of ["A", "B", "C", "D"] as const) {
-      const cycleNumber = routeFamily === "A" ? 6 : 5;
+      const cycleNumber = routeFamily === "A" ? 7 : 6;
       const cycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
         (candidate) => candidate.routeFamily === routeFamily && candidate.sequence === cycleNumber,
       )!;
