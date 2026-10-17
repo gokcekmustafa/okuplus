@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(88);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(92);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -175,24 +175,24 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: routeFamily === "D" ? 22 : 23,
-        READING_COMPREHENSION: routeFamily === "D" ? 23 : 25,
-        COMMON_STRATEGIES: routeFamily === "D" ? 21 : 20,
-        INTEGRATED_PRACTICE: routeFamily === "D" ? 22 : 21,
-        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 22 : 21,
+        FAST_READING: routeFamily === "D" ? 23 : 24,
+        READING_COMPREHENSION: routeFamily === "D" ? 24 : 26,
+        COMMON_STRATEGIES: routeFamily === "D" ? 22 : 21,
+        INTEGRATED_PRACTICE: routeFamily === "D" ? 23 : 22,
+        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 23 : 22,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 135 : 120);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 140 : 125);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 65 : 80);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 60 : 75);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
         result.targetStationCount,
       );
-      expect(result.sourceVerifiedDraftStationCount).toBe(100);
+      expect(result.sourceVerifiedDraftStationCount).toBe(105);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
-      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 125 : 105);
-      expect(result.targetStationCount - sourceQualifiedCount).toBe(routeFamily === "A" ? 75 : 95);
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 130 : 110);
+      expect(result.targetStationCount - sourceQualifiedCount).toBe(routeFamily === "A" ? 70 : 90);
       expect(result.authoredStationCount - sourceQualifiedCount).toBe(
         routeFamily === "A" ? 10 : 15,
       );
@@ -250,22 +250,22 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     expect(pendingExpansionStations.every((station) => station.sourceEvidence == null)).toBe(true);
   });
 
-  it("uses distinct verified source pages across Groups 15 through 20", () => {
+  it("uses distinct verified source pages across Groups 15 through 21", () => {
     const newestCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
       (cycle) =>
-        (cycle.routeFamily === "A" && [21, 22, 23, 24, 25].includes(cycle.sequence)) ||
+        (cycle.routeFamily === "A" && [20, 21, 22, 23, 24, 25, 26].includes(cycle.sequence)) ||
         (["B", "C", "D"].includes(cycle.routeFamily) &&
-          [20, 21, 22, 23, 24].includes(cycle.sequence)),
+          [19, 20, 21, 22, 23, 24, 25].includes(cycle.sequence)),
     );
-    expect(newestCycles).toHaveLength(20);
+    expect(newestCycles).toHaveLength(28);
     const stations = newestCycles.flatMap((cycle) => cycle.sourceStations);
-    expect(stations).toHaveLength(100);
+    expect(stations).toHaveLength(140);
     const sourceUrls = stations.map((station) => station.sourceEvidence?.url);
-    expect(new Set(sourceUrls).size).toBe(100);
+    expect(new Set(sourceUrls).size).toBe(140);
     const questionVersions = stations.flatMap((station) =>
       station.questions.map((question) => question.versionId),
     );
-    expect(new Set(questionVersions).size).toBe(300);
+    expect(new Set(questionVersions).size).toBe(420);
     expect(stations.every((station) => station.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
     expect(newestCycles.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
   });
@@ -443,5 +443,30 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     expect(stations.every((item) => item.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
     expect(group20.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
     expect(group20.every((cycle) => cycle.authoringStatus === "DRAFT_NOT_RELEASED")).toBe(true);
+  });
+
+  it("adds Group 21 as twenty source-unique, unpublished stations with sixty question versions", () => {
+    const group21 = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
+      (cycle) =>
+        (cycle.routeFamily === "A" && cycle.sequence === 26) ||
+        (["B", "C", "D"].includes(cycle.routeFamily) && cycle.sequence === 25),
+    );
+    expect(group21).toHaveLength(4);
+    const stations = group21.flatMap((cycle) => cycle.sourceStations);
+    expect(stations).toHaveLength(20);
+    expect(new Set(stations.map((item) => item.sourceEvidence?.url)).size).toBe(20);
+    expect(
+      new Set(stations.flatMap((item) => item.questions.map((question) => question.versionId)))
+        .size,
+    ).toBe(60);
+    const priorSourceUrls = new Set(
+      EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => !group21.includes(cycle))
+        .flatMap((cycle) => cycle.sourceStations)
+        .map((station) => station.sourceEvidence?.url),
+    );
+    expect(stations.every((item) => !priorSourceUrls.has(item.sourceEvidence?.url))).toBe(true);
+    expect(stations.every((item) => item.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
+    expect(group21.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
+    expect(group21.every((cycle) => cycle.authoringStatus === "DRAFT_NOT_RELEASED")).toBe(true);
   });
 });
