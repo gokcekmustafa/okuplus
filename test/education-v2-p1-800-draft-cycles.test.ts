@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(32);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(36);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -161,24 +161,27 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: 8,
-        READING_COMPREHENSION: 9,
-        COMMON_STRATEGIES: 7,
-        INTEGRATED_PRACTICE: 8,
-        MULTI_SKILL_ASSESSMENT: 8,
+        FAST_READING: 9,
+        READING_COMPREHENSION: 10,
+        COMMON_STRATEGIES: 8,
+        INTEGRATED_PRACTICE: 9,
+        MULTI_SKILL_ASSESSMENT: 9,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 65 : 50);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 70 : 55);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 135 : 150);
-      expect(result.sourceVerifiedDraftStationCount).toBe(30);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 130 : 145);
+      expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
+        result.targetStationCount,
+      );
+      expect(result.sourceVerifiedDraftStationCount).toBe(35);
       expect(result.productionGraph).toBe("NOT_VERIFIED");
     }
   });
 
   it("only counts source-traceable stations as verified and ties every new station to its source", () => {
     for (const routeFamily of ["A", "B", "C", "D"] as const) {
-      const cycleNumber = routeFamily === "A" ? 11 : 10;
+      const cycleNumber = routeFamily === "A" ? 12 : 11;
       const cycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
         (candidate) => candidate.routeFamily === routeFamily && candidate.sequence === cycleNumber,
       )!;
@@ -202,8 +205,8 @@ describe("800-istasyon müfredat genişleme adayları", () => {
   it("uses twenty distinct verified source pages in the newest four draft cycles", () => {
     const newestCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
       (cycle) =>
-        (cycle.routeFamily === "A" && cycle.sequence === 11) ||
-        (["B", "C", "D"].includes(cycle.routeFamily) && cycle.sequence === 10),
+        (cycle.routeFamily === "A" && cycle.sequence === 12) ||
+        (["B", "C", "D"].includes(cycle.routeFamily) && cycle.sequence === 11),
     );
     expect(newestCycles).toHaveLength(4);
     const stations = newestCycles.flatMap((cycle) => cycle.sourceStations);
