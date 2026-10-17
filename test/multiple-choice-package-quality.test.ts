@@ -23,6 +23,10 @@ describe("multiple-choice package quality", () => {
       expect(keys).toContain(
         `EDU_V2_P1_${routeFamily}_EXPANSION_${sequence}_PROGRAM:SOURCE_QUESTIONS`,
       );
+      const nextSequence = routeFamily === "A" ? 6 : 5;
+      expect(keys).toContain(
+        `EDU_V2_P1_${routeFamily}_EXPANSION_${nextSequence}_PROGRAM:SOURCE_QUESTIONS`,
+      );
     }
 
     const reports = MULTIPLE_CHOICE_SOURCE_PACKAGES.map((source) => ({
@@ -63,7 +67,7 @@ describe("multiple-choice package quality", () => {
       reports
         .filter(({ source }) => source.key.includes("_EXPANSION_"))
         .reduce((total, { report }) => total + report.questionCount, 0),
-    ).toBe(120);
+    ).toBe(180);
     for (const { source, report } of newCandidates) {
       expect(report.clearLengthOutlierCount, source.key).toBe(0);
     }
@@ -177,12 +181,12 @@ describe("multiple-choice package quality", () => {
 
   it("retains text, key, explanation and immutable version IDs in a deduplicated audit dossier", () => {
     const unique = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
-    expect(unique).toHaveLength(309);
+    expect(unique).toHaveLength(369);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(447);
+    expect(allVersions).toHaveLength(507);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(420);
+    ).toHaveLength(480);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,

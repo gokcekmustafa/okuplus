@@ -17,6 +17,16 @@ export const EDUCATION_V2_P1_800_CATEGORY_TARGETS = {
 
 export type EducationV2P1ExpansionCategory = keyof typeof EDUCATION_V2_P1_800_CATEGORY_TARGETS;
 
+export type EducationV2P1ExpansionDifficulty = "FOUNDATION" | "INTERMEDIATE" | "ADVANCED";
+
+export type EducationV2P1ExpansionSourceEvidence = {
+  title: string;
+  url: string;
+  checkedOn: string;
+  verifiedFacts: readonly string[];
+  contentRelation: string;
+};
+
 type DraftQuestion = {
   key: string;
   prompt: string;
@@ -35,6 +45,8 @@ type DraftStation = {
   textTitle: string;
   text: string;
   sourceReference: string;
+  sourceEvidence?: EducationV2P1ExpansionSourceEvidence;
+  provenanceStatus: "SOURCE_VERIFIED" | "REVIEW_REQUIRED";
   questions: [DraftQuestion, DraftQuestion, DraftQuestion];
 };
 
@@ -56,6 +68,19 @@ const q = (
   hint: string,
 ): DraftQuestion => ({ key, prompt, correct, distractors, explanation, hint });
 
+const sourceEvidence = (
+  title: string,
+  url: string,
+  verifiedFacts: readonly string[],
+  contentRelation: string,
+): EducationV2P1ExpansionSourceEvidence => ({
+  title,
+  url,
+  checkedOn: "2026-10-17",
+  verifiedFacts,
+  contentRelation,
+});
+
 const station = (
   key: string,
   title: string,
@@ -66,6 +91,7 @@ const station = (
   text: string,
   sourceReference: string,
   questions: [DraftQuestion, DraftQuestion, DraftQuestion],
+  sourceEvidence?: EducationV2P1ExpansionSourceEvidence,
 ): DraftStation => ({
   key,
   title,
@@ -75,6 +101,8 @@ const station = (
   textTitle,
   text,
   sourceReference,
+  ...(sourceEvidence ? { sourceEvidence } : {}),
+  provenanceStatus: sourceEvidence ? "SOURCE_VERIFIED" : "REVIEW_REQUIRED",
   questions,
 });
 
@@ -1871,6 +1899,1055 @@ const routeDrafts: RouteDraft[] = [
       ),
     ],
   },
+  {
+    routeFamily: "A",
+    priorSequence: 5,
+    priorPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_5_G8_12",
+    nextSequence: 6,
+    positionOffset: 2,
+    stations: [
+      station(
+        "a6-fast-reading",
+        "Isı adası raporundaki sayıları hızla bul",
+        "FAST_READING",
+        ["FAST_ATTENTION", "RC_DETAIL"],
+        "Bir bilgi metnindeki ölçüm aralığını ve karşılaştırma koşulunu hızlıca seçer.",
+        "Kent ve kırsal sıcaklıklar",
+        "Bir bilim yazısı, yapılaşmanın yoğun olduğu bölgelerin çevredeki kırsal alanlardan ortalama 1–3 °C daha sıcak olabildiğini bildiriyor. Geceleri bu fark 12 °C'ye kadar çıkabiliyor. Kent ve kırsal alanlar arasındaki bu sıcaklık farkı ısı adası olarak adlandırılıyor.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "a6-fast-1",
+            "Yoğun yapılaşmış bölgeler kırsal alanlardan ortalama ne kadar sıcak olabilir?",
+            "1–3 °C",
+            ["3–5 °C", "5–8 °C", "8–12 °C"],
+            "Metin ortalama farkı 1–3 °C aralığında veriyor.",
+            "İlk cümledeki ortalama aralığı bul.",
+          ),
+          q(
+            "a6-fast-2",
+            "Bu kent-kır sıcaklık farkının adı nedir?",
+            "Isı adası",
+            ["Su döngüsü", "Gölge etkisi", "Hava akımı"],
+            "Son cümle farkı ısı adası olarak adlandırıyor.",
+            "Metnin son cümlesindeki kavramı bul.",
+          ),
+          q(
+            "a6-fast-3",
+            "Metne göre fark geceleri en çok hangi değere ulaşabilir?",
+            "12 °C'ye",
+            ["1 °C'ye", "3 °C'ye", "8 °C'ye"],
+            "İkinci cümlede gece farkının 12 °C'ye kadar çıkabildiği belirtiliyor.",
+            "Geceyle ilgili cümledeki üst sınırı seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Ağaçlar Şehirlerin Sıcaklığını Nasıl Etkiler?",
+          "https://bilimgenc.tubitak.gov.tr/makale/agaclar-sehirlerin-sicakligini-nasil-etkiler",
+          [
+            "Yoğun şehirleşmiş bölgeler kırsal alanlardan ortalama 1–3 °C daha sıcak olabilir; gece farkı 12 °C'ye ulaşabilir.",
+            "Bu olgu ısı adası olarak adlandırılır.",
+          ],
+          "Özgün kısa metin kaynakta verilen ölçüm aralığı ve kavramı aktarır; üç soru doğrudan ayrıntı bulmayı ölçer.",
+        ),
+      ),
+      station(
+        "a6-comprehension",
+        "Ağaçların serinletici etkisini nedenleriyle açıkla",
+        "READING_COMPREHENSION",
+        ["RC_CAUSE_EFFECT", "RC_MAIN_IDEA"],
+        "Gölge ve buharlaşmanın sıcaklık üzerindeki katkılarını metinden ayırır.",
+        "Bir sokağın gölgesi",
+        "Ağaçlı bir sokakta dallar ve yapraklar güneş ışığının bir bölümünü aşağıya geçirmeden tutar. Bitkiler kökleriyle aldıkları suyun bir bölümünü yapraklarından dışarı verir; bu suyun buharlaşması çevreden ısı alır. Böylece gölge ve buharlaşma, sıcaklığın yükselmesini sınırlamaya birlikte katkıda bulunur.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "a6-comprehension-1",
+            "Yaprak ve dalların doğrudan etkisi nedir?",
+            "Güneş ışığını kısmen tutmak",
+            ["Topraktaki suyu artırmak", "Sokağın yönünü değiştirmek", "Gece ışığını güçlendirmek"],
+            "Metin, dallar ve yaprakların ışığın bir bölümünü tuttuğunu söylüyor.",
+            "İlk cümledeki bitki etkisini bul.",
+          ),
+          q(
+            "a6-comprehension-2",
+            "Buharlaşma çevreden ne alır?",
+            "Isı",
+            ["Gölge", "Oksijen", "Işık"],
+            "Su buharlaşırken çevreden ısı alır.",
+            "İkinci cümlenin sonundaki fiziksel etkiye bak.",
+          ),
+          q(
+            "a6-comprehension-3",
+            "Metnin temel düşüncesi hangisidir?",
+            "Gölge ve buharlaşma serinletir",
+            [
+              "Ağaçlar sokakları tamamen karanlık yapar",
+              "Bitkiler bütün ısıyı ortadan kaldırır",
+              "Sokak sıcaklığı yalnızca gece değişir",
+            ],
+            "Son cümle iki etkiyi birlikte sıcaklık artışını sınırlayan etkenler olarak özetliyor.",
+            "Son cümlede birlikte anılan iki etkiyi seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Ağaçlar Şehirlerin Sıcaklığını Nasıl Etkiler?",
+          "https://bilimgenc.tubitak.gov.tr/makale/agaclar-sehirlerin-sicakligini-nasil-etkiler",
+          [
+            "Bitkiler gölge oluşturur.",
+            "Bitkiler yapraklarından su verir; buharlaşma ısı alarak soğumaya katkı sağlar.",
+          ],
+          "Metin kaynakta açıklanan gölge ve buharlaşma mekanizmalarını özgün bir neden-sonuç bütünlüğü içinde yeniden kurar.",
+        ),
+      ),
+      station(
+        "a6-strategy",
+        "Karşılaştırmada ortak koşulu kanıt olarak kullan",
+        "COMMON_STRATEGIES",
+        ["RC_EVIDENCE", "RC_DETAIL"],
+        "Bir karşılaştırmanın hangi koşulda yapıldığını belirleyip sonucu bu sınır içinde yorumlar.",
+        "Gölge ölçümünü okuma",
+        "Bir gözlem notu, aynı koşullardaki iki nesneden gölgede kalanının daha düşük sıcaklıkta ölçülebildiğini belirtiyor. Not, bu sonucu nesnelerin renkleri farklıyken karşılaştırmıyor. Bu nedenle okur, çıkarımını özellikle gölge ve doğrudan güneş görme koşullarıyla sınırlamalı.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "a6-strategy-1",
+            "Karşılaştırılan iki nesne için hangi ortak koşul belirtiliyor?",
+            "Aynı koşullarda olmaları",
+            ["Aynı renkte olmaları", "Aynı yerde üretilmeleri", "Aynı saatte taşınmaları"],
+            "İlk cümle iki nesnenin aynı koşullarda karşılaştırıldığını söylüyor.",
+            "İlk cümlede nesneler için verilen ortak niteliği bul.",
+          ),
+          q(
+            "a6-strategy-2",
+            "Not hangi sonucu özellikle sınırlandırıyor?",
+            "Gölge ile doğrudan güneş görme farkını",
+            [
+              "İki nesnenin üretim tarihini",
+              "Günün bütün saatlerindeki değişimi",
+              "Renklerin kalıcılığını",
+            ],
+            "Son cümle çıkarımın gölge ve güneş görme koşullarıyla sınırlı kalmasını ister.",
+            "Son cümlede adı geçen iki durumu eşleştir.",
+          ),
+          q(
+            "a6-strategy-3",
+            "Renk etkisi hakkında neden kesin bir karşılaştırma yapılamaz?",
+            "Renk etkisi ölçülmediği için",
+            [
+              "Notta nesne bulunmadığı için",
+              "Ölçümün gece yapılmadığı için",
+              "Gölgenin yönü kaydedilmediği için",
+            ],
+            "Metin, renkler farklıyken karşılaştırma yapılmadığını açıkça belirtiyor.",
+            "İkinci cümlede hangi karşılaştırmanın yapılmadığı yazıyor?",
+          ),
+        ],
+        sourceEvidence(
+          "Ağaçlar Şehirlerin Sıcaklığını Nasıl Etkiler?",
+          "https://bilimgenc.tubitak.gov.tr/makale/agaclar-sehirlerin-sicakligini-nasil-etkiler",
+          [
+            "Aynı koşullarda gölgede kalan nesneler doğrudan güneş alanlara göre daha serin olabilir.",
+          ],
+          "Özgün gözlem notu, kaynakta vurgulanan eş koşullu gölge karşılaştırmasını okuma kanıtı olarak işler.",
+        ),
+      ),
+      station(
+        "a6-integrated",
+        "Yapı malzemeleri ile bitki örtüsünün etkisini ilişkilendir",
+        "INTEGRATED_PRACTICE",
+        ["RC_CAUSE_EFFECT", "RC_INFERENCE", "RC_MAIN_IDEA"],
+        "İki farklı soğuma mekanizmasını ve depolanan enerjinin gece etkisini birlikte yorumlar.",
+        "Gündüz ve gece sokakları",
+        "Bitki örtüsü güneş ışığını kısmen keser ve suyun buharlaşmasıyla soğumaya katkıda bulunur. Kentteki bazı yapay yüzeyler ise güneş enerjisinin daha büyük bölümünü soğurup depolar. Depolanan enerji gece geri salındığından, bitkili ve yapılaşmış alanların sıcaklık farkı geceleri belirginleşebilir.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "a6-integrated-1",
+            "Bitki örtüsü hangi iki yolla soğumaya katkı sağlar?",
+            "Gölge ve buharlaşmayla",
+            ["Yansıma ve sesle", "Yağış ve rüzgârla", "Işık ve basınçla"],
+            "İlk cümle gölgeyi ve su buharlaşmasını iki etki olarak veriyor.",
+            "İlk cümledeki iki eylemi birlikte bul.",
+          ),
+          q(
+            "a6-integrated-2",
+            "Yapay yüzeyler soğurdukları enerjiyi ne yapabilir?",
+            "Bir süre depolayabilir",
+            [
+              "Tamamını uzaya yollar",
+              "Suyu doğrudan yağmura çevirir",
+              "Yalnızca bitkilere aktarır",
+            ],
+            "İkinci cümle bazı yüzeylerin enerjiyi depoladığını belirtiyor.",
+            "İkinci cümledeki fiili bul.",
+          ),
+          q(
+            "a6-integrated-3",
+            "Sıcaklık farkı hangi zamanda daha belirginleşebilir?",
+            "Gece",
+            ["Öğle vakti", "Sabah erken", "Akşamüstü"],
+            "Son cümlede depolanan enerjinin gece salınmasıyla farkın belirginleşebileceği açıklanıyor.",
+            "Enerjinin geri verildiği zamanı seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Ağaçlar Şehirlerin Sıcaklığını Nasıl Etkiler?",
+          "https://bilimgenc.tubitak.gov.tr/makale/agaclar-sehirlerin-sicakligini-nasil-etkiler",
+          [
+            "Bitkiler gölge ve buharlaşma yoluyla soğumaya katkı sağlar.",
+            "Yapay kent yüzeyleri enerjiyi depolayıp gece geri salabilir.",
+          ],
+          "Metin kaynakta ayrı açıklanan bitki ve yapay yüzey etkilerini bir karşılaştırmada birleştirir.",
+        ),
+      ),
+      station(
+        "a6-assessment",
+        "Su döngüsündeki aşamaları ve çıkarım sınırını değerlendir",
+        "MULTI_SKILL_ASSESSMENT",
+        ["RC_SEQUENCE", "RC_CAUSE_EFFECT", "RC_INFERENCE"],
+        "Buharlaşma, yoğunlaşma ve yağış sırasını kurar; metnin desteklediği çıkarımla yetinir.",
+        "Bir damlanın yolculuğu",
+        "Güneşten aldığı ısıyla yüzeydeki su buharlaşır. Su buharı soğuk hava akımlarıyla karşılaşınca yoğunlaşarak yağmur ya da kar biçiminde yeryüzüne dönebilir. Yağışın bir bölümü toprağa süzülüp yer altı sularına karışabilir; bu anlatım her damlanın aynı yolu izleyeceğini söylemez.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "a6-assessment-1",
+            "Yüzeydeki su buharlaşırken hangi etkiyi alır?",
+            "Isı",
+            ["Ses", "Tuz", "Gölge"],
+            "İlk cümle buharlaşma için Güneş'ten alınan ısıyı belirtir.",
+            "İlk cümlede suyun aldığı etkiyi bul.",
+          ),
+          q(
+            "a6-assessment-2",
+            "Su buharı soğuk hava akımlarıyla karşılaşınca ne olabilir?",
+            "Yoğunlaşıp yağışa dönüşebilir",
+            [
+              "Her durumda yer altına iner",
+              "Doğrudan canlıya dönüşür",
+              "Buharlaşmayı tamamen durdurur",
+            ],
+            "İkinci cümle yoğunlaşma ve yağmur ya da kar olarak dönüşü anlatır.",
+            "İkinci cümledeki koşul ve sonucu eşleştir.",
+          ),
+          q(
+            "a6-assessment-3",
+            "Metinden hangi sonuç çıkarılamaz?",
+            "Her su damlasının aynı yolu izleyeceği",
+            [
+              "Bazı suların buharlaşabildiği",
+              "Yağışın toprağa süzülebildiği",
+              "Su buharının yoğunlaşabildiği",
+            ],
+            "Son cümle her damlanın aynı yolu izlediğini söylemediğini açıkça sınırlar.",
+            "Son cümlenin reddettiği genellemeyi bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Su Döngüsü Oluşturalım",
+          "https://bilimgenc.tubitak.gov.tr/makale/su-dongusu",
+          [
+            "Isı alan su buharlaşır; soğuk hava akımları yoğunlaşma ve yağışa yol açabilir.",
+            "Yağış suyu yer altına süzülebilir.",
+          ],
+          "Özgün metin su döngüsü aşamalarını kaynakta verilen olasılık diliyle aktarır ve her damlanın aynı yolu izlemediğini açıkça belirtir.",
+        ),
+      ),
+    ],
+  },
+  {
+    routeFamily: "B",
+    priorSequence: 4,
+    priorPathCode: "EDUCATION_V2_P1_B_FLUENCY_MEANING_CYCLE_4_G8_12",
+    nextSequence: 5,
+    positionOffset: 0,
+    stations: [
+      station(
+        "b5-fast-reading",
+        "Su döngüsünün bilgi basamaklarını hızla tara",
+        "FAST_READING",
+        ["FAST_ATTENTION", "RC_SEQUENCE"],
+        "Bilgi metninde süreç sırasını hızlıca bulur ve aşamaları birbirinden ayırır.",
+        "Buhardan yağışa",
+        "Yeryüzündeki su ısı alarak buharlaşır. Su buharı soğuk hava akımlarıyla karşılaşınca yoğunlaşır; ardından yağmur ya da kar olarak yeryüzüne ulaşabilir. Yüzeye dönen suyun bir bölümü toprağın altına süzülür.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "b5-fast-1",
+            "Buharlaşmayı başlatan etki metinde nasıl açıklanıyor?",
+            "Su ısı alıyor",
+            ["Su tuz kaybediyor", "Su gölgeye giriyor", "Su toprağa karışıyor"],
+            "İlk cümlede suyun ısı alarak buharlaştığı belirtiliyor.",
+            "İlk cümledeki neden bölümünü tara.",
+          ),
+          q(
+            "b5-fast-2",
+            "Yoğunlaşmanın ardından hangi olay gelebilir?",
+            "Yağmur ya da kar",
+            ["Tohum oluşumu", "Rüzgârın durması", "Suyun tuza dönüşmesi"],
+            "İkinci cümle yoğunlaşmadan sonra yağış oluşabileceğini söylüyor.",
+            "İkinci cümlede yoğunlaşmanın ardından geleni bul.",
+          ),
+          q(
+            "b5-fast-3",
+            "Yeryüzüne dönen suyun bir bölümü nereye süzülebilir?",
+            "Toprağın altına",
+            ["Bulutların üstüne", "Güneşin içine", "Rüzgârın yönüne"],
+            "Son cümle suyun toprağın altına süzülebileceğini bildiriyor.",
+            "Son cümlenin yön bildiren bölümünü bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Su Döngüsü Oluşturalım",
+          "https://bilimgenc.tubitak.gov.tr/makale/su-dongusu",
+          [
+            "Isı alan su buharlaşır, soğuk hava akımıyla yoğunlaşıp yağış olabilir.",
+            "Yağış yer altı sularına karışabilir.",
+          ],
+          "Metin kaynakta doğrulanan döngü aşamalarını özgün ve sıralı bir paragraf içinde sunar.",
+        ),
+      ),
+      station(
+        "b5-comprehension",
+        "Tohumun çimlenmesi için gereken koşulları birlikte anla",
+        "READING_COMPREHENSION",
+        ["RC_DETAIL", "RC_CAUSE_EFFECT"],
+        "Tohumun su, uygun sıcaklık ve oksijen gereksinimlerini neden-sonuç ilişkisiyle açıklar.",
+        "Çimlenme için uygun ortam",
+        "Bir tohumun çimlenmeye başlaması için uygun miktarda su ve uygun sıcaklık gerekir. Tohum bu sırada oksijenli solunumla enerji üretir. Su çok fazlaysa hava alamayan tohum çürüyebilir; susuz ya da çok sıcak ortamda ise kuruyabilir.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "b5-comprehension-1",
+            "Tohumun çimlenmesi için metinde sayılan koşullardan biri hangisidir?",
+            "Uygun miktarda su",
+            ["Sürekli karanlık", "Tuzlu hava", "Hareketsiz rüzgâr"],
+            "İlk cümle uygun miktarda suyu gerekli koşul olarak veriyor.",
+            "İlk cümlede ‘gerekir’ denilen koşulları bul.",
+          ),
+          q(
+            "b5-comprehension-2",
+            "Tohum oksijenli solunum sırasında ne üretir?",
+            "Enerji",
+            ["Gölge", "Yağış", "Kireç"],
+            "İkinci cümle solunumun enerji üretmesini açıklar.",
+            "İkinci cümlenin sonucunu seç.",
+          ),
+          q(
+            "b5-comprehension-3",
+            "Aşırı su tohum için neden sorun olabilir?",
+            "Hava alamayıp çürüyebilir",
+            [
+              "Güneşi daha çok toplar",
+              "Kökü hemen meyveye dönüşür",
+              "Sıcaklığı kendiliğinden düşürür",
+            ],
+            "Üçüncü cümle aşırı suda hava alamayan tohumun çürüyebileceğini söylüyor.",
+            "‘Su çok fazlaysa’ bölümündeki sonucu bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Meyve Çekirdeklerinden Meyve Ağacına",
+          "https://bilimgenc.tubitak.gov.tr/makale/meyve-cekirdeklerinden-meyve-agacina",
+          [
+            "Çimlenme için uygun miktarda su ve sıcaklık gerekir.",
+            "Tohum oksijenli solunumla enerji üretir; aşırı su hava almayı engelleyebilir.",
+          ],
+          "Metin kaynakta açıklanan çimlenme koşullarını ve aşırı su riskini kendi örnekleriyle özetler.",
+        ),
+      ),
+      station(
+        "b5-strategy",
+        "Öğrenme hakkındaki iddiaları kanıtla sınamayı öğren",
+        "COMMON_STRATEGIES",
+        ["RC_EVIDENCE", "RC_INFERENCE"],
+        "Bir araştırma bulgusuyla geniş ve kanıtlanmamış iddiayı birbirinden ayırır.",
+        "Uyku ve öğrenme bulguları",
+        "Uyku, gün içinde öğrenilen bilgilerin bellekte pekişmesine katkı sağlayabilir. Bazı deneylerde uyku sırasında verilen bir ipucunun daha önce öğrenilmiş bilgiyi hatırlamayı desteklediği görüldü. Bu sonuçlar, kişinin uykuda her tür yeni bilgiyi kesin olarak öğrendiğini kanıtlamaz.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "b5-strategy-1",
+            "Metin uykunun hangi sürece katkı sağlayabileceğini söylüyor?",
+            "Öğrenilmiş bilgilerin pekişmesine",
+            [
+              "Her yeni bilginin otomatik oluşmasına",
+              "Bütün anıların silinmesine",
+              "Uyku gereksiniminin ortadan kalkmasına",
+            ],
+            "İlk cümle bellekte pekişmeye katkıdan söz ediyor.",
+            "İlk cümledeki ‘katkı sağlayabilir’ ifadesine bak.",
+          ),
+          q(
+            "b5-strategy-2",
+            "Deneylerde uyku sırasında hangi ipucu kullanılmış?",
+            "Önceden öğrenilenlerle eşlenen ipucu",
+            ["Daha önce görülmemiş bir sınav", "Gün ışığının süresi", "Öğrenmeyle ilgisiz görev"],
+            "İkinci cümle ipucunun daha önce öğrenilmiş bilgiyle ilişkili olduğunu belirtiyor.",
+            "İkinci cümlede ipucuyla neyin eşleştirildiğini bul.",
+          ),
+          q(
+            "b5-strategy-3",
+            "Bu bulgulardan hangi iddia çıkarılamaz?",
+            "Her yeni bilginin uykuda kesin öğrenildiği",
+            [
+              "Uykunun belleği etkileyebileceği",
+              "Bazı ipuçlarının hatırlamayı destekleyebileceği",
+              "Araştırmaların belirli deneylere dayandığı",
+            ],
+            "Son cümle bu geniş iddiayı kanıtlanmış saymıyor.",
+            "Son cümlede kanıtlanmadığı söylenen iddiayı seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Öğrenmek İçin Uykuya Dalmak",
+          "https://bilimgenc.tubitak.gov.tr/uykuda-ogrenme",
+          [
+            "Uyku gün içinde öğrenilenleri pekiştirebilir.",
+            "Uyku sırasında sunulan eşlenmiş ipuçları önce öğrenilmiş bilgilerin hatırlanmasını destekleyebilir; bu, her yeni bilginin uykuda öğrenildiğini kanıtlamaz.",
+          ],
+          "Özgün metin araştırma bulgusunun kapsamını ve kanıtlamadığı iddiayı özellikle ayırır.",
+        ),
+      ),
+      station(
+        "b5-integrated",
+        "Bir öğrenme bulgusunu çalışma planına aktar",
+        "INTEGRATED_PRACTICE",
+        ["RC_INFERENCE", "RC_CAUSE_EFFECT", "RC_MAIN_IDEA"],
+        "Hatırlamayı destekleyen bulguyu aşırı genellemeden uygulanabilir bir tekrar planına dönüştürür.",
+        "Ders tekrarı ve dinlenme",
+        "Bir öğrenci yeni kavramları akşam çalışıp kısa notlar çıkardı. Araştırma yazısı, uykunun gün içindeki öğrenmeleri pekiştirebildiğini; ancak uyurken her konunun kendiliğinden öğrenileceğinin kanıtlanmadığını açıklıyor. Öğrenci bu nedenle ertesi gün notlarını yeniden okuyup kendini sınamayı planladı.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "b5-integrated-1",
+            "Öğrenci ilk olarak ne yaptı?",
+            "Akşam çalışıp not çıkardı",
+            ["Notları uyurken dinletti", "Çalışmayı tamamen bıraktı", "Konuları başkasına sordu"],
+            "İlk cümle akşam çalışmayı ve not çıkarmayı anlatıyor.",
+            "İlk cümledeki iki eylemi bul.",
+          ),
+          q(
+            "b5-integrated-2",
+            "Ertesi günkü plan hangi yaklaşımla uyumludur?",
+            "Notları yeniden gözden geçirip kendini sınamakla",
+            [
+              "Bütün bilgiyi uykuda öğrenmeyi beklemekle",
+              "Notları okumadan sınava girmekle",
+              "Dinlenmeyi tamamen bırakmakla",
+            ],
+            "Son cümlede notları yeniden okuma ve kendini sınama planı var.",
+            "Son cümledeki iki plan adımını eşleştir.",
+          ),
+          q(
+            "b5-integrated-3",
+            "Metindeki araştırma bilgisi hangi sınırı koyuyor?",
+            "Uyku belleği destekler, her konuyu öğretmez",
+            [
+              "Uyku belleği her zaman zayıflatır",
+              "Not tutmak bütün konuları tek başına öğretir",
+              "Tekrar yapmak hiçbir durumda gerekmez",
+            ],
+            "İkinci cümle pekiştirme olasılığını korurken uykuda tüm konuların öğrenildiğini reddediyor.",
+            "İkinci cümlede hem desteklenen hem desteklenmeyen iddiayı bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Öğrenmek İçin Uykuya Dalmak",
+          "https://bilimgenc.tubitak.gov.tr/uykuda-ogrenme",
+          [
+            "Uyku gün içinde öğrenilen bilgilerin pekişmesine katkıda bulunabilir.",
+            "Uyku sırasında yeni bilgilerin genel ve kesin biçimde öğrenildiği iddiası kanıtlanmış değildir.",
+          ],
+          "Özgün örnek, kaynağın sınırlandırdığı bulguyu ertesi gün yapılan etkin tekrar davranışına uygular.",
+        ),
+      ),
+      station(
+        "b5-assessment",
+        "Çimlenme gözleminde değişken ve çıkarımı değerlendir",
+        "MULTI_SKILL_ASSESSMENT",
+        ["RC_DETAIL", "RC_CAUSE_EFFECT", "RC_INFERENCE"],
+        "Gözlem sonucunu belirtilen koşullarla sınırlar ve ölçülmeyen değişkeni fark eder.",
+        "İki tohum kabı",
+        "Bir sınıf iki tohum kabını nemli tuttu; birini oda sıcaklığında, diğerini çok sıcak bir yerde bekletti. Oda sıcaklığındaki kapta çimlenme görüldü, sıcak kaptaki tohumların bir bölümü kurudu. Öğretmen bu gözlemden bütün bitki türlerinin aynı sıcaklıkta çimlendiği sonucunun çıkarılamayacağını belirtti.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "b5-assessment-1",
+            "Sınıf hangi koşulu iki kapta da benzer tuttu?",
+            "Nem",
+            ["Işık rengi", "Tohum türü", "Kapların konumu"],
+            "İlk cümle iki kabın da nemli tutulduğunu söylüyor.",
+            "İlk cümlede iki kap için ortak olan niteliği bul.",
+          ),
+          q(
+            "b5-assessment-2",
+            "Metindeki çimlenme sonucu hangi koşulla birlikte görülüyor?",
+            "Oda sıcaklığındaki kapla",
+            ["Çok sıcak yerdeki kapla", "Kuru ve kapalı dolapla", "Hiç su verilmeyen kapla"],
+            "İkinci cümlede oda sıcaklığındaki kapta çimlenme görülüyor.",
+            "Sonucu ve bulunduğu kabı birlikte tara.",
+          ),
+          q(
+            "b5-assessment-3",
+            "Öğretmenin özellikle reddettiği genelleme nedir?",
+            "Bütün türlerin aynı sıcaklıkta çimleneceği",
+            [
+              "Kapların nemli tutulduğu",
+              "Sıcak kaptaki bazı tohumların kuruduğu",
+              "Bir kapta çimlenme görüldüğü",
+            ],
+            "Son cümle bütün türlere aynı sıcaklık genellemesini desteklemiyor.",
+            "Son cümlede ‘bütün’ sözcüğüyle başlayan iddiayı bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Meyve Çekirdeklerinden Meyve Ağacına",
+          "https://bilimgenc.tubitak.gov.tr/makale/meyve-cekirdeklerinden-meyve-agacina",
+          [
+            "Çimlenme için uygun sıcaklık ve su koşulları gerekir; yüksek sıcaklık ya da susuzluk tohumu kurutabilir.",
+          ],
+          "Özgün sınıf gözlemi kaynakta açıklanan çimlenme koşullarını kullanır; sonucu tüm türlere genellemez.",
+        ),
+      ),
+    ],
+  },
+  {
+    routeFamily: "C",
+    priorSequence: 4,
+    priorPathCode: "EDUCATION_V2_P1_C_INFERENCE_EVIDENCE_CYCLE_4_G8_12",
+    nextSequence: 5,
+    positionOffset: 1,
+    stations: [
+      station(
+        "c5-fast-reading",
+        "Göç zamanını belirleyen ışık bilgisini bul",
+        "FAST_READING",
+        ["FAST_ATTENTION", "RC_DETAIL"],
+        "Bir açıklamada göç zamanıyla ilişkili çevresel ipucunu hızla belirler.",
+        "Gün uzunluğu ve göç",
+        "Göçmen kuşlar, gün ışığının 24 saat içindeki süresini yani fotoperiyodu izler. Kışın sonu ve ilkbaharın başında günlerin uzaması, kuşların vücutlarında bazı fizyolojik ve biyokimyasal değişimleri tetikleyebilir. Bu değişimler göç zamanlamasında rol oynar.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "c5-fast-1",
+            "Kuşların izlediği gün ışığı süresinin adı nedir?",
+            "Fotoperiyot",
+            ["Ekolokasyon", "Çimlenme", "Yoğunlaşma"],
+            "İlk cümle gün ışığının gün içindeki süresini fotoperiyot olarak adlandırıyor.",
+            "İlk cümledeki terimi bul.",
+          ),
+          q(
+            "c5-fast-2",
+            "Günlerin uzaması hangi dönemde belirtiliyor?",
+            "Kış sonu ve ilkbahar başında",
+            [
+              "Yaz sonu ve sonbahar ortasında",
+              "Sonbahar başı ve kış ortasında",
+              "İlkbahar sonu ve yaz ortasında",
+            ],
+            "İkinci cümle bu dönemi açıkça veriyor.",
+            "İkinci cümledeki mevsim aralığını seç.",
+          ),
+          q(
+            "c5-fast-3",
+            "Gün uzunluğundaki değişim neyi tetikleyebilir?",
+            "Vücut süreçlerindeki değişimleri",
+            ["Deniz suyunun tuzunu", "Yeryüzünün dönüşünü", "Kuşların tüy rengini her zaman"],
+            "İkinci cümle vücutta bazı fizyolojik ve biyokimyasal değişimlerin tetiklenebileceğini bildiriyor.",
+            "‘Tetikleyebilir’ sözcüğünden sonraki ifadeyi bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Kuşlar Ne Zaman Göç Edeceklerini Nasıl Biliyor?",
+          "https://bilimgenc.tubitak.gov.tr/makale/kuslar-ne-zaman-goc-edeceklerini-nasil-biliyor",
+          [
+            "Göçmen kuşlar gün ışığı süresini (fotoperiyot) izler.",
+            "Günlerin uzaması fizyolojik ve biyokimyasal değişimleri tetikleyebilir.",
+          ],
+          "Metin kaynağın fotoperiyot ve göç zamanlaması açıklamasını özgün biçimde özetler.",
+        ),
+      ),
+      station(
+        "c5-comprehension",
+        "Kuşların göç hazırlığındaki neden-sonuç zincirini kur",
+        "READING_COMPREHENSION",
+        ["RC_CAUSE_EFFECT", "RC_SEQUENCE"],
+        "Gün ışığı değişimi ile göçe hazırlık arasındaki kanıtlanan bağı açıklar.",
+        "Işık değişiminden hazırlığa",
+        "Günlerin uzayıp kısalması, kuşlarda fizyolojik ve biyokimyasal değişimlere yol açabilir. Bazı göçmen kuşlarda hormon değişimleri daha fazla beslenme ve kilo alımıyla ilişkilidir. Bu hazırlık, üreme alanlarına uygun zamanda ulaşmaya yardımcı olur; tek başına göç rotasının yönünü açıklamaz.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "c5-comprehension-1",
+            "Gün uzunluğundaki değişim kuşlarda neyle ilişkilendiriliyor?",
+            "Fizyolojik vücut değişimleriyle",
+            [
+              "Yalnızca kanat renginin değişmesiyle",
+              "Deniz akıntısının yön değiştirmesiyle",
+              "Yuvanın kendiliğinden taşınmasıyla",
+            ],
+            "İlk cümle gün uzunluğuyla bu vücut değişimlerini bağlıyor.",
+            "İlk cümlede neden-sonuç bağını bul.",
+          ),
+          q(
+            "c5-comprehension-2",
+            "Bazı hormon değişimleri hangi davranışla ilişkilidir?",
+            "Daha çok beslenmeyle",
+            [
+              "Gün ışığını ölçmeyi bırakmakla",
+              "Yumurtaları başka türe vermekle",
+              "Ekolokasyonla avlanmakla",
+            ],
+            "İkinci cümle hormon değişimini daha fazla beslenme ve kilo alımıyla ilişkilendiriyor.",
+            "İkinci cümledeki ilişkiyi seç.",
+          ),
+          q(
+            "c5-comprehension-3",
+            "Metin hangi konunun açıklanmadığını özellikle belirtiyor?",
+            "Göç rotasının yönünü",
+            [
+              "Gün uzunluğunun değişmesini",
+              "Beslenme ve kilo alımını",
+              "Üreme alanına zamanında varmayı",
+            ],
+            "Son cümle bu hazırlığın rota yönünü tek başına açıklamadığını söylüyor.",
+            "Son cümledeki sınırı bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Kuşlar Ne Zaman Göç Edeceklerini Nasıl Biliyor?",
+          "https://bilimgenc.tubitak.gov.tr/makale/kuslar-ne-zaman-goc-edeceklerini-nasil-biliyor",
+          [
+            "Gün uzunluğu vücut sistemlerindeki mevsimsel değişimleri tetikleyebilir.",
+            "Hormon ve beslenme değişimleri göç hazırlığına katkı sağlar.",
+          ],
+          "Özgün metin kaynağın zamanlama hazırlığına ilişkin neden-sonuç ilişkilerini ayırır; yön bulmayla karıştırmaz.",
+        ),
+      ),
+      station(
+        "c5-strategy",
+        "Yarasaların yön bulma kanıtlarını kapsamına göre ayır",
+        "COMMON_STRATEGIES",
+        ["RC_EVIDENCE", "RC_INFERENCE"],
+        "Deney bulgularını doğrudan ölçtüğü mesafe ve koşullarla sınırlı yorumlar.",
+        "Yarasa deneyindeki iki araç",
+        "Yarasalar yakın çevredeki nesnelerin yankılarını kullanarak konum ve engel bilgisi edinebilir; bu yöntem kısa mesafelerde etkilidir. Fare kulaklı yarasalar ise yuvalarından kilometrelerce uzağa gidip geri dönebilir. Bu gözlem, uzun mesafeli yön bulmada ekolokasyon dışında başka ipuçlarının da rol oynayabileceğini düşündürür.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "c5-strategy-1",
+            "Ekolokasyon yarasaya hangi bilgileri sağlayabilir?",
+            "Konum, mesafe ve engelleri",
+            [
+              "Gün ışığının yıl içindeki süresini",
+              "Deniz suyunun tuz miktarını",
+              "Yuvanın geçmiş sıcaklığını",
+            ],
+            "İlk cümle yankıların konum, mesafe ve engel bilgisi sağladığını belirtiyor.",
+            "İlk cümlede sıralanan üç bilgiyi seç.",
+          ),
+          q(
+            "c5-strategy-2",
+            "Ekolokasyon metinde hangi uzaklıkta etkili sayılıyor?",
+            "Yakın çevredeki kısa mesafelerde",
+            [
+              "Yalnızca kıtalar arası uzaklıklarda",
+              "Her uzaklıkta aynı biçimde",
+              "Sadece yuvanın yakın çevresinde",
+            ],
+            "İlk cümle yöntemin kısa mesafelerde etkili olduğunu söylüyor.",
+            "İlk cümlenin sonundaki sınırlamayı bul.",
+          ),
+          q(
+            "c5-strategy-3",
+            "Uzun mesafeli dönüş gözlemi hangi çıkarımı düşündürüyor?",
+            "Başka ipuçları da olabilir",
+            [
+              "Yarasalar yankı çıkaramaz",
+              "Her yarasa aynı yuvada yaşar",
+              "Mesafe yön bulmayı etkilemez",
+            ],
+            "Son cümle ekolokasyon dışında ipuçlarının da rol oynayabileceği çıkarımını yapıyor.",
+            "Son cümlede ‘düşündürür’ denilen sonucu seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Fare Kulaklı Yarasalar Yönlerini Nasıl Buluyor?",
+          "https://bilimgenc.tubitak.gov.tr/makale/fare-kulakli-yarasalar-yonlerini-nasil-buluyor",
+          [
+            "Ekolokasyon yankıyla yakın çevrede konum, mesafe ve engel bilgisi sağlar; kısa mesafede etkilidir.",
+            "Kilometrelerce uzaktan yuvaya dönüş başka mekanizmaların da olabileceğini düşündürür.",
+          ],
+          "Özgün metin kaynaktaki yöntem kapsamını ve uzun mesafe gözleminden çıkarılan sınırlı sonucu karşılaştırır.",
+        ),
+      ),
+      station(
+        "c5-integrated",
+        "Manyetik alan deneyini karşılaştırmalı kanıtla yorumla",
+        "INTEGRATED_PRACTICE",
+        ["RC_EVIDENCE", "RC_CAUSE_EFFECT", "RC_INFERENCE"],
+        "Kontrol ve deney koşullarındaki farkı belirleyip ölçülen yönelimi yorumlar.",
+        "Doğal ve döndürülmüş alan",
+        "Bir deneyde yarasaların bir bölümü doğal manyetik alan altında, diğer bölümü yönü yapay olarak döndürülmüş bir alanda tutuldu. Gün batımını algılama koşulu iki grup için de aynıydı. Doğal alandaki yarasalar yuvaya yönelirken, döndürülmüş alana maruz kalanlar alan yönüne uygun biçimde yanlış yöne uçtu.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "c5-integrated-1",
+            "İki grup arasında değiştirilen temel koşul neydi?",
+            "Manyetik alanın yönü",
+            ["Yuvanın uzaklığı", "Gün batımının saati", "Yarasaların türü"],
+            "İlk cümle bir grupta manyetik alan yönünün yapay olarak döndürüldüğünü söylüyor.",
+            "İlk cümlede doğal ve yapay koşulu karşılaştır.",
+          ),
+          q(
+            "c5-integrated-2",
+            "İki grup için aynı tutulan koşul hangisiydi?",
+            "Gün batımını algılamaları",
+            ["Aynı yöne uçmaları", "Aynı yuvaya bırakılmaları", "Yapay alana maruz kalmaları"],
+            "İkinci cümle gün batımını algılamanın iki grupta da sabit olduğunu belirtiyor.",
+            "İkinci cümlede ‘aynı’ olan koşulu bul.",
+          ),
+          q(
+            "c5-integrated-3",
+            "Yapay alan grubunun uçuşu hangi bulguyla uyumludur?",
+            "Yönü döndürülen alanın yönüne uymasıyla",
+            [
+              "Güneş ışığını tamamen kaybetmesiyle",
+              "Ekolokasyonun her koşulda durmasıyla",
+              "Doğal alan grubuyla aynı yöne uçmasıyla",
+            ],
+            "Son cümle bu grubun alan yönüne uygun yanlış yöne uçtuğunu söylüyor.",
+            "Son cümlede uçuş yönünün neye uyduğunu seç.",
+          ),
+        ],
+        sourceEvidence(
+          "Fare Kulaklı Yarasalar Yönlerini Nasıl Buluyor?",
+          "https://bilimgenc.tubitak.gov.tr/makale/fare-kulakli-yarasalar-yonlerini-nasil-buluyor",
+          [
+            "Deneyde bir grup doğal, diğer grup yönü değiştirilmiş manyetik alanda tutuldu.",
+            "Doğal alandaki yarasalar yuvaya yöneldi; döndürülmüş alan grubu alan yönüne uygun yanlış yöne uçtu.",
+          ],
+          "Metin kaynağın deney karşılaştırmasını ve gözlenen sonucu yeniden anlatır; kontrollü farkı soru konusu yapar.",
+        ),
+      ),
+      station(
+        "c5-assessment",
+        "Yön bulma açıklamasında kanıt ve sınırları birlikte değerlendir",
+        "MULTI_SKILL_ASSESSMENT",
+        ["RC_MAIN_IDEA", "RC_EVIDENCE", "RC_INFERENCE"],
+        "Ekolokasyon ve manyetik alan bulgularını birbirini dışlamadan birleştirir.",
+        "Birbirini tamamlayan ipuçları",
+        "Yarasalar yakın çevrede yankılardan yararlanır; bu bilgi kısa mesafede engelleri tanımaya yardım eder. Fare kulaklı yarasaların uzak bırakıldıklarında yuvalarına dönmesi ve yapay manyetik alanın yönüyle uyumlu yanlış yöne uçması, Dünya'nın manyetik alanının uzun mesafeli yön bulmada da rol oynayabileceğini düşündürür. Deney, yankı sisteminin önemsiz olduğunu göstermez.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "c5-assessment-1",
+            "Yankılar hangi durumda yarasaya yardımcı olur?",
+            "Yakın çevredeki engelleri tanımada",
+            [
+              "Gün uzunluğunu ölçmede",
+              "Tohumun çimlenmesini sağlamada",
+              "Manyetik alanı değiştirmede",
+            ],
+            "İlk cümle yankıların kısa mesafede engel tanımaya yardım ettiğini söylüyor.",
+            "İlk cümlede yankıların işlevini bul.",
+          ),
+          q(
+            "c5-assessment-2",
+            "Manyetik alan deneyinden hangi sınırlı sonuç çıkar?",
+            "Manyetik alan yön bulmaya yardım edebilir",
+            [
+              "Ekolokasyon yakın çevredeki engelleri göstermez",
+              "Bütün canlılar aynı yolu izler",
+              "Gün batımı yön bulmada etkisiz kalır",
+            ],
+            "İkinci cümle manyetik alanın rol oynayabileceğini düşündürüyor; kesin ve tek mekanizma demiyor.",
+            "‘Düşündürür’ sözcüğünün bağladığı sonucu seç.",
+          ),
+          q(
+            "c5-assessment-3",
+            "Metin hangi iddiayı desteklemiyor?",
+            "Ekolokasyonun önemsiz olduğu",
+            [
+              "Yankıların kısa mesafede yararlı olduğu",
+              "Manyetik alanın rol oynayabileceği",
+              "Deneyde yapay alan kullanıldığı",
+            ],
+            "Son cümle deneyin ekolokasyonun önemsiz olduğunu göstermediğini açıkça söyler.",
+            "Son cümlede reddedilen iddiayı bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Fare Kulaklı Yarasalar Yönlerini Nasıl Buluyor?",
+          "https://bilimgenc.tubitak.gov.tr/makale/fare-kulakli-yarasalar-yonlerini-nasil-buluyor",
+          [
+            "Ekolokasyon kısa mesafede etkilidir.",
+            "Döndürülmüş manyetik alan deneyinin sonucu, manyetik alanın yön bulmada kullanılabileceğini gösterir.",
+          ],
+          "Özgün değerlendirme, iki bulguyu birbirini dışlamayan farklı kapsamlı araçlar olarak birleştirir.",
+        ),
+      ),
+    ],
+  },
+  {
+    routeFamily: "D",
+    priorSequence: 4,
+    priorPathCode: "EDUCATION_V2_P1_D_VOCABULARY_CONTEXT_CYCLE_4_G8_12",
+    nextSequence: 5,
+    positionOffset: 3,
+    stations: [
+      station(
+        "d5-fast-reading",
+        "Mercan metninde canlı ve yapı ilişkisini bul",
+        "FAST_READING",
+        ["FAST_ATTENTION", "RC_DETAIL"],
+        "Bir bilgi yazısındaki tanım, yapı ve oluşum bilgisini hızla seçer.",
+        "Mercan kolonileri",
+        "Mercanlar bitki ya da kaya değil, hayvandır. Her mercan bireyine polip denir; çok sayıda polip bir araya gelerek koloni oluşturur. Sert mercanların birikmesiyle büyük resifler zaman içinde gelişebilir.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "d5-fast-1",
+            "Metne göre mercanlar hangi canlı grubundadır?",
+            "Hayvanlar",
+            ["Bitkiler", "Mantarlar", "Bakteriler"],
+            "İlk cümle mercanların hayvan olduğunu doğrudan söylüyor.",
+            "İlk cümledeki karşıtlığı bul.",
+          ),
+          q(
+            "d5-fast-2",
+            "Tek bir mercan bireyine ne ad verilir?",
+            "Polip",
+            ["Koloni", "Resif", "Yosun"],
+            "İkinci cümle bireyin polip olarak adlandırıldığını belirtiyor.",
+            "İkinci cümledeki tanımı seç.",
+          ),
+          q(
+            "d5-fast-3",
+            "Büyük resifler hangi mercanların birikmesiyle oluşabilir?",
+            "Sert mercanların",
+            ["Yalnızca yumuşak mercanların", "Kıyı bitkilerinin", "Deniz kuşlarının"],
+            "Son cümle sert mercanların birikmesini resif oluşumuyla ilişkilendiriyor.",
+            "Son cümlede oluşumun öznesini bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Mercanlar",
+          "https://bilimgenc.tubitak.gov.tr/makale/mercanlar",
+          [
+            "Mercanlar hayvandır; bireylerine polip denir.",
+            "Milyonlarca polip koloni oluşturur; sert mercanlar büyük resifler kurar.",
+          ],
+          "Özgün metin kaynakta açıklanan canlı sınıfı, birey adı ve koloni oluşumunu kısa tanımlara dönüştürür.",
+        ),
+      ),
+      station(
+        "d5-comprehension",
+        "Mercan sözcüklerini yapı özellikleriyle eşleştir",
+        "READING_COMPREHENSION",
+        ["RC_VOCABULARY_CONTEXT", "RC_COMPARE_CONTRAST"],
+        "Sert ve yumuşak mercan ayrımını yapı ve koloni özellikleriyle açıklar.",
+        "Sert ve yumuşak yapılar",
+        "Sert mercanlarda kalkerli maddeler bulunur; bunlar büyük resiflerin oluşumuna katılabilir. Yumuşak mercanlar bu kalkerli maddeleri taşımaz ve daha küçük koloniler oluşturabilir. Bu ayrım, ‘sert’ ve ‘yumuşak’ sözcüklerinin metinde yalnızca dokunma hissini anlatmadığını gösterir.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "d5-comprehension-1",
+            "Sert mercanlarda hangi maddeler bulunur?",
+            "Kalkerli maddeler",
+            ["Yalnızca tatlı su", "Bitki lifleri", "Kum taneleri"],
+            "İlk cümle sert mercanların yapısındaki kalkerli maddeleri veriyor.",
+            "İlk cümlede ‘bulunur’ denilen yapıyı bul.",
+          ),
+          q(
+            "d5-comprehension-2",
+            "Yumuşak mercanlar metinde nasıl tanımlanıyor?",
+            "Küçük koloniler oluşturabilir",
+            ["Her zaman ada kurar", "Kalkerli maddeler taşır", "Resif oluşturamaz ve yaşayamaz"],
+            "İkinci cümle yumuşak mercanların küçük koloniler oluşturabileceğini söylüyor.",
+            "İkinci cümledeki olasılık bildiren ifadeyi seç.",
+          ),
+          q(
+            "d5-comprehension-3",
+            "‘Sert’ ve ‘yumuşak’ ayrımı metinde neyi anlatıyor?",
+            "Mercanların yapı özelliklerini",
+            ["Deniz suyunun tadını", "Poliplerin hareket hızını", "Kolonilerin yaşını"],
+            "Son cümle sözcüklerin yapı özellikleriyle ilgili olduğunu açıklıyor.",
+            "Son cümlenin açıkladığı anlam alanını bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Mercanlar",
+          "https://bilimgenc.tubitak.gov.tr/makale/mercanlar",
+          [
+            "Sert mercanlar kalkerli maddeler içerir ve büyük resifleri oluşturur.",
+            "Yumuşak mercanlarda bu maddeler bulunmaz; küçük koloniler oluşturabilirler.",
+          ],
+          "Metin kaynakta verilen karşılaştırmayı bağlam içi sözcük anlamı çalışmasına taşır.",
+        ),
+      ),
+      station(
+        "d5-strategy",
+        "Polip ve koloni anlamını metin ipuçlarıyla çıkar",
+        "COMMON_STRATEGIES",
+        ["RC_VOCABULARY_CONTEXT", "RC_INFERENCE"],
+        "Bilinmeyen bir terimin anlamını tanım ve parça-bütün ipuçlarından belirler.",
+        "Küçük birey, büyük yapı",
+        "Mercan kolonisi, çok sayıda küçük bireyin bir araya gelmesiyle oluşur. Kaynakta bu bireylerin her birinin polip olarak adlandırıldığı ve koloni bireylerinin birbirine bağlı olduğu anlatılır. Bu cümlelerde ‘koloni’, tek bir canlıdan çok birlikte yaşayan bireylerin oluşturduğu bütünü anlatır.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "d5-strategy-1",
+            "‘Polip’ sözcüğü burada neyi karşılıyor?",
+            "Bir mercan bireyini",
+            ["Bütün bir denizi", "Bir resif türünü", "Su altındaki bitkiyi"],
+            "İkinci cümle her bir bireyin polip diye adlandırıldığını söylüyor.",
+            "İkinci cümledeki tanım ipucunu kullan.",
+          ),
+          q(
+            "d5-strategy-2",
+            "‘Koloni’ sözcüğünün anlamını hangi ipucu belirginleştiriyor?",
+            "Çok sayıda bireyin bir araya gelmesi",
+            [
+              "Bir bireyin tek başına yaşaması",
+              "Suyun sıcaklığının değişmesi",
+              "Bir polipin yer değiştirmesi",
+            ],
+            "İlk cümle koloninin çok sayıda bireyden oluştuğunu belirtiyor.",
+            "İlk cümlede parça ve bütünü ayır.",
+          ),
+          q(
+            "d5-strategy-3",
+            "Metinde koloni bireyleri için hangi özellik veriliyor?",
+            "Birbirine bağlı olmaları",
+            [
+              "Hepsinin aynı büyüklükte olması",
+              "Her birinin farklı tür olması",
+              "Yalnızca gündüz beslenmeleri",
+            ],
+            "İkinci cümle koloni bireylerinin birbirine bağlı olduğunu söylüyor.",
+            "İkinci cümlede ‘bireylerin’ ardından gelen niteliği bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Mercanlar",
+          "https://bilimgenc.tubitak.gov.tr/makale/mercanlar",
+          [
+            "Polip tek bir mercan bireyidir; çok sayıda polip koloni oluşturur.",
+            "Kolonideki bireyler birbirine bağımlı olabilir.",
+          ],
+          "Özgün paragraf, kaynağın tanım ve parça-bütün ipuçlarını terim anlamı çıkarma becerisi için kullanır.",
+        ),
+      ),
+      station(
+        "d5-integrated",
+        "Resif sözcüğünün anlamını işlevinden çıkar",
+        "INTEGRATED_PRACTICE",
+        ["RC_VOCABULARY_CONTEXT", "RC_MAIN_IDEA", "RC_INFERENCE"],
+        "Bir coğrafi terimi oluşumu ve canlılar için işleviyle ilişkilendirir.",
+        "Resif birikimi ve yaşam alanı",
+        "Sert mercanların oluşturduğu yapılar uzun zaman içinde birikerek resifleri meydana getirir. Bu girintili çıkıntılı alanlarda çok sayıda deniz canlısı barınabilir; bazı balıklar burada beslenme ve üreme alanı bulur. Bu nedenle metindeki ‘resif’, yalnızca bir kaya yığını değil, canlılara yaşam alanı sağlayan bir oluşumdur.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "d5-integrated-1",
+            "Resiflerin oluşumu metinde nasıl bir süreç olarak anlatılıyor?",
+            "Uzun zaman alan bir süreç",
+            [
+              "Tek bir günde tamamlanan bir olay",
+              "Yalnızca bir mevsim süren bir değişim",
+              "Kısa sürede biten bir oluşum",
+            ],
+            "İlk cümle resiflerin sert mercan yapılarının uzun sürede birikmesiyle oluştuğunu bildiriyor.",
+            "İlk cümledeki oluşum sürecini bul.",
+          ),
+          q(
+            "d5-integrated-2",
+            "Resiflerin canlılar için sağladığı işlevlerden biri hangisidir?",
+            "Barınma alanı sunması",
+            [
+              "Deniz suyunu tatlılaştırması",
+              "Bütün akıntıları durdurması",
+              "Güneş ışığını üretmesi",
+            ],
+            "İkinci cümle resiflerde deniz canlılarının barınabildiğini söylüyor.",
+            "İkinci cümlede canlıların bulduğu alanı seç.",
+          ),
+          q(
+            "d5-integrated-3",
+            "Metin ‘resif’ sözcüğünü hangi anlamla genişletiyor?",
+            "Canlılar için yaşam alanı",
+            [
+              "Her türlü deniz bitkisi",
+              "Yalnızca geçici kum birikintisi",
+              "Bir balığın tek başına yaptığı yuva",
+            ],
+            "Son cümle resifin canlılara yaşam alanı sağladığını vurguluyor.",
+            "Son cümledeki ‘yalnızca değil’ yapısını tamamla.",
+          ),
+        ],
+        sourceEvidence(
+          "Mercanlar",
+          "https://bilimgenc.tubitak.gov.tr/makale/mercanlar",
+          [
+            "Resifler sert mercanların birikmesiyle uzun sürede oluşur.",
+            "Resifler çok sayıda deniz canlısına barınma ve üreme alanı sağlar.",
+          ],
+          "Özgün metin terimin oluşumunu ve ekolojik işlevini tek paragrafta bağlar.",
+        ),
+      ),
+      station(
+        "d5-assessment",
+        "Duyu sözcüğünü bilimsel mekanizmayla karıştırma",
+        "MULTI_SKILL_ASSESSMENT",
+        ["RC_VOCABULARY_CONTEXT", "RC_CAUSE_EFFECT", "RC_INFERENCE"],
+        "Serinlik hissi ile gerçek çevre sıcaklığını ayırt ederek reseptör açıklamasını yorumlar.",
+        "Serinlik hissinin kaynağı",
+        "Mentollü bir ürün kullanan kişi ağzında ya da cildinde serinlik hissedebilir. Mentol, düşük sıcaklıkları algılayan TRPM8 reseptörlerini etkinleştirir ve beyne soğukluk sinyali gönderilmesine yol açar. Bu his, çevre sıcaklığının gerçekten düştüğünü tek başına göstermez.",
+        "Özgün anlatım; doğrulanmış olgular kaynak kaydına bağlandı.",
+        [
+          q(
+            "d5-assessment-1",
+            "Serinlik sinyalinin gönderilmesinde hangi reseptör adı geçiyor?",
+            "TRPM8",
+            ["Polip", "Fotoreseptör", "Ekolokasyon"],
+            "İkinci cümle reseptörü TRPM8 olarak adlandırıyor.",
+            "İkinci cümlede büyük harfli kısaltmayı bul.",
+          ),
+          q(
+            "d5-assessment-2",
+            "Mentol reseptörleri etkinleştirince ne oluşabilir?",
+            "Soğukluk hissi",
+            ["Gerçek yağış", "Yeni bir mercan kolonisi", "Gün ışığının uzaması"],
+            "İkinci cümle beyne soğukluk sinyali gittiğini açıklıyor.",
+            "İkinci cümlede sinyalin oluşturduğu algıyı seç.",
+          ),
+          q(
+            "d5-assessment-3",
+            "Serinlik hissi hangi sonucu tek başına kanıtlamaz?",
+            "Çevre sıcaklığının gerçekten düştüğünü",
+            [
+              "Mentolün kullanıldığını",
+              "Bir reseptörün etkinleşebildiğini",
+              "Soğukluk algısı oluştuğunu",
+            ],
+            "Son cümle hissin çevre sıcaklığındaki gerçek düşüşü göstermediğini belirtiyor.",
+            "Son cümlede özellikle kanıtlamadığı sonucu bul.",
+          ),
+        ],
+        sourceEvidence(
+          "Mentol Neden Soğuk Hissi Verir?",
+          "https://bilimgenc.tubitak.gov.tr/makale/mentol-neden-soguk-hissi-verir",
+          [
+            "Mentol TRPM8 reseptörlerini etkinleştirerek ortam sıcaklığı değişmeden soğuk hissi oluşturabilir.",
+          ],
+          "Özgün metin duyusal algı ile ölçülen çevre sıcaklığını ayırır; terim ve neden-sonuç soruları bu ayrıma dayanır.",
+        ),
+      ),
+    ],
+  },
 ];
 
 export type EducationV2P1ExpansionDraftQuestion = DraftQuestion & {
@@ -1884,6 +2961,7 @@ export type EducationV2P1ExpansionDraftStation = Omit<DraftStation, "questions">
   sequence: number;
   pathCode: string;
   stepOrder: number;
+  difficulty: EducationV2P1ExpansionDifficulty;
   prerequisiteKey: string | null;
   contentVersionId: string;
   exerciseVersionId: string;
@@ -1892,6 +2970,7 @@ export type EducationV2P1ExpansionDraftStation = Omit<DraftStation, "questions">
 
 export type EducationV2P1ExpansionDraftCycle = LearningRouteCycle & {
   authoredStationCategories: readonly EducationV2P1ExpansionCategory[];
+  sourceVerifiedStationCount: number;
   authoringStatus: "DRAFT_NOT_RELEASED";
   sourceStations: readonly EducationV2P1ExpansionDraftStation[];
 };
@@ -1934,6 +3013,9 @@ function buildDraftCycle(route: RouteDraft): EducationV2P1ExpansionDraftCycle {
         sequence: route.nextSequence,
         pathCode,
         stepOrder: stepIndex + 1,
+        difficulty: (
+          ["FOUNDATION", "INTERMEDIATE", "INTERMEDIATE", "ADVANCED", "ADVANCED"] as const
+        )[stepIndex]!,
         prerequisiteKey:
           stepIndex === 0
             ? null
@@ -2051,6 +3133,9 @@ function buildDraftCycle(route: RouteDraft): EducationV2P1ExpansionDraftCycle {
     nextPathCode: null,
     publicationApproved: () => false,
     authoredStationCategories: sourceStations.map((item) => item.category),
+    sourceVerifiedStationCount: sourceStations.filter(
+      (item) => item.provenanceStatus === "SOURCE_VERIFIED",
+    ).length,
     authoringStatus: "DRAFT_NOT_RELEASED" as const,
     sourceStations,
   } satisfies EducationV2P1ExpansionDraftCycle;

@@ -35,6 +35,8 @@ export type LearningRouteCycle = {
   manifest: LearningCycleManifest;
   nextPathCode: string | null;
   authoredStationCategories?: readonly EducationV2P1ExpansionCategory[];
+  /** Number of authored stations with a checked, content-linked source citation. */
+  sourceVerifiedStationCount?: number;
   /** Source permission; a PUBLISHED database graph is a separate requirement. */
   publicationApproved: () => boolean;
 };
@@ -154,6 +156,7 @@ export type LearningRouteCoverage = {
   routeFamily: "A" | "B" | "C" | "D";
   authoredStationCount: number;
   releasedSourceStationCount: number;
+  sourceVerifiedDraftStationCount: number;
   targetStationCount: number;
   remainingAuthoredStations: number;
   categoryDistribution: "NOT_CLASSIFIED" | "PARTIALLY_CLASSIFIED";
@@ -177,6 +180,10 @@ export function summarizeLearningRouteCoverage(
       (count, cycle) => count + (cycle.publicationApproved() ? cycle.manifest.steps.length : 0),
       0,
     );
+    const sourceVerifiedDraftStationCount = routeCycles.reduce(
+      (count, cycle) => count + (cycle.sourceVerifiedStationCount ?? 0),
+      0,
+    );
     const categoryCounts = Object.fromEntries(
       Object.keys(EDUCATION_V2_P1_800_CATEGORY_TARGETS).map((category) => [category, 0]),
     ) as Record<EducationV2P1ExpansionCategory, number>;
@@ -191,6 +198,7 @@ export function summarizeLearningRouteCoverage(
       routeFamily,
       authoredStationCount,
       releasedSourceStationCount,
+      sourceVerifiedDraftStationCount,
       targetStationCount: LEARNING_ROUTE_STATION_TARGET,
       remainingAuthoredStations: Math.max(0, LEARNING_ROUTE_STATION_TARGET - authoredStationCount),
       categoryDistribution:

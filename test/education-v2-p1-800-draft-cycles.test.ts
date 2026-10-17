@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(8);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(12);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -24,8 +24,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       expect(validateLearningCycleManifest(draft.manifest)).toMatchObject({ valid: true });
       for (const station of draft.sourceStations) {
         expect(station.text.trim().length).toBeGreaterThan(80);
-        expect(station.sourceReference).toContain("Özgün 800 istasyon genişleme içeriği");
+        expect(station.sourceReference.trim().length).toBeGreaterThan(15);
         expect(station.outcome.trim().length).toBeGreaterThan(20);
+        expect(["FOUNDATION", "INTERMEDIATE", "ADVANCED"]).toContain(station.difficulty);
         expect(station.questions).toHaveLength(3);
         expect(new Set(station.skillCodes).size).toBe(station.skillCodes.length);
         for (const question of station.questions) {
@@ -107,8 +108,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       expect(routeShortest).toBeLessThanOrEqual(6);
     }
     expect(Math.max(...positionCounts) - Math.min(...positionCounts)).toBeLessThanOrEqual(1);
-    expect(uniqueLongest).toBeLessThan(30);
-    expect(uniqueShortest).toBeLessThan(30);
+    const totalQuestions = positionCounts.reduce((total, count) => total + count, 0);
+    expect(uniqueLongest / totalQuestions).toBeLessThan(0.25);
+    expect(uniqueShortest / totalQuestions).toBeLessThan(0.25);
   });
 
   it("counts these drafts separately as authored candidates, not released or production graphs", () => {
@@ -117,17 +119,38 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: 2,
-        READING_COMPREHENSION: 2,
-        COMMON_STRATEGIES: 2,
-        INTEGRATED_PRACTICE: 2,
-        MULTI_SKILL_ASSESSMENT: 2,
+        FAST_READING: 3,
+        READING_COMPREHENSION: 3,
+        COMMON_STRATEGIES: 3,
+        INTEGRATED_PRACTICE: 3,
+        MULTI_SKILL_ASSESSMENT: 3,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 35 : 20);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 40 : 25);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 165 : 180);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 160 : 175);
+      expect(result.sourceVerifiedDraftStationCount).toBe(5);
       expect(result.productionGraph).toBe("NOT_VERIFIED");
+    }
+  });
+
+  it("only counts source-traceable stations as verified and ties every new station to its source", () => {
+    for (const routeFamily of ["A", "B", "C", "D"] as const) {
+      const cycleNumber = routeFamily === "A" ? 6 : 5;
+      const cycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+        (candidate) => candidate.routeFamily === routeFamily && candidate.sequence === cycleNumber,
+      )!;
+      expect(cycle.sourceVerifiedStationCount).toBe(5);
+      expect(cycle.sourceStations).toHaveLength(5);
+      for (const station of cycle.sourceStations) {
+        expect(station.provenanceStatus).toBe("SOURCE_VERIFIED");
+        expect(station.sourceEvidence).toBeDefined();
+        expect(station.sourceEvidence?.url).toMatch(/^https:\/\//u);
+        expect(station.sourceEvidence?.title.trim().length).toBeGreaterThan(8);
+        expect(station.sourceEvidence?.verifiedFacts.length).toBeGreaterThan(0);
+        expect(station.sourceEvidence?.contentRelation.trim().length).toBeGreaterThan(20);
+        expect(station.difficulty).toBeTruthy();
+      }
     }
   });
 });

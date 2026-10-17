@@ -47,17 +47,18 @@ describe("versioned learning routes", () => {
     expect(summarizeLearningRouteCoverage()).toEqual([
       {
         routeFamily: "A",
-        authoredStationCount: 35,
+        authoredStationCount: 40,
         releasedSourceStationCount: 25,
+        sourceVerifiedDraftStationCount: 5,
         targetStationCount: 200,
-        remainingAuthoredStations: 165,
+        remainingAuthoredStations: 160,
         categoryDistribution: "PARTIALLY_CLASSIFIED",
         categoryCounts: {
-          FAST_READING: 2,
-          READING_COMPREHENSION: 2,
-          COMMON_STRATEGIES: 2,
-          INTEGRATED_PRACTICE: 2,
-          MULTI_SKILL_ASSESSMENT: 2,
+          FAST_READING: 3,
+          READING_COMPREHENSION: 3,
+          COMMON_STRATEGIES: 3,
+          INTEGRATED_PRACTICE: 3,
+          MULTI_SKILL_ASSESSMENT: 3,
         },
         unclassifiedStationCount: 25,
         categoryTargets: {
@@ -71,17 +72,18 @@ describe("versioned learning routes", () => {
       },
       ...(["B", "C", "D"] as const).map((routeFamily) => ({
         routeFamily,
-        authoredStationCount: 20,
+        authoredStationCount: 25,
         releasedSourceStationCount: 5,
+        sourceVerifiedDraftStationCount: 5,
         targetStationCount: 200,
-        remainingAuthoredStations: 180,
+        remainingAuthoredStations: 175,
         categoryDistribution: "PARTIALLY_CLASSIFIED" as const,
         categoryCounts: {
-          FAST_READING: 2,
-          READING_COMPREHENSION: 2,
-          COMMON_STRATEGIES: 2,
-          INTEGRATED_PRACTICE: 2,
-          MULTI_SKILL_ASSESSMENT: 2,
+          FAST_READING: 3,
+          READING_COMPREHENSION: 3,
+          COMMON_STRATEGIES: 3,
+          INTEGRATED_PRACTICE: 3,
+          MULTI_SKILL_ASSESSMENT: 3,
         },
         unclassifiedStationCount: 10,
         categoryTargets: {
@@ -99,11 +101,11 @@ describe("versioned learning routes", () => {
   it("chains authored cycles in route order and respects their explicit release decisions", () => {
     expect(validateLearningRouteCatalog()).toEqual([]);
     const a = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A");
-    expect(a.map((cycle) => cycle.manifest.steps.length)).toEqual([9, 9, 7, 5, 5]);
+    expect(a.map((cycle) => cycle.manifest.steps.length)).toEqual([9, 9, 7, 5, 5, 5]);
     expect(nextLearningRouteCycle(a[0]!.pathCode)?.pathCode).toBe(a[1]!.pathCode);
     expect(nextLearningRouteCycle(a[1]!.pathCode)?.pathCode).toBe(a[2]!.pathCode);
     expect(upcomingLearningRouteCycles(a[0]!.pathCode).map((cycle) => cycle.sequence)).toEqual([
-      2, 3, 4, 5,
+      2, 3, 4, 5, 6,
     ]);
     expect(a[2]!.publicationApproved()).toBe(true);
     expect(nextLearningRouteCycle(a[2]!.pathCode)).toBe(a[3]);
@@ -111,6 +113,8 @@ describe("versioned learning routes", () => {
     expect(a[3]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[3]!.pathCode)).toBe(a[4]);
     expect(a[4]!.publicationApproved()).toBe(false);
+    expect(nextLearningRouteCycle(a[4]!.pathCode)).toBe(a[5]);
+    expect(a[5]!.publicationApproved()).toBe(false);
     expect(nextLearningRouteCycle("unknown-route")).toBeNull();
     expect(learningRouteCycle(a[0]!.pathCode)?.scopeCode).toBe("G8_12");
   });
@@ -137,7 +141,7 @@ describe("versioned learning routes", () => {
       const cycles = LEARNING_ROUTE_CYCLES.filter(
         (cycle) => cycle.routeFamily === routeFamily,
       ).sort((left, right) => left.sequence - right.sequence);
-      expect(cycles.map((cycle) => cycle.sequence)).toEqual([1, 2, 3, 4]);
+      expect(cycles.map((cycle) => cycle.sequence)).toEqual([1, 2, 3, 4, 5]);
       expect(nextLearningRouteCycle(cycles[0]!.pathCode)).toBe(cycles[1]);
       expect(cycles[0]!.publicationApproved()).toBe(true);
       expect(cycles[1]!.publicationApproved()).toBe(false);
@@ -149,6 +153,7 @@ describe("versioned learning routes", () => {
         cycles[1],
         cycles[2],
         cycles[3],
+        cycles[4],
       ]);
       expect(nextLearningRouteCycle(cycles[1]!.pathCode)).toBe(cycles[2]);
       expect(cycles[2]!.publicationApproved()).toBe(false);
@@ -156,6 +161,9 @@ describe("versioned learning routes", () => {
       expect(nextLearningRouteCycle(cycles[2]!.pathCode)).toBe(cycles[3]);
       expect(cycles[3]!.publicationApproved()).toBe(false);
       expect(cycles[3]!.manifest.steps).toHaveLength(5);
+      expect(nextLearningRouteCycle(cycles[3]!.pathCode)).toBe(cycles[4]);
+      expect(cycles[4]!.publicationApproved()).toBe(false);
+      expect(cycles[4]!.manifest.steps).toHaveLength(5);
     }
   });
 
