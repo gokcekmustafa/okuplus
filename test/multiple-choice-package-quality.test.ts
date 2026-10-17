@@ -74,7 +74,7 @@ describe("multiple-choice package quality", () => {
       reports
         .filter(({ source }) => source.key.includes("_EXPANSION_"))
         .reduce((total, { report }) => total + report.questionCount, 0),
-    ).toBe(1500);
+    ).toBe(1560);
     for (const { source, report } of newCandidates) {
       expect(report.clearLengthOutlierCount, source.key).toBe(0);
     }
@@ -188,12 +188,12 @@ describe("multiple-choice package quality", () => {
 
   it("retains text, key, explanation and immutable version IDs in a deduplicated audit dossier", () => {
     const unique = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
-    expect(unique).toHaveLength(1689);
+    expect(unique).toHaveLength(1749);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(1827);
+    expect(allVersions).toHaveLength(1887);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(1800);
+    ).toHaveLength(1860);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,

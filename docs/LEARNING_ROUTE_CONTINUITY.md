@@ -14,20 +14,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Hazırlanmış toplam | Yayın onaylı | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
 | --------- | -----------------: | -----------: | --------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
-| A / G8_12 |                150 |           25 |                   115 |                     140 |                        10 |                        60 |                        50 | Cycle 4–28     |
-| B / G8_12 |                135 |            5 |                   115 |                     120 |                        15 |                        80 |                        65 | Cycle 3–27     |
-| C / G8_12 |                135 |            5 |                   115 |                     120 |                        15 |                        80 |                        65 | Cycle 3–27     |
-| D / G8_12 |                135 |            5 |                   115 |                     120 |                        15 |                        80 |                        65 | Cycle 3–27     |
+| A / G8_12 |                155 |           25 |                   120 |                     145 |                        10 |                        55 |                        45 | Cycle 4–29     |
+| B / G8_12 |                140 |            5 |                   120 |                     125 |                        15 |                        75 |                        60 | Cycle 3–28     |
+| C / G8_12 |                140 |            5 |                   120 |                     125 |                        15 |                        75 |                        60 | Cycle 3–28     |
+| D / G8_12 |                140 |            5 |                   120 |                     125 |                        15 |                        75 |                        60 | Cycle 3–28     |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 18 Ekim 2026
-QA çıktısına göre 555 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
-500'ü (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
+QA çıktısına göre 575 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
+520'si (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
 taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
 incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
-300 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 245'tir.
+280 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 225'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–28 ve B/C/D Cycle 3–27 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–29 ve B/C/D Cycle 3–28 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -55,9 +55,10 @@ Yeni adayların kaynak metinleri, üçer sorusu, cevap anahtarları, açıklamal
 beceri etiketleri, kaynak notları ve manifest sürüm bağlantıları
 `education-v2-p1-800-draft-cycles.ts` içindedir. Bu kaynak paketi henüz
 production seed/provision girdisi değildir ve otomatik atama izni vermez.
-18 Ekim 2026'da eklenen Group 9–23, TÜBİTAK Bilim Genç'ten toplam 300 ayrı
-kaynak sayfası kullanarak her rotaya toplam 75'er istasyon ekledi. Group 23'ün 20
-istasyonu 60 yeni soruyla A28/B27/C27/D27 taslaklarına eklendi; kaynak
+18 Ekim 2026'da eklenen Group 9–24, TÜBİTAK Bilim Genç'ten toplam 320 ayrı
+kaynak sayfası kullanarak her rotaya toplam 80'er istasyon ekledi. Group 23'ün 20
+istasyonu 60 yeni soruyla A28/B27/C27/D27 taslaklarına, Group 24'ün 20
+istasyonu 60 yeni soruyla A29/B28/C28/D28 taslaklarına eklendi; kaynak
 bağlantılarının önceki gruplardan ayrışması, soru sürümleri, doğru cevap
 konumları ve mekanik seçenek uzunluğu ölçümleri kontrol edildi. Belirgin
 uzunluk aykırılığı kalmadı; bu otomatik kontroller semantik doğruluk veya
