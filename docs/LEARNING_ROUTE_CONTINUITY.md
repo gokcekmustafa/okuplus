@@ -14,20 +14,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Hazırlanmış toplam | Yayın onaylı | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
 | --------- | -----------------: | -----------: | --------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
-| A / G8_12 |                105 |           25 |                    70 |                      95 |                        10 |                       105 |                        95 | Cycle 4–19     |
-| B / G8_12 |                 90 |            5 |                    70 |                      75 |                        15 |                       125 |                       110 | Cycle 3–18     |
-| C / G8_12 |                 90 |            5 |                    70 |                      75 |                        15 |                       125 |                       110 | Cycle 3–18     |
-| D / G8_12 |                 90 |            5 |                    70 |                      75 |                        15 |                       125 |                       110 | Cycle 3–18     |
+| A / G8_12 |                110 |           25 |                    75 |                     100 |                        10 |                       100 |                        90 | Cycle 4–20     |
+| B / G8_12 |                 95 |            5 |                    75 |                      80 |                        15 |                       120 |                       105 | Cycle 3–19     |
+| C / G8_12 |                 95 |            5 |                    75 |                      80 |                        15 |                       120 |                       105 | Cycle 3–19     |
+| D / G8_12 |                 95 |            5 |                    75 |                      80 |                        15 |                       120 |                       105 | Cycle 3–19     |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
-QA çıktısına göre 375 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
-320'si (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
+QA çıktısına göre 395 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
+340'ı (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
 taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
 incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
-480 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 425'tir.
+460 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 405'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–19 ve B/C/D Cycle 3–18 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–20 ve B/C/D Cycle 3–19 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -51,11 +51,11 @@ Yeni adayların kaynak metinleri, üçer sorusu, cevap anahtarları, açıklamal
 beceri etiketleri, kaynak notları ve manifest sürüm bağlantıları
 `education-v2-p1-800-draft-cycles.ts` içindedir. Bu kaynak paketi henüz
 production seed/provision girdisi değildir ve otomatik atama izni vermez.
-17 Ekim 2026'da eklenen Group 9–14, TÜBİTAK Bilim Genç'ten
-toplam 120 ayrı kaynak sayfası kullanarak her rotaya otuzar istasyon ekledi.
-Group 14'ün 20 istasyonu 60 yeni soruyla A19/B18/C18/D18 taslaklarına eklendi;
-kaynak bağlantıları, soru sürümleri ve mekanik seçenek kalite ölçümleri kontrol edildi.
-anlamsal editoryal onay yine ayrıca gereklidir.
+17 Ekim 2026'da eklenen Group 9–15, TÜBİTAK Bilim Genç'ten toplam 140 ayrı
+kaynak sayfası kullanarak her rotaya 35'er istasyon ekledi. Group 15'in 20
+istasyonu 60 yeni soruyla A20/B19/C19/D19 taslaklarına eklendi; kaynak
+bağlantıları, soru sürümleri ve mekanik seçenek kalite ölçümleri kontrol edildi.
+Anlamsal editoryal onay yine ayrıca gereklidir.
 
 ## Soru bankası kalite denetimi
 
