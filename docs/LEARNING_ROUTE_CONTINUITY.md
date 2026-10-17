@@ -14,16 +14,16 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Kaynakta hazırlanmış istasyon | Kaynakta yayın onaylı | 200 hedefine kalan | Son aday döngü aralığı |
 | --------- | ----------------------------: | --------------------: | -----------------: | ---------------------- |
-| A / G8_12 |                            70 |                    25 |                130 | Cycle 4–12             |
-| B / G8_12 |                            55 |                     5 |                145 | Cycle 3–11             |
-| C / G8_12 |                            55 |                     5 |                145 | Cycle 3–11             |
-| D / G8_12 |                            55 |                     5 |                145 | Cycle 3–11             |
+| A / G8_12 |                            75 |                    25 |                125 | Cycle 4–13             |
+| B / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
+| C / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
+| D / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
-kaynak QA çıktısına göre dört rotada toplam 235 istasyon kaynak kataloğunda
-hazırlanmıştır; her rotada 200'e ulaşmak için toplam 565 istasyon daha gerekir.
+kaynak QA çıktısına göre dört rotada toplam 255 istasyon kaynak kataloğunda
+hazırlanmıştır; her rotada 200'e ulaşmak için toplam 545 istasyon daha gerekir.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–12 ve B/C/D Cycle 3–11 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–13 ve B/C/D Cycle 3–12 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -38,8 +38,8 @@ yayın kararı verilmiş ilk döngüleri işler. Boş istasyon veya aynı metind
 
 Her rotanın planlanan hedefi: hızlı okuma 60, okuduğunu anlama 80, ortak
 stratejiler 20, bütünleşik uygulama 25 ve çoklu beceri değerlendirmesi 15
-istasyondur. Güncel kaynak QA çıktısında bu kategorilerde A/B/C/D başına 45,
-toplam 180 istasyon sınıflandırılmıştır. Daha önce hazırlanmış 55 istasyonun
+istasyondur. Güncel kaynak QA çıktısında bu kategorilerde A/B/C/D başına 50,
+toplam 200 istasyon sınıflandırılmıştır. Daha önce hazırlanmış 55 istasyonun
 bu kategori dağılımı henüz kaynak kayıtlarında sınıflandırılmadığından
 `summarizeLearningRouteCoverage()` bunları `unclassifiedStationCount` olarak
 gösterir; kategori hedeflerine kalan miktar tamamlanmış gibi hesaplanmaz.
