@@ -14,20 +14,20 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Hazırlanmış toplam | Yayın onaylı | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
 | --------- | -----------------: | -----------: | --------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
-| A / G8_12 |                 95 |           25 |                    60 |                      85 |                        10 |                       115 |                       105 | Cycle 4–17     |
-| B / G8_12 |                 80 |            5 |                    60 |                      65 |                        15 |                       135 |                       120 | Cycle 3–16     |
-| C / G8_12 |                 80 |            5 |                    60 |                      65 |                        15 |                       135 |                       120 | Cycle 3–16     |
-| D / G8_12 |                 80 |            5 |                    60 |                      65 |                        15 |                       135 |                       120 | Cycle 3–16     |
+| A / G8_12 |                100 |           25 |                    65 |                      90 |                        10 |                       110 |                       100 | Cycle 4–18     |
+| B / G8_12 |                 85 |            5 |                    65 |                      70 |                        15 |                       130 |                       115 | Cycle 3–17     |
+| C / G8_12 |                 85 |            5 |                    65 |                      70 |                        15 |                       130 |                       115 | Cycle 3–17     |
+| D / G8_12 |                 85 |            5 |                    65 |                      70 |                        15 |                       130 |                       115 | Cycle 3–17     |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
-QA çıktısına göre 335 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
-280'i (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
+QA çıktısına göre 355 istasyon hazırlanmış olarak kataloglanmıştır; bunlardan
+300'ü (rota başına yayın onaylı istasyonlar ve açık kaynak kanıtı taşıyan
 taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
 incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
-520 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 465'tir.
+500 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 445'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–17 ve B/C/D Cycle 3–16 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–18 ve B/C/D Cycle 3–17 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -42,8 +42,8 @@ yayın kararı verilmiş ilk döngüleri işler. Boş istasyon veya aynı metind
 
 Her rotanın planlanan hedefi: hızlı okuma 60, okuduğunu anlama 80, ortak
 stratejiler 20, bütünleşik uygulama 25 ve çoklu beceri değerlendirmesi 15
-istasyondur. Güncel kaynak QA çıktısında bu kategorilerde A/B/C/D başına 70,
-toplam 280 istasyon sınıflandırılmıştır. Daha önce hazırlanmış 55 istasyonun
+istasyondur. Güncel kaynak QA çıktısında bu kategorilerde A/B/C/D başına 75,
+toplam 300 istasyon sınıflandırılmıştır. Daha önce hazırlanmış 55 istasyonun
 bu kategori dağılımı henüz kaynak kayıtlarında sınıflandırılmadığından
 `summarizeLearningRouteCoverage()` bunları `unclassifiedStationCount` olarak
 gösterir; kategori hedeflerine kalan miktar tamamlanmış gibi hesaplanmaz.
@@ -51,9 +51,10 @@ Yeni adayların kaynak metinleri, üçer sorusu, cevap anahtarları, açıklamal
 beceri etiketleri, kaynak notları ve manifest sürüm bağlantıları
 `education-v2-p1-800-draft-cycles.ts` içindedir. Bu kaynak paketi henüz
 production seed/provision girdisi değildir ve otomatik atama izni vermez.
-17 Ekim 2026'da eklenen Group 9–12, TÜBİTAK Bilim Genç'ten
-toplam 80 ayrı kaynak sayfası kullanarak her rotaya yirmişer istasyon ekledi.
-Group 12'nin 60 sorusu için kaynak bağlantısı ve mekanik seçenek kalite ölçümleri kontrol edildi;
+17 Ekim 2026'da eklenen Group 9–13, TÜBİTAK Bilim Genç'ten
+toplam 100 ayrı kaynak sayfası kullanarak her rotaya yirmişer istasyon ekledi.
+Group 13'ün 20 istasyonu 60 yeni soruyla A18/B17/C17/D17 taslaklarına eklendi;
+kaynak bağlantıları, soru sürümleri ve mekanik seçenek kalite ölçümleri kontrol edildi.
 anlamsal editoryal onay yine ayrıca gereklidir.
 
 ## Soru bankası kalite denetimi
