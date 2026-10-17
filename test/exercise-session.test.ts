@@ -243,6 +243,8 @@ describe("exercise session", () => {
     });
     const qvA = await prisma.questionVersion.create({
       data: {
+        // Keep the option-order seed stable alongside the fixed session IDs.
+        id: "99999981-0000-7000-8000-0000000000f1",
         questionId: QUESTION_A,
         version: 1,
         prompt: "Başkent?",
