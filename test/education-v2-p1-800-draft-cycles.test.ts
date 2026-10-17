@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
 import { validateLearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -11,8 +12,8 @@ import {
 } from "../src/curriculum/learning-route-catalog.js";
 
 describe("800-istasyon müfredat genişleme adayları", () => {
-  it("adds one fully authored, skill-tagged five-station source cycle per route without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(4);
+  it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(8);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -35,6 +36,17 @@ describe("800-istasyon müfredat genişleme adayları", () => {
           ).toBe(question.correct);
         }
       }
+      const quality = assessMultipleChoicePackageQuality(
+        draft.sourceStations.flatMap((station) =>
+          station.questions.map((question) => ({
+            key: question.key,
+            prompt: question.prompt,
+            options: question.options,
+            correctOptionId: question.correctOptionId,
+          })),
+        ),
+      );
+      expect(quality.clearLengthOutlierCount).toBe(0);
     }
   });
 
@@ -105,13 +117,16 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: 1,
-        READING_COMPREHENSION: 1,
-        COMMON_STRATEGIES: 1,
-        INTEGRATED_PRACTICE: 1,
-        MULTI_SKILL_ASSESSMENT: 1,
+        FAST_READING: 2,
+        READING_COMPREHENSION: 2,
+        COMMON_STRATEGIES: 2,
+        INTEGRATED_PRACTICE: 2,
+        MULTI_SKILL_ASSESSMENT: 2,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 35 : 20);
+      expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 165 : 180);
       expect(result.productionGraph).toBe("NOT_VERIFIED");
     }
   });

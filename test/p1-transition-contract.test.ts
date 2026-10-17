@@ -5,6 +5,7 @@ import {
   nextP1CyclePathCode,
   P1_CYCLE_TRANSITION_POLICY_VERSION,
 } from "../src/modules/student-learning/p1-transition.js";
+import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
 import {
   EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
@@ -133,12 +134,22 @@ describe("P1 transition foundation contracts", () => {
     expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12")).toBe(
       "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12",
     );
-    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12")).toBeNull();
+    const nextDraftCycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,
+    );
+    expect(nextDraftCycle).toBeDefined();
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12")).toBe(
+      nextDraftCycle!.pathCode,
+    );
+    expect(nextDraftCycle!.authoringStatus).toBe("DRAFT_NOT_RELEASED");
+    expect(nextDraftCycle!.publicationApproved()).toBe(false);
+    expect(nextDraftCycle!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(P1_CYCLE_TRANSITION_POLICY_VERSION).toBe("P1_CYCLE_TRANSITION_V1");
     expect(transition).toContain('"NEXT_CYCLE_UNAVAILABLE"');
     expect(transition).toContain('enrollment.routeStatus !== "ACTIVE"');
     expect(transition).toContain('status: "PUBLISHED"');
     expect(transition).toContain("hasExpectedP1CycleGraph");
+    expect(transition).toContain("!nextCycle.publicationApproved()");
     expect(transition).toContain("stableKey");
     expect(transition).toContain("prerequisiteStepId");
     expect(transition).toContain("studentLearningPath.upsert");
