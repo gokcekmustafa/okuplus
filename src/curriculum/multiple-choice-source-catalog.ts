@@ -403,7 +403,7 @@ export const MULTIPLE_CHOICE_SOURCE_COVERAGE_GAPS = [
   {
     code: "RUNTIME_TRAINING_BANK_NOT_ENUMERATED",
     detail:
-      "Bağımsız Antrenman soruları statik repo paketinden değil, yayımlanmış veritabanı şablon/soru sürümlerinden yükleniyor; korumalı canlı envanter workflow'u çalıştırılmadığı için soru içeriği ve semantiği henüz incelenmedi.",
+      "Bu statik katalog, bağımsız Antrenman'ın yayımlanmış veritabanı şablon/soru sürümlerini kapsamaz. Canlı envanter yalnızca ayrı, korumalı salt-okunur workflow kanıtıyla raporlanabilir; bu katalog komutu soru içeriğini veya semantiğini doğrulamaz.",
   },
   {
     code: "FIRST_REAL_PACK_VERSION_UNDECLARED",
