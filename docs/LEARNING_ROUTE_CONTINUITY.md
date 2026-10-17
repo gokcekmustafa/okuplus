@@ -14,16 +14,16 @@ kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
 | Rota      | Kaynakta hazırlanmış istasyon | Kaynakta yayın onaylı | 200 hedefine kalan | Son aday döngü aralığı |
 | --------- | ----------------------------: | --------------------: | -----------------: | ---------------------- |
-| A / G8_12 |                            75 |                    25 |                125 | Cycle 4–13             |
-| B / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
-| C / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
-| D / G8_12 |                            60 |                     5 |                140 | Cycle 3–12             |
+| A / G8_12 |                            80 |                    25 |                120 | Cycle 4–14             |
+| B / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
+| C / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
+| D / G8_12 |                            65 |                     5 |                135 | Cycle 3–13             |
 
 P0'ın 22 istasyonu korunur ve A/B/C/D sayaçlarına dahil değildir. 17 Ekim 2026
-kaynak QA çıktısına göre dört rotada toplam 255 istasyon kaynak kataloğunda
-hazırlanmıştır; her rotada 200'e ulaşmak için toplam 545 istasyon daha gerekir.
+kaynak QA çıktısına göre dört rotada toplam 275 istasyon kaynak kataloğunda
+hazırlanmıştır; her rotada 200'e ulaşmak için toplam 525 istasyon daha gerekir.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–13 ve B/C/D Cycle 3–12 zincirleri `DRAFT_NOT_RELEASED`
+sayısı değildir. A Cycle 4–14 ve B/C/D Cycle 3–13 zincirleri `DRAFT_NOT_RELEASED`
 ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
@@ -47,6 +47,9 @@ Yeni adayların kaynak metinleri, üçer sorusu, cevap anahtarları, açıklamal
 beceri etiketleri, kaynak notları ve manifest sürüm bağlantıları
 `education-v2-p1-800-draft-cycles.ts` içindedir. Bu kaynak paketi henüz
 production seed/provision girdisi değildir ve otomatik atama izni vermez.
+17 Ekim 2026'da eklenen Group 9, TÜBİTAK Bilim Genç'ten 20 ayrı kaynak sayfası
+kullanarak her rotaya beşer istasyon ekledi. Bu özgün metinler ve sorular için
+editoryal onay yine ayrıca gereklidir.
 
 ## Soru bankası kalite denetimi
 
