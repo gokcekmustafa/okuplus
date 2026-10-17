@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(108);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(112);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -67,6 +67,7 @@ describe("800-istasyon müfredat genişleme adayları", () => {
         draft.sequence === (draft.routeFamily === "A" ? 28 : 27) ||
         draft.sequence === (draft.routeFamily === "A" ? 29 : 28) ||
         draft.sequence === (draft.routeFamily === "A" ? 30 : 29) ||
+        draft.sequence === (draft.routeFamily === "A" ? 31 : 30) ||
         draft.sequence === (draft.routeFamily === "A" ? 18 : 17) ||
         draft.sequence === (draft.routeFamily === "A" ? 17 : 16);
       const expectedCategoryCounts = isNewBalancedCycle
@@ -104,7 +105,7 @@ describe("800-istasyon müfredat genişleme adayları", () => {
           })),
         ),
       );
-      expect(quality.clearLengthOutlierCount).toBe(0);
+      expect(quality.clearLengthOutlierCount, `${draft.routeFamily}/${draft.sequence}`).toBe(0);
     }
   });
 
@@ -180,24 +181,24 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: routeFamily === "D" ? 27 : 28,
-        READING_COMPREHENSION: routeFamily === "D" ? 28 : 30,
-        COMMON_STRATEGIES: routeFamily === "D" ? 26 : 25,
-        INTEGRATED_PRACTICE: routeFamily === "D" ? 27 : 26,
-        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 27 : 26,
+        FAST_READING: routeFamily === "D" ? 28 : 29,
+        READING_COMPREHENSION: routeFamily === "D" ? 29 : 31,
+        COMMON_STRATEGIES: routeFamily === "D" ? 27 : 26,
+        INTEGRATED_PRACTICE: routeFamily === "D" ? 28 : 27,
+        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 28 : 27,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 160 : 145);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 165 : 150);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 40 : 55);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 35 : 50);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
         result.targetStationCount,
       );
-      expect(result.sourceVerifiedDraftStationCount).toBe(125);
+      expect(result.sourceVerifiedDraftStationCount).toBe(130);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
-      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 150 : 130);
-      expect(result.targetStationCount - sourceQualifiedCount).toBe(routeFamily === "A" ? 50 : 70);
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 155 : 135);
+      expect(result.targetStationCount - sourceQualifiedCount).toBe(routeFamily === "A" ? 45 : 65);
       expect(result.authoredStationCount - sourceQualifiedCount).toBe(
         routeFamily === "A" ? 10 : 15,
       );
@@ -586,5 +587,46 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     expect(stations.every((station) => station.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
     expect(group25.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
     expect(group25.every((cycle) => cycle.authoringStatus === "DRAFT_NOT_RELEASED")).toBe(true);
+  });
+
+  it("adds Group 26 as twenty globally source-unique, dated and unpublished stations", () => {
+    const group26 = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
+      (cycle) =>
+        (cycle.routeFamily === "A" && cycle.sequence === 31) ||
+        (["B", "C", "D"].includes(cycle.routeFamily) && cycle.sequence === 30),
+    );
+    const stations = group26.flatMap((cycle) => cycle.sourceStations);
+    const normalizeSourcePage = (url: string | undefined) => {
+      if (!url) return "";
+      const parsed = new URL(url);
+      return `${parsed.hostname.replace(/^www\./u, "").toLowerCase()}${parsed.pathname.replace(/\/$/u, "")}`;
+    };
+    const priorSourcePages = new Set(
+      EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => !group26.includes(cycle))
+        .flatMap((cycle) => cycle.sourceStations)
+        .map((station) => normalizeSourcePage(station.sourceEvidence?.url)),
+    );
+
+    expect(group26).toHaveLength(4);
+    expect(stations).toHaveLength(20);
+    expect(
+      new Set(stations.map((station) => normalizeSourcePage(station.sourceEvidence?.url))).size,
+    ).toBe(20);
+    expect(
+      stations.every(
+        (station) => !priorSourcePages.has(normalizeSourcePage(station.sourceEvidence?.url)),
+      ),
+    ).toBe(true);
+    expect(
+      new Set(
+        stations.flatMap((station) => station.questions.map((question) => question.versionId)),
+      ).size,
+    ).toBe(60);
+    expect(stations.every((station) => station.sourceEvidence?.checkedOn === "2026-10-18")).toBe(
+      true,
+    );
+    expect(stations.every((station) => station.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
+    expect(group26.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
+    expect(group26.every((cycle) => cycle.authoringStatus === "DRAFT_NOT_RELEASED")).toBe(true);
   });
 });
