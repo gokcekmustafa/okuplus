@@ -13,7 +13,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(60);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(64);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -55,6 +55,7 @@ describe("800-istasyon müfredat genişleme adayları", () => {
         (draft.routeFamily === "A" && draft.sequence === 16) ||
         ((draft.routeFamily === "B" || draft.routeFamily === "C") && draft.sequence === 15);
       const isNewBalancedCycle =
+        draft.sequence === (draft.routeFamily === "A" ? 19 : 18) ||
         draft.sequence === (draft.routeFamily === "A" ? 18 : 17) ||
         draft.sequence === (draft.routeFamily === "A" ? 17 : 16);
       const expectedCategoryCounts = isNewBalancedCycle
@@ -164,25 +165,25 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
       expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
       expect(result.categoryCounts).toEqual({
-        FAST_READING: routeFamily === "D" ? 15 : 16,
-        READING_COMPREHENSION: routeFamily === "D" ? 16 : 18,
-        COMMON_STRATEGIES: routeFamily === "D" ? 14 : 13,
-        INTEGRATED_PRACTICE: routeFamily === "D" ? 15 : 14,
-        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 15 : 14,
+        FAST_READING: routeFamily === "D" ? 16 : 17,
+        READING_COMPREHENSION: routeFamily === "D" ? 17 : 19,
+        COMMON_STRATEGIES: routeFamily === "D" ? 15 : 14,
+        INTEGRATED_PRACTICE: routeFamily === "D" ? 16 : 15,
+        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 16 : 15,
       });
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 100 : 85);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 105 : 90);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 100 : 115);
+      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 95 : 110);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
         result.targetStationCount,
       );
-      expect(result.sourceVerifiedDraftStationCount).toBe(65);
+      expect(result.sourceVerifiedDraftStationCount).toBe(70);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
-      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 90 : 70);
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 95 : 75);
       expect(result.targetStationCount - sourceQualifiedCount).toBe(
-        routeFamily === "A" ? 110 : 130,
+        routeFamily === "A" ? 105 : 125,
       );
       expect(result.authoredStationCount - sourceQualifiedCount).toBe(
         routeFamily === "A" ? 10 : 15,
@@ -193,7 +194,7 @@ describe("800-istasyon müfredat genişleme adayları", () => {
 
   it("only counts source-traceable stations as verified and ties every new station to its source", () => {
     for (const routeFamily of ["A", "B", "C", "D"] as const) {
-      const cycleNumber = routeFamily === "A" ? 18 : 17;
+      const cycleNumber = routeFamily === "A" ? 19 : 18;
       const cycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
         (candidate) => candidate.routeFamily === routeFamily && candidate.sequence === cycleNumber,
       )!;
@@ -214,11 +215,11 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     }
   });
 
-  it("uses forty distinct verified source pages in the newest eight draft cycles", () => {
+  it("uses forty distinct verified source pages in Groups 13 and 14", () => {
     const newestCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
       (cycle) =>
-        (cycle.routeFamily === "A" && [17, 18].includes(cycle.sequence)) ||
-        (["B", "C", "D"].includes(cycle.routeFamily) && [16, 17].includes(cycle.sequence)),
+        (cycle.routeFamily === "A" && [18, 19].includes(cycle.sequence)) ||
+        (["B", "C", "D"].includes(cycle.routeFamily) && [17, 18].includes(cycle.sequence)),
     );
     expect(newestCycles).toHaveLength(8);
     const stations = newestCycles.flatMap((cycle) => cycle.sourceStations);
@@ -231,5 +232,30 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     expect(new Set(questionVersions).size).toBe(120);
     expect(stations.every((station) => station.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
     expect(newestCycles.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
+  });
+
+  it("adds Group 14 as twenty source-unique, unpublished stations with sixty question versions", () => {
+    const group14 = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
+      (cycle) =>
+        (cycle.routeFamily === "A" && cycle.sequence === 19) ||
+        (["B", "C", "D"].includes(cycle.routeFamily) && cycle.sequence === 18),
+    );
+    expect(group14).toHaveLength(4);
+    const stations = group14.flatMap((cycle) => cycle.sourceStations);
+    expect(stations).toHaveLength(20);
+    expect(new Set(stations.map((item) => item.sourceEvidence?.url)).size).toBe(20);
+    expect(
+      new Set(stations.flatMap((item) => item.questions.map((question) => question.versionId)))
+        .size,
+    ).toBe(60);
+    const priorSourceUrls = new Set(
+      EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => !group14.includes(cycle))
+        .flatMap((cycle) => cycle.sourceStations)
+        .map((station) => station.sourceEvidence?.url),
+    );
+    expect(stations.every((item) => !priorSourceUrls.has(item.sourceEvidence?.url))).toBe(true);
+    expect(stations.every((item) => item.provenanceStatus === "SOURCE_VERIFIED")).toBe(true);
+    expect(group14.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
+    expect(group14.every((cycle) => cycle.authoringStatus === "DRAFT_NOT_RELEASED")).toBe(true);
   });
 });
