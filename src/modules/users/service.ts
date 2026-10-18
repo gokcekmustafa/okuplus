@@ -30,6 +30,13 @@ const USER_LIST_SELECT = {
   platformRole: true,
   createdAt: true,
   updatedAt: true,
+  memberships: {
+    select: {
+      role: true,
+      status: true,
+      tenant: { select: { name: true, type: true } },
+    },
+  },
   _count: { select: { memberships: true } },
 } satisfies Prisma.UserSelect;
 
@@ -60,6 +67,12 @@ export interface UserListItem {
   createdAt: Date;
   updatedAt: Date;
   membershipCount: number;
+  roleConnections: Array<{
+    role: Membership["role"];
+    status: Membership["status"];
+    tenantName: string;
+    tenantType: string;
+  }>;
 }
 
 export interface UserDetail {
@@ -176,7 +189,16 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
   ]);
 
   return {
-    items: rows.map(({ _count, ...u }) => ({ ...u, membershipCount: _count.memberships })),
+    items: rows.map(({ _count, memberships, ...u }) => ({
+      ...u,
+      membershipCount: _count.memberships,
+      roleConnections: memberships.map((membership) => ({
+        role: membership.role,
+        status: membership.status,
+        tenantName: membership.tenant.name,
+        tenantType: membership.tenant.type,
+      })),
+    })),
     total,
     page,
     pageSize,

@@ -14,6 +14,8 @@ const TENANT_A = "99999996-0000-7000-8000-0000000000a1";
 const TENANT_B = "99999996-0000-7000-8000-0000000000b1";
 const CONTENT_A = "99999996-0000-7000-8000-0000000000c1";
 const CONTENT_B = "99999996-0000-7000-8000-0000000000c2";
+const SKILL_A = "99999996-0000-7000-8000-0000000000d1";
+const SKILL_B = "99999996-0000-7000-8000-0000000000d2";
 const USERS = [SUPER_ADMIN_ID, CONTENT_EDITOR_ID, NORMAL_USER_ID];
 const CONTENTS = [CONTENT_A, CONTENT_B];
 
@@ -89,6 +91,7 @@ async function cleanup(): Promise<void> {
       await tx.questionVersion.deleteMany({ where: { questionId: { in: questionIds } } });
       await tx.question.deleteMany({ where: { id: { in: questionIds } } });
     }
+    await tx.skill.deleteMany({ where: { id: { in: [SKILL_A, SKILL_B] } } });
     await tx.content.deleteMany({ where: { id: { in: CONTENTS } } });
     await tx.membership.deleteMany({
       where: { OR: [{ userId: { in: USERS } }, { tenantId: { in: [TENANT_A, TENANT_B] } }] },
@@ -180,6 +183,12 @@ describe("question admin", () => {
           title: "Soru İçeriği B",
           difficulty: 0.5,
         },
+      ],
+    });
+    await prisma.skill.createMany({
+      data: [
+        { id: SKILL_A, code: "QUESTION_ADMIN_SKILL_A", name: "Ana düşünce", category: "MAIN_IDEA" },
+        { id: SKILL_B, code: "QUESTION_ADMIN_SKILL_B", name: "Çıkarım", category: "INFERENCE" },
       ],
     });
     app = await buildApp(loadEnv());
@@ -280,13 +289,7 @@ describe("question admin", () => {
   });
 
   it("DRAFT düzenlenir, REVIEW/PUBLISHED immutable kalır ve v2 oluşturulur", async () => {
-    const question = (
-      await app.inject({
-        method: "GET",
-        url: `/admin/contents/${CONTENT_A}/questions`,
-        headers: await adminHeaders(),
-      })
-    ).json().data[0];
+    const question = await createQuestion("MULTIPLE_CHOICE", 91);
     const versions = await app.inject({
       method: "GET",
       url: `/admin/questions/${question.id}/versions`,
@@ -300,7 +303,7 @@ describe("question admin", () => {
           method: "PATCH",
           url: `/admin/questions/versions/${v1.id}`,
           headers: await adminHeaders(),
-          payload: { prompt: "Düzenlenmiş taslak" },
+          payload: { prompt: "Düzenlenmiş taslak", skillId: SKILL_A },
         })
       ).statusCode,
     ).toBe(200);
@@ -350,6 +353,26 @@ describe("question admin", () => {
     });
     expect(v2.statusCode).toBe(200);
     expect(v2.json().data.version).toBe(2);
+    const changedV2 = await app.inject({
+      method: "PATCH",
+      url: `/admin/questions/versions/${v2.json().data.id}`,
+      headers: await adminHeaders(),
+      payload: { skillId: SKILL_B },
+    });
+    expect(changedV2.statusCode).toBe(200);
+    const questionAfter = await app.inject({
+      method: "GET",
+      url: `/admin/questions/${question.id}`,
+      headers: await adminHeaders(),
+    });
+    expect(questionAfter.statusCode).toBe(200);
+    expect(questionAfter.json().data.skillId).toBe(SKILL_B);
+    const immutableV1 = await app.inject({
+      method: "GET",
+      url: `/admin/questions/versions/${v1.id}`,
+      headers: await adminHeaders(),
+    });
+    expect(immutableV1.json().data.prompt).toBe("Düzenlenmiş taslak");
   });
 
   it("yayınlanmış parent altında onaylı yeni soru sürümü yayınlanır", async () => {

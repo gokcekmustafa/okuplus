@@ -204,6 +204,18 @@ describe("user + membership admin", () => {
     expect(found.displayName).toBe("Kullanıcı A");
     expect(found.email).toBe(USER_A_EMAIL);
     expect(typeof found.membershipCount).toBe("number");
+    expect(found.roleConnections).toEqual([]);
+    const tenantStudent = body.data.items.find(
+      (user: { id: string }) => user.id === NORMAL_USER_ID,
+    );
+    expect(tenantStudent.roleConnections).toEqual([
+      expect.objectContaining({
+        role: "STUDENT",
+        status: "ACTIVE",
+        tenantName: "Org Kurum",
+        tenantType: "ORGANIZATION",
+      }),
+    ]);
   });
 
   it("Arama: ad veya e-posta ile filtreler", async () => {

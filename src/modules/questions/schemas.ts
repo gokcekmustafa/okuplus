@@ -324,6 +324,7 @@ export const updateQuestionVersionSchema = z.object({
   correctAnswer: correctAnswerSchema.optional(),
   explanation: explanationSchema,
   hint: hintSchema,
+  skillId: z.string().trim().min(1).nullable().optional(),
   sourceReference: sourceReferenceSchema,
   difficulty: difficultySchema,
 });

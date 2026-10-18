@@ -1691,7 +1691,7 @@
               <div class="management-section-heading">
                 <div>
                   <span class="eyebrow">B · ÖĞRENME YOLU</span>
-                  <h3 id="analytics-journey-title">Öğrenci listesi ve yol durumu</h3>
+                  <h3 id="analytics-journey-title">Öğrenciler</h3>
                 </div>
                 <p class="muted">
                   Öğrenme Yolu, Antrenman, Ödevler ve Ölçme-Değerlendirme ayrı tutulur.
@@ -1706,7 +1706,7 @@
                         <th>Sınıf</th>
                         <th>Kurum bağlantısı</th>
                         <th>Son etkinlik</th>
-                        <th></th>
+                        <th>Öğrenci ayrıntısı</th>
                       </tr>
                     </thead>
                     <tbody id="analytics-student-body">
@@ -1718,39 +1718,10 @@
                 </div>
                 <div id="analytics-student-pagination" class="table-footer"></div>
               </div>
-              <article
-                id="analytics-student-detail"
-                class="card analytics-detail-card hidden"
-                aria-live="polite"
-              ></article>
-            </section>
-
-            <section class="analytics-section" aria-labelledby="analytics-performance-title">
-              <div class="management-section-heading">
-                <div>
-                  <span class="eyebrow">C · ÖĞRENME PERFORMANSI</span>
-                  <h3 id="analytics-performance-title">Beceri kanıtları</h3>
-                </div>
-                <p class="muted">Ölçüm sonucu olmayan değerler tahmin edilmez.</p>
-              </div>
-              <div id="analytics-performance-empty" class="management-empty-state">
-                <strong>Bir öğrenci seçin.</strong
-                ><span>Öğrenme yolu ve performans ayrıntıları burada görüntülenir.</span>
-              </div>
-            </section>
-
-            <section class="analytics-section" aria-labelledby="analytics-activity-title">
-              <div class="management-section-heading">
-                <div>
-                  <span class="eyebrow">D · AYRINTILI ETKİNLİK</span>
-                  <h3 id="analytics-activity-title">Zaman çizelgesi</h3>
-                </div>
-                <p class="muted">Yalnızca sunucuya kaydedilmiş etkinlikler gösterilir.</p>
-              </div>
-              <div id="analytics-activity-empty" class="management-empty-state">
-                <strong>Bir öğrenci seçin.</strong
-                ><span>Başlama, tamamlama, bırakma ve teknik hata kayıtları listelenir.</span>
-              </div>
+              <p class="field-hint muted">
+                Öğrenci adına veya “Ayrıntıları aç” düğmesine tıklayın. Hesap bilgileri, öğrenme
+                yolu, performans ve etkinlik tek öğrenci ayrıntısında açılır.
+              </p>
             </section>
           </section>
 
@@ -2055,8 +2026,11 @@
           <!-- Kullanıcılar -->
           <section id="page-users" class="page-view hidden">
             <div class="page-head">
-              <h2>Kullanıcılar</h2>
-              <p class="muted">Platform kullanıcılarını ve üyeliklerini yönetin</p>
+              <h2>Kullanıcı Hesapları</h2>
+              <p class="muted">
+                Hesapları, platform rollerini ve kurum üyeliklerini yönetin. Öğrenci ilerlemesi ayrı
+                Öğrenci Analitiği alanındadır.
+              </p>
             </div>
 
             <div class="tenant-toolbar">
@@ -2093,6 +2067,7 @@
                 <thead>
                   <tr>
                     <th>Kullanıcı</th>
+                    <th>Hesap ve roller</th>
                     <th>Telefon</th>
                     <th>Doğum Yılı</th>
                     <th>Durum</th>
@@ -2102,7 +2077,7 @@
                 </thead>
                 <tbody id="user-list-body">
                   <tr>
-                    <td colspan="6" class="empty-cell">Yükleniyor…</td>
+                    <td colspan="7" class="empty-cell">Yükleniyor…</td>
                   </tr>
                 </tbody>
               </table>
@@ -4158,6 +4133,11 @@
                 <form id="question-form" novalidate>
                   <div class="modal-body">
                     <div id="question-form-error" class="error-banner hidden" role="alert"></div>
+                    <div
+                      id="question-form-version-guidance"
+                      class="notice-card hidden"
+                      role="note"
+                    ></div>
                     <label class="field">
                       <span>İçerik *</span>
                       <select id="question-form-content" required>

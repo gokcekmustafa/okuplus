@@ -440,42 +440,50 @@ export async function updateQuestionVersion(
   id: string,
   input: UpdateQuestionVersionInput,
 ): Promise<QuestionVersionDetail> {
-  const existing = await prisma.questionVersion.findUnique({
-    where: { id },
-    select: { ...VERSION_DETAIL_SELECT, question: { select: { type: true } } },
-  });
-  if (!existing) throw notFoundError("Soru sürümü bulunamadı");
-  if (existing.status !== "DRAFT")
-    throw validationError(
-      "Yalnızca taslak soru sürümü düzenlenebilir. İncelemedeki veya yayınlanmış sürüm için yeni sürüm oluşturulmalı.",
-    );
-  const payload = {
-    prompt: input.prompt ?? existing.prompt,
-    options: input.options ?? existing.options,
-    correctAnswer: input.correctAnswer ?? existing.correctAnswer,
-    explanation: input.explanation !== undefined ? input.explanation : existing.explanation,
-    hint: input.hint !== undefined ? input.hint : existing.hint,
-    difficulty: input.difficulty !== undefined ? input.difficulty : existing.difficulty,
-  };
-  validateQuestionVersionPayload(existing.question.type, payload);
-  await prisma.questionVersion.update({
-    where: { id },
-    data: {
-      prompt: payload.prompt,
-      options: toNullableJsonInput(payload.options),
-      correctAnswer: toNullableJsonInput(payload.correctAnswer),
-      explanation: payload.explanation,
-      hint: payload.hint,
-      difficulty: payload.difficulty,
-      ...(input.sourceReference !== undefined
-        ? {
-            generationMetadata: mergeSourceReference(
-              existing.generationMetadata,
-              input.sourceReference,
-            ),
-          }
-        : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.questionVersion.findUnique({
+      where: { id },
+      select: { ...VERSION_DETAIL_SELECT, question: { select: { id: true, type: true } } },
+    });
+    if (!existing) throw notFoundError("Soru sürümü bulunamadı");
+    if (existing.status !== "DRAFT")
+      throw validationError(
+        "Yalnızca taslak soru sürümü düzenlenebilir. İncelemedeki veya yayınlanmış sürüm için yeni sürüm oluşturulmalı.",
+      );
+    const payload = {
+      prompt: input.prompt ?? existing.prompt,
+      options: input.options ?? existing.options,
+      correctAnswer: input.correctAnswer ?? existing.correctAnswer,
+      explanation: input.explanation !== undefined ? input.explanation : existing.explanation,
+      hint: input.hint !== undefined ? input.hint : existing.hint,
+      difficulty: input.difficulty !== undefined ? input.difficulty : existing.difficulty,
+    };
+    validateQuestionVersionPayload(existing.question.type, payload);
+    if (input.skillId !== undefined) {
+      await tx.question.update({
+        where: { id: existing.question.id },
+        data: { skillId: input.skillId },
+      });
+    }
+    await tx.questionVersion.update({
+      where: { id },
+      data: {
+        prompt: payload.prompt,
+        options: toNullableJsonInput(payload.options),
+        correctAnswer: toNullableJsonInput(payload.correctAnswer),
+        explanation: payload.explanation,
+        hint: payload.hint,
+        difficulty: payload.difficulty,
+        ...(input.sourceReference !== undefined
+          ? {
+              generationMetadata: mergeSourceReference(
+                existing.generationMetadata,
+                input.sourceReference,
+              ),
+            }
+          : {}),
+      },
+    });
   });
   return getQuestionVersion(id);
 }

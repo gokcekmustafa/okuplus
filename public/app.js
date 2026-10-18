@@ -172,6 +172,7 @@ const PLAN_LABELS = Object.freeze({
 
 const PLATFORM_ROLE_LABELS = Object.freeze({
   SUPER_ADMIN: "Platform yöneticisi",
+  CONTENT_EDITOR: "İçerik editörü",
 });
 
 const ENTITLEMENT_SOURCE_LABELS = Object.freeze({
@@ -5766,29 +5767,6 @@ $("analytics-student-pagination")?.addEventListener("click", (event) => {
   analyticsStudentPage += button.dataset.analyticsPage === "next" ? 1 : -1;
   void loadAnalyticsPage();
 });
-$("analytics-student-detail")?.addEventListener("click", (event) => {
-  const profileButton = event.target.closest("[data-analytics-profile]");
-  if (profileButton) {
-    void openStudentDetail(profileButton.dataset.analyticsProfile);
-    return;
-  }
-  if (event.target.closest("[data-analytics-detail-close]")) {
-    $("analytics-student-detail").classList.add("hidden");
-    const performancePanel = $("analytics-performance-empty");
-    const activityPanel = $("analytics-activity-empty");
-    if (performancePanel) {
-      performancePanel.className = "management-empty-state";
-      performancePanel.innerHTML =
-        "<strong>Bir öğrenci seçin.</strong><span>Öğrenme yolu ve performans ayrıntıları burada görüntülenir.</span>";
-    }
-    if (activityPanel) {
-      activityPanel.className = "management-empty-state";
-      activityPanel.innerHTML =
-        "<strong>Bir öğrenci seçin.</strong><span>Başlama, tamamlama, bırakma ve teknik hata kayıtları listelenir.</span>";
-    }
-  }
-});
-
 $("user-menu-toggle")?.addEventListener("click", () => {
   const menu = $("user-menu");
   if (!menu) return;
@@ -5934,7 +5912,7 @@ function membershipStatusBadge(status) {
 async function loadUsers() {
   hideUserError();
   const tbody = $("user-list-body");
-  tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Yükleniyor…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Yükleniyor…</td></tr>';
 
   const search = $("user-search").value.trim();
   const status = $("user-status-filter").value;
@@ -5953,7 +5931,7 @@ async function loadUsers() {
 
     renderUserList();
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">—</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">—</td></tr>';
     showUserError(err.message || "Kullanıcılar yüklenemedi.");
   }
 }
@@ -5962,7 +5940,7 @@ function renderUserList() {
   const tbody = $("user-list-body");
 
   if (userData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
   } else {
     tbody.innerHTML = userData
       .map(
@@ -5974,6 +5952,7 @@ function renderUserList() {
           </button>
           ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
         </td>
+        <td>${renderUserRoleConnections(u)}</td>
         <td>${u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"}</td>
         <td>${u.birthYear ?? "—"}</td>
         <td>${userStatusBadge(u.status)}</td>
@@ -5991,6 +5970,25 @@ function renderUserList() {
   $("user-page-info").textContent = `${userTotal} kullanıcı · sayfa ${userPage}/${totalPages}`;
   $("user-prev-btn").disabled = userPage <= 1;
   $("user-next-btn").disabled = userPage >= totalPages;
+}
+
+function renderUserRoleConnections(user) {
+  const labels = [];
+  if (user.platformRole)
+    labels.push(
+      `<span class="badge badge-info">${escapeHtml(platformRoleLabel(user.platformRole))}</span>`,
+    );
+  for (const connection of user.roleConnections ?? []) {
+    const role = MEMBERSHIP_ROLE_LABELS[connection.role] ?? connection.role;
+    const tenantType = tenantTypeLabel(connection.tenantType);
+    const status = MEMBERSHIP_STATUS_LABELS[connection.status] ?? connection.status;
+    labels.push(
+      `<span class="role-connection" title="${escapeHtml(connection.tenantName)} · ${escapeHtml(status)}"><span class="badge">${escapeHtml(tenantType)} · ${escapeHtml(role)}</span><span class="cell-muted">${escapeHtml(connection.tenantName)} · ${escapeHtml(status)}</span></span>`,
+    );
+  }
+  return labels.length
+    ? `<div class="role-connection-list">${labels.join("")}</div>`
+    : '<span class="muted">Üyelik rolü yok</span>';
 }
 
 const INDIVIDUAL_ALLOWED_ROLES = ["STUDENT", "PARENT"];
@@ -6199,6 +6197,7 @@ function renderUserDetail(u, notice = "") {
   const classAssignments = u.classAssignments ?? [];
   const enrollments = u.enrollments ?? [];
   const entitlements = u.entitlements ?? [];
+  const hasStudentRole = memberships.some((membership) => membership.role === "STUDENT");
   const membershipRows = memberships.length
     ? memberships
         .map(
@@ -6231,6 +6230,7 @@ function renderUserDetail(u, notice = "") {
     : '<tr><td colspan="5" class="empty-cell">Üyelik yok.</td></tr>';
 
   $("user-detail-body").innerHTML = `
+    ${hasStudentRole && canAccessPage("students") && canAccessPage("analytics") ? `<section class="detail-section student-workspace-link"><div><h4>Öğrenci görünümü</h4><p class="muted">Öğrencinin hesabı, öğrenme yolu ve performansını tek ayrıntıda inceleyin.</p></div><button type="button" class="btn btn-primary btn-sm" data-user-open-student="${escapeHtml(u.id)}">Öğrenci ayrıntılarını aç</button></section>` : ""}
     <form id="user-detail-form" class="detail-edit-form" novalidate>
       <h4>Kullanıcı bilgileri</h4>
       <div class="form-grid">
@@ -6655,8 +6655,13 @@ function setupUserEvents() {
     const removeBtn = event.target.closest("[data-mem-remove]");
     const passwordBtn = event.target.closest("#user-detail-password-btn");
     const entitlementBtn = event.target.closest("#user-detail-entitlement-btn");
+    const studentWorkspaceBtn = event.target.closest("[data-user-open-student]");
 
-    if (entitlementBtn) {
+    if (studentWorkspaceBtn) {
+      void openAnalyticsStudentWorkspace(studentWorkspaceBtn.dataset.userOpenStudent, {
+        closeUserDetail: true,
+      });
+    } else if (entitlementBtn) {
       void createAdminUserEntitlement();
     } else if (passwordBtn) {
       void resetAdminUserPassword();
@@ -7089,7 +7094,7 @@ async function submitStudentForm(event) {
   }
 }
 
-async function openStudentDetail(id) {
+async function openStudentDetail(id, options = {}) {
   const modal = $("student-detail-modal");
   $("student-detail-body").innerHTML = '<p class="muted">Yükleniyor…</p>';
   modal.classList.remove("hidden");
@@ -7099,6 +7104,7 @@ async function openStudentDetail(id) {
     const detail = await parseResponse(res);
     studentDetailCurrent = detail;
     renderStudentDetail(detail);
+    if (options.analyticsData) renderStudentDetailAnalytics(options.analyticsData);
   } catch (err) {
     studentDetailCurrent = null;
     $("student-detail-body").innerHTML =
@@ -7173,7 +7179,7 @@ function renderStudentDetail(d) {
     : '<tr><td colspan="6" class="empty-cell">Sınıf kaydı yok.</td></tr>';
 
   $("student-detail-body").innerHTML = `
-    ${canAccessPage("analytics") ? `<div class="detail-section"><button type="button" class="btn btn-ghost btn-sm" data-student-analytics-id="${escapeHtml(d.user.id)}">Öğrenci analitiğini görüntüle</button></div>` : ""}
+    ${canAccessPage("analytics") ? `<section class="detail-section student-analytics-workspace" aria-labelledby="student-detail-analytics-title"><div class="detail-section-heading"><div><h4 id="student-detail-analytics-title">Öğrenci analitiği</h4><p class="muted">Öğrenme yolu, performans ve son etkinlik bu öğrenci ayrıntısında görüntülenir.</p></div><button type="button" class="btn btn-ghost btn-sm" data-student-analytics-id="${escapeHtml(d.user.id)}">Analitiği yükle</button></div><div id="student-detail-analytics-content" class="student-detail-analytics-content"><p class="muted">Analitiği görüntülemek için “Analitiği yükle”yi seçin.</p></div></section>` : ""}
     <section class="detail-section">
       <h4>Kişisel Bilgiler</h4>
       <dl class="info-grid">${infoRows
@@ -7239,6 +7245,83 @@ function enrollmentStatusOptions() {
   return Object.entries(ENROLLMENT_STATUS_LABELS)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
     .join("");
+}
+
+function renderStudentDetailAnalytics(data) {
+  const panel = $("student-detail-analytics-content");
+  if (!panel) return;
+  const performance = data.performance;
+  const correctRatio =
+    performance.correctRatio === null ? "Veri yok" : `%${performance.correctRatio}`;
+  const readingSpeed = performance.readingSpeed.available
+    ? `${performance.readingSpeed.points.at(-1)?.value ?? "—"} WPM`
+    : "Veri yok";
+  const comprehension = performance.readingComprehension.available
+    ? `%${Math.round(performance.readingComprehension.points.at(-1)?.value ?? 0)}`
+    : "Veri yok";
+  const areaRows = data.journey.areas.length
+    ? data.journey.areas
+        .map(
+          (area) =>
+            `<tr><td>${escapeHtml(area.area)}</td><td>${area.completed} / ${area.total}</td><td>${area.inProgress}</td><td>${area.locked}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="4" class="empty-cell">Öğrenme yolu kaydı yok.</td></tr>';
+  const pathRows = data.journey.paths
+    .map(
+      (path) =>
+        `<tr><td>${escapeHtml(path.title)}</td><td>${path.currentStep ? `#${path.currentStep.position} · ${escapeHtml(path.currentStep.title)}` : "Bekleyen adım yok"}</td><td>${escapeHtml(path.status)}</td></tr>`,
+    )
+    .join("");
+  const activityRows = data.activity.items.length
+    ? data.activity.items
+        .map(
+          (item) =>
+            `<tr><td>${escapeHtml(formatDateTime(item.at))}</td><td>${escapeHtml(item.type)}</td><td>${escapeHtml(item.result ?? "—")}</td></tr>`,
+        )
+        .join("")
+    : '<tr><td colspan="3" class="empty-cell">Son etkinlik kaydı yok.</td></tr>';
+  const limitations = data.activity.limitations?.length
+    ? `<p class="muted">${data.activity.limitations.map((item) => escapeHtml(item)).join(" ")}</p>`
+    : "";
+
+  panel.innerHTML = `
+    <div class="student-analytics-metrics">
+      <article><span>Doğru oranı</span><strong>${correctRatio}</strong></article>
+      <article><span>Tamamlanan alıştırma</span><strong>${performance.completedExercises}</strong></article>
+      <article><span>Okuma hızı</span><strong>${readingSpeed}</strong></article>
+      <article><span>Okuduğunu anlama</span><strong>${comprehension}</strong></article>
+    </div>
+    <div class="student-analytics-columns">
+      <section><h5>Öğrenme yolu</h5><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Tamamlanan</th><th>Sürüyor</th><th>Kilitli</th></tr></thead><tbody>${areaRows}</tbody></table></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Rota</th><th>Mevcut adım</th><th>Durum</th></tr></thead><tbody>${pathRows || '<tr><td colspan="3" class="empty-cell">Rota kaydı yok.</td></tr>'}</tbody></table></div></section>
+      <section><h5>Son etkinlik</h5><div class="table-wrap"><table class="data-table"><thead><tr><th>Zaman</th><th>Etkinlik</th><th>Sonuç</th></tr></thead><tbody>${activityRows}</tbody></table></div>${data.activity.truncated ? '<p class="muted">En güncel kayıtlar gösteriliyor.</p>' : ""}${limitations}</section>
+    </div>
+    ${performance.skillsNeedingReview.length ? `<div class="analytics-review-note"><strong>İnceleme sinyalleri</strong><ul>${performance.skillsNeedingReview.map((item) => `<li>${escapeHtml(item.name)}: ${escapeHtml(item.reason)}</li>`).join("")}</ul></div>` : ""}
+    <p class="muted">Analitik dönemi: ${escapeHtml(formatDateTime(data.period.from))} – ${escapeHtml(formatDateTime(data.period.to))}</p>`;
+}
+
+async function loadStudentDetailAnalytics(studentId) {
+  const panel = $("student-detail-analytics-content");
+  if (!panel) return;
+  panel.innerHTML = '<p class="muted" role="status">Öğrenci analitiği yükleniyor…</p>';
+  const button = $("student-detail-body").querySelector("[data-student-analytics-id]");
+  if (button) button.disabled = true;
+  try {
+    const query = analyticsQuery();
+    const data = await parseResponse(
+      await authenticatedFetch(
+        `/admin/analytics/students/${encodeURIComponent(studentId)}?${query.toString()}`,
+      ),
+    );
+    if (studentDetailCurrent?.user?.id === studentId) renderStudentDetailAnalytics(data);
+  } catch (error) {
+    if (studentDetailCurrent?.user?.id === studentId) {
+      panel.innerHTML = `<p class="error" role="alert">${escapeHtml(error?.message ?? "Öğrenci analitiği yüklenemedi.")}</p>`;
+    }
+  } finally {
+    if (button?.isConnected) button.disabled = false;
+  }
 }
 
 async function populateEnrollmentAddYear(tenantId) {
@@ -7424,10 +7507,7 @@ function setupStudentEvents() {
     } else if (updateBtn) {
       void updateEnrollment(updateBtn.dataset.enrUpdate);
     } else if (analyticsButton && canAccessPage("analytics")) {
-      const studentId = analyticsButton.dataset.studentAnalyticsId;
-      $("student-detail-modal").classList.add("hidden");
-      navigate("analytics");
-      void loadAnalyticsStudentDetail(studentId);
+      void loadStudentDetailAnalytics(analyticsButton.dataset.studentAnalyticsId);
     }
   });
   $("student-detail-body").addEventListener("change", (event) => {
@@ -9211,7 +9291,7 @@ async function loadAnalyticsStudents(requestId = analyticsRequest) {
     ? students.items
         .map(
           (student) =>
-            `<tr><td><button type="button" class="link-btn analytics-student-name" data-analytics-student="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</button><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntılar</button></td></tr>`,
+            `<tr><td><button type="button" class="link-btn analytics-student-name" data-analytics-student="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</button><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-primary btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntıları aç</button></td></tr>`,
         )
         .join("")
     : '<tr><td colspan="5" class="empty-cell">Bu tarih aralığında öğrenci etkinliği bulunamadı.</td></tr>';
@@ -9219,85 +9299,41 @@ async function loadAnalyticsStudents(requestId = analyticsRequest) {
     `<span class="muted">${students.total} öğrenci</span><div><button type="button" class="btn btn-ghost btn-sm" data-analytics-page="prev" ${students.page <= 1 ? "disabled" : ""}>Önceki</button><button type="button" class="btn btn-ghost btn-sm" data-analytics-page="next" ${students.page * students.pageSize >= students.total ? "disabled" : ""}>Sonraki</button></div>`;
 }
 
-function renderAnalyticsDetail(data) {
-  const card = $("analytics-student-detail");
-  const performance = data.performance;
-  card.classList.remove("hidden");
-  card.setAttribute("aria-busy", "false");
-  const areaRows = data.journey.areas.length
-    ? data.journey.areas
-        .map(
-          (area) =>
-            `<tr><td>${escapeHtml(area.area)}</td><td>${area.completed}/${area.total}</td><td>${area.inProgress}</td><td>${area.locked}</td></tr>`,
-        )
-        .join("")
-    : '<tr><td colspan="4" class="empty-cell">Öğrenme yolu verisi mevcut değil.</td></tr>';
-  const pathRows = data.journey.paths
-    .flatMap((path) =>
-      path.steps.map(
-        (step) =>
-          `<tr><td>${escapeHtml(path.title)}</td><td>${step.position}</td><td>${escapeHtml(step.title)}</td><td>${escapeHtml(step.status)}</td></tr>`,
-      ),
-    )
-    .join("");
-  const activityRows = data.activity.items.length
-    ? data.activity.items
-        .map(
-          (item) =>
-            `<tr><td>${escapeHtml(formatDateTime(item.at))}</td><td>${escapeHtml(item.type)}</td><td>${escapeHtml(item.result ?? "—")}</td></tr>`,
-        )
-        .join("")
-    : '<tr><td colspan="3" class="empty-cell">Etkinlik verisi mevcut değil.</td></tr>';
-  const score =
-    performance.correctRatio === null ? "Veri mevcut değil" : `%${performance.correctRatio}`;
-  const speed = performance.readingSpeed.available
-    ? `${performance.readingSpeed.points.at(-1)?.value ?? "—"} WPM`
-    : "Veri mevcut değil";
-  const comprehension = performance.readingComprehension.available
-    ? `%${Math.round(performance.readingComprehension.points.at(-1)?.value ?? 0)}`
-    : "Veri mevcut değil";
-  const currentLevel = data.student.currentLevel
-    ? `${data.student.currentLevel.name} (${data.student.currentLevel.code})`
-    : "Veri mevcut değil";
-  const currentPathRows = data.journey.paths
-    .map(
-      (path) =>
-        `<tr><td>${escapeHtml(path.area)}</td><td>${escapeHtml(path.title)}</td><td>${path.currentStep ? `#${path.currentStep.position} · ${escapeHtml(path.currentStep.title)}` : "Tamamlandı veya bekleyen adım yok"}</td></tr>`,
-    )
-    .join("");
-  card.innerHTML = `<div class="analytics-detail-head"><div><span class="eyebrow">ÖĞRENCİ AYRINTISI</span><h3>${escapeHtml(data.student.displayName)}</h3><p class="muted">${escapeHtml(data.student.classNames.join(", ") || "Sınıf bilgisi yok")} · Seviye: ${escapeHtml(currentLevel)}</p></div><div class="analytics-detail-actions">${data.student.profileId ? `<button type="button" class="btn btn-ghost btn-sm" data-analytics-profile="${escapeHtml(data.student.profileId)}">Hesap ayrıntıları</button>` : ""}<button type="button" class="btn btn-ghost btn-sm" data-analytics-detail-close>Kapat</button></div></div>
-    <div class="analytics-detail-columns"><div><h4>Öğrenme yolu durumu</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Yol</th><th>Mevcut adım</th></tr></thead><tbody>${currentPathRows || '<tr><td colspan="3" class="empty-cell">Veri mevcut değil.</td></tr>'}</tbody></table></div><h4>Adım ilerlemesi</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Yol</th><th>#</th><th>Adım</th><th>Durum</th></tr></thead><tbody>${pathRows || '<tr><td colspan="4" class="empty-cell">Veri mevcut değil.</td></tr>'}</tbody></table></div></div><div><h4>Alan özeti</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Tamamlanan</th><th>Sürüyor</th><th>Kilitli adım</th></tr></thead><tbody>${areaRows}</tbody></table></div><p class="muted">Son etkinlik: ${data.journey.lastActivityAt ? escapeHtml(formatDateTime(data.journey.lastActivityAt)) : "Veri mevcut değil"}</p></div></div>`;
+async function fetchAnalyticsStudentDetail(studentId) {
+  const query = analyticsQuery();
+  return parseResponse(
+    await authenticatedFetch(
+      `/admin/analytics/students/${encodeURIComponent(studentId)}?${query.toString()}`,
+    ),
+  );
+}
 
-  const performancePanel = $("analytics-performance-empty");
-  if (performancePanel) {
-    performancePanel.classList.remove("management-empty-state");
-    performancePanel.innerHTML = `<div class="analytics-detail-grid"><article><span class="muted">Doğru oranı</span><strong>${score}</strong></article><article><span class="muted">Tamamlanan alıştırma</span><strong>${performance.completedExercises}</strong></article><article><span class="muted">Okuma hızı</span><strong>${speed}</strong></article><article><span class="muted">Anlama kanıtı</span><strong>${comprehension}</strong></article><article><span class="muted">Başlangıç farkı</span><strong>${performance.improvementFromBaseline === null ? "Veri mevcut değil" : `${Math.round(performance.improvementFromBaseline * 100)} puan`}</strong></article></div>${performance.skillsNeedingReview.length ? `<div class="analytics-review-note"><strong>İnceleme sinyalleri</strong><ul>${performance.skillsNeedingReview.map((item) => `<li>${escapeHtml(item.name)}: ${escapeHtml(item.reason)}</li>`).join("")}</ul></div>` : ""}`;
-  }
-  const activityPanel = $("analytics-activity-empty");
-  if (activityPanel) {
-    activityPanel.classList.remove("management-empty-state");
-    activityPanel.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr><th>Zaman</th><th>Etkinlik</th><th>Sonuç</th></tr></thead><tbody>${activityRows}</tbody></table></div>${data.activity.truncated ? '<p class="muted">Liste sınırı nedeniyle yalnızca en güncel kayıtlar gösteriliyor.</p>' : ""}<p class="muted">${data.activity.limitations.map((item) => escapeHtml(item)).join(" ")}</p>`;
+async function openAnalyticsStudentWorkspace(studentId, options = {}) {
+  try {
+    const data = await fetchAnalyticsStudentDetail(studentId);
+    if (!data.student?.profileId) throw new Error("Öğrenci profili bulunamadı.");
+    await openStudentDetail(data.student.profileId, { analyticsData: data });
+    if (options.closeUserDetail) $("user-detail-modal").classList.add("hidden");
+  } catch (cause) {
+    const message = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
+    if (options.closeUserDetail) {
+      showUserError(message);
+    } else {
+      const error = $("analytics-error");
+      error.textContent = message;
+      error.classList.remove("hidden");
+    }
   }
 }
 
 async function loadAnalyticsStudentDetail(studentId, requestId = analyticsRequest) {
-  const card = $("analytics-student-detail");
-  card.classList.remove("hidden");
-  card.setAttribute("aria-busy", "true");
-  card.innerHTML = '<p class="muted" role="status">Öğrenci ayrıntıları yükleniyor…</p>';
-  card.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
   try {
-    const query = analyticsQuery();
-    const data = await parseResponse(
-      await authenticatedFetch(
-        `/admin/analytics/students/${encodeURIComponent(studentId)}?${query.toString()}`,
-      ),
-    );
-    if (requestId === analyticsRequest) renderAnalyticsDetail(data);
+    const data = await fetchAnalyticsStudentDetail(studentId);
+    if (requestId !== analyticsRequest) return;
+    if (!data.student?.profileId) throw new Error("Öğrenci profili bulunamadı.");
+    await openStudentDetail(data.student.profileId, { analyticsData: data });
   } catch (cause) {
     if (requestId !== analyticsRequest) return;
-    card.setAttribute("aria-busy", "false");
-    card.innerHTML = `<div class="analytics-detail-head"><div><h3>Ayrıntılar yüklenemedi</h3><p class="error">${escapeHtml(cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.")}</p></div><button type="button" class="btn btn-ghost btn-sm" data-analytics-detail-close>Kapat</button></div>`;
     const error = $("analytics-error");
     error.textContent = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
     error.classList.remove("hidden");
@@ -11026,17 +11062,22 @@ async function handleQuestionNewVersion() {
       method: "POST",
       body: JSON.stringify({}),
     });
-    await parseResponse(res);
+    const createdVersion = await parseResponse(res);
     if (authoringContext) {
       questionAuthoringContext = null;
       closeQuestionDetail();
       await openContentAuthoring(authoringContext.contentId, authoringContext.contentVersionId);
+      if (createdVersion?.id) await handleQuestionVersionEdit(createdVersion.id);
       return;
     }
-    void loadQuestionVersions(currentQuestionId);
+    await loadQuestionVersions(currentQuestionId);
     void loadQuestions();
-    showQuestionError("Yeni sürüm oluşturuldu.");
-    setTimeout(hideQuestionError, 3000);
+    if (createdVersion?.id) {
+      await handleQuestionVersionEdit(createdVersion.id);
+    } else {
+      showQuestionError("Yeni sürüm oluşturuldu; ayrıntılar yenilendi.");
+      setTimeout(hideQuestionError, 3000);
+    }
   } catch (err) {
     errEl.textContent = err.message || "Yeni sürüm oluşturulamadı.";
     errEl.classList.remove("hidden");
@@ -11065,13 +11106,18 @@ async function handleQuestionVersionEdit(versionId) {
 }
 async function populateQuestionFormForVersion(v) {
   resetQuestionForm();
+  const versionGuidance = $("question-form-version-guidance");
+  if (versionGuidance) {
+    versionGuidance.innerHTML = `<strong>Yeni sürüm taslağı</strong><span>Yayımlanmış sürümler değiştirilemez. Soru metni, cevap, ipucu, açıklama ve kaynak bu taslak sürümde saklanır; eski sürüm ve ona bağlı cevap/puan kayıtları korunur. Beceri etiketi soru kaydına uygulanır.</span>`;
+    versionGuidance.classList.remove("hidden");
+  }
   await populateQuestionFormSelects(currentQuestionContentId ?? "", v.contentVersionId ?? "");
   const type = currentQuestionType ?? v.questionType ?? $("question-form-type").value;
   $("question-form-type").value = type;
   $("question-form-type").disabled = true;
   $("question-form-content").closest(".field").classList.add("hidden");
   $("question-form-content-version").closest(".field").classList.remove("hidden");
-  $("question-form-skill").closest(".field").classList.add("hidden");
+  $("question-form-skill").closest(".field").classList.remove("hidden");
   $("question-form-position").closest(".field").classList.add("hidden");
   $("question-form-title").textContent = `Sürüm Düzenle v${v.version}`;
   $("question-form-prompt").value = v.prompt ?? "";
@@ -11080,6 +11126,13 @@ async function populateQuestionFormForVersion(v) {
   $("question-form-source-reference").value =
     v.sourceReference ?? v.generationMetadata?.sourceReference ?? "";
   $("question-form-difficulty").value = v.difficulty != null ? String(v.difficulty) : "";
+  const questionId = v.questionId ?? editingQuestionId ?? currentQuestionId;
+  if (questionId) {
+    const question = await parseResponse(
+      await questionApi(`/questions/${encodeURIComponent(questionId)}`),
+    );
+    $("question-form-skill").value = question.skillId ?? "";
+  }
   const correctAnswer = v.correctAnswer;
   const options = v.options ?? [];
   $("question-form-mc-options").innerHTML = "";
@@ -11589,6 +11642,7 @@ function openQuestionForm() {
 }
 function closeQuestionForm() {
   $("question-form-modal").classList.add("hidden");
+  $("question-form-version-guidance")?.classList.add("hidden");
   questionFormMode = "createQuestion";
   editingVersionId = null;
   editingQuestionId = null;
@@ -11604,6 +11658,7 @@ function closeQuestionForm() {
 }
 function resetQuestionForm() {
   $("question-form").reset();
+  $("question-form-version-guidance")?.classList.add("hidden");
   $("question-form-error").classList.add("hidden");
   $("question-form-error").textContent = "";
   $("question-form-mc-options").innerHTML = "";
@@ -11842,6 +11897,7 @@ async function submitQuestionForm(event) {
   }
   const versionPayload = {
     ...(contentVersionId ? { contentVersionId } : {}),
+    skillId,
     prompt,
     options,
     correctAnswer,
