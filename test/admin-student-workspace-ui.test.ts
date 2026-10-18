@@ -107,6 +107,31 @@ describe("admin student workspace and question editing UI", () => {
     );
   });
 
+  it("labels locked steps clearly in the admin analytics workspace", () => {
+    const panel = { innerHTML: "" };
+    const context = createContext({
+      $: () => panel,
+      escapeHtml: (value: unknown) => String(value),
+      formatDateTime: (value: unknown) => String(value),
+    });
+    runInContext(
+      `${functionSource("function renderStudentDetailAnalytics(", "async function loadStudentDetailAnalytics(")}; renderStudentDetailAnalytics`,
+      context,
+    )({
+      performance: {
+        correctRatio: 100,
+        completedExercises: 1,
+        readingSpeed: { available: false, points: [] },
+        readingComprehension: { available: false, points: [] },
+        skillsNeedingReview: [],
+      },
+      journey: { areas: [], paths: [] },
+      activity: { items: [], limitations: [], truncated: false },
+      period: { from: "2026-01-01", to: "2026-01-31" },
+    });
+    expect(panel.innerHTML).toContain("<th>Kilitli adım</th>");
+  });
+
   it("opens the new version draft in the editor immediately after cloning", async () => {
     const questionApi = vi.fn(async () => ({}));
     const editVersion = vi.fn(async () => {});

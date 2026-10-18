@@ -7293,7 +7293,7 @@ function renderStudentDetailAnalytics(data) {
       <article><span>Okuduğunu anlama</span><strong>${comprehension}</strong></article>
     </div>
     <div class="student-analytics-columns">
-      <section><h5>Öğrenme yolu</h5><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Tamamlanan</th><th>Sürüyor</th><th>Kilitli</th></tr></thead><tbody>${areaRows}</tbody></table></div>
+      <section><h5>Öğrenme yolu</h5><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Tamamlanan</th><th>Sürüyor</th><th>Kilitli adım</th></tr></thead><tbody>${areaRows}</tbody></table></div>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>Rota</th><th>Mevcut adım</th><th>Durum</th></tr></thead><tbody>${pathRows || '<tr><td colspan="3" class="empty-cell">Rota kaydı yok.</td></tr>'}</tbody></table></div></section>
       <section><h5>Son etkinlik</h5><div class="table-wrap"><table class="data-table"><thead><tr><th>Zaman</th><th>Etkinlik</th><th>Sonuç</th></tr></thead><tbody>${activityRows}</tbody></table></div>${data.activity.truncated ? '<p class="muted">En güncel kayıtlar gösteriliyor.</p>' : ""}${limitations}</section>
     </div>
