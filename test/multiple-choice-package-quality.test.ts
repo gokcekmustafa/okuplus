@@ -5,6 +5,7 @@ import {
   MULTIPLE_CHOICE_SOURCE_PACKAGES,
 } from "../src/curriculum/multiple-choice-source-catalog.js";
 import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
+import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
 
 describe("multiple-choice package quality", () => {
   it("covers each real catalog source and reports package-level length and position patterns", () => {
@@ -70,14 +71,47 @@ describe("multiple-choice package quality", () => {
     expect(newCandidates.map(({ source }) => source.status)).toContain(
       "VERSIONED_REVISION_CANDIDATE",
     );
+    const expansionSources = MULTIPLE_CHOICE_SOURCE_PACKAGES.filter(({ key }) =>
+      key.includes("_EXPANSION_"),
+    );
+    const expectedExpansionKeys = EDUCATION_V2_P1_800_DRAFT_CYCLES.map(
+      (cycle) => `${cycle.programId}:SOURCE_QUESTIONS`,
+    );
+    expect(expansionSources.map(({ key }) => key)).toEqual(expectedExpansionKeys);
+    const expectedExpansionQuestionCount = EDUCATION_V2_P1_800_DRAFT_CYCLES.reduce(
+      (total, cycle) =>
+        total +
+        cycle.sourceStations.reduce(
+          (stationTotal, station) => stationTotal + station.questions.length,
+          0,
+        ),
+      0,
+    );
+    const expansionQuestions = expansionSources.flatMap(({ questions }) => questions);
+    expect(expansionQuestions).toHaveLength(expectedExpansionQuestionCount);
+    expect(new Set(expansionQuestions.map(({ sourceQuestionId }) => sourceQuestionId)).size).toBe(
+      expectedExpansionQuestionCount,
+    );
+    expect(new Set(expansionQuestions.map(({ sourceVersionId }) => sourceVersionId)).size).toBe(
+      expectedExpansionQuestionCount,
+    );
     expect(
       reports
         .filter(({ source }) => source.key.includes("_EXPANSION_"))
         .reduce((total, { report }) => total + report.questionCount, 0),
-    ).toBe(1860);
+    ).toBe(expectedExpansionQuestionCount);
     for (const { source, report } of newCandidates) {
       expect(report.clearLengthOutlierCount, source.key).toBe(0);
     }
+    const aerosolQuestion = MULTIPLE_CHOICE_SOURCE_PACKAGES.find((source) =>
+      source.key.includes("EDU_V2_P1_D_EXPANSION_40_PROGRAM"),
+    )?.questions.find((question) => question.key === "d40-size-1");
+    expect(
+      aerosolQuestion?.options.find((option) => option.id === aerosolQuestion.correctOptionId)
+        ?.text,
+    ).toBe("Terra üzerindeki MISR gözlemlerine");
+    expect(aerosolQuestion?.explanation).toContain("MISR");
+    expect(aerosolQuestion?.sourceText).toContain("MISR");
     const placement = reports.find(({ source }) => source.status === "DESIGN_ONLY_CANDIDATE")!;
     expect(placement.report.questionCount).toBeGreaterThan(0);
     expect(placement.report.needsEditorialReview).toBe(true);
@@ -188,12 +222,22 @@ describe("multiple-choice package quality", () => {
 
   it("retains text, key, explanation and immutable version IDs in a deduplicated audit dossier", () => {
     const unique = collectUniqueMultipleChoiceQuestions(MULTIPLE_CHOICE_SOURCE_PACKAGES);
-    expect(unique).toHaveLength(2049);
+    const rawQuestionReferences = MULTIPLE_CHOICE_SOURCE_PACKAGES.flatMap((source) =>
+      source.questions.map((question) => ({ source, question })),
+    );
+    expect(unique).toHaveLength(
+      new Set(
+        rawQuestionReferences.map(
+          ({ source, question }) => question.sourceQuestionId ?? `${source.key}:${question.key}`,
+        ),
+      ).size,
+    );
+    expect(unique).toHaveLength(2529);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(2187);
+    expect(allVersions).toHaveLength(2667);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(2160);
+    ).toHaveLength(2640);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,

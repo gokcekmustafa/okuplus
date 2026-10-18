@@ -68,6 +68,181 @@ const q = (
   hint: string,
 ): DraftQuestion => ({ key, prompt, correct, distractors, explanation, hint });
 
+/** Unreleased draft answer revisions. Each edit receives a new immutable question version below. */
+const draftQuestionRevisionsV2: Readonly<
+  Record<
+    string,
+    {
+      correct: string;
+      distractors?: [string, string, string];
+      explanation?: string;
+    }
+  >
+> = {
+  "a41-urban-3": { correct: "Gelişim biçimlerini karşılaştırmayı" },
+  "a41-manhattan-3": { correct: "Gölge ve ısı etkisini birlikte değerlendirmek" },
+  "a41-rain-2": { correct: "Rüzgârı yönlendirip havayı yakınsatabilir" },
+  "a41-rain-3": { correct: "Bir mekanizmanın her durumda geçerli olduğunu" },
+  "b39-zambezi-2": { correct: "Sulak alan kurur, tuzlu su ilerleyebilir" },
+  "b39-miss-2": { correct: "Kıyı gerilemesi, su baskını ve yeni arazi" },
+  "b39-mangrove-3": { correct: "Erozyon, fırtına ve insan etkisi" },
+  "b39-wax-3": { correct: "Sediment, akış ve kıyı koşulları" },
+  "c39-river-1": { correct: "Su alır, verir ya da ikisini de" },
+  "c39-river-3": { correct: "Kesimler farklı yükseklikte olabilir" },
+  "c39-cycle-1": { correct: "Hava, yeryüzü ve yer altında" },
+  "c39-cycle-3": { correct: "Temel ilişkiler var; ayrıntılar yereldir" },
+  "c39-baikal-2": { correct: "Gölün güney kesiminde" },
+  "c39-ice-2": { correct: "Daha erken donar ve daha erken çözülür" },
+  "d39-ice-map-1": { correct: "Uydu görüntülerini karşılaştırarak" },
+  "d39-fast-ice-2": { correct: "Kıyıdaki sıcak okyanus akıntılarını" },
+  "a35-oceancolor-3": { correct: "Bazı yüksek enlem ve kıyılar kapsanmadı" },
+  "b33-plankton-1": { correct: "Akıntıya karşı yüzemezse" },
+  "b33-plankton-3": { correct: "Fitoplanktonla beslenir ve av olur" },
+  "b33-marsh-1": {
+    correct: "Gelgit",
+    distractors: ["Rüzgâr", "Göl taşması", "Bitki değişimi"],
+  },
+  "b33-watershed-3": { correct: "Yoldaki kirleticileri" },
+  "b33-ice-2": { correct: "Işığın çoğunu yansıtır" },
+  "d33-greenland-2": { correct: "Karşıt yönlü akıntılar" },
+  "a36-aquifer-3": { correct: "Kolayca çıkarılmasını ve içilebilirliğini" },
+  "a36-amazon-1": { correct: "Uzun dönemli Landsat görüntüleri" },
+  "b34-sediment-3": { correct: "Görüntüler arasında gerçekleşebilir" },
+  "b34-rivergw-3": { correct: "Yer altı suyu yağış yokken de akışı besler" },
+  "c34-quality-1": { correct: "Bir kullanım için uygunluğunu" },
+  "c34-quality-2": { correct: "İçmeye uygunluğunu" },
+  "c34-epa-1": {
+    correct: "Isı enerjisi",
+    distractors: ["Ses enerjisi", "Kayaç mineralleri", "Bitki genleri"],
+  },
+  "d34-quebec-2": { correct: "Nehir sedimentleri ve organik madde" },
+  "d34-delta-2": { correct: "Dalga ve gelgit aşındırması" },
+  "d34-density-3": {
+    correct: "Sıcaklıkla çözünmüş maddeyi hesaba katmak",
+    distractors: [
+      "Suyun hacmiyle sıcaklığına birlikte bakmak",
+      "Suyun rengi ve akış hızını ölçmek",
+      "Yalnızca katı madde miktarını saymak",
+    ],
+  },
+  "d34-extinct-1": { correct: "Son birey de yaşamadığında" },
+  "a37-river-1": { correct: "Yer altı suyunun akarsuya katılması" },
+  "a37-river-3": { correct: "Havza, yer altı suyu ve bitkiyi birlikte incelemek" },
+  "a37-hydro-1": { correct: "Suyun hareketi, dağılımı ve özellikleri" },
+  "a37-hydro-2": { correct: "Akiferde birikir ya da kaynaktan çıkar" },
+  "a37-spring-2": { correct: "Beslenme alanı ve yağış" },
+  "a37-spring-3": { correct: "Berraklık içilebilirliği kanıtlamaz" },
+  "b35-kelp-3": { correct: "Canlı türleri ve sayılarındaki değişimi" },
+  "b35-kelp-1": { correct: "Serin, sığ kıyı sularında" },
+  "b35-tide-1": { correct: "Gelgit seviyelerinin" },
+  "b35-tide-2": { correct: "Gelgit kabarması kıyıya ulaştığında" },
+  "b35-tide-3": { correct: "Yerel koşullar su seviyesini etkileyebilir" },
+  "b35-coral-3": { correct: "Tür ve çevre büyümeyi etkiler" },
+  "c35-katrina-3": { correct: "Her su basan alanın kalıcı kaybolduğunu" },
+  "c35-plant-1": { correct: "Fosil yapı ve bağlamları karşılaştırarak" },
+  "c35-plant-2": { correct: "Davranış korunmayabilir; kanıt sınırlıdır" },
+  "c35-ebro-2": { correct: "Yüzeyden taşınan malzemeyi artırabilir" },
+  "c35-ebro-3": { correct: "Doğal ve insan etkilerini karşılaştırmak" },
+  "d35-desolation-3": { correct: "Gözlemlerin desteklediği olası bir açıklama" },
+  "d35-mississippi-1": { correct: "Toprak ve besin yüklü sediment" },
+  "d35-irrawaddy-3": { correct: "Sıkışma ve erozyon alanı alçaltabilir" },
+  "d35-plants-3": { correct: "Su kalitesi ve canlı çeşitliliği de önemli" },
+  "d35-flood-1": {
+    correct: "Su",
+    distractors: ["Bitki", "Toprak", "Bulut"],
+  },
+  "a38-atmos-3": { correct: "Suyu bölgeler arasında taşır" },
+  "a38-runoff-1": { correct: "Su yüzeyde akıp toprağa sızmadığında" },
+  "b36-hydrography-2": { correct: "Harita ve seyri destekler" },
+  "b36-ioos-1": { correct: "Okyanus verilerini birlikte işler" },
+  "c36-alvord-3": { correct: "Geçmiş göl ve taşkına dair başka kanıtlar" },
+  "c36-chil-3": { correct: "Aşınmaya dirençli heyelan tortusu" },
+  "c36-chil-1": { correct: "Heyelan akışı kapattığı için" },
+  "c36-ganges-2": { correct: "Daha yeni taşkına uğramış alanları" },
+  "c36-ant-1": { correct: "Mantar bahçelerine taşımak için" },
+  "c36-ant-2": { correct: "Mantarı besin için yetiştirip bahçeyi korur" },
+  "d36-lakes-3": { correct: "Görüntüdeki alg türünün hangisi olduğunu" },
+  "a39-weather-3": { correct: "Yerel nem, enerji ve coğrafya farklıdır" },
+  "a39-weather-2": { correct: "Akım, ısı ve nem taşınmasına katkı verir" },
+  "a39-drought-1": { correct: "Akışın yerel olağan düzeyin altına inmesi" },
+  "a39-drought-2": { correct: "Akış yerel normale göre değerlendirilmelidir" },
+  "b37-enso-1": { correct: "Sıcak su ve zayıflayan doğu rüzgârları" },
+  "b37-ndvi-1": { correct: "Aynı ayın değeriyle uzun dönem ortalaması" },
+  "b37-ndvi-3": { correct: "Kuraklığın gerçek nedenini" },
+  "b37-flash-2": { correct: "Sıcaklık, rüzgâr ve güneş ışınımı" },
+  "b37-timing-2": { correct: "Su erken taşınıp tükenebilir" },
+  "c37-watershed-1": { correct: "Ortak çıkışa su taşıyan kara alanı" },
+  "c37-watershed-2": { correct: "Akışı yavaşlatıp sızıntıya fırsat verir" },
+  "c37-watershed-3": { correct: "Yağış, zemin ve bitkiyi incelemek" },
+  "c37-desert-1": { correct: "Arazinin kalıcı verim kaybı" },
+  "c37-desert-2": { correct: "Yağış dönünce bitkinin yeniden büyümesi" },
+  "c37-desert-3": { correct: "Uzun dönemli yağış ve bitki kayıtları" },
+  "c37-weather-3": { correct: "Farklı atmosfer ölçümlerini birleştirmek" },
+  "c37-map-2": { correct: "İklim, toprak ve su gözlemleri" },
+  "d37-color-3": { correct: "Dalga boyu bantlarının birleşimi" },
+  "d37-soilmap-1": {
+    correct: "Kahverengiyle",
+    distractors: ["Mavi tonlarıyla", "Mor tonlarıyla", "Gri tonlarıyla"],
+  },
+  "d37-color-2": { correct: "Özellikleri daha görünür kılmak için" },
+  "d37-moisture-2": { correct: "Bazı bölgelerde etkisi daha güçlüdür" },
+  "d37-moisture-3": { correct: "Uzun vadeli tahminin kusursuz olmasını" },
+  "d37-dry-2": { correct: "Bir değişim diğerlerini tetikleyebilir" },
+  "d37-dry-3": { correct: "Bölgesel ve dönemsel ölçümler" },
+  "a40-drip-1": { correct: "Doygun kayaca ulaşıp akifere karışabilir" },
+  "a40-drip-2": { correct: "Eğim yönünde aşağıya" },
+  "a40-imerg-2": { correct: "Yerel yağış zirvesini düşük gösterebilir" },
+  "b38-cloud-2": { correct: "Rüzgâr kristalleri uzatıp dağıtabilir" },
+  "b38-air-3": { correct: "Karşılaşınca hareketleri değişebilir" },
+  "b38-ndvi-1": { correct: "25 Temmuz 2020–24 Temmuz 2021" },
+  "c38-radar-2": {
+    correct: "Yağışın dağılımı ve şiddeti ile fırtınanın yüksekliği",
+    distractors: [
+      "Bölgedeki su kaynaklarının içilebilirliği ve kirlilik düzeyi",
+      "Bölgedeki bitki türleri ve toplam sayıları",
+      "Yerel rüzgâr yönü ve hızının ayrıntıları",
+    ],
+  },
+  "c38-cloud-2": { correct: "Yağış bulutu türünü" },
+  "c38-cloudlog-3": { correct: "Günlük değişimi karşılaştırmayı" },
+  "c38-pattern-2": { correct: "Yağış kuşağı mevsimle yer değiştirebilir" },
+  "d38-gpm-3": { correct: "Yerel istasyon ayrıntıları" },
+  "d38-leaf-1": {
+    correct: "Kurakta yaprak alanı yıllık ortalamayı aştı",
+    distractors: [
+      "Yaprak alanı ölçümünde değer sıfır çıktı",
+      "Yıllık ortalama yağış her bölgede eşit kaldı",
+      "Kurak mevsimde bütün ağaçlar kurudu",
+    ],
+  },
+  "d38-crop-3": { correct: "Kesin ürün verimini hesaplamak" },
+  "d38-drought-1": {
+    correct: "Yağış, sıcaklık, evapotranspirasyon ve toprak nemi",
+    distractors: [
+      "Bulut türleri, gelgit seviyesi ve akarsu debisi",
+      "Göl seviyesi, rüzgâr hızı ve deniz suyu tuzluluğu",
+      "Bitki türleri, kent nüfusu ve kıyı biçimi",
+    ],
+  },
+  "a42-dust-3": { correct: "Yıl içindeki genel toz taşınımını" },
+  "b40-fire-2": { correct: "Sonraki yangınların şiddetini azaltmak" },
+  "c40-plankton-3": { correct: "Katkı bazı bölgelerde daha belirgindir" },
+  "c40-iron-3": { correct: "Her artışın toz kaynaklı olduğunu" },
+  "c40-arabian-3": { correct: "Her durumda tek neden bulunduğunu" },
+  "d40-size-1": {
+    correct: "Terra üzerindeki MISR gözlemlerine",
+    distractors: [
+      "Terra üzerindeki MODIS gözlemlerine",
+      "Aqua üzerindeki MODIS gözlemlerine",
+      "Landsat üzerindeki OLI gözlemlerine",
+    ],
+    explanation:
+      "Kaynak, aerosol boyutu haritalarının Terra uydusundaki MISR gözlemlerine dayandığını belirtir.",
+  },
+  "d40-size-2": { correct: "Doğal toz genellikle daha iridir" },
+  "d40-smoke-3": { correct: "Dumanın buluta göre dikey konumunu" },
+};
+
 const sourceEvidence = (
   title: string,
   url: string,
@@ -26140,17 +26315,23 @@ function buildDraftCycle(route: RouteDraft): EducationV2P1ExpansionDraftCycle {
       const contentVersionId = `${prefix}_CONTENT_${draft.key.toUpperCase()}_V1`;
       const exerciseVersionId = `${prefix}_EXERCISE_${draft.key.toUpperCase()}_V1`;
       const questions = draft.questions.map((question) => {
+        const revision = draftQuestionRevisionsV2[question.key];
+        const correctAnswer = revision?.correct ?? question.correct;
+        const distractors = revision?.distractors ?? question.distractors;
+        const explanation = revision?.explanation ?? question.explanation;
         const correctIndex = (route.positionOffset + orderedQuestionIndex++) % 4;
         let distractorIndex = 0;
-        const rawOptions = [question.correct, ...question.distractors];
+        const rawOptions = [correctAnswer, ...distractors];
         const options = rawOptions.map((_, position) => {
-          const text =
-            position === correctIndex ? question.correct : question.distractors[distractorIndex++];
+          const text = position === correctIndex ? correctAnswer : distractors[distractorIndex++];
           return { id: String.fromCharCode(97 + position), text: text!, position: position + 1 };
         });
         return {
           ...question,
-          versionId: `${prefix}_QUESTION_${draft.key.toUpperCase()}_${question.key.toUpperCase()}_V1`,
+          correct: correctAnswer,
+          distractors,
+          explanation,
+          versionId: `${prefix}_QUESTION_${draft.key.toUpperCase()}_${question.key.toUpperCase()}_V${revision ? 2 : 1}`,
           options,
           correctOptionId: String.fromCharCode(97 + correctIndex),
         };
@@ -41952,6 +42133,21 @@ routeDrafts.push(
 );
 
 const unlinkedDraftCycles = routeDrafts.map(buildDraftCycle);
+
+const draftQuestionKeyCounts = new Map<string, number>();
+for (const question of unlinkedDraftCycles.flatMap((cycle) =>
+  cycle.sourceStations.flatMap((station) => station.questions),
+)) {
+  draftQuestionKeyCounts.set(question.key, (draftQuestionKeyCounts.get(question.key) ?? 0) + 1);
+}
+const invalidRevisionKeys = Object.keys(draftQuestionRevisionsV2).filter(
+  (key) => draftQuestionKeyCounts.get(key) !== 1,
+);
+if (invalidRevisionKeys.length > 0) {
+  throw new Error(
+    `Taslak soru v2 düzeltme anahtarları eksik veya yinelenmiş: ${invalidRevisionKeys.join(", ")}`,
+  );
+}
 
 export const EDUCATION_V2_P1_800_DRAFT_CYCLES = unlinkedDraftCycles.map((cycle) => ({
   ...cycle,
