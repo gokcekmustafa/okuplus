@@ -5961,26 +5961,34 @@ function renderUserList() {
     tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
   } else {
     tbody.innerHTML = userData
-      .map(
-        (u) => `
-      <tr>
-        <td>
-          <button type="button" class="link-btn" data-user-detail-id="${u.id}">
-            ${escapeHtml(u.displayName)}
-          </button>
-          ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
-        </td>
-        <td>${renderUserRoleConnections(u)}</td>
-        <td>${u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"}</td>
-        <td>${u.birthYear ?? "—"}</td>
-        <td>${userStatusBadge(u.status)}</td>
-        <td>${u.membershipCount}</td>
-        <td class="text-right">
-          <button type="button" class="btn btn-ghost btn-sm" data-user-edit-id="${u.id}">Düzenle</button>
-          <button type="button" class="btn btn-ghost btn-sm" data-user-delete-id="${u.id}">Sil</button>
-        </td>
-      </tr>`,
-      )
+      .map((u) => {
+        const hasStudentRole = (u.roleConnections ?? []).some(
+          (connection) => connection.role === "STUDENT",
+        );
+        return `
+        <tr>
+          <td>
+            <button
+              type="button"
+              class="link-btn"
+              data-user-detail-id="${u.id}"
+              ${hasStudentRole ? `data-user-open-student="${escapeHtml(u.id)}" aria-label="Öğrenci ayrıntısını aç: ${escapeHtml(u.displayName)}"` : ""}
+            >
+              ${escapeHtml(u.displayName)}
+            </button>
+            ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
+          </td>
+          <td>${renderUserRoleConnections(u)}</td>
+          <td>${u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"}</td>
+          <td>${u.birthYear ?? "—"}</td>
+          <td>${userStatusBadge(u.status)}</td>
+          <td>${u.membershipCount}</td>
+          <td class="text-right">
+            <button type="button" class="btn btn-ghost btn-sm" data-user-edit-id="${u.id}">Düzenle</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-user-delete-id="${u.id}">Sil</button>
+          </td>
+        </tr>`;
+      })
       .join("");
   }
 
@@ -6593,21 +6601,28 @@ async function deleteUser(id) {
   }
 }
 
-function setupUserEvents() {
-  $("user-list-body").addEventListener("click", (event) => {
-    const detailBtn = event.target.closest("[data-user-detail-id]");
-    const editBtn = event.target.closest("[data-user-edit-id]");
-    const deleteBtn = event.target.closest("[data-user-delete-id]");
+function handleUserListClick(event) {
+  const studentWorkspaceBtn = event.target.closest("[data-user-open-student]");
+  const detailBtn = event.target.closest("[data-user-detail-id]");
+  const editBtn = event.target.closest("[data-user-edit-id]");
+  const deleteBtn = event.target.closest("[data-user-delete-id]");
 
-    if (detailBtn) {
-      void openUserDetail(detailBtn.dataset.userDetailId);
-    } else if (editBtn) {
-      const user = userData.find((u) => u.id === editBtn.dataset.userEditId);
-      if (user) void openUserForm("edit", user);
-    } else if (deleteBtn) {
-      void deleteUser(deleteBtn.dataset.userDeleteId);
-    }
-  });
+  if (studentWorkspaceBtn) {
+    void openAnalyticsStudentWorkspace(studentWorkspaceBtn.dataset.userOpenStudent, {
+      closeUserDetail: true,
+    });
+  } else if (detailBtn) {
+    void openUserDetail(detailBtn.dataset.userDetailId);
+  } else if (editBtn) {
+    const user = userData.find((u) => u.id === editBtn.dataset.userEditId);
+    if (user) void openUserForm("edit", user);
+  } else if (deleteBtn) {
+    void deleteUser(deleteBtn.dataset.userDeleteId);
+  }
+}
+
+function setupUserEvents() {
+  $("user-list-body").addEventListener("click", handleUserListClick);
 
   $("user-search").addEventListener("input", () => {
     userPage = 1;

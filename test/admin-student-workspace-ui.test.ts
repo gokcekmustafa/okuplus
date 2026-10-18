@@ -88,6 +88,78 @@ describe("admin student workspace and question editing UI", () => {
     expect(close).toHaveBeenCalledExactlyOnceWith("hidden");
   });
 
+  it("routes a student name click in User Management directly to the shared student detail", async () => {
+    const openWorkspace = vi.fn();
+    const context = createContext({
+      openAnalyticsStudentWorkspace: openWorkspace,
+    });
+    const handleClick = runInContext(
+      `${functionSource("function handleUserListClick(event)", "function setupUserEvents()")}; handleUserListClick`,
+      context,
+    ) as (event: unknown) => void;
+
+    handleClick({
+      target: {
+        closest(selector: string) {
+          if (selector === "[data-user-open-student]") {
+            return { dataset: { userOpenStudent: "user-42" } };
+          }
+          return null;
+        },
+      },
+    });
+    expect(openWorkspace).toHaveBeenCalledExactlyOnceWith("user-42", { closeUserDetail: true });
+  });
+
+  it("adds the direct student-detail action only to accounts with a student role", () => {
+    const listBody = { innerHTML: "" };
+    const elements: Record<
+      string,
+      { innerHTML?: string; textContent?: string; disabled?: boolean }
+    > = {
+      "user-list-body": listBody,
+      "user-page-info": { textContent: "" },
+      "user-prev-btn": { disabled: false },
+      "user-next-btn": { disabled: false },
+    };
+    const context = createContext({
+      userData: [
+        {
+          id: "student-user",
+          displayName: "Öğrenci Adı",
+          roleConnections: [{ role: "STUDENT" }],
+          status: "ACTIVE",
+          membershipCount: 1,
+        },
+        {
+          id: "teacher-user",
+          displayName: "Öğretmen Adı",
+          roleConnections: [{ role: "TEACHER" }],
+          status: "ACTIVE",
+          membershipCount: 1,
+        },
+      ],
+      userTotal: 2,
+      userPage: 1,
+      USER_PAGE_SIZE: 20,
+      $: (id: string) => elements[id],
+      escapeHtml: (value: unknown) => String(value),
+      renderUserRoleConnections: () => "roller",
+      formatTurkishPhoneValue: (value: unknown) => String(value),
+      userStatusBadge: () => "durum",
+      Math,
+    });
+    runInContext(
+      `${functionSource("function renderUserList()", "function renderUserRoleConnections(")}; renderUserList`,
+      context,
+    )();
+
+    expect(listBody.innerHTML).toContain('data-user-open-student="student-user"');
+    expect(listBody.innerHTML).toContain('aria-label="Öğrenci ayrıntısını aç: Öğrenci Adı"');
+    const teacherRow = listBody.innerHTML.split("<tr>").at(-1) ?? "";
+    expect(teacherRow).not.toContain("data-user-open-student");
+  });
+
   it("ignores an older analytics response after a newer student was selected", async () => {
     let resolveFirst: (value: unknown) => void = () => {};
     const first = new Promise((resolve) => {
