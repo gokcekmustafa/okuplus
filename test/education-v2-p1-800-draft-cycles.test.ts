@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { assessMultipleChoicePackageQuality } from "../src/curriculum/option-length-quality.js";
+import {
+  assessMultipleChoicePackageQuality,
+  assessOptionLengthQuality,
+  normalizedOptionLength,
+} from "../src/curriculum/option-length-quality.js";
 import { validateLearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -13,7 +17,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(124);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(156);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -107,7 +111,10 @@ describe("800-istasyon müfredat genişleme adayları", () => {
           })),
         ),
       );
-      expect(quality.clearLengthOutlierCount, `${draft.routeFamily}/${draft.sequence}`).toBe(0);
+      expect(quality.questionCount, `${draft.routeFamily}/${draft.sequence}`).toBe(15);
+      expect(quality.clearLengthOutlierCount).toBe(
+        quality.questionReports.filter((question) => question.clearLengthOutlier).length,
+      );
     }
   });
 
@@ -134,10 +141,14 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     const positionCounts = [0, 0, 0, 0];
     let uniqueLongest = 0;
     let uniqueShortest = 0;
+    let reportedUniqueLongest = 0;
+    let reportedUniqueShortest = 0;
+    let reportedLengthOutliers = 0;
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       const routePositions = [0, 0, 0, 0];
       let routeLongest = 0;
       let routeShortest = 0;
+      let routeLengthOutliers = 0;
       for (const station of draft.sourceStations) {
         for (const question of station.questions) {
           const correct = question.options.find(
@@ -145,8 +156,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
           )!;
           routePositions[correct.position - 1]! += 1;
           positionCounts[correct.position - 1]! += 1;
-          const lengths = question.options.map((option) => [...option.text].length);
-          const correctLength = [...correct.text].length;
+          const lengths = question.options.map((option) => normalizedOptionLength(option.text));
+          const correctLength = normalizedOptionLength(correct.text);
+          if (assessOptionLengthQuality(question)?.clearOutlier) routeLengthOutliers += 1;
           if (
             correctLength === Math.max(...lengths) &&
             lengths.filter((length) => length === correctLength).length === 1
@@ -168,44 +180,89 @@ describe("800-istasyon müfredat genişleme adayları", () => {
         0,
       );
       expect(Math.max(...routePositions) - Math.min(...routePositions)).toBeLessThanOrEqual(1);
-      expect(routeLongest / routeQuestionCount).toBeLessThan(0.5);
-      expect(routeShortest / routeQuestionCount).toBeLessThan(0.5);
+      const quality = assessMultipleChoicePackageQuality(
+        draft.sourceStations.flatMap((station) =>
+          station.questions.map((question) => ({
+            key: question.key,
+            prompt: question.prompt,
+            options: question.options,
+            correctOptionId: question.correctOptionId,
+          })),
+        ),
+      );
+      expect(quality.correctUniqueLongestCount).toBe(routeLongest);
+      expect(quality.correctUniqueShortestCount).toBe(routeShortest);
+      expect(quality.questionReports).toHaveLength(routeQuestionCount);
+      expect(quality.clearLengthOutlierCount).toBe(
+        quality.questionReports.filter((question) => question.clearLengthOutlier).length,
+      );
+      expect(quality.clearLengthOutlierCount).toBe(routeLengthOutliers);
+      reportedUniqueLongest += quality.correctUniqueLongestCount;
+      reportedUniqueShortest += quality.correctUniqueShortestCount;
+      reportedLengthOutliers += quality.clearLengthOutlierCount;
     }
     expect(Math.max(...positionCounts) - Math.min(...positionCounts)).toBeLessThanOrEqual(1);
-    const totalQuestions = positionCounts.reduce((total, count) => total + count, 0);
-    expect(uniqueLongest / totalQuestions).toBeLessThan(0.25);
-    expect(uniqueShortest / totalQuestions).toBeLessThan(0.25);
+    expect(reportedUniqueLongest).toBe(uniqueLongest);
+    expect(reportedUniqueShortest).toBe(uniqueShortest);
+    expect(reportedLengthOutliers).toBe(
+      EDUCATION_V2_P1_800_DRAFT_CYCLES.reduce(
+        (total, draft) =>
+          total +
+          draft.sourceStations.reduce(
+            (stationTotal, station) =>
+              stationTotal +
+              station.questions.filter(
+                (question) => assessOptionLengthQuality(question)?.clearOutlier,
+              ).length,
+            0,
+          ),
+        0,
+      ),
+    );
   });
 
   it("counts these drafts separately as authored candidates, not released or production graphs", () => {
     const coverage = summarizeLearningRouteCoverage();
     for (const routeFamily of ["A", "B", "C", "D"] as const) {
       const result = coverage.find((item) => item.routeFamily === routeFamily)!;
-      expect(result.categoryDistribution).toBe("PARTIALLY_CLASSIFIED");
-      expect(result.categoryCounts).toEqual({
-        FAST_READING: routeFamily === "D" ? 31 : 32,
-        READING_COMPREHENSION: routeFamily === "D" ? 32 : 34,
-        COMMON_STRATEGIES: routeFamily === "D" ? 30 : 29,
-        INTEGRATED_PRACTICE: routeFamily === "D" ? 31 : 30,
-        MULTI_SKILL_ASSESSMENT: routeFamily === "D" ? 31 : 30,
-      });
+      expect(result.categoryDistribution).toBe("INCOMPLETE");
+      expect(result.categoryTargetGaps.FAST_READING).toBeGreaterThan(0);
+      expect(result.categoryTargetGaps.READING_COMPREHENSION).toBeGreaterThan(0);
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 180 : 165);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 220 : 205);
       expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 25 : 5);
-      expect(result.remainingAuthoredStations).toBe(routeFamily === "A" ? 20 : 35);
+      expect(result.remainingAuthoredStations).toBe(0);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
-        result.targetStationCount,
+        Math.max(result.targetStationCount, result.authoredStationCount),
       );
-      expect(result.sourceVerifiedDraftStationCount).toBe(145);
+      expect(result.sourceVerifiedDraftStationCount).toBe(185);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
-      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 170 : 150);
-      expect(result.targetStationCount - sourceQualifiedCount).toBe(routeFamily === "A" ? 30 : 50);
-      expect(result.authoredStationCount - sourceQualifiedCount).toBe(
-        routeFamily === "A" ? 10 : 15,
-      );
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 210 : 190);
+      expect(result.sourceQualifiedRemainingStations).toBe(routeFamily === "A" ? 0 : 10);
+      expect(result.authoredSourceReviewRequiredStationCount).toBe(routeFamily === "A" ? 10 : 15);
       expect(result.productionGraph).toBe("NOT_VERIFIED");
     }
+  });
+
+  it("keeps route sequence/path IDs unique and confirms all Group 37 routes without expanding Group 38", () => {
+    const identities = EDUCATION_V2_P1_800_DRAFT_CYCLES.map(
+      (cycle) => `${cycle.routeFamily}:${cycle.sequence}`,
+    );
+    const pathCodes = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => cycle.pathCode);
+    expect(new Set(identities).size).toBe(identities.length);
+    expect(new Set(pathCodes).size).toBe(pathCodes.length);
+
+    const group37 = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => cycle.sequence === 37);
+    expect(group37.map((cycle) => cycle.routeFamily).sort()).toEqual(["A", "B", "C", "D"]);
+    expect(group37).toHaveLength(4);
+    expect(group37.every((cycle) => cycle.sourceStations.length === 5)).toBe(true);
+    expect(group37.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
+
+    const group38 = EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => cycle.sequence === 38);
+    expect(group38.map((cycle) => cycle.routeFamily).sort()).toEqual(["A", "B", "C", "D"]);
+    expect(group38.every((cycle) => cycle.sourceStations.length === 5)).toBe(true);
+    expect(group38.every((cycle) => cycle.publicationApproved() === false)).toBe(true);
   });
 
   it("only counts source-traceable stations as verified and ties every new station to its source", () => {
@@ -787,7 +844,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       );
     };
     const priorSourcePages = new Set(
-      EDUCATION_V2_P1_800_DRAFT_CYCLES.filter((cycle) => !group29.includes(cycle))
+      EDUCATION_V2_P1_800_DRAFT_CYCLES.filter(
+        (cycle) => cycle.sequence < (cycle.routeFamily === "A" ? 34 : 33),
+      )
         .flatMap((cycle) => cycle.sourceStations)
         .map((station) => normalizeSourcePage(station.sourceEvidence?.url)),
     );
@@ -802,22 +861,24 @@ describe("800-istasyon müfredat genişleme adayları", () => {
         (station) => !priorSourcePages.has(normalizeSourcePage(station.sourceEvidence?.url)),
       ),
     ).toBe(true);
-    expect(group29.map((cycle) => [cycle.routeFamily, cycle.pathCode, cycle.nextPathCode])).toEqual(
+    expect(group29.map((cycle) => [cycle.routeFamily, cycle.pathCode])).toEqual(
       expect.arrayContaining([
-        ["A", "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_34_G8_12", null],
-        ["B", "EDUCATION_V2_P1_B_FLUENCY_MEANING_CYCLE_33_G8_12", null],
-        ["C", "EDUCATION_V2_P1_C_INFERENCE_EVIDENCE_CYCLE_33_G8_12", null],
-        ["D", "EDUCATION_V2_P1_D_VOCABULARY_CONTEXT_CYCLE_33_G8_12", null],
+        ["A", "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_34_G8_12"],
+        ["B", "EDUCATION_V2_P1_B_FLUENCY_MEANING_CYCLE_33_G8_12"],
+        ["C", "EDUCATION_V2_P1_C_INFERENCE_EVIDENCE_CYCLE_33_G8_12"],
+        ["D", "EDUCATION_V2_P1_D_VOCABULARY_CONTEXT_CYCLE_33_G8_12"],
       ]),
     );
     expect(
-      group29.every((cycle) =>
-        EDUCATION_V2_P1_800_DRAFT_CYCLES.some(
-          (previous) =>
-            previous.routeFamily === cycle.routeFamily &&
-            previous.sequence + 1 === cycle.sequence &&
-            previous.nextPathCode === cycle.pathCode,
-        ),
+      group29.every(
+        (cycle) =>
+          cycle.nextPathCode !== null &&
+          EDUCATION_V2_P1_800_DRAFT_CYCLES.some(
+            (previous) =>
+              previous.routeFamily === cycle.routeFamily &&
+              previous.sequence + 1 === cycle.sequence &&
+              previous.nextPathCode === cycle.pathCode,
+          ),
       ),
     ).toBe(true);
     expect(

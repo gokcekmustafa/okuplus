@@ -162,8 +162,10 @@ export type LearningRouteCoverage = {
   authoredSourceReviewRequiredStationCount: number;
   targetStationCount: number;
   remainingAuthoredStations: number;
-  categoryDistribution: "NOT_CLASSIFIED" | "PARTIALLY_CLASSIFIED";
+  categoryDistribution: "NOT_CLASSIFIED" | "INCOMPLETE" | "TARGETS_MISMATCH" | "TARGETS_MET";
   categoryCounts: Record<EducationV2P1ExpansionCategory, number>;
+  categoryTargetGaps: Record<EducationV2P1ExpansionCategory, number>;
+  categoryTargetExcesses: Record<EducationV2P1ExpansionCategory, number>;
   unclassifiedStationCount: number;
   categoryTargets: typeof EDUCATION_V2_P1_800_CATEGORY_TARGETS;
   productionGraph: "NOT_VERIFIED";
@@ -199,6 +201,21 @@ export function summarizeLearningRouteCoverage(
         classifiedStationCount += 1;
       }
     }
+    const categoryTargetGaps = Object.fromEntries(
+      Object.entries(EDUCATION_V2_P1_800_CATEGORY_TARGETS).map(([category, target]) => [
+        category,
+        Math.max(0, target - categoryCounts[category as EducationV2P1ExpansionCategory]),
+      ]),
+    ) as Record<EducationV2P1ExpansionCategory, number>;
+    const categoryTargetExcesses = Object.fromEntries(
+      Object.entries(EDUCATION_V2_P1_800_CATEGORY_TARGETS).map(([category, target]) => [
+        category,
+        Math.max(0, categoryCounts[category as EducationV2P1ExpansionCategory] - target),
+      ]),
+    ) as Record<EducationV2P1ExpansionCategory, number>;
+    const categoryTargetsMet =
+      Object.values(categoryTargetGaps).every((count) => count === 0) &&
+      Object.values(categoryTargetExcesses).every((count) => count === 0);
     return {
       routeFamily,
       authoredStationCount,
@@ -216,8 +233,16 @@ export function summarizeLearningRouteCoverage(
       targetStationCount: LEARNING_ROUTE_STATION_TARGET,
       remainingAuthoredStations: Math.max(0, LEARNING_ROUTE_STATION_TARGET - authoredStationCount),
       categoryDistribution:
-        classifiedStationCount === 0 ? "NOT_CLASSIFIED" : "PARTIALLY_CLASSIFIED",
+        classifiedStationCount === 0
+          ? "NOT_CLASSIFIED"
+          : authoredStationCount > classifiedStationCount
+            ? "INCOMPLETE"
+            : categoryTargetsMet
+              ? "TARGETS_MET"
+              : "TARGETS_MISMATCH",
       categoryCounts,
+      categoryTargetGaps,
+      categoryTargetExcesses,
       unclassifiedStationCount: Math.max(0, authoredStationCount - classifiedStationCount),
       categoryTargets: EDUCATION_V2_P1_800_CATEGORY_TARGETS,
       productionGraph: "NOT_VERIFIED",

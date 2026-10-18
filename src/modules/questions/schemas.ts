@@ -59,6 +59,13 @@ const hintSchema = z
   .nullable()
   .optional();
 
+const sourceReferenceSchema = z
+  .string()
+  .trim()
+  .max(2000, "Kaynak bilgisi en fazla 2.000 karakter olmalı")
+  .nullable()
+  .optional();
+
 const difficultySchema = z
   .number()
   .min(0, "Zorluk en az 0 olmalı")
@@ -267,6 +274,7 @@ export const createQuestionSchema = z
     correctAnswer: correctAnswerSchema,
     explanation: explanationSchema,
     hint: hintSchema,
+    sourceReference: sourceReferenceSchema,
     difficulty: difficultySchema,
   })
   .superRefine((input, ctx) => {
@@ -305,6 +313,7 @@ export const createQuestionVersionSchema = z.object({
   correctAnswer: correctAnswerSchema.optional(),
   explanation: explanationSchema,
   hint: hintSchema,
+  sourceReference: sourceReferenceSchema,
   difficulty: difficultySchema,
 });
 
@@ -315,6 +324,7 @@ export const updateQuestionVersionSchema = z.object({
   correctAnswer: correctAnswerSchema.optional(),
   explanation: explanationSchema,
   hint: hintSchema,
+  sourceReference: sourceReferenceSchema,
   difficulty: difficultySchema,
 });
 

@@ -49,6 +49,7 @@ import { tenantAdminRoutes } from "./modules/tenant/index.js";
 import { trainingStudentRoutes } from "./modules/training/index.js";
 import { userAdminRoutes } from "./modules/users/index.js";
 import { guestDiagnosticRoutes } from "./modules/guest-diagnostic/index.js";
+import { curriculumDraftAdminRoutes } from "./modules/curriculum-drafts/admin-routes.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { staticPlugin } from "./plugins/static.js";
@@ -135,6 +136,7 @@ export async function buildApp(
   await app.register(classAdminRoutes, { authProvider });
   await app.register(contentAdminRoutes, { authProvider });
   await app.register(questionAdminRoutes, { authProvider });
+  await app.register(curriculumDraftAdminRoutes, { authProvider });
   await app.register(questionStudentRoutes, { authProvider });
   await app.register(sessionAdminRoutes, { authProvider });
   await app.register(sessionStudentRoutes, { authProvider });

@@ -497,6 +497,20 @@
             ></span>
             <span class="nav-label">Soru Bankası</span>
           </button>
+          <button
+            class="nav-item"
+            data-page="curriculum-drafts"
+            data-admin
+            data-super-admin-only
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true">
+              <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#book"></use>
+              </svg>
+            </span>
+            <span class="nav-label">Taslak Müfredat</span>
+          </button>
           <button class="nav-item" data-page="templates" data-admin type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -4198,6 +4212,15 @@
                         placeholder="İpucu (isteğe bağlı)"
                       />
                     </label>
+                    <label class="field">
+                      <span>Kaynak / kaynak bağlantısı</span>
+                      <input
+                        id="question-form-source-reference"
+                        type="text"
+                        maxlength="2000"
+                        placeholder="Kaynak adı veya bağlantısı (isteğe bağlı)"
+                      />
+                    </label>
                     <div class="form-grid">
                       <label class="field">
                         <span>Zorluk (0–1)</span>
@@ -4362,6 +4385,92 @@
                   </div>
                 </form>
               </div>
+            </div>
+          </section>
+
+          <!-- Taslak müfredat önizlemesi: yalnızca SUPER_ADMIN tarafından kullanılabilir. -->
+          <section id="page-curriculum-drafts" class="page-view hidden">
+            <div class="page-head">
+              <h2>Taslak Müfredat</h2>
+              <p class="muted">
+                Öğrencilere açılmamış istasyonları ve soru anahtarlarını güvenli biçimde inceleyin.
+              </p>
+            </div>
+            <div class="notice-card curriculum-draft-warning" role="note">
+              <strong>Yayınlanmamış içerik</strong>
+              <span
+                >Bu önizleme salt okunurdur; burada yapılan inceleme içeriği yayımlamaz veya
+                öğrenciye atamaz.</span
+              >
+            </div>
+            <div
+              id="curriculum-draft-summary"
+              class="curriculum-draft-summary"
+              role="status"
+              aria-live="polite"
+            ></div>
+            <div
+              id="curriculum-draft-coverage"
+              class="curriculum-draft-coverage"
+              aria-label="Rota kapsam özeti"
+            ></div>
+            <div class="tenant-toolbar curriculum-draft-toolbar">
+              <div class="tenant-filters">
+                <label class="field inline-field">
+                  <span>Rota</span>
+                  <select id="curriculum-draft-route">
+                    <option value="">Tüm rotalar</option>
+                    <option value="A">A rotası</option>
+                    <option value="B">B rotası</option>
+                    <option value="C">C rotası</option>
+                    <option value="D">D rotası</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span>Grup / sıra</span>
+                  <input
+                    id="curriculum-draft-sequence"
+                    type="number"
+                    min="1"
+                    max="1000"
+                    placeholder="Tüm gruplar"
+                  />
+                </label>
+                <label class="field inline-field">
+                  <span>İstasyon ara</span>
+                  <input
+                    id="curriculum-draft-search"
+                    type="search"
+                    maxlength="120"
+                    placeholder="Başlık, beceri veya kaynak ara…"
+                    autocomplete="off"
+                  />
+                </label>
+              </div>
+              <button id="curriculum-draft-refresh" type="button" class="btn btn-ghost">
+                Yenile
+              </button>
+            </div>
+            <div id="curriculum-draft-error" class="error-banner hidden" role="alert"></div>
+            <div class="curriculum-draft-layout">
+              <section class="card curriculum-draft-list-panel" aria-label="Taslak istasyonlar">
+                <div id="curriculum-draft-list" class="curriculum-draft-list">
+                  <p class="muted">Taslaklar yükleniyor…</p>
+                </div>
+              </section>
+              <section
+                id="curriculum-draft-detail"
+                class="card curriculum-draft-detail"
+                aria-label="İstasyon önizlemesi"
+                aria-live="polite"
+              >
+                <div class="management-empty-state">
+                  <strong>Bir istasyon seçin.</strong>
+                  <span
+                    >Metin, sorular, cevap anahtarları ve kaynak bilgisi burada görüntülenir.</span
+                  >
+                </div>
+              </section>
             </div>
           </section>
 

@@ -44,72 +44,123 @@ function graph(cycle: LearningRouteCycle) {
 
 describe("versioned learning routes", () => {
   it("reports authored and released source counts separately from production publication", () => {
-    expect(summarizeLearningRouteCoverage()).toEqual([
+    const coverage = summarizeLearningRouteCoverage();
+    expect(
+      coverage.map((item) => ({
+        route: item.routeFamily,
+        authored: item.authoredStationCount,
+        releaseApprovedSource: item.releasedSourceStationCount,
+        sourceVerifiedDraft: item.sourceVerifiedDraftStationCount,
+        sourceQualified: item.sourceQualifiedStationCount,
+        reviewRequired: item.authoredSourceReviewRequiredStationCount,
+        sourceRemaining: item.sourceQualifiedRemainingStations,
+        categoryDistribution: item.categoryDistribution,
+        categoryCounts: item.categoryCounts,
+        categoryTargetGaps: item.categoryTargetGaps,
+        categoryTargetExcesses: item.categoryTargetExcesses,
+        unclassified: item.unclassifiedStationCount,
+        productionGraph: item.productionGraph,
+      })),
+    ).toEqual([
       {
-        routeFamily: "A",
-        authoredStationCount: 180,
-        releasedSourceStationCount: 25,
-        sourceVerifiedDraftStationCount: 145,
-        sourceQualifiedStationCount: 170,
-        sourceQualifiedRemainingStations: 30,
-        authoredSourceReviewRequiredStationCount: 10,
-        targetStationCount: 200,
-        remainingAuthoredStations: 20,
-        categoryDistribution: "PARTIALLY_CLASSIFIED",
+        route: "A",
+        authored: 220,
+        releaseApprovedSource: 25,
+        sourceVerifiedDraft: 185,
+        sourceQualified: 210,
+        reviewRequired: 10,
+        sourceRemaining: 0,
+        categoryDistribution: "INCOMPLETE",
         categoryCounts: {
-          FAST_READING: 32,
-          READING_COMPREHENSION: 34,
-          COMMON_STRATEGIES: 29,
-          INTEGRATED_PRACTICE: 30,
-          MULTI_SKILL_ASSESSMENT: 30,
+          FAST_READING: 40,
+          READING_COMPREHENSION: 42,
+          COMMON_STRATEGIES: 37,
+          INTEGRATED_PRACTICE: 38,
+          MULTI_SKILL_ASSESSMENT: 38,
         },
-        unclassifiedStationCount: 25,
-        categoryTargets: {
-          FAST_READING: 60,
-          READING_COMPREHENSION: 80,
-          COMMON_STRATEGIES: 20,
-          INTEGRATED_PRACTICE: 25,
-          MULTI_SKILL_ASSESSMENT: 15,
+        categoryTargetGaps: {
+          FAST_READING: 20,
+          READING_COMPREHENSION: 38,
+          COMMON_STRATEGIES: 0,
+          INTEGRATED_PRACTICE: 0,
+          MULTI_SKILL_ASSESSMENT: 0,
         },
+        categoryTargetExcesses: {
+          FAST_READING: 0,
+          READING_COMPREHENSION: 0,
+          COMMON_STRATEGIES: 17,
+          INTEGRATED_PRACTICE: 13,
+          MULTI_SKILL_ASSESSMENT: 23,
+        },
+        unclassified: 25,
         productionGraph: "NOT_VERIFIED",
       },
-      ...(["B", "C", "D"] as const).map((routeFamily) => ({
-        routeFamily,
-        authoredStationCount: 165,
-        releasedSourceStationCount: 5,
-        sourceVerifiedDraftStationCount: 145,
-        sourceQualifiedStationCount: 150,
-        sourceQualifiedRemainingStations: 50,
-        authoredSourceReviewRequiredStationCount: 15,
-        targetStationCount: 200,
-        remainingAuthoredStations: 35,
-        categoryDistribution: "PARTIALLY_CLASSIFIED" as const,
-        categoryCounts:
-          routeFamily === "D"
-            ? {
-                FAST_READING: 31,
-                READING_COMPREHENSION: 32,
-                COMMON_STRATEGIES: 30,
-                INTEGRATED_PRACTICE: 31,
-                MULTI_SKILL_ASSESSMENT: 31,
-              }
-            : {
-                FAST_READING: 32,
-                READING_COMPREHENSION: 34,
-                COMMON_STRATEGIES: 29,
-                INTEGRATED_PRACTICE: 30,
-                MULTI_SKILL_ASSESSMENT: 30,
-              },
-        unclassifiedStationCount: 10,
-        categoryTargets: {
-          FAST_READING: 60,
-          READING_COMPREHENSION: 80,
-          COMMON_STRATEGIES: 20,
-          INTEGRATED_PRACTICE: 25,
-          MULTI_SKILL_ASSESSMENT: 15,
+      ...(["B", "C"] as const).map((route) => ({
+        route,
+        authored: 205,
+        releaseApprovedSource: 5,
+        sourceVerifiedDraft: 185,
+        sourceQualified: 190,
+        reviewRequired: 15,
+        sourceRemaining: 10,
+        categoryDistribution: "INCOMPLETE",
+        categoryCounts: {
+          FAST_READING: 40,
+          READING_COMPREHENSION: 42,
+          COMMON_STRATEGIES: 37,
+          INTEGRATED_PRACTICE: 38,
+          MULTI_SKILL_ASSESSMENT: 38,
         },
-        productionGraph: "NOT_VERIFIED" as const,
+        categoryTargetGaps: {
+          FAST_READING: 20,
+          READING_COMPREHENSION: 38,
+          COMMON_STRATEGIES: 0,
+          INTEGRATED_PRACTICE: 0,
+          MULTI_SKILL_ASSESSMENT: 0,
+        },
+        categoryTargetExcesses: {
+          FAST_READING: 0,
+          READING_COMPREHENSION: 0,
+          COMMON_STRATEGIES: 17,
+          INTEGRATED_PRACTICE: 13,
+          MULTI_SKILL_ASSESSMENT: 23,
+        },
+        unclassified: 10,
+        productionGraph: "NOT_VERIFIED",
       })),
+      {
+        route: "D",
+        authored: 205,
+        releaseApprovedSource: 5,
+        sourceVerifiedDraft: 185,
+        sourceQualified: 190,
+        reviewRequired: 15,
+        sourceRemaining: 10,
+        categoryDistribution: "INCOMPLETE",
+        categoryCounts: {
+          FAST_READING: 39,
+          READING_COMPREHENSION: 40,
+          COMMON_STRATEGIES: 38,
+          INTEGRATED_PRACTICE: 39,
+          MULTI_SKILL_ASSESSMENT: 39,
+        },
+        categoryTargetGaps: {
+          FAST_READING: 21,
+          READING_COMPREHENSION: 40,
+          COMMON_STRATEGIES: 0,
+          INTEGRATED_PRACTICE: 0,
+          MULTI_SKILL_ASSESSMENT: 0,
+        },
+        categoryTargetExcesses: {
+          FAST_READING: 0,
+          READING_COMPREHENSION: 0,
+          COMMON_STRATEGIES: 18,
+          INTEGRATED_PRACTICE: 14,
+          MULTI_SKILL_ASSESSMENT: 24,
+        },
+        unclassified: 10,
+        productionGraph: "NOT_VERIFIED",
+      },
     ]);
   });
 
@@ -118,16 +169,19 @@ describe("versioned learning routes", () => {
     const a = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.routeFamily === "A").sort(
       (left, right) => left.sequence - right.sequence,
     );
+    expect(a.map((cycle) => cycle.sequence)).toEqual(
+      Array.from({ length: a.length }, (_, index) => index + 1),
+    );
     expect(a.map((cycle) => cycle.manifest.steps.length)).toEqual([
       9,
       9,
       7,
-      ...Array.from({ length: 31 }, () => 5),
+      ...Array.from({ length: a.length - 3 }, () => 5),
     ]);
     expect(nextLearningRouteCycle(a[0]!.pathCode)?.pathCode).toBe(a[1]!.pathCode);
     expect(nextLearningRouteCycle(a[1]!.pathCode)?.pathCode).toBe(a[2]!.pathCode);
     expect(upcomingLearningRouteCycles(a[0]!.pathCode).map((cycle) => cycle.sequence)).toEqual(
-      Array.from({ length: 33 }, (_, index) => index + 2),
+      Array.from({ length: a.length - 1 }, (_, index) => index + 2),
     );
     expect(a[2]!.publicationApproved()).toBe(true);
     expect(nextLearningRouteCycle(a[2]!.pathCode)).toBe(a[3]);
@@ -220,7 +274,12 @@ describe("versioned learning routes", () => {
     expect(nextLearningRouteCycle(a[32]!.pathCode)).toBe(a[33]);
     expect(a[33]!.publicationApproved()).toBe(false);
     expect(a[33]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
-    expect(nextLearningRouteCycle(a[33]!.pathCode)).toBeNull();
+    for (let index = 3; index < a.length; index += 1) {
+      expect(a[index]!.publicationApproved()).toBe(false);
+      expect(a[index]!.manifest.steps).toHaveLength(5);
+      expect(a[index]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+      expect(nextLearningRouteCycle(a[index]!.pathCode)).toBe(a[index + 1] ?? null);
+    }
     expect(nextLearningRouteCycle("unknown-route")).toBeNull();
     expect(learningRouteCycle(a[0]!.pathCode)?.scopeCode).toBe("G8_12");
   });
@@ -248,7 +307,7 @@ describe("versioned learning routes", () => {
         (cycle) => cycle.routeFamily === routeFamily,
       ).sort((left, right) => left.sequence - right.sequence);
       expect(cycles.map((cycle) => cycle.sequence)).toEqual(
-        Array.from({ length: 33 }, (_, index) => index + 1),
+        Array.from({ length: cycles.length }, (_, index) => index + 1),
       );
       expect(nextLearningRouteCycle(cycles[0]!.pathCode)).toBe(cycles[1]);
       expect(cycles[0]!.publicationApproved()).toBe(true);
@@ -267,9 +326,6 @@ describe("versioned learning routes", () => {
       expect(cycles[31]!.publicationApproved()).toBe(false);
       expect(cycles[31]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
       expect(nextLearningRouteCycle(cycles[31]!.pathCode)).toBe(cycles[32]);
-      expect(cycles[32]!.publicationApproved()).toBe(false);
-      expect(cycles[32]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
-      expect(nextLearningRouteCycle(cycles[32]!.pathCode)).toBeNull();
       expect(nextLearningRouteCycle(cycles[1]!.pathCode)).toBe(cycles[2]);
       expect(cycles[2]!.publicationApproved()).toBe(false);
       expect(cycles[2]!.manifest.steps).toHaveLength(5);
@@ -353,6 +409,11 @@ describe("versioned learning routes", () => {
       expect(cycles[29]!.publicationApproved()).toBe(false);
       expect(cycles[29]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
       expect(nextLearningRouteCycle(cycles[29]!.pathCode)).toBe(cycles[30]);
+      for (let index = 1; index < cycles.length; index += 1) {
+        expect(cycles[index]!.publicationApproved()).toBe(false);
+        expect(cycles[index]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+        expect(nextLearningRouteCycle(cycles[index]!.pathCode)).toBe(cycles[index + 1] ?? null);
+      }
     }
   });
 

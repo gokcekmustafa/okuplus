@@ -192,6 +192,27 @@ export interface QuestionVersionDetail extends QuestionVersionSummary {
   difficulty: number | null;
   partialCreditEnabled: boolean;
   generationMetadata: Prisma.JsonValue | null;
+  sourceReference: string | null;
+}
+
+function mergeSourceReference(
+  metadata: Prisma.JsonValue | null,
+  sourceReference: string | null,
+): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+  const next: Record<string, Prisma.InputJsonValue> = isObjectJson(metadata)
+    ? ({ ...metadata } as Record<string, Prisma.InputJsonValue>)
+    : metadata === null
+      ? {}
+      : { legacyValue: metadata as Prisma.InputJsonValue };
+  if (sourceReference) next.sourceReference = sourceReference;
+  else delete next.sourceReference;
+  return Object.keys(next).length > 0 ? next : Prisma.DbNull;
+}
+
+function readSourceReference(metadata: Prisma.JsonValue | null): string | null {
+  return isObjectJson(metadata) && typeof metadata.sourceReference === "string"
+    ? metadata.sourceReference
+    : null;
 }
 
 export async function listQuestionByContent(contentId: string): Promise<QuestionListItem[]> {
@@ -276,6 +297,9 @@ export async function createQuestion(
         explanation: input.explanation ?? null,
         hint: input.hint ?? null,
         difficulty: input.difficulty ?? null,
+        ...(input.sourceReference !== undefined
+          ? { generationMetadata: mergeSourceReference(null, input.sourceReference) }
+          : {}),
         ...(actorId ? { createdById: actorId } : {}),
       },
     });
@@ -400,6 +424,10 @@ export async function createQuestionVersion(
         explanation: payload.explanation,
         hint: payload.hint,
         difficulty: payload.difficulty,
+        generationMetadata:
+          input.sourceReference === undefined
+            ? toNullableJsonInput(previous.generationMetadata)
+            : mergeSourceReference(previous.generationMetadata, input.sourceReference),
         ...(actorId ? { createdById: actorId } : {}),
       },
       select: { id: true },
@@ -439,6 +467,14 @@ export async function updateQuestionVersion(
       explanation: payload.explanation,
       hint: payload.hint,
       difficulty: payload.difficulty,
+      ...(input.sourceReference !== undefined
+        ? {
+            generationMetadata: mergeSourceReference(
+              existing.generationMetadata,
+              input.sourceReference,
+            ),
+          }
+        : {}),
     },
   });
   return getQuestionVersion(id);
@@ -1221,5 +1257,6 @@ function toQuestionVersionDetail(row: VersionDetailRow): QuestionVersionDetail {
     difficulty: row.difficulty,
     partialCreditEnabled: row.partialCreditEnabled,
     generationMetadata: row.generationMetadata,
+    sourceReference: readSourceReference(row.generationMetadata),
   };
 }

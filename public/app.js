@@ -1343,6 +1343,9 @@ function showDashboard(me) {
       item.hasAttribute("data-organization") ? !isOrganizationUser : !isPlatform,
     );
   }
+  for (const item of document.querySelectorAll("[data-super-admin-only]")) {
+    item.classList.toggle("hidden", currentPlatformRole !== "SUPER_ADMIN");
+  }
   for (const item of document.querySelectorAll("[data-management]")) {
     item.classList.toggle("hidden", !isPlatformUser && !isOrganizationUser);
   }
@@ -4830,6 +4833,7 @@ const PAGES = [
   "academic-years",
   "contents",
   "questions",
+  "curriculum-drafts",
   "templates",
   "exercise",
   "lessons",
@@ -4849,6 +4853,7 @@ const PLATFORM_PAGES = new Set([
   "users",
   "contents",
   "questions",
+  "curriculum-drafts",
   "templates",
   "skills",
   "levels",
@@ -4903,6 +4908,7 @@ function roleHomePage() {
 
 function canAccessPage(page) {
   if (isPlatformUser === null) return true;
+  if (page === "curriculum-drafts") return currentPlatformRole === "SUPER_ADMIN";
   if (page === "premium-info") return isPersonalBillingUser;
   if (page === "billing-account") return isPersonalBillingUser || isOrganizationAdminUser;
   if (isPlatformUser) return PLATFORM_PAGES.has(page);
@@ -4983,6 +4989,8 @@ function navigate(page, { continuation = null } = {}) {
   } else if (page === "questions") {
     void loadQuestions();
     void populateQuestionFilters();
+  } else if (page === "curriculum-drafts") {
+    void loadCurriculumDrafts();
   } else if (page === "templates") {
     void loadTemplates();
     void populateTemplateFilters();
@@ -5730,6 +5738,24 @@ $("analytics-tenant-type-filter")?.addEventListener("change", () => {
   analyticsStudentPage = 1;
   void loadAnalyticsPage();
 });
+$("curriculum-draft-route")?.addEventListener("change", () => void loadCurriculumDrafts());
+$("curriculum-draft-sequence")?.addEventListener("change", () => void loadCurriculumDrafts());
+$("curriculum-draft-refresh")?.addEventListener("click", () => void loadCurriculumDrafts());
+let curriculumDraftSearchTimer;
+$("curriculum-draft-search")?.addEventListener("input", () => {
+  clearTimeout(curriculumDraftSearchTimer);
+  curriculumDraftSearchTimer = setTimeout(() => void loadCurriculumDrafts(), 250);
+});
+$("curriculum-draft-list")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-curriculum-draft-station]");
+  if (button) {
+    void loadCurriculumDraftStation(
+      button.dataset.route,
+      button.dataset.sequence,
+      button.dataset.stationKey,
+    );
+  }
+});
 $("analytics-student-body")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-analytics-student]");
   if (button) void loadAnalyticsStudentDetail(button.dataset.analyticsStudent);
@@ -5741,6 +5767,11 @@ $("analytics-student-pagination")?.addEventListener("click", (event) => {
   void loadAnalyticsPage();
 });
 $("analytics-student-detail")?.addEventListener("click", (event) => {
+  const profileButton = event.target.closest("[data-analytics-profile]");
+  if (profileButton) {
+    void openStudentDetail(profileButton.dataset.analyticsProfile);
+    return;
+  }
   if (event.target.closest("[data-analytics-detail-close]")) {
     $("analytics-student-detail").classList.add("hidden");
     const performancePanel = $("analytics-performance-empty");
@@ -6142,7 +6173,7 @@ function renderUserDetail(u, notice = "") {
     ["Kullanıcı kimliği", `<span class="mono">${escapeHtml(u.id)}</span>`],
     ["E-posta", u.email ? escapeHtml(u.email) : "—"],
     ["Telefon", u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"],
-    ["TC Kimlik No", u.nationalId ? escapeHtml(u.nationalId) : "—"],
+    ["TC Kimlik No", u.nationalId ? `•••••••••${escapeHtml(u.nationalId.slice(-2))}` : "—"],
     ["Doğum yılı", u.birthYear ?? "—"],
     ["Durum", userStatusBadge(u.status)],
     [
@@ -6234,7 +6265,9 @@ function renderUserDetail(u, notice = "") {
       )
       .join("")}</dl>
 
-    <div class="membership-section">
+    <details class="admin-detail-disclosure">
+    <summary>Üyelikler ve kurum rolleri (${memberships.length})</summary>
+    <div class="admin-detail-disclosure-content membership-section">
       <h4>Üyelik ekle</h4>
       <div class="membership-add-row">
         <label class="field">
@@ -6270,9 +6303,11 @@ function renderUserDetail(u, notice = "") {
         </table>
       </div>
     </div>
+    </details>
 
-    <section class="detail-section">
-      <h4>Parola yönetimi</h4>
+    <details class="admin-detail-disclosure">
+      <summary>Parola yönetimi</summary>
+      <section class="admin-detail-disclosure-content detail-section">
       <div class="membership-add-row">
         <label class="field">
           <span>Yeni parola</span>
@@ -6281,18 +6316,19 @@ function renderUserDetail(u, notice = "") {
         <button id="user-detail-password-btn" type="button" class="btn btn-primary">Yeni parola belirle</button>
       </div>
       <p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p>
-    </section>
+      </section>
+    </details>
 
-    <section class="detail-section"><h4>Kurum/şube bağlantıları</h4>
+    <details class="admin-detail-disclosure"><summary>Kurum ve şube bağlantıları (${branches.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Kurum/şube bağlantıları</h4>
       ${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(generalStatusLabel(item.status))}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}
-    </section>
-    <section class="detail-section"><h4>Öğretmen sınıf atamaları (${classAssignments.length})</h4>
+    </section></details>
+    <details class="admin-detail-disclosure"><summary>Öğretmen sınıf atamaları (${classAssignments.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Öğretmen sınıf atamaları (${classAssignments.length})</h4>
       ${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Ders</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.subject || "—")}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}
-    </section>
-    <section class="detail-section"><h4>Öğrenci kayıtları (${enrollments.length})</h4>
+    </section></details>
+    <details class="admin-detail-disclosure"><summary>Öğrenci kayıtları (${enrollments.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Öğrenci kayıtları (${enrollments.length})</h4>
       ${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}
-    </section>
-    <section class="detail-section"><h4>Paket ve kullanım hakları (${entitlements.length})</h4>
+    </section></details>
+    <details class="admin-detail-disclosure"><summary>Paket ve kullanım hakları (${entitlements.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Paket ve kullanım hakları (${entitlements.length})</h4>
       ${entitlements.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Kapsam</th><th>Paket</th><th>Kaynak</th><th>Durum</th><th>Bitiş</th></tr></thead><tbody>${entitlements.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel"}</td><td>${planLabel(item.plan)}</td><td>${escapeHtml(entitlementSourceLabel(item.source))}</td><td>${item.active ? "Aktif" : "Pasif"}</td><td>${item.expiresAt ? escapeHtml(new Date(item.expiresAt).toLocaleDateString("tr-TR")) : "Süresiz"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tanımlı paket ve kullanım hakkı yok.</p>'}
       <div class="membership-add-row">
         <label class="field"><span>Kapsam kurumu</span><select id="user-detail-entitlement-tenant"><option value="">Kurum seçin…</option>${memberships
@@ -6313,7 +6349,7 @@ function renderUserDetail(u, notice = "") {
         <button id="user-detail-entitlement-btn" type="button" class="btn btn-primary"><span class="btn-label">Paket ve kullanım haklarını kaydet</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>
       </div>
       <p id="user-detail-entitlement-status" class="muted" role="status" aria-live="polite">Günlük alıştırma ve soru hakları seçilen pakete göre uygulanır.</p>
-    </section>`;
+    </section></details>`;
 
   void populateMembershipTenantSelect();
 }
@@ -7077,7 +7113,10 @@ function renderStudentDetail(d) {
     ["Ad Soyad", escapeHtml(d.user.displayName)],
     ["E-posta", d.user.email ? escapeHtml(d.user.email) : "—"],
     ["Telefon", d.user.phone ? escapeHtml(formatTurkishPhoneValue(d.user.phone)) : "—"],
-    ["TC Kimlik No", d.user.nationalId ? escapeHtml(d.user.nationalId) : "—"],
+    [
+      "TC Kimlik No",
+      d.user.nationalId ? `•••••••••${escapeHtml(d.user.nationalId.slice(-2))}` : "—",
+    ],
     ["Doğum yılı", d.user.birthYear ?? "—"],
     ["Hesap durumu", userStatusBadge(d.user.status)],
     [
@@ -7134,6 +7173,7 @@ function renderStudentDetail(d) {
     : '<tr><td colspan="6" class="empty-cell">Sınıf kaydı yok.</td></tr>';
 
   $("student-detail-body").innerHTML = `
+    ${canAccessPage("analytics") ? `<div class="detail-section"><button type="button" class="btn btn-ghost btn-sm" data-student-analytics-id="${escapeHtml(d.user.id)}">Öğrenci analitiğini görüntüle</button></div>` : ""}
     <section class="detail-section">
       <h4>Kişisel Bilgiler</h4>
       <dl class="info-grid">${infoRows
@@ -7377,11 +7417,17 @@ function setupStudentEvents() {
   $("student-detail-body").addEventListener("click", (event) => {
     const addBtn = event.target.closest("#enroll-add-btn");
     const updateBtn = event.target.closest("[data-enr-update]");
+    const analyticsButton = event.target.closest("[data-student-analytics-id]");
 
     if (addBtn) {
       void addEnrollment();
     } else if (updateBtn) {
       void updateEnrollment(updateBtn.dataset.enrUpdate);
+    } else if (analyticsButton && canAccessPage("analytics")) {
+      const studentId = analyticsButton.dataset.studentAnalyticsId;
+      $("student-detail-modal").classList.add("hidden");
+      navigate("analytics");
+      void loadAnalyticsStudentDetail(studentId);
     }
   });
   $("student-detail-body").addEventListener("change", (event) => {
@@ -7719,7 +7765,10 @@ function renderTeacherDetail(d) {
     ["Ad Soyad", escapeHtml(d.user.displayName)],
     ["E-posta", d.user.email ? escapeHtml(d.user.email) : "—"],
     ["Telefon", d.user.phone ? escapeHtml(formatTurkishPhoneValue(d.user.phone)) : "—"],
-    ["TC Kimlik No", d.user.nationalId ? escapeHtml(d.user.nationalId) : "—"],
+    [
+      "TC Kimlik No",
+      d.user.nationalId ? `•••••••••${escapeHtml(d.user.nationalId.slice(-2))}` : "—",
+    ],
     ["Doğum yılı", d.user.birthYear ?? "—"],
     ["Hesap durumu", userStatusBadge(d.user.status)],
     [
@@ -8990,6 +9039,122 @@ function analyticsQuery() {
   return params;
 }
 
+let curriculumDraftRequest = 0;
+function curriculumDraftQuery() {
+  const query = new URLSearchParams();
+  const routeFamily = $("curriculum-draft-route")?.value;
+  const sequence = $("curriculum-draft-sequence")?.value.trim();
+  const search = $("curriculum-draft-search")?.value.trim();
+  if (routeFamily) query.set("routeFamily", routeFamily);
+  if (sequence) query.set("sequence", sequence);
+  if (search) query.set("search", search);
+  return query;
+}
+
+async function loadCurriculumDrafts() {
+  if (currentPlatformRole !== "SUPER_ADMIN") return;
+  const requestId = ++curriculumDraftRequest;
+  const list = $("curriculum-draft-list");
+  const error = $("curriculum-draft-error");
+  const summary = $("curriculum-draft-summary");
+  error.classList.add("hidden");
+  list.setAttribute("aria-busy", "true");
+  list.innerHTML = '<p class="muted">Taslaklar yükleniyor…</p>';
+  try {
+    const query = curriculumDraftQuery();
+    const data = await parseResponse(
+      await authenticatedFetch(`/admin/curriculum-drafts?${query.toString()}`),
+    );
+    if (requestId !== curriculumDraftRequest) return;
+    summary.textContent = `${data.totalStations} istasyon gösteriliyor · Taslak içerikler öğrenci erişimine kapalı`;
+    $("curriculum-draft-coverage").innerHTML = data.coverage
+      .map(
+        (item) =>
+          `<section class="curriculum-draft-coverage-card"><h3>${escapeHtml(item.routeFamily)} rotası</h3><p>${item.authoredStationCount} hazırlanmış · ${item.sourceVerifiedDraftCount} kaynak kanıtı kayıtlı · ${item.sourceReviewRequiredCount} inceleme bekliyor</p><p>${item.sourceQualifiedCount}/200 kaynak niteliği · ${item.sourceQualifiedRemaining} kalan</p><p class="muted">Yayın izni kaydı: ${item.releaseApprovedSourceCount} · Üretim grafiği: doğrulanmadı</p><p class="muted">Kategori açıkları: ${
+            Object.entries(item.categoryTargetGaps)
+              .filter(([, count]) => count > 0)
+              .map(([category, count]) => `${category} ${count}`)
+              .join(" · ") || "yok"
+          }</p><p class="muted">Kategori fazlaları: ${
+            Object.entries(item.categoryTargetExcesses)
+              .filter(([, count]) => count > 0)
+              .map(([category, count]) => `${category} ${count}`)
+              .join(" · ") || "yok"
+          }</p></section>`,
+      )
+      .join("");
+    list.innerHTML = data.cycles.length
+      ? data.cycles
+          .map((cycle) => {
+            const positions = ["A", "B", "C", "D"]
+              .map(
+                (position) =>
+                  `${position} ${cycle.questionQuality.correctPositionCounts[position] ?? 0}`,
+              )
+              .join(" · ");
+            return `<section class="curriculum-draft-cycle"><div class="curriculum-draft-cycle-head"><div><span class="eyebrow">${escapeHtml(cycle.routeFamily)} ROTASI · GRUP ${cycle.sequence}</span><h3>${escapeHtml(cycle.title)}</h3><p class="muted curriculum-draft-quality">${cycle.questionQuality.questionCount} soru · doğru şık konumları ${positions} · belirgin uzunluk uyarısı ${cycle.questionQuality.clearLengthOutlierCount}</p></div><span class="badge badge-neutral">Taslak · ${cycle.stations.length}/${cycle.stationCount}</span></div><ul>${cycle.stations
+              .map(
+                (station) =>
+                  `<li><button type="button" class="curriculum-draft-station" data-curriculum-draft-station data-route="${escapeHtml(cycle.routeFamily)}" data-sequence="${cycle.sequence}" data-station-key="${escapeHtml(station.key)}"><span><strong>${escapeHtml(station.title)}</strong><small>${escapeHtml(station.category)} · ${escapeHtml(station.provenanceStatus === "SOURCE_VERIFIED" ? "Kaynak bilgisi kayıtlı" : "Kaynak incelemesi bekliyor")}${station.sourcePageUseCount > 1 ? ` · kaynak ${station.sourcePageUseCount} istasyonda kullanılıyor` : ""}</small></span><span aria-hidden="true">›</span></button></li>`,
+              )
+              .join("")}</ul></section>`;
+          })
+          .join("")
+      : '<div class="management-empty-state"><strong>Eşleşen taslak bulunamadı.</strong><span>Rota, grup veya arama ölçütünü değiştirebilirsiniz.</span></div>';
+  } catch (cause) {
+    if (requestId !== curriculumDraftRequest) return;
+    list.innerHTML = "";
+    error.textContent = cause?.message ?? "Taslaklar yüklenemedi.";
+    error.classList.remove("hidden");
+  } finally {
+    if (requestId === curriculumDraftRequest) list.removeAttribute("aria-busy");
+  }
+}
+
+async function loadCurriculumDraftStation(route, sequence, stationKey) {
+  if (currentPlatformRole !== "SUPER_ADMIN") return;
+  const detail = $("curriculum-draft-detail");
+  detail.setAttribute("aria-busy", "true");
+  detail.innerHTML = '<p class="muted" role="status">İstasyon yükleniyor…</p>';
+  try {
+    const path = `/admin/curriculum-drafts/${encodeURIComponent(route)}/${encodeURIComponent(sequence)}/${encodeURIComponent(stationKey)}`;
+    const data = await parseResponse(await authenticatedFetch(path));
+    const station = data.station;
+    let sourceLink = "Kaynak bağlantısı kayıtlı değil.";
+    if (station.sourceEvidence?.url) {
+      try {
+        const safeUrl = new URL(station.sourceEvidence.url);
+        if (safeUrl.protocol === "https:") {
+          sourceLink = `<a href="${escapeHtml(safeUrl.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(station.sourceTitle || safeUrl.hostname)} ↗</a>`;
+        }
+      } catch (_error) {
+        void _error;
+      }
+    }
+    const quality = data.cycle.questionQuality;
+    const answerPositions = ["A", "B", "C", "D"]
+      .map((position) => `${position} ${quality.correctPositionCounts[position] ?? 0}`)
+      .join(" · ");
+    detail.innerHTML = `<div class="curriculum-draft-detail-head"><div><span class="eyebrow">${escapeHtml(data.cycle.routeFamily)} ROTASI · GRUP ${data.cycle.sequence} · YAYINLANMAMIŞ TASLAK</span><h3>${escapeHtml(station.title)}</h3></div><span class="badge badge-warning">Öğrenciye atanmadı</span></div><p class="notice-card curriculum-draft-quality-note">Otomatik biçim sinyalleri: doğru şık konumları ${answerPositions}; belirgin uzunluk uyarısı ${quality.clearLengthOutlierCount}/${quality.questionCount}. Bu ölçümler anlam ve cevap doğruluğunu kanıtlamaz; editoryal incelemenin yerini tutmaz.</p><dl class="info-grid"><div class="info-item"><dt>Kategori</dt><dd>${escapeHtml(station.category)}</dd></div><div class="info-item"><dt>Zorluk</dt><dd>${escapeHtml(station.difficulty)}</dd></div><div class="info-item"><dt>Beceriler</dt><dd>${station.skillCodes.map(escapeHtml).join(", ")}</dd></div><div class="info-item"><dt>Kaynak durumu</dt><dd>${escapeHtml(station.provenanceStatus === "SOURCE_VERIFIED" ? "Kaynak bilgisi kayıtlı" : "Kaynak incelemesi bekliyor")}</dd></div></dl><p class="curriculum-draft-outcome"><strong>Öğrenme amacı:</strong> ${escapeHtml(station.outcome)}</p><section class="curriculum-draft-text"><h4>${escapeHtml(station.textTitle)}</h4><p>${escapeHtml(station.text).replaceAll("\n", "<br>")}</p></section><section class="curriculum-draft-source"><h4>Kaynak</h4><p>${sourceLink}</p>${station.sourceEvidence?.checkedOn ? `<p class="muted">Kaynak kontrol tarihi: ${escapeHtml(station.sourceEvidence.checkedOn)}</p>` : ""}${station.sourcePageUseCount > 1 ? `<p class="notice-card">Bu kaynak ${station.sourcePageUseCount} istasyonda kullanılıyor. Bu tek başına içerik tekrarı olduğunu göstermez; istasyonların metin ve beceri hedeflerinin ayrı olduğunu kontrol edin.</p>` : ""}${station.sourceEvidence?.contentRelation ? `<p class="muted">${escapeHtml(station.sourceEvidence.contentRelation)}</p>` : ""}${station.sourceEvidence?.verifiedFacts?.length ? `<ul>${station.sourceEvidence.verifiedFacts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join("")}</ul>` : ""}</section><section class="curriculum-draft-questions"><h4>Sorular ve cevap anahtarı <span class="muted">· yalnızca yönetici önizlemesi</span></h4>${station.questions
+      .map(
+        (question, index) =>
+          `<article class="curriculum-draft-question"><h5>${index + 1}. ${escapeHtml(question.prompt)}</h5><ul>${question.options
+            .map(
+              (option) =>
+                `<li class="${option.id === question.correctOptionId ? "is-correct" : ""}"><span>${escapeHtml(option.text)}</span>${option.id === question.correctOptionId ? "<strong>Doğru cevap</strong>" : ""}</li>`,
+            )
+            .join(
+              "",
+            )}</ul><p><strong>Açıklama:</strong> ${escapeHtml(question.explanation)}</p>${question.hint ? `<p><strong>İpucu:</strong> ${escapeHtml(question.hint)}</p>` : ""}</article>`,
+      )
+      .join("")}</section>`;
+  } catch (cause) {
+    detail.innerHTML = `<p class="error" role="alert">${escapeHtml(cause?.message ?? "İstasyon önizlemesi yüklenemedi.")}</p>`;
+  } finally {
+    detail.removeAttribute("aria-busy");
+  }
+}
+
 function analyticsDuration(value) {
   if (value === null || value === undefined) return "Veri mevcut değil";
   const seconds = Math.round(Number(value) / 1000);
@@ -9046,7 +9211,7 @@ async function loadAnalyticsStudents(requestId = analyticsRequest) {
     ? students.items
         .map(
           (student) =>
-            `<tr><td><strong>${escapeHtml(student.displayName)}</strong><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntılar</button></td></tr>`,
+            `<tr><td><button type="button" class="link-btn analytics-student-name" data-analytics-student="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</button><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-ghost btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntılar</button></td></tr>`,
         )
         .join("")
     : '<tr><td colspan="5" class="empty-cell">Bu tarih aralığında öğrenci etkinliği bulunamadı.</td></tr>';
@@ -9058,6 +9223,7 @@ function renderAnalyticsDetail(data) {
   const card = $("analytics-student-detail");
   const performance = data.performance;
   card.classList.remove("hidden");
+  card.setAttribute("aria-busy", "false");
   const areaRows = data.journey.areas.length
     ? data.journey.areas
         .map(
@@ -9099,7 +9265,7 @@ function renderAnalyticsDetail(data) {
         `<tr><td>${escapeHtml(path.area)}</td><td>${escapeHtml(path.title)}</td><td>${path.currentStep ? `#${path.currentStep.position} · ${escapeHtml(path.currentStep.title)}` : "Tamamlandı veya bekleyen adım yok"}</td></tr>`,
     )
     .join("");
-  card.innerHTML = `<div class="analytics-detail-head"><div><span class="eyebrow">ÖĞRENCİ AYRINTISI</span><h3>${escapeHtml(data.student.displayName)}</h3><p class="muted">${escapeHtml(data.student.classNames.join(", ") || "Sınıf bilgisi yok")} · Seviye: ${escapeHtml(currentLevel)}</p></div><button type="button" class="btn btn-ghost btn-sm" data-analytics-detail-close>Kapat</button></div>
+  card.innerHTML = `<div class="analytics-detail-head"><div><span class="eyebrow">ÖĞRENCİ AYRINTISI</span><h3>${escapeHtml(data.student.displayName)}</h3><p class="muted">${escapeHtml(data.student.classNames.join(", ") || "Sınıf bilgisi yok")} · Seviye: ${escapeHtml(currentLevel)}</p></div><div class="analytics-detail-actions">${data.student.profileId ? `<button type="button" class="btn btn-ghost btn-sm" data-analytics-profile="${escapeHtml(data.student.profileId)}">Hesap ayrıntıları</button>` : ""}<button type="button" class="btn btn-ghost btn-sm" data-analytics-detail-close>Kapat</button></div></div>
     <div class="analytics-detail-columns"><div><h4>Öğrenme yolu durumu</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Yol</th><th>Mevcut adım</th></tr></thead><tbody>${currentPathRows || '<tr><td colspan="3" class="empty-cell">Veri mevcut değil.</td></tr>'}</tbody></table></div><h4>Adım ilerlemesi</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Yol</th><th>#</th><th>Adım</th><th>Durum</th></tr></thead><tbody>${pathRows || '<tr><td colspan="4" class="empty-cell">Veri mevcut değil.</td></tr>'}</tbody></table></div></div><div><h4>Alan özeti</h4><div class="table-wrap"><table class="data-table"><thead><tr><th>Alan</th><th>Tamamlanan</th><th>Sürüyor</th><th>Kilitli adım</th></tr></thead><tbody>${areaRows}</tbody></table></div><p class="muted">Son etkinlik: ${data.journey.lastActivityAt ? escapeHtml(formatDateTime(data.journey.lastActivityAt)) : "Veri mevcut değil"}</p></div></div>`;
 
   const performancePanel = $("analytics-performance-empty");
@@ -9115,6 +9281,11 @@ function renderAnalyticsDetail(data) {
 }
 
 async function loadAnalyticsStudentDetail(studentId, requestId = analyticsRequest) {
+  const card = $("analytics-student-detail");
+  card.classList.remove("hidden");
+  card.setAttribute("aria-busy", "true");
+  card.innerHTML = '<p class="muted" role="status">Öğrenci ayrıntıları yükleniyor…</p>';
+  card.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
   try {
     const query = analyticsQuery();
     const data = await parseResponse(
@@ -9125,6 +9296,8 @@ async function loadAnalyticsStudentDetail(studentId, requestId = analyticsReques
     if (requestId === analyticsRequest) renderAnalyticsDetail(data);
   } catch (cause) {
     if (requestId !== analyticsRequest) return;
+    card.setAttribute("aria-busy", "false");
+    card.innerHTML = `<div class="analytics-detail-head"><div><h3>Ayrıntılar yüklenemedi</h3><p class="error">${escapeHtml(cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.")}</p></div><button type="button" class="btn btn-ghost btn-sm" data-analytics-detail-close>Kapat</button></div>`;
     const error = $("analytics-error");
     error.textContent = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
     error.classList.remove("hidden");
@@ -10904,6 +11077,8 @@ async function populateQuestionFormForVersion(v) {
   $("question-form-prompt").value = v.prompt ?? "";
   $("question-form-explanation").value = v.explanation ?? "";
   $("question-form-hint").value = v.hint ?? "";
+  $("question-form-source-reference").value =
+    v.sourceReference ?? v.generationMetadata?.sourceReference ?? "";
   $("question-form-difficulty").value = v.difficulty != null ? String(v.difficulty) : "";
   const correctAnswer = v.correctAnswer;
   const options = v.options ?? [];
@@ -11514,6 +11689,7 @@ async function submitQuestionForm(event) {
   const prompt = $("question-form-prompt").value.trim();
   const explanation = $("question-form-explanation").value.trim() || null;
   const hint = $("question-form-hint").value.trim() || null;
+  const sourceReference = $("question-form-source-reference").value.trim() || null;
   const difficultyRaw = $("question-form-difficulty").value.trim();
   const difficulty = difficultyRaw === "" ? null : Number(difficultyRaw);
   const skillId = $("question-form-skill").value || null;
@@ -11671,6 +11847,7 @@ async function submitQuestionForm(event) {
     correctAnswer,
     ...(explanation !== null || questionFormMode !== "createQuestion" ? { explanation } : {}),
     ...(hint !== null || questionFormMode !== "createQuestion" ? { hint } : {}),
+    sourceReference,
     ...(difficulty !== null ? { difficulty } : {}),
   };
   const payload = {
@@ -11680,6 +11857,7 @@ async function submitQuestionForm(event) {
     correctAnswer,
     ...(explanation ? { explanation } : {}),
     ...(hint ? { hint } : {}),
+    sourceReference,
     ...(difficulty !== null ? { difficulty } : {}),
     ...(skillId ? { skillId } : {}),
     position,
