@@ -11,6 +11,32 @@ function functionSource(start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
+function analyticsStudentFlowSource(includeFetcher = false): string {
+  return [
+    ...(includeFetcher
+      ? [
+          functionSource(
+            "async function fetchAnalyticsStudentDetail(",
+            "function handleAnalyticsStudentClick(",
+          ),
+        ]
+      : []),
+    functionSource("function handleAnalyticsStudentClick(", "function showAnalyticsStudentError("),
+    functionSource(
+      "function showAnalyticsStudentError(",
+      "async function openAnalyticsStudentWorkspace(",
+    ),
+    functionSource(
+      "async function openAnalyticsStudentWorkspace(",
+      "async function loadAnalyticsStudentDetail(",
+    ),
+    functionSource(
+      "async function loadAnalyticsStudentDetail(",
+      "async function loadAnalyticsPage(",
+    ),
+  ].join("\n");
+}
+
 describe("admin student workspace and question editing UI", () => {
   it("labels account roles by platform and tenant scope without exposing raw markup", () => {
     const context = createContext({
@@ -46,12 +72,13 @@ describe("admin student workspace and question editing UI", () => {
   it("opens the matching shared student profile from the analytics row", async () => {
     const openStudentDetail = vi.fn(async () => true);
     const data = { student: { profileId: "profile-1" } };
+    const fetchDetail = vi.fn(async () => data);
     const context = createContext({
       analyticsRequest: 7,
       analyticsStudentDetailRequest: 0,
-      fetchAnalyticsStudentDetail: vi.fn(async () => data),
+      fetchAnalyticsStudentDetail: fetchDetail,
       openStudentDetail,
-      $: () => ({ textContent: "", classList: { remove() {} } }),
+      $: () => ({ textContent: "", classList: { add() {}, remove() {} } }),
     });
     runInContext(
       `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
@@ -62,6 +89,129 @@ describe("admin student workspace and question editing UI", () => {
       analyticsData: data,
       isCurrent: expect.any(Function),
     });
+    expect(fetchDetail).toHaveBeenCalledExactlyOnceWith("student-1");
+  });
+
+  it("handles an analytics details-button click using the row's student identity", () => {
+    const loadDetail = vi.fn();
+    const context = createContext({ loadAnalyticsStudentDetail: loadDetail });
+    const handleClick = runInContext(
+      `${functionSource("function handleAnalyticsStudentClick(", "function showAnalyticsStudentError(")}; handleAnalyticsStudentClick`,
+      context,
+    ) as (event: unknown) => void;
+
+    handleClick({
+      target: {
+        closest(selector: string) {
+          return selector === "[data-analytics-student]"
+            ? { disabled: false, dataset: { analyticsStudent: "student-user-7" } }
+            : null;
+        },
+      },
+    });
+
+    expect(loadDetail).toHaveBeenCalledExactlyOnceWith("student-user-7");
+  });
+
+  it("resolves the analytics student ID to its profile ID before opening profile detail", async () => {
+    const response = { student: { id: "student-user-7", profileId: "profile-9" } };
+    const authenticatedFetch = vi.fn(async () => ({}));
+    const openStudentDetail = vi.fn(async () => true);
+    const analyticsError = { textContent: "", classList: { add: vi.fn(), remove: vi.fn() } };
+    const context = createContext({
+      analyticsRequest: 3,
+      analyticsStudentDetailRequest: 0,
+      analyticsQuery: () => new URLSearchParams("from=2026-10-01"),
+      authenticatedFetch,
+      parseResponse: async () => response,
+      openStudentDetail,
+      encodeURIComponent,
+      $: (id: string) => (id === "analytics-error" ? analyticsError : null),
+    });
+    const flow = runInContext(
+      `${analyticsStudentFlowSource(true)}; ({handleAnalyticsStudentClick, loadAnalyticsStudentDetail})`,
+      context,
+    ) as {
+      handleAnalyticsStudentClick: (event: unknown) => Promise<void> | void;
+      loadAnalyticsStudentDetail: (id: string) => Promise<void>;
+    };
+
+    await flow.handleAnalyticsStudentClick({
+      target: {
+        closest(selector: string) {
+          return selector === "[data-analytics-student]"
+            ? { disabled: false, dataset: { analyticsStudent: "student-user-7" } }
+            : null;
+        },
+      },
+    });
+
+    expect(authenticatedFetch).toHaveBeenCalledWith(
+      "/admin/analytics/students/student-user-7?from=2026-10-01",
+    );
+    expect(openStudentDetail).toHaveBeenCalledWith(
+      "profile-9",
+      expect.objectContaining({ analyticsData: response }),
+    );
+  });
+
+  it("shows analytics API failures in the visible alert instead of swallowing them", async () => {
+    const error = { textContent: "", classList: { add: vi.fn(), remove: vi.fn() } };
+    const context = createContext({
+      analyticsRequest: 0,
+      analyticsStudentDetailRequest: 0,
+      fetchAnalyticsStudentDetail: vi.fn(async () => {
+        throw new Error("Öğrenci ayrıntısı için yetkiniz yok.");
+      }),
+      showUserError: vi.fn(),
+      $: (id: string) => (id === "analytics-error" ? error : null),
+    });
+    const flow = runInContext(
+      `${analyticsStudentFlowSource()}; ({handleAnalyticsStudentClick, loadAnalyticsStudentDetail})`,
+      context,
+    ) as {
+      handleAnalyticsStudentClick: (event: unknown) => Promise<void> | void;
+      loadAnalyticsStudentDetail: (id: string) => Promise<void>;
+    };
+
+    await flow.handleAnalyticsStudentClick({
+      target: {
+        closest(selector: string) {
+          return selector === "[data-analytics-student]"
+            ? { disabled: false, dataset: { analyticsStudent: "student-user-7" } }
+            : null;
+        },
+      },
+    });
+
+    expect(error.textContent).toBe("Öğrenci ayrıntısı için yetkiniz yok.");
+    expect(error.classList.remove).toHaveBeenCalledWith("hidden");
+  });
+
+  it("surfaces a failed profile-detail request in Analytics as well", async () => {
+    const error = { textContent: "", classList: { add: vi.fn(), remove: vi.fn() } };
+    const detailError = { textContent: "Öğrenci profili açılamadı." };
+    const context = createContext({
+      analyticsRequest: 0,
+      analyticsStudentDetailRequest: 0,
+      fetchAnalyticsStudentDetail: vi.fn(async () => ({ student: { profileId: "profile-9" } })),
+      openStudentDetail: vi.fn(async () => false),
+      showUserError: vi.fn(),
+      $: (id: string) => {
+        if (id === "analytics-error") return error;
+        if (id === "student-detail-body") return { querySelector: () => detailError };
+        return null;
+      },
+    });
+    const flow = runInContext(
+      `${analyticsStudentFlowSource()}; loadAnalyticsStudentDetail`,
+      context,
+    ) as (id: string) => Promise<void>;
+
+    await flow("student-user-7");
+
+    expect(error.textContent).toBe("Öğrenci profili açılamadı.");
+    expect(error.classList.remove).toHaveBeenCalledWith("hidden");
   });
 
   it("opens the same student workspace from User Management when the account has student access", async () => {
@@ -74,7 +224,9 @@ describe("admin student workspace and question editing UI", () => {
       fetchAnalyticsStudentDetail: vi.fn(async () => data),
       openStudentDetail,
       showUserError: vi.fn(),
-      $: () => ({ classList: { add: close } }),
+      $: (id: string) => ({
+        classList: { add: id === "user-detail-modal" ? close : vi.fn() },
+      }),
     });
     runInContext(
       `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
@@ -88,9 +240,11 @@ describe("admin student workspace and question editing UI", () => {
     expect(close).toHaveBeenCalledExactlyOnceWith("hidden");
   });
 
-  it("routes a student name click in User Management directly to the shared student detail", async () => {
+  it("keeps a student name click in User Management on the general user detail", () => {
+    const openUserDetail = vi.fn();
     const openWorkspace = vi.fn();
     const context = createContext({
+      openUserDetail,
       openAnalyticsStudentWorkspace: openWorkspace,
     });
     const handleClick = runInContext(
@@ -101,17 +255,18 @@ describe("admin student workspace and question editing UI", () => {
     handleClick({
       target: {
         closest(selector: string) {
-          if (selector === "[data-user-open-student]") {
-            return { dataset: { userOpenStudent: "user-42" } };
+          if (selector === "[data-user-detail-id]") {
+            return { dataset: { userDetailId: "user-42" } };
           }
           return null;
         },
       },
     });
-    expect(openWorkspace).toHaveBeenCalledExactlyOnceWith("user-42", { closeUserDetail: true });
+    expect(openUserDetail).toHaveBeenCalledExactlyOnceWith("user-42");
+    expect(openWorkspace).not.toHaveBeenCalled();
   });
 
-  it("adds the direct student-detail action only to accounts with a student role", () => {
+  it("renders student and non-student names as general user-detail links", () => {
     const listBody = { innerHTML: "" };
     const elements: Record<
       string,
@@ -154,10 +309,10 @@ describe("admin student workspace and question editing UI", () => {
       context,
     )();
 
-    expect(listBody.innerHTML).toContain('data-user-open-student="student-user"');
-    expect(listBody.innerHTML).toContain('aria-label="Öğrenci ayrıntısını aç: Öğrenci Adı"');
-    const teacherRow = listBody.innerHTML.split("<tr>").at(-1) ?? "";
-    expect(teacherRow).not.toContain("data-user-open-student");
+    const [studentRow, teacherRow] = listBody.innerHTML.split("<tr>").slice(1);
+    expect(studentRow).toContain('data-user-detail-id="student-user"');
+    expect(teacherRow).toContain('data-user-detail-id="teacher-user"');
+    expect(listBody.innerHTML).not.toContain("data-user-open-student");
   });
 
   it("ignores an older analytics response after a newer student was selected", async () => {
@@ -236,7 +391,9 @@ describe("admin student workspace and question editing UI", () => {
       fetchAnalyticsStudentDetail: vi.fn(async () => ({ student: { profileId: "profile-2" } })),
       openStudentDetail: vi.fn(async () => false),
       showUserError: vi.fn(),
-      $: () => ({ classList: { add: close } }),
+      $: (id: string) => ({
+        classList: { add: id === "user-detail-modal" ? close : vi.fn() },
+      }),
     });
     runInContext(
       `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,

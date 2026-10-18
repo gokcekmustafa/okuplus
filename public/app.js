@@ -5774,10 +5774,7 @@ $("curriculum-draft-detail")?.addEventListener("submit", (event) => {
   event.preventDefault();
   void saveCurriculumDraftQuestion(form);
 });
-$("analytics-student-body")?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-analytics-student]");
-  if (button) void loadAnalyticsStudentDetail(button.dataset.analyticsStudent);
-});
+$("analytics-student-body")?.addEventListener("click", handleAnalyticsStudentClick);
 $("analytics-student-pagination")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-analytics-page]");
   if (!button || button.disabled) return;
@@ -5961,19 +5958,11 @@ function renderUserList() {
     tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
   } else {
     tbody.innerHTML = userData
-      .map((u) => {
-        const hasStudentRole = (u.roleConnections ?? []).some(
-          (connection) => connection.role === "STUDENT",
-        );
-        return `
+      .map(
+        (u) => `
         <tr>
           <td>
-            <button
-              type="button"
-              class="link-btn"
-              data-user-detail-id="${u.id}"
-              ${hasStudentRole ? `data-user-open-student="${escapeHtml(u.id)}" aria-label="Öğrenci ayrıntısını aç: ${escapeHtml(u.displayName)}"` : ""}
-            >
+            <button type="button" class="link-btn" data-user-detail-id="${u.id}">
               ${escapeHtml(u.displayName)}
             </button>
             ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
@@ -5987,8 +5976,8 @@ function renderUserList() {
             <button type="button" class="btn btn-ghost btn-sm" data-user-edit-id="${u.id}">Düzenle</button>
             <button type="button" class="btn btn-ghost btn-sm" data-user-delete-id="${u.id}">Sil</button>
           </td>
-        </tr>`;
-      })
+        </tr>`,
+      )
       .join("");
   }
 
@@ -6602,16 +6591,11 @@ async function deleteUser(id) {
 }
 
 function handleUserListClick(event) {
-  const studentWorkspaceBtn = event.target.closest("[data-user-open-student]");
   const detailBtn = event.target.closest("[data-user-detail-id]");
   const editBtn = event.target.closest("[data-user-edit-id]");
   const deleteBtn = event.target.closest("[data-user-delete-id]");
 
-  if (studentWorkspaceBtn) {
-    void openAnalyticsStudentWorkspace(studentWorkspaceBtn.dataset.userOpenStudent, {
-      closeUserDetail: true,
-    });
-  } else if (detailBtn) {
+  if (detailBtn) {
     void openUserDetail(detailBtn.dataset.userDetailId);
   } else if (editBtn) {
     const user = userData.find((u) => u.id === editBtn.dataset.userEditId);
@@ -9452,9 +9436,28 @@ async function fetchAnalyticsStudentDetail(studentId) {
   );
 }
 
+function handleAnalyticsStudentClick(event) {
+  const button = event.target.closest("[data-analytics-student]");
+  if (!button || button.disabled) return;
+  const studentId = button.dataset.analyticsStudent;
+  if (!studentId) {
+    showAnalyticsStudentError("Öğrenci kimliği alınamadı. Listeyi yenileyip tekrar deneyin.");
+    return;
+  }
+  return loadAnalyticsStudentDetail(studentId);
+}
+
+function showAnalyticsStudentError(message) {
+  const error = $("analytics-error");
+  if (!error) return;
+  error.textContent = message;
+  error.classList.remove("hidden");
+}
+
 async function openAnalyticsStudentWorkspace(studentId, options = {}) {
   const selectionId = ++analyticsStudentDetailRequest;
   const requestId = options.requestId ?? analyticsRequest;
+  $("analytics-error")?.classList.add("hidden");
   try {
     const data = await fetchAnalyticsStudentDetail(studentId);
     if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
@@ -9464,7 +9467,14 @@ async function openAnalyticsStudentWorkspace(studentId, options = {}) {
       isCurrent: () =>
         selectionId === analyticsStudentDetailRequest && requestId === analyticsRequest,
     });
-    if (selectionId !== analyticsStudentDetailRequest) return;
+    if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
+    if (!opened) {
+      const detailError = $("student-detail-body")?.querySelector(".error")?.textContent;
+      showAnalyticsStudentError(
+        detailError || "Öğrenci ayrıntısı yüklenemedi. Lütfen tekrar deneyin.",
+      );
+      return;
+    }
     if (opened && options.closeUserDetail) $("user-detail-modal").classList.add("hidden");
   } catch (cause) {
     if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
@@ -9472,9 +9482,7 @@ async function openAnalyticsStudentWorkspace(studentId, options = {}) {
     if (options.closeUserDetail) {
       showUserError(message);
     } else {
-      const error = $("analytics-error");
-      error.textContent = message;
-      error.classList.remove("hidden");
+      showAnalyticsStudentError(message);
     }
   }
 }

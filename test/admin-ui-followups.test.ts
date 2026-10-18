@@ -58,18 +58,28 @@ describe("management UI follow-ups", () => {
     expect(appJs).toContain("Kaydetme isteği tamamlandı; ancak güncel önizleme yüklenemedi.");
   });
 
-  it("routes both student list actions to profile details and ignores stale responses", () => {
+  it("keeps User Management names on user details and routes Analytics actions to profiles", () => {
     expect(appJs).toContain('data-analytics-student="${escapeHtml(student.studentId)}"');
     expect(appJs).toContain(
-      "if (button) void loadAnalyticsStudentDetail(button.dataset.analyticsStudent)",
+      '$("analytics-student-body")?.addEventListener("click", handleAnalyticsStudentClick)',
     );
+    expect(appJs).toContain("return loadAnalyticsStudentDetail(studentId)");
+    expect(appJs).toContain('data-user-detail-id="${u.id}"');
+    expect(appJs).toContain("void openUserDetail(detailBtn.dataset.userDetailId)");
+    const userListRenderer = appJs.slice(
+      appJs.indexOf("function renderUserList()"),
+      appJs.indexOf(
+        "function renderUserRoleConnections(",
+        appJs.indexOf("function renderUserList()"),
+      ),
+    );
+    expect(userListRenderer).not.toContain("data-user-open-student");
     expect(appJs).toContain("options.analyticsData.student.profileId !== detail.id");
     expect(appJs).toContain(
       "requestId !== studentDetailRequest || (options.isCurrent && !options.isCurrent())",
     );
     expect(appJs).toContain("analyticsStudentDetailRequest += 1;");
     expect(appJs).toContain("studentDetailCurrent = null;");
-    expect(appJs).toContain('data-user-detail-id="${u.id}"');
     expect(appJs).toContain('data-user-open-student="${escapeHtml(u.id)}"');
   });
 
