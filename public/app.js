@@ -5757,6 +5757,23 @@ $("curriculum-draft-list")?.addEventListener("click", (event) => {
     );
   }
 });
+$("curriculum-draft-detail")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-draft-question-open]");
+  if (!button) return;
+  const form = [
+    ...$("curriculum-draft-detail").querySelectorAll("[data-draft-question-edit]"),
+  ].find((candidate) => candidate.dataset.draftQuestionEdit === button.dataset.draftQuestionOpen);
+  if (form) {
+    form.hidden = !form.hidden;
+    if (!form.hidden) form.querySelector('[name="prompt"]').focus();
+  }
+});
+$("curriculum-draft-detail")?.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-draft-question-edit]");
+  if (!form) return;
+  event.preventDefault();
+  void saveCurriculumDraftQuestion(form);
+});
 $("analytics-student-body")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-analytics-student]");
   if (button) void loadAnalyticsStudentDetail(button.dataset.analyticsStudent);
@@ -5838,6 +5855,7 @@ let userData = [];
 let userFormMode = "create";
 let userEditingId = null;
 let userDetailCurrent = null;
+let userDetailRequest = 0;
 
 function userApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -6148,17 +6166,24 @@ async function submitUserForm(event) {
 }
 
 async function openUserDetail(id) {
+  const requestId = ++userDetailRequest;
+  analyticsStudentDetailRequest += 1;
   const modal = $("user-detail-modal");
+  $("user-detail-title").textContent = "Kullanıcı ayrıntısı yükleniyor…";
   $("user-detail-body").innerHTML = '<p class="muted">Yükleniyor…</p>';
   modal.classList.remove("hidden");
 
   try {
     const res = await userApi(`/${encodeURIComponent(id)}`);
     const detail = await parseResponse(res);
+    if (requestId !== userDetailRequest) return;
+    if (detail.id !== id) throw new Error("Açılan kullanıcı kaydı istenen kullanıcıyla eşleşmedi.");
     userDetailCurrent = detail;
     renderUserDetail(detail);
   } catch (err) {
+    if (requestId !== userDetailRequest) return;
     userDetailCurrent = null;
+    $("user-detail-title").textContent = "Kullanıcı ayrıntısı açılamadı";
     $("user-detail-body").innerHTML =
       `<p class="error">${escapeHtml(err.message || "Detay yüklenemedi.")}</p>`;
   }
@@ -6635,6 +6660,8 @@ function setupUserEvents() {
   });
 
   $("user-detail-close").addEventListener("click", () => {
+    userDetailRequest += 1;
+    analyticsStudentDetailRequest += 1;
     $("user-detail-modal").classList.add("hidden");
   });
   $("user-detail-edit").addEventListener("click", () => {
@@ -6690,6 +6717,7 @@ let studentData = [];
 let studentFormMode = "create";
 let studentEditingId = null;
 let studentDetailCurrent = null;
+let studentDetailRequest = 0;
 let studentFilterTenantsLoaded = false;
 
 function studentApi(path, options = {}) {
@@ -7095,21 +7123,39 @@ async function submitStudentForm(event) {
 }
 
 async function openStudentDetail(id, options = {}) {
+  const requestId = ++studentDetailRequest;
   const modal = $("student-detail-modal");
+  studentDetailCurrent = null;
+  $("student-detail-title").textContent = "Öğrenci detayı yükleniyor…";
   $("student-detail-body").innerHTML = '<p class="muted">Yükleniyor…</p>';
   modal.classList.remove("hidden");
 
   try {
     const res = await studentApi(`/${encodeURIComponent(id)}`);
     const detail = await parseResponse(res);
+    if (requestId !== studentDetailRequest || (options.isCurrent && !options.isCurrent()))
+      return false;
+    if (detail.id !== id) throw new Error("Açılan öğrenci kaydı istenen öğrenciyle eşleşmedi.");
+    if (
+      options.analyticsData?.student &&
+      (options.analyticsData.student.profileId !== detail.id ||
+        options.analyticsData.student.id !== detail.user.id)
+    ) {
+      throw new Error("Öğrenci ve analitik bilgileri eşleşmedi. Ayrıntıyı yeniden açın.");
+    }
     studentDetailCurrent = detail;
     renderStudentDetail(detail);
     if (options.analyticsData) renderStudentDetailAnalytics(options.analyticsData);
   } catch (err) {
+    if (requestId !== studentDetailRequest || (options.isCurrent && !options.isCurrent()))
+      return false;
     studentDetailCurrent = null;
+    $("student-detail-title").textContent = "Öğrenci ayrıntısı açılamadı";
     $("student-detail-body").innerHTML =
       `<p class="error">${escapeHtml(err.message || "Detay yüklenemedi.")}</p>`;
+    return false;
   }
+  return requestId === studentDetailRequest;
 }
 
 function renderStudentDetail(d) {
@@ -7483,6 +7529,9 @@ function setupStudentEvents() {
   });
 
   $("student-detail-close").addEventListener("click", () => {
+    studentDetailRequest += 1;
+    analyticsStudentDetailRequest += 1;
+    studentDetailCurrent = null;
     $("student-detail-modal").classList.add("hidden");
   });
   $("student-detail-edit").addEventListener("click", () => {
@@ -9096,6 +9145,7 @@ async function loadManagementDashboard(pageId) {
 }
 
 let analyticsRequest = 0;
+let analyticsStudentDetailRequest = 0;
 let analyticsStudentPage = 1;
 const ANALYTICS_PAGE_SIZE = 20;
 
@@ -9192,7 +9242,7 @@ async function loadCurriculumDrafts() {
 }
 
 async function loadCurriculumDraftStation(route, sequence, stationKey) {
-  if (currentPlatformRole !== "SUPER_ADMIN") return;
+  if (currentPlatformRole !== "SUPER_ADMIN") return false;
   const detail = $("curriculum-draft-detail");
   detail.setAttribute("aria-busy", "true");
   detail.innerHTML = '<p class="muted" role="status">İstasyon yükleniyor…</p>';
@@ -9215,23 +9265,105 @@ async function loadCurriculumDraftStation(route, sequence, stationKey) {
     const answerPositions = ["A", "B", "C", "D"]
       .map((position) => `${position} ${quality.correctPositionCounts[position] ?? 0}`)
       .join(" · ");
-    detail.innerHTML = `<div class="curriculum-draft-detail-head"><div><span class="eyebrow">${escapeHtml(data.cycle.routeFamily)} ROTASI · GRUP ${data.cycle.sequence} · YAYINLANMAMIŞ TASLAK</span><h3>${escapeHtml(station.title)}</h3></div><span class="badge badge-warning">Öğrenciye atanmadı</span></div><p class="notice-card curriculum-draft-quality-note">Otomatik biçim sinyalleri: doğru şık konumları ${answerPositions}; belirgin uzunluk uyarısı ${quality.clearLengthOutlierCount}/${quality.questionCount}. Bu ölçümler anlam ve cevap doğruluğunu kanıtlamaz; editoryal incelemenin yerini tutmaz.</p><dl class="info-grid"><div class="info-item"><dt>Kategori</dt><dd>${escapeHtml(station.category)}</dd></div><div class="info-item"><dt>Zorluk</dt><dd>${escapeHtml(station.difficulty)}</dd></div><div class="info-item"><dt>Beceriler</dt><dd>${station.skillCodes.map(escapeHtml).join(", ")}</dd></div><div class="info-item"><dt>Kaynak durumu</dt><dd>${escapeHtml(station.provenanceStatus === "SOURCE_VERIFIED" ? "Kaynak bilgisi kayıtlı" : "Kaynak incelemesi bekliyor")}</dd></div></dl><p class="curriculum-draft-outcome"><strong>Öğrenme amacı:</strong> ${escapeHtml(station.outcome)}</p><section class="curriculum-draft-text"><h4>${escapeHtml(station.textTitle)}</h4><p>${escapeHtml(station.text).replaceAll("\n", "<br>")}</p></section><section class="curriculum-draft-source"><h4>Kaynak</h4><p>${sourceLink}</p>${station.sourceEvidence?.checkedOn ? `<p class="muted">Kaynak kontrol tarihi: ${escapeHtml(station.sourceEvidence.checkedOn)}</p>` : ""}${station.sourcePageUseCount > 1 ? `<p class="notice-card">Bu kaynak ${station.sourcePageUseCount} istasyonda kullanılıyor. Bu tek başına içerik tekrarı olduğunu göstermez; istasyonların metin ve beceri hedeflerinin ayrı olduğunu kontrol edin.</p>` : ""}${station.sourceEvidence?.contentRelation ? `<p class="muted">${escapeHtml(station.sourceEvidence.contentRelation)}</p>` : ""}${station.sourceEvidence?.verifiedFacts?.length ? `<ul>${station.sourceEvidence.verifiedFacts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join("")}</ul>` : ""}</section><section class="curriculum-draft-questions"><h4>Sorular ve cevap anahtarı <span class="muted">· yalnızca yönetici önizlemesi</span></h4>${station.questions
-      .map(
-        (question, index) =>
-          `<article class="curriculum-draft-question"><h5>${index + 1}. ${escapeHtml(question.prompt)}</h5><ul>${question.options
-            .map(
-              (option) =>
-                `<li class="${option.id === question.correctOptionId ? "is-correct" : ""}"><span>${escapeHtml(option.text)}</span>${option.id === question.correctOptionId ? "<strong>Doğru cevap</strong>" : ""}</li>`,
-            )
-            .join(
-              "",
-            )}</ul><p><strong>Açıklama:</strong> ${escapeHtml(question.explanation)}</p>${question.hint ? `<p><strong>İpucu:</strong> ${escapeHtml(question.hint)}</p>` : ""}</article>`,
-      )
-      .join("")}</section>`;
+    detail.innerHTML = `
+      <div class="curriculum-draft-detail-head">
+        <div><span class="eyebrow">${escapeHtml(data.cycle.routeFamily)} ROTASI · GRUP ${data.cycle.sequence} · YAYINLANMAMIŞ TASLAK</span><h3>${escapeHtml(station.title)}</h3></div>
+        <span class="badge badge-warning">Öğrenciye atanmadı</span>
+      </div>
+      <p class="notice-card curriculum-draft-quality-note">Otomatik biçim sinyalleri: doğru şık konumları ${answerPositions}; belirgin uzunluk uyarısı ${quality.clearLengthOutlierCount}/${quality.questionCount}. Bu ölçümler anlam ve cevap doğruluğunu kanıtlamaz; editoryal incelemenin yerini tutmaz.</p>
+      <p class="notice-card curriculum-draft-save-note">Düzenlemeler sürümlü taslak kaydı olarak saklanır; öğrencilere açılmaz ve yayımlanmış soru geçmişini değiştirmez.</p>
+      <dl class="info-grid"><div class="info-item"><dt>Kategori</dt><dd>${escapeHtml(station.category)}</dd></div><div class="info-item"><dt>Zorluk</dt><dd>${escapeHtml(station.difficulty)}</dd></div><div class="info-item"><dt>Beceriler</dt><dd>${station.skillCodes.map(escapeHtml).join(", ")}</dd></div><div class="info-item"><dt>Kaynak durumu</dt><dd>${escapeHtml(station.provenanceStatus === "SOURCE_VERIFIED" ? "Kaynak bilgisi kayıtlı" : "Kaynak incelemesi bekliyor")}</dd></div></dl>
+      <p class="curriculum-draft-outcome"><strong>Öğrenme amacı:</strong> ${escapeHtml(station.outcome)}</p>
+      <section class="curriculum-draft-text"><h4>${escapeHtml(station.textTitle)}</h4><p>${escapeHtml(station.text).replaceAll("\n", "<br>")}</p></section>
+      <section class="curriculum-draft-source"><h4>Kaynak</h4><p>${sourceLink}</p>${station.sourceEvidence?.checkedOn ? `<p class="muted">Kaynak kontrol tarihi: ${escapeHtml(station.sourceEvidence.checkedOn)}</p>` : ""}${station.sourcePageUseCount > 1 ? `<p class="notice-card">Bu kaynak ${station.sourcePageUseCount} istasyonda kullanılıyor. Bu tek başına içerik tekrarı olduğunu göstermez; istasyonların metin ve beceri hedeflerinin ayrı olduğunu kontrol edin.</p>` : ""}${station.sourceEvidence?.contentRelation ? `<p class="muted">${escapeHtml(station.sourceEvidence.contentRelation)}</p>` : ""}${station.sourceEvidence?.verifiedFacts?.length ? `<ul>${station.sourceEvidence.verifiedFacts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join("")}</ul>` : ""}</section>
+      <section class="curriculum-draft-questions"><h4>Sorular ve cevap anahtarı <span class="muted">· yalnızca yönetici önizlemesi</span></h4>${station.questions.map((question, index) => renderCurriculumDraftQuestion(question, index, { route, sequence, stationKey })).join("")}</section>`;
+    return true;
   } catch (cause) {
     detail.innerHTML = `<p class="error" role="alert">${escapeHtml(cause?.message ?? "İstasyon önizlemesi yüklenemedi.")}</p>`;
+    return false;
   } finally {
     detail.removeAttribute("aria-busy");
+  }
+}
+
+function renderCurriculumDraftQuestion(question, index, identity) {
+  const optionLabels = ["A", "B", "C", "D"];
+  const options = question.options
+    .map(
+      (option, optionIndex) =>
+        `<label class="field"><span>Seçenek ${optionLabels[optionIndex] ?? optionIndex + 1}</span><textarea data-draft-option-id="${escapeHtml(option.id)}" maxlength="500" required>${escapeHtml(option.text)}</textarea></label>`,
+    )
+    .join("");
+  const correctOptions = question.options
+    .map(
+      (option, optionIndex) =>
+        `<option value="${escapeHtml(option.id)}" ${option.id === question.correctOptionId ? "selected" : ""}>${optionLabels[optionIndex] ?? optionIndex + 1}</option>`,
+    )
+    .join("");
+  const answerList = question.options
+    .map(
+      (option, optionIndex) =>
+        `<li class="${option.id === question.correctOptionId ? "is-correct" : ""}"><span>${optionLabels[optionIndex] ?? optionIndex + 1}. ${escapeHtml(option.text)}</span>${option.id === question.correctOptionId ? "<strong>Doğru cevap</strong>" : ""}</li>`,
+    )
+    .join("");
+  return `<article class="curriculum-draft-question">
+    <div class="curriculum-draft-question-heading"><h5>${index + 1}. ${escapeHtml(question.prompt)}</h5><div><span class="badge badge-neutral">${question.revision > 0 ? `Taslak sürüm ${question.revision}` : "Kaynak taslak"}</span> <button type="button" class="btn btn-ghost btn-sm" data-draft-question-open="${escapeHtml(question.key)}" ${question.sourceChanged ? "disabled" : ""}>Düzenle</button></div></div>
+    ${question.sourceChanged ? '<p class="error" role="alert">Kaynak soru bu sırada değişmiş. Bu kayıt düzenleme için güncel kaynakla yeniden eşleştirilmelidir.</p>' : ""}
+    <ul>${answerList}</ul><p><strong>Açıklama:</strong> ${escapeHtml(question.explanation)}</p><p><strong>Soru kaynağı:</strong> ${escapeHtml(question.sourceReference || "Kaynak bilgisi kayıtlı değil.")}</p>${question.hint ? `<p><strong>İpucu:</strong> ${escapeHtml(question.hint)}</p>` : ""}
+    <form class="curriculum-draft-question-editor" data-draft-question-edit="${escapeHtml(question.key)}" data-route="${escapeHtml(identity.route)}" data-sequence="${escapeHtml(identity.sequence)}" data-station-key="${escapeHtml(identity.stationKey)}" data-version-id="${escapeHtml(question.versionId)}" hidden>
+      <label class="field"><span>Soru metni</span><textarea name="prompt" maxlength="2000" required>${escapeHtml(question.prompt)}</textarea></label>
+      ${options}
+      <label class="field"><span>Doğru cevap</span><select name="correctOptionId">${correctOptions}</select></label>
+      <label class="field"><span>İpucu</span><textarea name="hint" maxlength="1000">${escapeHtml(question.hint ?? "")}</textarea></label>
+      <label class="field"><span>Açıklama</span><textarea name="explanation" maxlength="2000" required>${escapeHtml(question.explanation)}</textarea></label>
+      <label class="field"><span>Kaynak bilgisi</span><textarea name="sourceReference" maxlength="1200">${escapeHtml(question.sourceReference ?? "")}</textarea></label>
+      <p class="error hidden" data-draft-save-error role="alert"></p>
+      <button type="submit" class="btn btn-primary">Taslak değişikliğini kaydet</button>
+    </form>
+  </article>`;
+}
+
+async function saveCurriculumDraftQuestion(form) {
+  const error = form.querySelector("[data-draft-save-error]");
+  const button = form.querySelector('button[type="submit"]');
+  error.textContent = "";
+  error.classList.add("hidden");
+  button.disabled = true;
+  const questionKey = form.dataset.draftQuestionEdit;
+  const path = `/admin/curriculum-drafts/${encodeURIComponent(form.dataset.route)}/${encodeURIComponent(form.dataset.sequence)}/${encodeURIComponent(form.dataset.stationKey)}/questions/${encodeURIComponent(questionKey)}`;
+  const payload = {
+    expectedVersionId: form.dataset.versionId,
+    prompt: form.elements.prompt.value,
+    options: [...form.querySelectorAll("[data-draft-option-id]")].map((option) => ({
+      id: option.dataset.draftOptionId,
+      text: option.value,
+    })),
+    correctOptionId: form.elements.correctOptionId.value,
+    hint: form.elements.hint.value.trim() || null,
+    explanation: form.elements.explanation.value,
+    sourceReference: form.elements.sourceReference.value,
+  };
+  try {
+    await parseResponse(
+      await authenticatedFetch(path, { method: "PATCH", body: JSON.stringify(payload) }),
+    );
+    const reloaded = await loadCurriculumDraftStation(
+      form.dataset.route,
+      form.dataset.sequence,
+      form.dataset.stationKey,
+    );
+    const status = document.createElement("p");
+    status.className = `notice-card ${reloaded ? "curriculum-draft-save-success" : "curriculum-draft-save-note"}`;
+    status.setAttribute("role", "status");
+    status.textContent = reloaded
+      ? "Taslak sürümü kaydedildi ve önizleme yenilendi. İçerik yayımlanmadı."
+      : "Kaydetme isteği tamamlandı; ancak güncel önizleme yüklenemedi. Yeniden yükleyerek kayıt durumunu doğrulayın.";
+    $("curriculum-draft-detail").prepend(status);
+  } catch (cause) {
+    error.textContent = cause?.message ?? "Taslak değişikliği kaydedilemedi. Yeniden deneyin.";
+    error.classList.remove("hidden");
+  } finally {
+    if (button.isConnected) button.disabled = false;
   }
 }
 
@@ -9252,30 +9384,27 @@ function renderAnalyticsOverview(data) {
   $("analytics-not-continued").textContent = String(overview.startedNotContinuedStudents);
   $("analytics-errors").textContent = String(overview.technicalErrors);
   $("analytics-definition").textContent = data.definitions.activeStudent;
-  $("analytics-feature-body").innerHTML = overview.featureUsage.length
-    ? overview.featureUsage
-        .map(
-          (item) =>
-            `<tr><td>${escapeHtml(item.feature)}</td><td>${item.sessions}</td><td>${item.students}</td></tr>`,
-        )
-        .join("")
-    : '<tr><td colspan="3" class="empty-cell">Veri mevcut değil.</td></tr>';
   const usageGroups = [
-    ["Günlük", overview.usageByDay],
-    ["Haftalık", overview.usageByWeek],
-    ["Aylık", overview.usageByMonth],
+    ["Günlük", overview.usageByDay ?? []],
+    ["Haftalık", overview.usageByWeek ?? []],
+    ["Aylık", overview.usageByMonth ?? []],
   ];
-  const usageRows = usageGroups.flatMap(([label, items]) =>
+  const featureRows = (overview.featureUsage ?? []).map(
+    (item) =>
+      `<tr><td>${escapeHtml(item.feature)}</td><td>${item.sessions} oturum</td><td>${item.students} öğrenci</td></tr>`,
+  );
+  const periodRows = usageGroups.flatMap(([label, items]) =>
     items
-      .slice(-12)
+      .slice(-3)
       .map(
         (item) =>
-          `<div class="analytics-usage-row"><span>${label} · ${escapeHtml(formatDateTime(item.bucket))}</span><strong>${item.activeStudents} öğrenci · ${item.events} etkinlik</strong></div>`,
+          `<tr><td>${label} · ${escapeHtml(formatDateTime(item.bucket))}</td><td>${item.events} etkinlik</td><td>${item.activeStudents} öğrenci</td></tr>`,
       ),
   );
-  $("analytics-usage-summary").innerHTML = usageRows.length
-    ? usageRows.join("")
-    : '<div class="analytics-usage-row"><span>Seçilen dönem</span><strong>Veri mevcut değil</strong></div>';
+  const rows = [...featureRows, ...periodRows];
+  $("analytics-feature-body").innerHTML = rows.length
+    ? rows.join("")
+    : '<tr><td colspan="3" class="empty-cell">Veri mevcut değil.</td></tr>';
 }
 
 async function loadAnalyticsStudents(requestId = analyticsRequest) {
@@ -9309,12 +9438,21 @@ async function fetchAnalyticsStudentDetail(studentId) {
 }
 
 async function openAnalyticsStudentWorkspace(studentId, options = {}) {
+  const selectionId = ++analyticsStudentDetailRequest;
+  const requestId = options.requestId ?? analyticsRequest;
   try {
     const data = await fetchAnalyticsStudentDetail(studentId);
+    if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
     if (!data.student?.profileId) throw new Error("Öğrenci profili bulunamadı.");
-    await openStudentDetail(data.student.profileId, { analyticsData: data });
-    if (options.closeUserDetail) $("user-detail-modal").classList.add("hidden");
+    const opened = await openStudentDetail(data.student.profileId, {
+      analyticsData: data,
+      isCurrent: () =>
+        selectionId === analyticsStudentDetailRequest && requestId === analyticsRequest,
+    });
+    if (selectionId !== analyticsStudentDetailRequest) return;
+    if (opened && options.closeUserDetail) $("user-detail-modal").classList.add("hidden");
   } catch (cause) {
+    if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
     const message = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
     if (options.closeUserDetail) {
       showUserError(message);
@@ -9327,22 +9465,13 @@ async function openAnalyticsStudentWorkspace(studentId, options = {}) {
 }
 
 async function loadAnalyticsStudentDetail(studentId, requestId = analyticsRequest) {
-  try {
-    const data = await fetchAnalyticsStudentDetail(studentId);
-    if (requestId !== analyticsRequest) return;
-    if (!data.student?.profileId) throw new Error("Öğrenci profili bulunamadı.");
-    await openStudentDetail(data.student.profileId, { analyticsData: data });
-  } catch (cause) {
-    if (requestId !== analyticsRequest) return;
-    const error = $("analytics-error");
-    error.textContent = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
-    error.classList.remove("hidden");
-  }
+  return openAnalyticsStudentWorkspace(studentId, { requestId });
 }
 
 async function loadAnalyticsPage() {
   if (!isPlatformUser && !isOrganizationUser) return;
   const requestId = ++analyticsRequest;
+  analyticsStudentDetailRequest += 1;
   const status = $("analytics-status");
   const error = $("analytics-error");
   if (!$("analytics-from").value) {

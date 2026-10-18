@@ -43,28 +43,34 @@ describe("admin student workspace and question editing UI", () => {
     expect(html).not.toContain("<Örnek Kurum>");
   });
 
-  it("opens the shared student profile from the analytics row", async () => {
-    const openStudentDetail = vi.fn(async () => {});
+  it("opens the matching shared student profile from the analytics row", async () => {
+    const openStudentDetail = vi.fn(async () => true);
     const data = { student: { profileId: "profile-1" } };
     const context = createContext({
       analyticsRequest: 7,
+      analyticsStudentDetailRequest: 0,
       fetchAnalyticsStudentDetail: vi.fn(async () => data),
       openStudentDetail,
       $: () => ({ textContent: "", classList: { remove() {} } }),
     });
     runInContext(
-      `${functionSource("async function loadAnalyticsStudentDetail(", "async function loadAnalyticsPage()")}; loadAnalyticsStudentDetail`,
+      `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
       context,
     );
-    await runInContext("loadAnalyticsStudentDetail('student-1', 7)", context);
-    expect(openStudentDetail).toHaveBeenCalledExactlyOnceWith("profile-1", { analyticsData: data });
+    await runInContext("openAnalyticsStudentWorkspace('student-1', {requestId:7})", context);
+    expect(openStudentDetail).toHaveBeenCalledExactlyOnceWith("profile-1", {
+      analyticsData: data,
+      isCurrent: expect.any(Function),
+    });
   });
 
   it("opens the same student workspace from User Management when the account has student access", async () => {
     const close = vi.fn();
-    const openStudentDetail = vi.fn(async () => {});
+    const openStudentDetail = vi.fn(async () => true);
     const data = { student: { profileId: "profile-2" } };
     const context = createContext({
+      analyticsRequest: 0,
+      analyticsStudentDetailRequest: 0,
       fetchAnalyticsStudentDetail: vi.fn(async () => data),
       openStudentDetail,
       showUserError: vi.fn(),
@@ -75,8 +81,101 @@ describe("admin student workspace and question editing UI", () => {
       context,
     );
     await runInContext("openAnalyticsStudentWorkspace('user-2', {closeUserDetail:true})", context);
-    expect(openStudentDetail).toHaveBeenCalledExactlyOnceWith("profile-2", { analyticsData: data });
+    expect(openStudentDetail).toHaveBeenCalledExactlyOnceWith("profile-2", {
+      analyticsData: data,
+      isCurrent: expect.any(Function),
+    });
     expect(close).toHaveBeenCalledExactlyOnceWith("hidden");
+  });
+
+  it("ignores an older analytics response after a newer student was selected", async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const openStudentDetail = vi.fn(async () => true);
+    const context = createContext({
+      analyticsRequest: 4,
+      analyticsStudentDetailRequest: 0,
+      fetchAnalyticsStudentDetail: vi
+        .fn()
+        .mockReturnValueOnce(first)
+        .mockResolvedValueOnce({ student: { profileId: "profile-new" } }),
+      openStudentDetail,
+      showUserError: vi.fn(),
+      $: () => ({ classList: { add() {} } }),
+    });
+    runInContext(
+      `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
+      context,
+    );
+
+    const older = runInContext("openAnalyticsStudentWorkspace('student-old')", context);
+    await runInContext("openAnalyticsStudentWorkspace('student-new')", context);
+    resolveFirst({ student: { profileId: "profile-old" } });
+    await older;
+
+    expect(openStudentDetail).toHaveBeenCalledExactlyOnceWith("profile-new", {
+      analyticsData: { student: { profileId: "profile-new" } },
+      isCurrent: expect.any(Function),
+    });
+  });
+
+  it("ignores an older User Management response after a different user was selected", async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const renderUserDetail = vi.fn();
+    const elements = {
+      "user-detail-modal": { classList: { remove() {} } },
+      "user-detail-title": { textContent: "" },
+      "user-detail-body": { innerHTML: "" },
+    };
+    const context = createContext({
+      userDetailRequest: 0,
+      analyticsStudentDetailRequest: 0,
+      userDetailCurrent: null,
+      userApi: vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce({ id: "user-new" }),
+      parseResponse: async (value: unknown) => value,
+      renderUserDetail,
+      encodeURIComponent,
+      escapeHtml: (value: unknown) => String(value),
+      $: (id: string) => elements[id as keyof typeof elements],
+    });
+    runInContext(
+      `${functionSource("async function openUserDetail(", "function renderUserDetail(")}; openUserDetail`,
+      context,
+    );
+
+    const older = runInContext("openUserDetail('user-old')", context);
+    await runInContext("openUserDetail('user-new')", context);
+    resolveFirst({ id: "user-old" });
+    await older;
+
+    expect(renderUserDetail).toHaveBeenCalledExactlyOnceWith({ id: "user-new" });
+  });
+
+  it("keeps User Management open when the shared student detail fails", async () => {
+    const close = vi.fn();
+    const context = createContext({
+      analyticsRequest: 0,
+      analyticsStudentDetailRequest: 0,
+      fetchAnalyticsStudentDetail: vi.fn(async () => ({ student: { profileId: "profile-2" } })),
+      openStudentDetail: vi.fn(async () => false),
+      showUserError: vi.fn(),
+      $: () => ({ classList: { add: close } }),
+    });
+    runInContext(
+      `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
+      context,
+    );
+
+    await runInContext(
+      "openAnalyticsStudentWorkspace('student-2', {closeUserDetail:true})",
+      context,
+    );
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("loads analytics inside the open student profile instead of navigating to another page", async () => {
@@ -172,5 +271,14 @@ describe("admin student workspace and question editing UI", () => {
     );
     expect(source).toContain('$("content-authoring-body")');
     expect(source).toContain("skillId,");
+  });
+
+  it("renders the edited question source in the reopened draft preview", () => {
+    expect(source).toContain("<strong>Soru kaynağı:</strong>");
+    expect(source).toContain("escapeHtml(question.sourceReference ||");
+  });
+
+  it("guards the shared profile response against a superseded selection", () => {
+    expect(source).toContain("options.isCurrent && !options.isCurrent()");
   });
 });

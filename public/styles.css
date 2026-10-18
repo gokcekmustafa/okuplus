@@ -1870,6 +1870,20 @@ body {
   padding-bottom: 0;
 }
 
+.analytics-usage-table-card .card-head {
+  padding-bottom: 8px;
+}
+
+.analytics-usage-table th,
+.analytics-usage-table td {
+  padding-block: 9px;
+}
+
+.analytics-usage-table td:nth-child(2),
+.analytics-usage-table td:nth-child(3) {
+  white-space: nowrap;
+}
+
 .analytics-secondary-line {
   display: block;
   margin-top: 3px;
@@ -9812,6 +9826,35 @@ textarea:focus-visible {
   white-space: pre-wrap;
   line-height: 1.65;
 }
+.curriculum-draft-question-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.curriculum-draft-question-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.curriculum-draft-question-heading h5 {
+  margin: 0 0 10px;
+}
+.curriculum-draft-question-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.curriculum-draft-question-editor[hidden] {
+  display: none;
+}
+.curriculum-draft-question-editor textarea {
+  min-height: 72px;
+}
 .curriculum-draft-question li {
   display: flex;
   justify-content: space-between;
@@ -9831,15 +9874,63 @@ textarea:focus-visible {
   background: var(--surface, #fff);
 }
 .admin-detail-disclosure > summary {
+  position: relative;
+  z-index: 1;
   padding: 14px 16px;
+  border-radius: 11px;
+  background-color: var(--surface, #fff);
   font-weight: 650;
   cursor: pointer;
 }
 .admin-detail-disclosure[open] > summary {
   border-bottom: 1px solid var(--border);
+  border-radius: 11px 11px 0 0;
+  background-color: var(--primary-soft, #eff4ff);
 }
 .admin-detail-disclosure-content {
   padding: 12px 16px;
+}
+
+.user-detail-modal-dialog .modal-head {
+  position: sticky;
+  top: -20px;
+  z-index: 3;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--surface);
+}
+
+.user-detail-modal-dialog .admin-detail-disclosure > summary {
+  background-color: var(--surface);
+}
+
+.user-detail-modal-dialog .admin-detail-disclosure[open] > summary {
+  background-color: var(--primary-soft);
+}
+
+@media (max-width: 600px) {
+  .analytics-usage-table-card .table-wrap {
+    overflow-x: auto;
+  }
+
+  .analytics-usage-table {
+    min-width: 460px;
+    font-size: 13px;
+  }
+
+  .user-detail-modal-dialog {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .user-detail-modal-dialog .modal-head {
+    top: -16px;
+  }
+
+  .user-detail-modal-dialog .admin-detail-disclosure > summary {
+    padding: 12px;
+    line-height: 1.45;
+  }
 }
 .analytics-detail-actions {
   display: flex;

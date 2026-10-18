@@ -1652,39 +1652,28 @@
                   ><strong id="analytics-errors" class="management-kpi-value">—</strong>
                 </article>
               </div>
-              <div class="analytics-columns">
-                <article class="card table-card">
-                  <div class="card-head">
-                    <h4>Özellik kullanımı</h4>
-                    <span class="muted">Oturum kayıtları</span>
-                  </div>
-                  <div class="table-wrap">
-                    <table class="data-table">
-                      <thead>
-                        <tr>
-                          <th>Alan</th>
-                          <th>Oturum</th>
-                          <th>Öğrenci</th>
-                        </tr>
-                      </thead>
-                      <tbody id="analytics-feature-body">
-                        <tr>
-                          <td colspan="3" class="empty-cell">Veri yükleniyor…</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </article>
-                <article class="card table-card">
-                  <div class="card-head">
-                    <h4>Kullanım yoğunluğu</h4>
-                    <span class="muted">Günlük · haftalık · aylık</span>
-                  </div>
-                  <div id="analytics-usage-summary" class="analytics-usage-summary muted">
-                    Veri yükleniyor…
-                  </div>
-                </article>
-              </div>
+              <article class="card table-card analytics-usage-table-card">
+                <div class="card-head">
+                  <h4>Kullanım kayıtları</h4>
+                  <span class="muted">Özellik oturumları ve dönemsel etkinlikler</span>
+                </div>
+                <div class="table-wrap">
+                  <table class="data-table analytics-usage-table">
+                    <thead>
+                      <tr>
+                        <th>Özellik veya dönem</th>
+                        <th>Oturum / etkinlik</th>
+                        <th>Öğrenci</th>
+                      </tr>
+                    </thead>
+                    <tbody id="analytics-feature-body">
+                      <tr>
+                        <td colspan="3" class="empty-cell">Veri yükleniyor…</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
             </section>
 
             <section class="analytics-section" aria-labelledby="analytics-journey-title">
@@ -2212,7 +2201,7 @@
 
             <!-- Detay modalı (bilgi + üyelik yönetimi) -->
             <div id="user-detail-modal" class="modal-backdrop hidden">
-              <div class="modal modal-wide">
+              <div class="modal modal-wide user-detail-modal-dialog">
                 <div class="modal-head">
                   <h3 id="user-detail-title">Kullanıcı detayı</h3>
                   <button
@@ -4373,13 +4362,14 @@
             <div class="page-head">
               <h2>Taslak Müfredat</h2>
               <p class="muted">
-                Öğrencilere açılmamış istasyonları ve soru anahtarlarını güvenli biçimde inceleyin.
+                Öğrencilere açılmamış istasyonları inceleyin ve soru taslaklarında sürümlü düzenleme
+                yapın.
               </p>
             </div>
             <div class="notice-card curriculum-draft-warning" role="note">
               <strong>Yayınlanmamış içerik</strong>
               <span
-                >Bu önizleme salt okunurdur; burada yapılan inceleme içeriği yayımlamaz veya
+                >Taslak düzenlemeleri sürüm geçmişine kaydedilir. Bu işlem içeriği yayımlamaz veya
                 öğrenciye atamaz.</span
               >
             </div>
