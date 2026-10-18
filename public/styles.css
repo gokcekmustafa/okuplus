@@ -9891,13 +9891,53 @@ textarea:focus-visible {
   padding: 12px 16px;
 }
 
-.user-detail-modal-dialog .modal-head {
-  position: sticky;
-  top: -20px;
-  z-index: 3;
-  padding: 12px 0;
+.admin-record-detail-modal {
+  display: flex;
+  width: min(1120px, 100%);
+  max-width: 1120px;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--surface);
+}
+
+.admin-record-detail-modal .modal-head {
+  position: static;
+  flex: 0 0 auto;
+  padding: 0 0 14px;
   border-bottom: 1px solid var(--border);
   background-color: var(--surface);
+}
+
+.admin-record-detail-modal .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background-color: var(--surface);
+}
+
+.admin-record-detail-modal .modal-actions {
+  flex: 0 0 auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  background-color: var(--surface);
+}
+
+.user-detail-modal-dialog .info-item,
+.user-detail-modal-dialog .admin-detail-disclosure,
+.user-detail-modal-dialog .admin-detail-disclosure-content,
+.user-detail-modal-dialog .admin-detail-disclosure .card {
+  background-color: var(--surface);
+}
+
+.user-detail-modal-dialog input,
+.user-detail-modal-dialog select,
+.user-detail-modal-dialog textarea,
+.user-detail-modal-dialog option {
+  background-color: var(--surface);
+  color: var(--text);
 }
 
 .user-detail-modal-dialog .admin-detail-disclosure > summary {
@@ -9918,13 +9958,15 @@ textarea:focus-visible {
     font-size: 13px;
   }
 
-  .user-detail-modal-dialog {
+  .admin-record-detail-modal {
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
     padding: 16px;
     border-radius: 14px;
   }
 
-  .user-detail-modal-dialog .modal-head {
-    top: -16px;
+  .admin-record-detail-modal .modal-head {
+    margin-bottom: 12px;
   }
 
   .user-detail-modal-dialog .admin-detail-disclosure > summary {

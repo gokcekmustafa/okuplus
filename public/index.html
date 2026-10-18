@@ -2201,7 +2201,12 @@
 
             <!-- Detay modalı (bilgi + üyelik yönetimi) -->
             <div id="user-detail-modal" class="modal-backdrop hidden">
-              <div class="modal modal-wide user-detail-modal-dialog">
+              <div
+                class="modal modal-wide user-detail-modal-dialog admin-record-detail-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="user-detail-title"
+              >
                 <div class="modal-head">
                   <h3 id="user-detail-title">Kullanıcı detayı</h3>
                   <button
@@ -2444,32 +2449,6 @@
                     </button>
                   </div>
                 </form>
-              </div>
-            </div>
-
-            <!-- Detay modalı -->
-            <div id="student-detail-modal" class="modal-backdrop hidden">
-              <div class="modal modal-wide">
-                <div class="modal-head">
-                  <h3 id="student-detail-title">Öğrenci detayı</h3>
-                  <button
-                    id="student-detail-close"
-                    type="button"
-                    class="btn btn-icon"
-                    aria-label="Kapat"
-                  >
-                    <span aria-hidden="true">✕</span>
-                  </button>
-                </div>
-                <div id="student-detail-body" class="modal-body"></div>
-                <div class="modal-actions">
-                  <button id="student-detail-edit" type="button" class="btn btn-ghost">
-                    Düzenle
-                  </button>
-                  <button id="student-detail-delete" type="button" class="btn btn-danger">
-                    Sil
-                  </button>
-                </div>
               </div>
             </div>
           </section>
@@ -6490,6 +6469,32 @@
             </section>
           </section>
         </main>
+        <!-- Öğrenci ayrıntısı, analitik sayfasından da açılabilmesi için sayfa bölümlerinin dışında tutulur. -->
+        <div id="student-detail-modal" class="modal-backdrop hidden">
+          <div
+            class="modal modal-wide admin-record-detail-modal student-detail-modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="student-detail-title"
+          >
+            <div class="modal-head">
+              <h3 id="student-detail-title">Öğrenci detayı</h3>
+              <button
+                id="student-detail-close"
+                type="button"
+                class="btn btn-icon"
+                aria-label="Kapat"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </div>
+            <div id="student-detail-body" class="modal-body"></div>
+            <div class="modal-actions">
+              <button id="student-detail-edit" type="button" class="btn btn-ghost">Düzenle</button>
+              <button id="student-detail-delete" type="button" class="btn btn-danger">Sil</button>
+            </div>
+          </div>
+        </div>
         <nav id="student-bottom-nav" class="student-bottom-nav hidden" aria-label="Öğrenci menüsü">
           <button
             type="button"

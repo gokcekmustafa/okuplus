@@ -89,6 +89,26 @@ describe("management UI follow-ups", () => {
     expect(styles).toContain("background-color: var(--surface);");
     expect(styles).toContain("background-color: var(--primary-soft);");
     expect(styles).toContain("@media (max-width: 600px)");
-    expect(styles).toContain(".user-detail-modal-dialog .modal-head");
+    expect(styles).toContain(".admin-record-detail-modal .modal-head");
+    expect(styles).toContain(".user-detail-modal-dialog option");
+    expect(styles).toContain(".admin-record-detail-modal {\n  display: flex;");
+    expect(styles).toContain("max-width: 1120px;");
+    expect(styles).toContain("overflow: auto;");
+    expect(indexHtml).toContain('aria-labelledby="user-detail-title"');
+  });
+
+  it("keeps the student detail modal outside hidden page sections for Analytics access", () => {
+    const studentModalIndex = indexHtml.indexOf('id="student-detail-modal"');
+    const analyticsPageIndex = indexHtml.indexOf('id="page-analytics"');
+    const studentsPageIndex = indexHtml.indexOf('id="page-students"');
+    const mainEndIndex = indexHtml.lastIndexOf("</main>");
+
+    expect(studentModalIndex).toBeGreaterThan(mainEndIndex);
+    expect(studentModalIndex).toBeGreaterThan(analyticsPageIndex);
+    expect(studentModalIndex).toBeGreaterThan(studentsPageIndex);
+    expect(indexHtml.slice(studentsPageIndex, studentModalIndex)).not.toContain(
+      'id="student-detail-modal"',
+    );
+    expect(indexHtml).toContain("student-detail-modal-dialog");
   });
 });

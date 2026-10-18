@@ -155,6 +155,72 @@ describe("admin student workspace and question editing UI", () => {
     );
   });
 
+  it("opens the visible student detail modal from an Analytics button click", async () => {
+    const studentModal = { classList: { remove: vi.fn() } };
+    const title = { textContent: "" };
+    const body = { innerHTML: "" };
+    const analyticsError = { textContent: "", classList: { add: vi.fn(), remove: vi.fn() } };
+    const analyticsData = { student: { id: "student-user-11", profileId: "profile-11" } };
+    const profile = {
+      id: "profile-11",
+      user: { id: "student-user-11", displayName: "Öğrenci On Bir" },
+    };
+    const renderStudentDetail = vi.fn();
+    const renderStudentDetailAnalytics = vi.fn();
+    const analyticsResponse = { kind: "analytics" };
+    const profileResponse = { kind: "profile" };
+    const authenticatedFetch = vi.fn(async () => analyticsResponse);
+    const studentApi = vi.fn(async () => profileResponse);
+    const elements: Record<string, unknown> = {
+      "analytics-error": analyticsError,
+      "student-detail-modal": studentModal,
+      "student-detail-title": title,
+      "student-detail-body": body,
+    };
+    const context = createContext({
+      analyticsRequest: 5,
+      analyticsStudentDetailRequest: 0,
+      studentDetailRequest: 0,
+      studentDetailCurrent: null,
+      analyticsQuery: () => new URLSearchParams("from=2026-10-01"),
+      authenticatedFetch,
+      studentApi,
+      parseResponse: async (response: unknown) =>
+        response === analyticsResponse ? analyticsData : profile,
+      renderStudentDetail,
+      renderStudentDetailAnalytics,
+      encodeURIComponent,
+      escapeHtml: (value: unknown) => String(value),
+      $: (id: string) => elements[id],
+    });
+    const flowSource = [
+      ...analyticsStudentFlowSource(true).split("\n"),
+      functionSource("async function openStudentDetail(", "function renderStudentDetail("),
+    ].join("\n");
+    const flow = runInContext(`${flowSource}; ({handleAnalyticsStudentClick})`, context) as {
+      handleAnalyticsStudentClick: (event: unknown) => Promise<void>;
+    };
+
+    await flow.handleAnalyticsStudentClick({
+      target: {
+        closest(selector: string) {
+          return selector === "[data-analytics-student]"
+            ? { disabled: false, dataset: { analyticsStudent: "student-user-11" } }
+            : null;
+        },
+      },
+    });
+
+    expect(authenticatedFetch).toHaveBeenCalledWith(
+      "/admin/analytics/students/student-user-11?from=2026-10-01",
+    );
+    expect(studentModal.classList.remove).toHaveBeenCalledWith("hidden");
+    expect(studentApi).toHaveBeenCalledWith("/profile-11");
+    expect(renderStudentDetail).toHaveBeenCalledExactlyOnceWith(profile);
+    expect(renderStudentDetailAnalytics).toHaveBeenCalledExactlyOnceWith(analyticsData);
+    expect(analyticsError.classList.add).toHaveBeenCalledWith("hidden");
+  });
+
   it("shows analytics API failures in the visible alert instead of swallowing them", async () => {
     const error = { textContent: "", classList: { add: vi.fn(), remove: vi.fn() } };
     const context = createContext({
