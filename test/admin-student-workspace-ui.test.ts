@@ -21,6 +21,10 @@ function analyticsStudentFlowSource(includeFetcher = false): string {
           ),
         ]
       : []),
+    functionSource(
+      "function setAnalyticsStudentButtonLoading(",
+      "function handleAnalyticsStudentClick(",
+    ),
     functionSource("function handleAnalyticsStudentClick(", "function showAnalyticsStudentError("),
     functionSource(
       "function showAnalyticsStudentError(",
@@ -111,6 +115,61 @@ describe("admin student workspace and question editing UI", () => {
     });
 
     expect(loadDetail).toHaveBeenCalledExactlyOnceWith("student-user-7");
+  });
+
+  it("shows immediate loading feedback on the Analytics details button and restores it", async () => {
+    let resolveLoad: () => void = () => {};
+    const load = new Promise<void>((resolve) => {
+      resolveLoad = resolve;
+    });
+    const label = { textContent: "Ayrıntıları aç" };
+    const spinner = { classList: { toggle: vi.fn() } };
+    const button = {
+      disabled: false,
+      dataset: { analyticsStudent: "student-user-12", analyticsStudentOpen: "true" },
+      querySelector(selector: string) {
+        if (selector === "[data-analytics-detail-label]") return label;
+        if (selector === "[data-analytics-detail-spinner]") return spinner;
+        return null;
+      },
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+    };
+    const context = createContext({ loadAnalyticsStudentDetail: vi.fn(() => load) });
+    const flow = runInContext(
+      [
+        functionSource(
+          "function setAnalyticsStudentButtonLoading(",
+          "function handleAnalyticsStudentClick(",
+        ),
+        functionSource(
+          "function handleAnalyticsStudentClick(",
+          "function showAnalyticsStudentError(",
+        ),
+      ].join("\n") + "; handleAnalyticsStudentClick",
+      context,
+    ) as (event: unknown) => Promise<void>;
+
+    const request = flow({
+      target: {
+        closest(selector: string) {
+          return selector === "[data-analytics-student]" ? button : null;
+        },
+      },
+    });
+
+    expect(button.disabled).toBe(true);
+    expect(button.setAttribute).toHaveBeenCalledWith("aria-busy", "true");
+    expect(label.textContent).toBe("Ayrıntılar yükleniyor…");
+    expect(spinner.classList.toggle).toHaveBeenCalledWith("hidden", false);
+
+    resolveLoad();
+    await request;
+
+    expect(button.disabled).toBe(false);
+    expect(button.removeAttribute).toHaveBeenCalledWith("aria-busy");
+    expect(label.textContent).toBe("Ayrıntıları aç");
+    expect(spinner.classList.toggle).toHaveBeenLastCalledWith("hidden", true);
   });
 
   it("resolves the analytics student ID to its profile ID before opening profile detail", async () => {

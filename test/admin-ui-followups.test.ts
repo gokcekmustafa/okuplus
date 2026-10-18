@@ -60,10 +60,17 @@ describe("management UI follow-ups", () => {
 
   it("keeps User Management names on user details and routes Analytics actions to profiles", () => {
     expect(appJs).toContain('data-analytics-student="${escapeHtml(student.studentId)}"');
+    expect(appJs).toContain('data-analytics-student-open="true"');
+    expect(appJs).toContain("Ayrıntılar yükleniyor…");
+    expect(appJs).toContain('button.setAttribute("aria-busy", "true")');
+    expect(appJs).toContain("setAnalyticsStudentButtonLoading(actionButton, true)");
     expect(appJs).toContain(
       '$("analytics-student-body")?.addEventListener("click", handleAnalyticsStudentClick)',
     );
-    expect(appJs).toContain("return loadAnalyticsStudentDetail(studentId)");
+    expect(appJs).toContain("const pending = loadAnalyticsStudentDetail(studentId)");
+    expect(appJs).toContain(
+      "pending.finally(() => setAnalyticsStudentButtonLoading(actionButton, false))",
+    );
     expect(appJs).toContain('data-user-detail-id="${u.id}"');
     expect(appJs).toContain("void openUserDetail(detailBtn.dataset.userDetailId)");
     const userListRenderer = appJs.slice(

@@ -9979,6 +9979,11 @@ textarea:focus-visible {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+[data-analytics-student-open] {
+  min-width: 168px;
+}
+
 @media (max-width: 900px) {
   .curriculum-draft-coverage {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -9419,7 +9419,7 @@ async function loadAnalyticsStudents(requestId = analyticsRequest) {
     ? students.items
         .map(
           (student) =>
-            `<tr><td><button type="button" class="link-btn analytics-student-name" data-analytics-student="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</button><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-primary btn-sm" data-analytics-student="${escapeHtml(student.studentId)}">Ayrıntıları aç</button></td></tr>`,
+            `<tr><td><button type="button" class="link-btn analytics-student-name" data-analytics-student="${escapeHtml(student.studentId)}">${escapeHtml(student.displayName)}</button><span class="muted analytics-secondary-line">${escapeHtml(student.status)}</span></td><td>${escapeHtml(student.classNames.join(", ") || "Sınıf bilgisi yok")}</td><td>${escapeHtml(student.tenantConnections?.map((tenant) => `${tenant.name} (${tenant.type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"})`).join(", ") || "Kurum bağlantısı yok")}</td><td>${student.lastActivityAt ? escapeHtml(formatDateTime(student.lastActivityAt)) : "Veri mevcut değil"}</td><td class="text-right"><button type="button" class="btn btn-primary btn-sm" data-analytics-student="${escapeHtml(student.studentId)}" data-analytics-student-open="true"><span data-analytics-detail-label aria-live="polite">Ayrıntıları aç</span><span class="btn-spinner hidden" data-analytics-detail-spinner aria-hidden="true"></span></button></td></tr>`,
         )
         .join("")
     : '<tr><td colspan="5" class="empty-cell">Bu tarih aralığında öğrenci etkinliği bulunamadı.</td></tr>';
@@ -9436,6 +9436,16 @@ async function fetchAnalyticsStudentDetail(studentId) {
   );
 }
 
+function setAnalyticsStudentButtonLoading(button, isLoading) {
+  const label = button.querySelector("[data-analytics-detail-label]");
+  const spinner = button.querySelector("[data-analytics-detail-spinner]");
+  button.disabled = isLoading;
+  if (isLoading) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
+  if (label) label.textContent = isLoading ? "Ayrıntılar yükleniyor…" : "Ayrıntıları aç";
+  spinner?.classList.toggle("hidden", !isLoading);
+}
+
 function handleAnalyticsStudentClick(event) {
   const button = event.target.closest("[data-analytics-student]");
   if (!button || button.disabled) return;
@@ -9444,7 +9454,16 @@ function handleAnalyticsStudentClick(event) {
     showAnalyticsStudentError("Öğrenci kimliği alınamadı. Listeyi yenileyip tekrar deneyin.");
     return;
   }
-  return loadAnalyticsStudentDetail(studentId);
+  const actionButton =
+    button.dataset.analyticsStudentOpen === "true"
+      ? button
+      : button.closest?.("tr")?.querySelector?.("[data-analytics-student-open]");
+  if (actionButton?.disabled) return;
+  if (actionButton) setAnalyticsStudentButtonLoading(actionButton, true);
+  const pending = loadAnalyticsStudentDetail(studentId);
+  return actionButton && pending && typeof pending.finally === "function"
+    ? pending.finally(() => setAnalyticsStudentButtonLoading(actionButton, false))
+    : pending;
 }
 
 function showAnalyticsStudentError(message) {
