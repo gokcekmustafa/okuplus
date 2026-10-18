@@ -158,7 +158,13 @@ export const prismaDraftQuestionRevisionStore: DraftQuestionRevisionStore = {
       { userId: input.actor.userId, tenantId: null, platformRole: "SUPER_ADMIN" },
       async (tx) => {
         // Serialize edits for a question so two tabs cannot both overwrite the same revision.
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${entityId}, 0))`;
+        const lockRows = await tx.$queryRaw<Array<{ locked: number }>>`
+          WITH lock_result AS MATERIALIZED (
+            SELECT pg_advisory_xact_lock(hashtextextended(${entityId}, 0))
+          )
+          SELECT 1::int AS locked FROM lock_result
+        `;
+        if (lockRows.length !== 1) throw conflictError("Taslak düzenleme kilidi alınamadı.");
         const latestRow = await tx.auditLog.findFirst({
           where: { entityType: ENTITY_TYPE, entityId },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
