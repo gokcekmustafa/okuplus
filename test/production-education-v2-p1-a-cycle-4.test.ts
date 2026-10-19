@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { FAST_READING_RENDERERS } from "../src/modules/training/exercise-contract.js";
 import {
@@ -5,6 +6,21 @@ import {
   EDUCATION_V2_P1_A_CYCLE_4_SOURCE_CYCLE,
   p1ACycle4QuestionVersionId,
 } from "../src/curriculum/education-v2-p1-a-cycle-4-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_4_EXPLICIT_PUBLICATION_APPROVED,
+  EDUCATION_V2_P1_A_CYCLE_4_STATUS,
+  isEducationV2P1ACycle4ProductionAssignmentEnabled,
+} from "../src/curriculum/education-v2-p1-a-cycle-4-release.js";
+import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
+
+const workflow = readFileSync(
+  new URL("../.github/workflows/production-education-v2-p1-a-cycle-4.yml", import.meta.url),
+  "utf8",
+);
+const seeder = readFileSync(
+  new URL("../scripts/seed-education-v2-p1-a-cycle-4.ts", import.meta.url),
+  "utf8",
+);
 
 describe("P1-A Cycle 4 authored program", () => {
   it("maps the five existing draft stations to a complete, ordered path", () => {
@@ -60,5 +76,44 @@ describe("P1-A Cycle 4 authored program", () => {
       expect(contract.scoring.mode).toBe("DETERMINISTIC");
       expect(contract.interactionType).toBe("MULTIPLE_CHOICE");
     }
+  });
+
+  it("keeps production provisioning manual, fingerprinted, idempotent, and limited to Cycle 4", () => {
+    const cycle = learningRouteCycle(EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.code);
+    expect(EDUCATION_V2_P1_A_CYCLE_4_STATUS).toBe("PUBLISHED");
+    expect(EDUCATION_V2_P1_A_CYCLE_4_EXPLICIT_PUBLICATION_APPROVED).toBe(true);
+    expect(isEducationV2P1ACycle4ProductionAssignmentEnabled()).toBe(true);
+    expect(cycle?.publicationApproved()).toBe(true);
+
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("default: PLAN_ONLY");
+    expect(workflow).toContain("name: production-migration");
+    expect(workflow).toContain('test "${GITHUB_REF}" = "refs/heads/master"');
+    expect(workflow).toContain("${{ secrets.PRODUCTION_DATABASE_URL }}");
+    expect(workflow).toContain("scripts/db-fingerprint.ts");
+    expect(workflow).toContain("scripts/production-migration-forensics.ts");
+    expect(workflow).toContain("scripts/verify-canonical-placement-migration-policy.ts");
+    expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --dry-run");
+    expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --apply");
+    expect(workflow).toContain("PREVIOUS_47_STATIONS=NOT_TOUCHED");
+    expect(workflow).toContain("STUDENT_ASSIGNMENTS_AND_PROGRESS=NOT_TOUCHED");
+    expect(workflow).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(workflow).toContain("f0166391faa1cfef4857097ad0deb127668bbda2");
+    expect(workflow).toContain(
+      "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_EDITORIAL_RELEASE_F0166391FAA1CFEF4857097AD0DEB127668BBDA2",
+    );
+    expect(workflow).not.toContain("Cycle 3");
+    expect(workflow).not.toContain("prisma migrate");
+
+    expect(seeder).toContain('Promise<"MISSING" | "EXISTING" | "CONFLICT">');
+    expect(seeder).toContain('if (dryRun || state === "EXISTING")');
+    expect(seeder).toContain("production APPLY yalnızca korumalı master workflow");
+    expect(seeder).toContain("contentOrigin: plan.sourceStation.contentOrigin");
+    expect(seeder).toContain("provenanceStatus: plan.sourceStation.provenanceStatus");
+    expect(seeder).toContain('routeFamily: "P1-A-CYCLE-4"');
+    expect(seeder).toContain("stableKey: `EDU-V2-P1-A-CYCLE-4-");
+    expect(seeder).toContain("sourceReference: plan.sourceStation.sourceReference");
+    expect(seeder).not.toContain("studentLearningPath");
+    expect(seeder).not.toContain("studentLearningStep");
   });
 });

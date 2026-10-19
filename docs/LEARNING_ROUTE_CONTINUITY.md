@@ -199,3 +199,15 @@ gerekir. Yedi istasyonlu grafik production'da zaten uygulanmıştır; önceki Cy
 2 rotasını tamamlayan öğrenci normal devam servisiyle 41. istasyona atanabilir.
 Yeni akademik eşik, sınıf/yaş eşlemesi veya uzman onayı şartı eklenmez. Daha uzun
 rota için yeni, gerçek ve sürümlenmiş içerik paketleri hazırlanmalıdır.
+
+P1-A Cycle 4 için ürün sahibinin açık yayın kararı kaynakta kaydedilmiştir ve
+beş istasyon, beş içerik, beş alıştırma, 15 soru ve bir değerlendirme mevcut
+genişleme taslağından sürümlü programa eşlenmiştir. Bu beş içerik
+`ORIGINAL_AUTHORING` kökenlidir; taslak manifestindeki `REVIEW_REQUIRED`
+provenance durumu korunur ve dış kaynak doğrulaması olarak sunulmaz. Korumalı
+üretim uygulama yolu
+`.github/workflows/production-education-v2-p1-a-cycle-4.yml` ve
+`scripts/seed-education-v2-p1-a-cycle-4.ts` dosyalarıdır. Kaynak onayı tek
+başına grafiği oluşturmaz: üretim planı, hedef fingerprint'i ve migration policy
+geçmeden grafiğin varlığı `NOT_VERIFIED` kalır; bu kod değişikliği öğrenci
+ataması veya ilerleme kaydı yazmaz.
