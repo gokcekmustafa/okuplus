@@ -174,6 +174,13 @@ export type PlannedLearningRouteNode = {
   isCurrent: false;
 };
 
+/** Counts real positions already rendered before adding roadmap placeholders. */
+export function countVisibleLearningRoutePositions(
+  groups: readonly { nodes: readonly unknown[] }[],
+): number {
+  return groups.reduce((count, group) => count + group.nodes.length, 0);
+}
+
 /**
  * Produces a safe, read-only roadmap projection for future stations. The
  * projection deliberately excludes passage bodies, questions, answers,

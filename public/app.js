@@ -2901,11 +2901,15 @@ function learningPathNodeSkill(node) {
 function sortGuidedLearningNodes(entries) {
   return entries
     .map(function (entry, index) {
-      // The API returns canonical P0 paths first and the assigned P1 route
-      // afterwards. Keep that order intact: re-sorting by skill/type moved
-      // P1-A stations in front of P0's shared terminal stations, so a student
-      // who had completed 22 P0 stations appeared to be on station 20.
-      var phase = String(entry.node?.learningPathCode || "").startsWith("EDUCATION_V2_P1_") ? 1 : 0;
+      // Keep real API paths in their canonical P0 → P1 order, then append the
+      // separate roadmap-only projection. Reserved nodes use a PLANNED_ path
+      // code, so path-code prefix checks alone used to sort them before real
+      // P1 stations and shift their displayed numbers.
+      var phase = entry.node?.planningStatus
+        ? 2
+        : String(entry.node?.learningPathCode || "").startsWith("EDUCATION_V2_P1_")
+          ? 1
+          : 0;
       return {
         ...entry,
         sortKey: phase,

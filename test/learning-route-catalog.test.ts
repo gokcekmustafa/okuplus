@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEARNING_ROUTE_CYCLES,
   buildPlannedLearningRouteNodes,
+  countVisibleLearningRoutePositions,
   LEARNING_ROUTE_VISIBLE_STATION_TARGET,
   learningRouteCycle,
   nextLearningRouteCycle,
@@ -81,6 +82,30 @@ describe("versioned learning routes", () => {
     ).toBe(false);
     const serialized = JSON.stringify(nodes);
     expect(serialized).not.toMatch(/questions|correctOptionId|explanation|sourceUrl|passage/iu);
+  });
+
+  it("counts P0 history with real P1 cycles before reserving the remainder", () => {
+    const cycles = LEARNING_ROUTE_CYCLES.filter(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence <= 3,
+    ).sort((left, right) => left.sequence - right.sequence);
+    const visibleGroups = [
+      { nodes: Array.from({ length: 22 }, (_, index) => `p0-${index + 1}`) },
+      ...cycles.map((cycle) => ({
+        nodes: Array.from(
+          { length: cycle.manifest.steps.length },
+          (_, index) => `${cycle.pathCode}:${index + 1}`,
+        ),
+      })),
+    ];
+    const visibleStationCount = countVisibleLearningRoutePositions(visibleGroups);
+    const plannedNodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycles.at(-1)!.pathCode,
+      visibleStationCount,
+    });
+
+    expect(visibleStationCount).toBe(47);
+    expect(visibleStationCount + plannedNodes.length).toBe(LEARNING_ROUTE_VISIBLE_STATION_TARGET);
+    expect(plannedNodes[0]).toMatchObject({ cycleSequence: 4, stepOrder: 1 });
   });
 
   it("does not duplicate catalog cycles already represented by published roadmap groups", () => {

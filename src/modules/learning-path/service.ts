@@ -9,6 +9,7 @@ import { assertStudentActor, type StudentActor } from "../student-learning/polic
 import { resolveTrainingRuntimeConfig } from "../training/exercise-contract.js";
 import {
   buildPlannedLearningRouteNodes,
+  countVisibleLearningRoutePositions,
   learningRouteCycle,
   LEARNING_ROUTE_VISIBLE_STATION_TARGET,
   matchesLearningRouteGraph,
@@ -1073,13 +1074,11 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
       }
       const currentRouteCycle = currentPath ? learningRouteCycle(currentPath.code) : null;
       const visibleRouteGroups = [...projections, ...upcomingPaths];
+      // The student roadmap renders P0 history and the enrolled P1 route in
+      // one ordered list. Count every real position shown there so reserved
+      // placeholders fill only the remaining slots up to the roadmap target.
       const visibleRouteStationCount = currentRouteCycle
-        ? visibleRouteGroups.reduce((count, projection) => {
-            const cycle = learningRouteCycle(projection.path.code);
-            return cycle?.routeFamily === currentRouteCycle.routeFamily
-              ? count + projection.nodes.length
-              : count;
-          }, 0)
+        ? countVisibleLearningRoutePositions(visibleRouteGroups)
         : 0;
       const plannedNodes =
         currentPath && currentRouteCycle

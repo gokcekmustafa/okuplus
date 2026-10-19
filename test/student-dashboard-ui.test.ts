@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import {
+  buildPlannedLearningRouteNodes,
+  LEARNING_ROUTE_CYCLES,
+} from "../src/curriculum/learning-route-catalog.js";
 
 const app = readFileSync("public/app.js", "utf8").replace(/\r\n/gu, "\n");
 const index = readFileSync("public/index.html", "utf8");
@@ -142,6 +146,93 @@ describe("student dashboard release 0.4", () => {
     expect(button("current")).toContain('aria-current="step"');
     expect(button("future")).not.toContain('aria-current="step"');
     expect(button("unavailable")).not.toContain('aria-current="step"');
+  });
+
+  it("keeps the 22 + 25 real route stations ahead of every planned position", () => {
+    const p0Nodes = Array.from({ length: 22 }, (_, index) => ({
+      id: `p0-step-${index + 1}`,
+      learningPathCode: "EDUCATION_V2_P0_COMMON_G8_12",
+      code: `P0_STEP_${index + 1}`,
+      type: "TEACHING",
+      status: "completed",
+      availability: "READY",
+    }));
+    const p1Cycles = LEARNING_ROUTE_CYCLES.filter(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence <= 3,
+    ).sort((left, right) => left.sequence - right.sequence);
+    const realGroups = [
+      {
+        path: { area: "COMMON", code: "EDUCATION_V2_P0_COMMON_G8_12" },
+        nodes: p0Nodes,
+      },
+      ...p1Cycles.map((cycle) => ({
+        path: { area: "READING_COMPREHENSION", code: cycle.pathCode },
+        nodes: cycle.manifest.steps.map((step) => ({
+          id: `cycle-${cycle.sequence}-step-${step.order}`,
+          learningPathCode: cycle.pathCode,
+          code: step.stableKey,
+          type: step.type,
+          status: "completed",
+          availability: "READY",
+        })),
+      })),
+    ];
+    const visibleCount = realGroups.reduce((count, group) => count + group.nodes.length, 0);
+    const plannedNodes = buildPlannedLearningRouteNodes({
+      currentPathCode: p1Cycles.at(-1)!.pathCode,
+      visibleStationCount: visibleCount,
+    });
+    const plannedGroup = {
+      path: { area: "READING_COMPREHENSION", code: "EDUCATION_V2_P1_A_PLANNED" },
+      nodes: plannedNodes,
+    };
+    const container = { innerHTML: "", querySelectorAll: () => [] };
+    const context = createContext({
+      $: (id: string) => (id === "learning-path" ? container : { textContent: "0" }),
+      escapeHtml: (value: unknown) => String(value).replaceAll("<", "&lt;"),
+      learningPathContinuation: null,
+      insightsIdentity: "student:tenant",
+      uiMotion: {
+        enhanceRoadmap: () => Promise.resolve({ cancelled: false }),
+        enhanceProgress() {},
+      },
+      continueAfterLearningPathMotion() {},
+      realGroups,
+      plannedGroup,
+    });
+    runInContext(
+      app.slice(
+        app.indexOf("function learningPathStatusLabel("),
+        app.indexOf("function returnToLearningPathAfterStep("),
+      ) +
+        app.slice(
+          app.indexOf("function learningPathAreaLabel("),
+          app.indexOf("async function loadLearningPath()"),
+        ),
+      context,
+    );
+    runInContext("renderLearningPathMap(realGroups.concat([plannedGroup]), null)", context);
+
+    const nodeAtStation = (station: number) => {
+      const articleStart = container.innerHTML.indexOf(`data-station-number="${station}"`);
+      expect(articleStart, `station ${station} should render`).toBeGreaterThanOrEqual(0);
+      const buttonStart = container.innerHTML.indexOf("<button", articleStart);
+      const buttonEnd = container.innerHTML.indexOf(">", buttonStart);
+      return container.innerHTML.slice(buttonStart, buttonEnd + 1);
+    };
+    expect(visibleCount).toBe(47);
+    expect(container.innerHTML.match(/data-station-number="/gu)).toHaveLength(300);
+    expect(nodeAtStation(1)).toContain('data-node-id="p0-step-1"');
+    expect(nodeAtStation(22)).toContain('data-node-id="p0-step-22"');
+    expect(nodeAtStation(23)).toContain('data-node-id="cycle-1-step-1"');
+    expect(nodeAtStation(47)).toContain('data-node-id="cycle-3-step-7"');
+    expect(nodeAtStation(48)).toContain('data-node-id="planned:A:4:1"');
+    for (const station of [103, 127, 128]) {
+      expect(nodeAtStation(station)).toContain(" disabled");
+      expect(nodeAtStation(station)).not.toContain("cycle-3-step");
+    }
+    expect(nodeAtStation(47)).toContain("completed");
+    expect(container.innerHTML).toContain("İçerik hazırlanıyor");
   });
 
   it("uses the Learning Path response for the dashboard today card", () => {
