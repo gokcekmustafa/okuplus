@@ -531,7 +531,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
         learningPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_4_G8_12",
         status: "locked",
         availability: "UNAVAILABLE",
-        planningStatus: "AUTHORED_UNRELEASED",
+        planningStatus: "GRAPH_NOT_AVAILABLE",
       });
       expect(
         plannedNodes.every(
