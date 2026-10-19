@@ -42162,6 +42162,15 @@ export const EDUCATION_V2_P1_800_DRAFT_CYCLES = unlinkedDraftCycles.map((cycle) 
     )?.pathCode ?? null,
 }));
 
+export function getEducationV2P1ExpansionDraftCycle(
+  routeFamily: RouteDraft["routeFamily"],
+  sequence: number,
+): EducationV2P1ExpansionDraftCycle | undefined {
+  return EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+    (cycle) => cycle.routeFamily === routeFamily && cycle.sequence === sequence,
+  );
+}
+
 export const EDUCATION_V2_P1_800_CATEGORY_TARGETS_BY_ROUTE = {
   A: EDUCATION_V2_P1_800_CATEGORY_TARGETS,
   B: EDUCATION_V2_P1_800_CATEGORY_TARGETS,
