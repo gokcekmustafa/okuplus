@@ -16,11 +16,15 @@ import {
   CYCLE4_PITR_PROJECT_ID,
   CYCLE4_PITR_REQUIRED_TABLES,
   CYCLE4_PITR_SOURCE_BRANCH_ID,
-  cycle4PitrSchemaSha256,
+  cycle4PitrCompareSchemaEndpoint,
+  cycle4PitrCompareSchemaRequest,
+  cycle4PitrFailureRecord,
+  cycle4PitrHttpFailure,
   cycle4PitrTimestamp,
   isCycle4PitrEvidenceValid,
   isCycle4PitrTimestampInWindow,
   normalizeNeonEndpointHost,
+  parseCycle4PitrSchemaDiff,
 } from "../scripts/production-cycle4-pitr-restore-evidence.js";
 
 const workflow = readFileSync(
@@ -107,6 +111,8 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(workflow).toContain("${{ secrets.NEON_API_KEY }}");
     expect(workflow).toContain("scripts/production-cycle4-pitr-restore-evidence.ts");
     expect(workflow).toContain("Enforce PITR evidence before Cycle 4 apply");
+    expect(workflow).toContain('schema.method !== "NEON_COMPARE_SCHEMA_API"');
+    expect(workflow).toContain("schema.diffIsEmpty !== true");
     expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --dry-run");
     expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --apply");
     expect(workflow).toContain("PREVIOUS_47_STATIONS=NOT_TOUCHED");
@@ -147,20 +153,51 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(isCycle4PitrTimestampInWindow("2026-10-19T12:00:00.000Z", now, 21_600)).toBe(false);
   });
 
-  it("canonicalizes Neon schema hashes and normalizes pooler endpoint hosts", () => {
-    expect(cycle4PitrSchemaSha256({ z: 1, a: { y: true, x: 2 } })).toBe(
-      cycle4PitrSchemaSha256({ a: { x: 2, y: true }, z: 1 }),
+  it("accepts only an explicitly empty Neon compare_schema diff", () => {
+    expect(parseCycle4PitrSchemaDiff({ diff: "" })).toEqual({ diffIsEmpty: true });
+    expect(parseCycle4PitrSchemaDiff({ diff: "+ CREATE TABLE unexpected;" })).toBeNull();
+    expect(parseCycle4PitrSchemaDiff({})).toBeNull();
+    expect(parseCycle4PitrSchemaDiff({ diff: null })).toBeNull();
+    expect(parseCycle4PitrSchemaDiff({ diff: "\n" })).toBeNull();
+    expect(cycle4PitrCompareSchemaEndpoint(CYCLE4_PITR_PROJECT_ID, "br-target-1")).toBe(
+      `/projects/${CYCLE4_PITR_PROJECT_ID}/branches/br-target-1/compare_schema`,
     );
+    const comparison = cycle4PitrCompareSchemaRequest({
+      projectId: CYCLE4_PITR_PROJECT_ID,
+      targetBranchId: "br-restored-target",
+      baseBranchId: CYCLE4_PITR_SOURCE_BRANCH_ID,
+      baseTimestamp: "2026-10-19T11:58:00.000Z",
+      databaseName: "oku_plus",
+    });
+    const comparisonUrl = new URL(comparison.requestPath, "https://console.neon.tech/api/v2");
+    expect(comparison.endpoint).toContain("/branches/br-restored-target/compare_schema");
+    expect(comparisonUrl.searchParams.get("base_branch_id")).toBe(CYCLE4_PITR_SOURCE_BRANCH_ID);
+    expect(comparisonUrl.searchParams.get("db_name")).toBe("oku_plus");
+    expect(comparisonUrl.searchParams.get("base_timestamp")).toBe("2026-10-19T11:58:00.000Z");
     expect(normalizeNeonEndpointHost("ep-example-123-pooler.us-east-2.aws.neon.tech")).toBe(
       "ep-example-123.us-east-2.aws.neon.tech",
     );
   });
 
+  it("records sanitized PITR API failure stage, endpoint, and HTTP status", () => {
+    const endpoint = cycle4PitrCompareSchemaEndpoint(CYCLE4_PITR_PROJECT_ID, "br-target-1");
+    const failure = cycle4PitrFailureRecord(
+      cycle4PitrHttpFailure("schema comparison", endpoint, 500),
+      "fallback",
+    );
+    expect(failure).toEqual({
+      stage: "schema comparison",
+      endpoint,
+      httpStatus: 500,
+      reason: "Neon Management API returned HTTP 500",
+    });
+    expect(JSON.stringify(failure)).not.toMatch(/https?:|Bearer|password|secret|postgresql:/iu);
+  });
+
   it("accepts only complete, read-only PITR evidence bound to this workflow attempt", () => {
     const nowMs = Date.parse("2026-10-19T12:00:00.000Z");
-    const schemaHash = "a".repeat(64);
     const evidence = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       status: "PASS",
       projectId: CYCLE4_PITR_PROJECT_ID,
       sourceBranchId: CYCLE4_PITR_SOURCE_BRANCH_ID,
@@ -195,10 +232,18 @@ describe("P1-A Cycle 4 authored program", () => {
       parentTimestamp: "2026-10-19T11:58:00.000Z",
       schemaComparison: {
         result: "PASS",
+        method: "NEON_COMPARE_SCHEMA_API",
+        endpoint: cycle4PitrCompareSchemaEndpoint(
+          CYCLE4_PITR_PROJECT_ID,
+          "br-isolated-test-12345678",
+        ),
+        httpStatus: 200,
+        baseBranchId: CYCLE4_PITR_SOURCE_BRANCH_ID,
+        targetBranchId: "br-isolated-test-12345678",
+        database: "oku_plus",
+        baseTimestamp: "2026-10-19T11:58:00.000Z",
+        diffIsEmpty: true,
         matches: true,
-        sourceReadAt: "2026-10-19T11:58:00.000Z",
-        sourceSha256: schemaHash,
-        targetSha256: schemaHash,
       },
       dataChecks: {
         result: "PASS",
@@ -252,6 +297,18 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(
       isCycle4PitrEvidenceValid(
         { ...evidence, dataChecks: { ...evidence.dataChecks, queryMode: "READ_WRITE" } },
+        expected,
+      ),
+    ).toBe(false);
+    expect(
+      isCycle4PitrEvidenceValid(
+        { ...evidence, schemaComparison: { ...evidence.schemaComparison, diffIsEmpty: false } },
+        expected,
+      ),
+    ).toBe(false);
+    expect(
+      isCycle4PitrEvidenceValid(
+        { ...evidence, schemaComparison: { ...evidence.schemaComparison, httpStatus: 500 } },
         expected,
       ),
     ).toBe(false);

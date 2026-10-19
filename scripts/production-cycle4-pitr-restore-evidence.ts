@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { appendFile, writeFile } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 import { parseCatalogTargetUrl } from "../src/curriculum/catalog-target-verification.js";
@@ -34,6 +33,12 @@ export type Cycle4PitrEvidenceExpectation = {
   role: string;
   port: string;
   nowMs?: number;
+};
+export type Cycle4PitrFailureRecord = {
+  stage: string;
+  endpoint: string | null;
+  httpStatus: number | null;
+  reason: string;
 };
 type NeonBranch = {
   id: string;
@@ -89,25 +94,29 @@ export function normalizeNeonEndpointHost(host: string): string {
     .replace(/\.$/u, "");
 }
 
-export function stablePitrJson(value: unknown): string {
-  const normalize = (candidate: unknown): unknown => {
-    if (Array.isArray(candidate)) return candidate.map(normalize);
-    if (candidate && typeof candidate === "object") {
-      return Object.fromEntries(
-        Object.entries(candidate as JsonRecord)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, entry]) => [key, normalize(entry)]),
-      );
-    }
-    return candidate;
-  };
-  return JSON.stringify(normalize(value));
+export function cycle4PitrCompareSchemaEndpoint(projectId: string, branchId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/compare_schema`;
 }
 
-export function cycle4PitrSchemaSha256(value: unknown): string {
-  return createHash("sha256")
-    .update(stablePitrJson(value) ?? "null", "utf8")
-    .digest("hex");
+export function cycle4PitrCompareSchemaRequest(input: {
+  projectId: string;
+  targetBranchId: string;
+  baseBranchId: string;
+  baseTimestamp: string;
+  databaseName: string;
+}): { endpoint: string; requestPath: string } {
+  const endpoint = cycle4PitrCompareSchemaEndpoint(input.projectId, input.targetBranchId);
+  const query = new URLSearchParams({
+    base_branch_id: input.baseBranchId,
+    db_name: input.databaseName,
+    base_timestamp: input.baseTimestamp,
+  });
+  return { endpoint, requestPath: `${endpoint}?${query.toString()}` };
+}
+
+export function parseCycle4PitrSchemaDiff(value: unknown): { diffIsEmpty: true } | null {
+  if (!isRecord(value) || typeof value.diff !== "string" || value.diff !== "") return null;
+  return { diffIsEmpty: true };
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -140,7 +149,7 @@ export function isCycle4PitrEvidenceValid(
   const countRecord = isRecord(counts) ? counts : null;
   return (
     value.status === "PASS" &&
-    value.schemaVersion === 1 &&
+    value.schemaVersion === 2 &&
     value.projectId === CYCLE4_PITR_PROJECT_ID &&
     value.sourceBranchId === CYCLE4_PITR_SOURCE_BRANCH_ID &&
     value.historyRetentionSeconds === CYCLE4_PITR_EXPECTED_RETENTION_SECONDS &&
@@ -173,10 +182,16 @@ export function isCycle4PitrEvidenceValid(
     ageMs >= 30_000 &&
     ageMs <= CYCLE4_PITR_EXPECTED_RETENTION_SECONDS * 1_000 - 30_000 &&
     schemaRecord.result === "PASS" &&
+    schemaRecord.method === "NEON_COMPARE_SCHEMA_API" &&
+    schemaRecord.endpoint ===
+      cycle4PitrCompareSchemaEndpoint(CYCLE4_PITR_PROJECT_ID, String(targetRecord.id)) &&
+    schemaRecord.httpStatus === 200 &&
+    schemaRecord.baseBranchId === CYCLE4_PITR_SOURCE_BRANCH_ID &&
+    schemaRecord.targetBranchId === targetRecord.id &&
+    schemaRecord.database === expected.database &&
+    schemaRecord.baseTimestamp === timestamp &&
+    schemaRecord.diffIsEmpty === true &&
     schemaRecord.matches === true &&
-    schemaRecord.sourceReadAt === timestamp &&
-    schemaRecord.sourceSha256 === schemaRecord.targetSha256 &&
-    /^[a-f0-9]{64}$/u.test(String(schemaRecord.sourceSha256 ?? "")) &&
     dataRecord.result === "PASS" &&
     dataRecord.queryMode === "READ_ONLY" &&
     dataRecord.studentRecordsQueried === false &&
@@ -225,8 +240,43 @@ function text(value: unknown, label: string): string {
   return value;
 }
 
-function safeError(stage: string, reason: string): Error {
-  return new Error(`${stage}: ${reason}`);
+export class Cycle4PitrSafeError extends Error {
+  readonly failure: Cycle4PitrFailureRecord;
+
+  constructor(failure: Cycle4PitrFailureRecord) {
+    super(`${failure.stage}: ${failure.reason}`);
+    this.failure = failure;
+  }
+}
+
+function safeError(
+  stage: string,
+  reason: string,
+  endpoint: string | null = null,
+  httpStatus: number | null = null,
+): Cycle4PitrSafeError {
+  return new Cycle4PitrSafeError({ stage, endpoint, httpStatus, reason });
+}
+
+export function cycle4PitrFailureRecord(
+  error: unknown,
+  fallbackStage: string,
+): Cycle4PitrFailureRecord {
+  if (error instanceof Cycle4PitrSafeError) return error.failure;
+  return {
+    stage: fallbackStage,
+    endpoint: null,
+    httpStatus: null,
+    reason: "validation failed; sensitive details suppressed",
+  };
+}
+
+export function cycle4PitrHttpFailure(
+  stage: string,
+  endpoint: string,
+  httpStatus: number,
+): Cycle4PitrSafeError {
+  return safeError(stage, `Neon Management API returned HTTP ${httpStatus}`, endpoint, httpStatus);
 }
 
 async function neonRequest<T>(
@@ -235,6 +285,7 @@ async function neonRequest<T>(
   stage: string,
   options: { method?: "GET" | "POST"; body?: unknown } = {},
 ): Promise<T> {
+  const endpoint = path.split("?", 1)[0] ?? path;
   let response: Response;
   try {
     response = await fetch(`${NEON_API}${path}`, {
@@ -248,13 +299,19 @@ async function neonRequest<T>(
       signal: AbortSignal.timeout(30_000),
     });
   } catch {
-    throw safeError(stage, "Neon Management API request failed before receiving a response");
+    throw safeError(
+      stage,
+      "Neon Management API request failed before receiving a response",
+      endpoint,
+    );
   }
-  if (!response.ok) throw safeError(stage, `Neon Management API returned HTTP ${response.status}`);
+  if (!response.ok) {
+    throw cycle4PitrHttpFailure(stage, endpoint, response.status);
+  }
   try {
     return (await response.json()) as T;
   } catch {
-    throw safeError(stage, "Neon Management API returned invalid JSON");
+    throw safeError(stage, "Neon Management API returned invalid JSON", endpoint, response.status);
   }
 }
 
@@ -446,26 +503,24 @@ async function readTargetDataChecks(databaseUrl: string): Promise<JsonRecord> {
   }
 }
 
-async function fetchSchema(
+async function compareSchema(
   apiKey: string,
-  projectId: string,
-  branchId: string,
-  databaseName: string,
-  timestamp?: string,
-): Promise<unknown> {
-  const params = new URLSearchParams({ db_name: databaseName, format: "json" });
-  if (timestamp) params.set("timestamp", timestamp);
-  const result = await neonRequest<unknown>(
-    apiKey,
-    `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/schema?${params.toString()}`,
-    timestamp ? "source historical schema" : "restored branch schema",
-  );
-  const payload = record(result, "schema");
-  const schema = payload.schema;
-  if (schema === undefined || schema === null) {
-    throw safeError("schema comparison", "Neon schema response did not contain schema");
+  input: {
+    projectId: string;
+    targetBranchId: string;
+    baseBranchId: string;
+    baseTimestamp: string;
+    databaseName: string;
+  },
+): Promise<{ endpoint: string; httpStatus: 200; diffIsEmpty: true }> {
+  const { endpoint, requestPath } = cycle4PitrCompareSchemaRequest(input);
+  const stage = "schema comparison";
+  const response = await neonRequest<unknown>(apiKey, requestPath, stage);
+  const parsed = parseCycle4PitrSchemaDiff(response);
+  if (!parsed) {
+    throw safeError(stage, "compare_schema response did not confirm an empty diff", endpoint, 200);
   }
-  return schema;
+  return { endpoint, httpStatus: 200, ...parsed };
 }
 
 async function waitForEndpoint(
@@ -535,7 +590,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
   const evidencePath = process.env.CYCLE4_PITR_EVIDENCE_PATH?.trim();
   if (!evidencePath) throw safeError("evidence output", "CYCLE4_PITR_EVIDENCE_PATH is required");
   const evidence: JsonRecord = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: "FAIL",
     createdAt: new Date(now).toISOString(),
     projectId: CYCLE4_PITR_PROJECT_ID,
@@ -870,28 +925,23 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     };
 
     stage = "schema comparison";
-    const sourceSchema = await fetchSchema(
-      apiKey,
+    const schemaDiff = await compareSchema(apiKey, {
       projectId,
-      source.id,
-      expectedDatabase,
-      parentTimestamp,
-    );
-    const targetSchema = await fetchSchema(apiKey, projectId, target.id, expectedDatabase);
-    const sourceSchemaHash = cycle4PitrSchemaSha256(sourceSchema);
-    const targetSchemaHash = cycle4PitrSchemaSha256(targetSchema);
-    if (sourceSchemaHash !== targetSchemaHash) {
-      throw safeError(
-        stage,
-        "restored branch schema does not match source schema at parent_timestamp",
-      );
-    }
+      targetBranchId: target.id,
+      baseBranchId: source.id,
+      baseTimestamp: parentTimestamp,
+      databaseName: expectedDatabase,
+    });
     evidence.schemaComparison = {
       result: "PASS",
-      sourceReadAt: parentTimestamp,
-      targetReadAt: "BRANCH_HEAD_CREATED_AT_PARENT_TIMESTAMP",
-      sourceSha256: sourceSchemaHash,
-      targetSha256: targetSchemaHash,
+      method: "NEON_COMPARE_SCHEMA_API",
+      endpoint: schemaDiff.endpoint,
+      httpStatus: schemaDiff.httpStatus,
+      baseBranchId: source.id,
+      targetBranchId: target.id,
+      database: expectedDatabase,
+      baseTimestamp: parentTimestamp,
+      diffIsEmpty: schemaDiff.diffIsEmpty,
       matches: true,
     };
 
@@ -962,13 +1012,10 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     evidence.completedAt = new Date().toISOString();
     return evidence;
   } catch (error) {
-    const safeMessage =
-      error instanceof Error && /^[a-zA-Z0-9 _-]+: [a-zA-Z0-9 .,_-]+$/u.test(error.message)
-        ? error.message
-        : `${stage}: validation failed; sensitive details suppressed`;
+    const safeFailure = cycle4PitrFailureRecord(error, stage);
     evidence.status = "FAIL";
-    evidence.failedStage = stage;
-    evidence.failure = safeMessage;
+    evidence.failedStage = safeFailure.stage;
+    evidence.failure = safeFailure;
     evidence.completedAt = new Date().toISOString();
     return evidence;
   } finally {

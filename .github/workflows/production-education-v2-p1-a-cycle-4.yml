@@ -203,12 +203,18 @@ jobs:
             const data = evidence.dataChecks || {};
             const restored = evidence.restoredDatabaseIdentity || {};
             const unchanged = evidence.productionSourceUnchanged || {};
-            if (evidence.status !== "PASS" || evidence.projectId !== "aged-snow-31166248" ||
+            if (evidence.status !== "PASS" || evidence.schemaVersion !== 2 ||
+                evidence.projectId !== "aged-snow-31166248" ||
                 evidence.sourceBranchId !== "br-damp-truth-b17y4gog" ||
                 target.id === evidence.sourceBranchId || target.projectId !== evidence.projectId ||
                 target.parentId !== evidence.sourceBranchId || target.default !== false || target.state !== "ready" ||
                 target.annotationMatchesRun !== true ||
-                schema.result !== "PASS" || schema.matches !== true || data.result !== "PASS" ||
+                schema.result !== "PASS" || schema.method !== "NEON_COMPARE_SCHEMA_API" ||
+                schema.endpoint !== `/projects/${evidence.projectId}/branches/${target.id}/compare_schema` ||
+                schema.httpStatus !== 200 || schema.baseBranchId !== evidence.sourceBranchId ||
+                schema.targetBranchId !== target.id || schema.database !== process.env.PRODUCTION_DB_APPROVED_DATABASE ||
+                schema.baseTimestamp !== evidence.parentTimestamp || schema.diffIsEmpty !== true ||
+                schema.matches !== true || data.result !== "PASS" ||
                 data.queryMode !== "READ_ONLY" || restored.result !== "PASS" ||
                 restored.transactionReadOnly !== true || unchanged.result !== "PASS" ||
                 evidence.productionDatabaseWrites !== false || evidence.studentProgressChanged !== false) {
