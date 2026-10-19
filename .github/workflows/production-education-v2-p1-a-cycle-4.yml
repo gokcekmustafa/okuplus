@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "PLAN_ONLY is read-only; APPLY requires release and backup confirmations"
+        description: "PLAN_ONLY is read-only; APPLY requires release approval and verified PITR restore"
         required: true
         type: choice
         options:
@@ -26,10 +26,6 @@ on:
       production_editorial_approval:
         description: "For APPLY, type the exact product-owner release approval shown below"
         required: false
-        type: string
-      production_backup_confirmation:
-        description: "PLAN_ONLY: READ_ONLY_NO_WRITE. APPLY: I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK"
-        required: true
         type: string
 
 permissions:
@@ -66,13 +62,12 @@ jobs:
       EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_RELEASE_COMMIT: ${{ inputs.production_release_commit }}
       EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_APPROVAL: ${{ inputs.production_editorial_approval }}
       EDUCATION_V2_P1_A_CYCLE_4_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
-      EDUCATION_V2_P1_A_CYCLE_4_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
       CYCLE4_OPERATION: ${{ inputs.operation }}
       CYCLE4_CONFIRMATION: ${{ inputs.confirm_cycle4 }}
-      CYCLE4_BACKUP_CONFIRMATION: ${{ inputs.production_backup_confirmation }}
       CYCLE4_EDITORIAL_APPROVAL: ${{ inputs.production_editorial_approval }}
       CYCLE4_RELEASE_ID: ${{ inputs.production_release_id }}
       CYCLE4_RELEASE_COMMIT: ${{ inputs.production_release_commit }}
+      CYCLE4_PITR_EVIDENCE_PATH: cycle4-pitr-restore-evidence.json
 
     steps:
       - name: Checkout selected master release
@@ -119,14 +114,12 @@ jobs:
           case "${CYCLE4_OPERATION}" in
             PLAN_ONLY)
               test "${CYCLE4_CONFIRMATION}" = "PLAN_EDUCATION_V2_P1_A_CYCLE_4"
-              test "${CYCLE4_BACKUP_CONFIRMATION}" = "READ_ONLY_NO_WRITE"
               echo "BACKUP_RESTORE_EVIDENCE=NOT_REQUIRED_FOR_READ_ONLY_PLAN" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             APPLY)
               test "${CYCLE4_CONFIRMATION}" = "APPLY_EDUCATION_V2_P1_A_CYCLE_4"
               test "${CYCLE4_EDITORIAL_APPROVAL}" = "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_EDITORIAL_RELEASE_F0166391FAA1CFEF4857097AD0DEB127668BBDA2"
-              test "${CYCLE4_BACKUP_CONFIRMATION}" = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK"
-              echo "BACKUP_RESTORE_EVIDENCE=OPERATOR_VERIFIED" >> "${GITHUB_STEP_SUMMARY}"
+              echo "BACKUP_RESTORE_EVIDENCE=REQUIRED_FROM_LIVE_PITR_VALIDATION" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             *)
               echo "FAIL: invalid Cycle 4 operation"
@@ -188,6 +181,43 @@ jobs:
           '
           cat cycle4-plan-before.json >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Create and verify isolated Neon PITR restore evidence
+        if: ${{ inputs.operation == 'APPLY' }}
+        env:
+          NEON_MANAGEMENT_API_KEY: ${{ secrets.NEON_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install tsx scripts/production-cycle4-pitr-restore-evidence.ts
+
+      - name: Enforce PITR evidence before Cycle 4 apply
+        if: ${{ inputs.operation == 'APPLY' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const evidence = JSON.parse(fs.readFileSync(process.env.CYCLE4_PITR_EVIDENCE_PATH, "utf8"));
+            const target = evidence.targetBranch || {};
+            const schema = evidence.schemaComparison || {};
+            const data = evidence.dataChecks || {};
+            const restored = evidence.restoredDatabaseIdentity || {};
+            const unchanged = evidence.productionSourceUnchanged || {};
+            if (evidence.status !== "PASS" || evidence.projectId !== "aged-snow-31166248" ||
+                evidence.sourceBranchId !== "br-damp-truth-b17y4gog" ||
+                target.id === evidence.sourceBranchId || target.projectId !== evidence.projectId ||
+                target.parentId !== evidence.sourceBranchId || target.default !== false || target.state !== "ready" ||
+                target.annotationMatchesRun !== true ||
+                schema.result !== "PASS" || schema.matches !== true || data.result !== "PASS" ||
+                data.queryMode !== "READ_ONLY" || restored.result !== "PASS" ||
+                restored.transactionReadOnly !== true || unchanged.result !== "PASS" ||
+                evidence.productionDatabaseWrites !== false || evidence.studentProgressChanged !== false) {
+              process.stderr.write("PITR evidence is missing, failed, or incomplete; Cycle 4 APPLY is blocked.\n");
+              process.exit(1);
+            }
+          '
+          echo "PITR_RESTORE_EVIDENCE=PASS" >> "${GITHUB_STEP_SUMMARY}"
+
       - name: Apply Cycle 4 graph only
         if: ${{ inputs.operation == 'APPLY' }}
         shell: bash
@@ -224,3 +254,4 @@ jobs:
           name: production-education-v2-p1-a-cycle-4
           path: cycle4-*.json
           if-no-files-found: ignore
+          retention-days: 7

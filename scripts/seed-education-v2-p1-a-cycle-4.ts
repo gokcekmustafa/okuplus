@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { readFileSync } from "node:fs";
 import { Prisma, PrismaClient } from "@prisma/client";
 import {
   parseTrainingExerciseVersionConfig,
@@ -25,6 +26,10 @@ import {
   p1ACycle4ContentVersionId,
   p1ACycle4AssessmentId,
 } from "../src/curriculum/education-v2-p1-a-cycle-4-program.js";
+import {
+  isCycle4PitrEvidenceValid,
+  type Cycle4PitrEvidenceExpectation,
+} from "./production-cycle4-pitr-restore-evidence.js";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -43,13 +48,11 @@ const PRODUCTION_RELEASE_ID_ENV = "EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_RELEASE_
 const PRODUCTION_RELEASE_COMMIT_ENV = "EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_RELEASE_COMMIT";
 const PRODUCTION_APPROVAL_ENV = "EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_APPROVAL";
 const APPROVED_FINGERPRINT_ENV = "EDUCATION_V2_P1_A_CYCLE_4_APPROVED_TARGET_FINGERPRINT";
-const PRODUCTION_BACKUP_CONFIRMATION_ENV = "EDUCATION_V2_P1_A_CYCLE_4_BACKUP_CONFIRMATION";
+const PITR_EVIDENCE_PATH_ENV = "CYCLE4_PITR_EVIDENCE_PATH";
 const APPROVED_CONTENT_RELEASE_COMMIT = "f0166391faa1cfef4857097ad0deb127668bbda2";
 const APPROVED_RELEASE_ID = `${EDUCATION_V2_P1_A_CYCLE_4_ID}@v${EDUCATION_V2_P1_A_CYCLE_4_VERSION}:${APPROVED_CONTENT_RELEASE_COMMIT}`;
 const PRODUCTION_CONFIRMATION =
   "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_EDITORIAL_RELEASE_F0166391FAA1CFEF4857097AD0DEB127668BBDA2";
-const BACKUP_CONFIRMATION = "I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK";
-
 type TargetEnvironment = "TEST" | "PRODUCTION";
 type Target = CatalogTarget & { approvedTarget: CatalogTarget; approvedFingerprint: string };
 type Program = typeof EDUCATION_V2_P1_A_CYCLE_4_PROGRAM;
@@ -79,6 +82,27 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) fail(`${name} gerekli`);
   return value;
+}
+
+function assertPitrRestoreEvidence(): void {
+  const evidencePath = required(PITR_EVIDENCE_PATH_ENV);
+  let evidence: Record<string, unknown>;
+  try {
+    evidence = JSON.parse(readFileSync(evidencePath, "utf8")) as Record<string, unknown>;
+  } catch {
+    fail("aynı korumalı workflow çalışmasına ait PITR kanıt dosyası okunamadı");
+  }
+  const expected: Cycle4PitrEvidenceExpectation = {
+    runId: process.env.GITHUB_RUN_ID ?? "",
+    runAttempt: process.env.GITHUB_RUN_ATTEMPT || "1",
+    sha: process.env.GITHUB_SHA?.toLowerCase() ?? "",
+    database: required(PRODUCTION_DATABASE_NAME_ENV),
+    role: required("PRODUCTION_DB_APPROVED_USER"),
+    port: required("PRODUCTION_DB_APPROVED_PORT"),
+  };
+  if (!isCycle4PitrEvidenceValid(evidence, expected)) {
+    fail("geçerli, başarılı ve aynı çalışmaya bağlı PITR geri yükleme kanıtı gerekli");
+  }
 }
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -162,9 +186,6 @@ function readTarget(): Target | null {
     if (!dryRun && process.env[PRODUCTION_APPROVAL_ENV] !== PRODUCTION_CONFIRMATION) {
       fail(`production editorial approval=${PRODUCTION_CONFIRMATION} gerekli`);
     }
-    if (!dryRun && process.env[PRODUCTION_BACKUP_CONFIRMATION_ENV] !== BACKUP_CONFIRMATION) {
-      fail(`production backup/rollback confirmation=${BACKUP_CONFIRMATION} gerekli`);
-    }
     if (
       !dryRun &&
       (process.env.GITHUB_ACTIONS !== "true" ||
@@ -173,6 +194,7 @@ function readTarget(): Target | null {
     ) {
       fail("production APPLY yalnızca korumalı master workflow üzerinden çalıştırılabilir");
     }
+    if (!dryRun) assertPitrRestoreEvidence();
   }
   return { ...target, approvedTarget, approvedFingerprint };
 }

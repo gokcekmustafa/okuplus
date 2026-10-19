@@ -12,6 +12,16 @@ import {
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-4-release.js";
 import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
+import {
+  CYCLE4_PITR_PROJECT_ID,
+  CYCLE4_PITR_REQUIRED_TABLES,
+  CYCLE4_PITR_SOURCE_BRANCH_ID,
+  cycle4PitrSchemaSha256,
+  cycle4PitrTimestamp,
+  isCycle4PitrEvidenceValid,
+  isCycle4PitrTimestampInWindow,
+  normalizeNeonEndpointHost,
+} from "../scripts/production-cycle4-pitr-restore-evidence.js";
 
 const workflow = readFileSync(
   new URL("../.github/workflows/production-education-v2-p1-a-cycle-4.yml", import.meta.url),
@@ -93,11 +103,20 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(workflow).toContain("scripts/db-fingerprint.ts");
     expect(workflow).toContain("scripts/production-migration-forensics.ts");
     expect(workflow).toContain("scripts/verify-canonical-placement-migration-policy.ts");
+    expect(workflow).toContain("name: production-migration");
+    expect(workflow).toContain("${{ secrets.NEON_API_KEY }}");
+    expect(workflow).toContain("scripts/production-cycle4-pitr-restore-evidence.ts");
+    expect(workflow).toContain("Enforce PITR evidence before Cycle 4 apply");
     expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --dry-run");
     expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-4.ts --apply");
     expect(workflow).toContain("PREVIOUS_47_STATIONS=NOT_TOUCHED");
     expect(workflow).toContain("STUDENT_ASSIGNMENTS_AND_PROGRESS=NOT_TOUCHED");
-    expect(workflow).toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(workflow).not.toContain("production_backup_confirmation:");
+    expect(workflow).not.toContain("${{ inputs.production_backup_confirmation }}");
+    expect(workflow).not.toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(workflow.indexOf("Create and verify isolated Neon PITR restore evidence")).toBeLessThan(
+      workflow.indexOf("Apply Cycle 4 graph only"),
+    );
     expect(workflow).toContain("f0166391faa1cfef4857097ad0deb127668bbda2");
     expect(workflow).toContain(
       "I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_EDITORIAL_RELEASE_F0166391FAA1CFEF4857097AD0DEB127668BBDA2",
@@ -108,6 +127,7 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(seeder).toContain('Promise<"MISSING" | "EXISTING" | "CONFLICT">');
     expect(seeder).toContain('if (dryRun || state === "EXISTING")');
     expect(seeder).toContain("production APPLY yalnızca korumalı master workflow");
+    expect(seeder).toContain("assertPitrRestoreEvidence");
     expect(seeder).toContain("contentOrigin: plan.sourceStation.contentOrigin");
     expect(seeder).toContain("provenanceStatus: plan.sourceStation.provenanceStatus");
     expect(seeder).toContain('routeFamily: "P1-A-CYCLE-4"');
@@ -115,5 +135,125 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(seeder).toContain("sourceReference: plan.sourceStation.sourceReference");
     expect(seeder).not.toContain("studentLearningPath");
     expect(seeder).not.toContain("studentLearningStep");
+    expect(seeder).not.toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+  });
+
+  it("creates a recent UTC timestamp strictly inside the PITR retention window", () => {
+    const now = Date.UTC(2026, 9, 19, 12, 0, 0);
+    const timestamp = cycle4PitrTimestamp(now);
+    expect(timestamp).toBe("2026-10-19T11:58:00.000Z");
+    expect(isCycle4PitrTimestampInWindow(timestamp, now, 21_600)).toBe(true);
+    expect(isCycle4PitrTimestampInWindow("2026-10-19T05:59:00.000Z", now, 21_600)).toBe(false);
+    expect(isCycle4PitrTimestampInWindow("2026-10-19T12:00:00.000Z", now, 21_600)).toBe(false);
+  });
+
+  it("canonicalizes Neon schema hashes and normalizes pooler endpoint hosts", () => {
+    expect(cycle4PitrSchemaSha256({ z: 1, a: { y: true, x: 2 } })).toBe(
+      cycle4PitrSchemaSha256({ a: { x: 2, y: true }, z: 1 }),
+    );
+    expect(normalizeNeonEndpointHost("ep-example-123-pooler.us-east-2.aws.neon.tech")).toBe(
+      "ep-example-123.us-east-2.aws.neon.tech",
+    );
+  });
+
+  it("accepts only complete, read-only PITR evidence bound to this workflow attempt", () => {
+    const nowMs = Date.parse("2026-10-19T12:00:00.000Z");
+    const schemaHash = "a".repeat(64);
+    const evidence = {
+      schemaVersion: 1,
+      status: "PASS",
+      projectId: CYCLE4_PITR_PROJECT_ID,
+      sourceBranchId: CYCLE4_PITR_SOURCE_BRANCH_ID,
+      historyRetentionSeconds: 21_600,
+      productionTargetIdentity: "PASS",
+      workflowRunId: "123456",
+      workflowRunAttempt: "1",
+      sourceCommit: "1".repeat(40),
+      productionDatabaseWrites: false,
+      productionBranchMutated: false,
+      studentDataQueried: false,
+      studentProgressChanged: false,
+      sourceBranch: {
+        id: CYCLE4_PITR_SOURCE_BRANCH_ID,
+        projectId: CYCLE4_PITR_PROJECT_ID,
+        name: "production",
+        default: true,
+      },
+      targetBranch: {
+        id: "br-isolated-test-12345678",
+        projectId: CYCLE4_PITR_PROJECT_ID,
+        parentId: CYCLE4_PITR_SOURCE_BRANCH_ID,
+        parentTimestamp: "2026-10-19T11:58:00.000Z",
+        default: false,
+        state: "ready",
+        annotationMatchesRun: true,
+        endpointBranchId: "br-isolated-test-12345678",
+        endpointId: "ep-isolated-test-12345678",
+        endpointType: "read_write",
+        endpointState: "idle",
+      },
+      parentTimestamp: "2026-10-19T11:58:00.000Z",
+      schemaComparison: {
+        result: "PASS",
+        matches: true,
+        sourceReadAt: "2026-10-19T11:58:00.000Z",
+        sourceSha256: schemaHash,
+        targetSha256: schemaHash,
+      },
+      dataChecks: {
+        result: "PASS",
+        queryMode: "READ_ONLY",
+        studentRecordsQueried: false,
+        questionTextOrAnswerKeysQueried: false,
+        requiredTables: CYCLE4_PITR_REQUIRED_TABLES,
+        missingTables: [],
+        aggregateCounts: {
+          learningPaths: 1,
+          learningUnits: 1,
+          learningSteps: 1,
+          content: 1,
+          contentVersions: 1,
+          exerciseTemplates: 1,
+          exerciseTemplateVersions: 1,
+          questions: 1,
+          questionVersions: 1,
+          assessments: 1,
+          successfulMigrations: 1,
+        },
+      },
+      restoredDatabaseIdentity: {
+        result: "PASS",
+        transactionReadOnly: true,
+        database: "oku_plus",
+        role: "oku_app",
+        port: 5432,
+        schema: "public",
+        targetEndpointHostMatchedNeonApi: true,
+      },
+      productionSourceUnchanged: {
+        result: "PASS",
+        id: CYCLE4_PITR_SOURCE_BRANCH_ID,
+        name: "production",
+        default: true,
+      },
+    };
+    const expected = {
+      runId: "123456",
+      runAttempt: "1",
+      sha: "1".repeat(40),
+      database: "oku_plus",
+      role: "oku_app",
+      port: "5432",
+      nowMs,
+    };
+
+    expect(isCycle4PitrEvidenceValid(evidence, expected)).toBe(true);
+    expect(isCycle4PitrEvidenceValid(evidence, { ...expected, runAttempt: "2" })).toBe(false);
+    expect(
+      isCycle4PitrEvidenceValid(
+        { ...evidence, dataChecks: { ...evidence.dataChecks, queryMode: "READ_WRITE" } },
+        expected,
+      ),
+    ).toBe(false);
   });
 });
