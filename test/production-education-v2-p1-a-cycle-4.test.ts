@@ -20,7 +20,9 @@ import {
   cycle4PitrCompareSchemaRequest,
   cycle4PitrFailureRecord,
   cycle4PitrHttpFailure,
+  cycle4PitrOptionalEndpointId,
   cycle4PitrTimestamp,
+  cycle4PitrTimestampMatches,
   isCycle4PitrEvidenceValid,
   isCycle4PitrTimestampInWindow,
   normalizeNeonEndpointHost,
@@ -176,6 +178,19 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(comparisonUrl.searchParams.get("base_timestamp")).toBe("2026-10-19T11:58:00.000Z");
     expect(normalizeNeonEndpointHost("ep-example-123-pooler.us-east-2.aws.neon.tech")).toBe(
       "ep-example-123.us-east-2.aws.neon.tech",
+    );
+  });
+
+  it("uses branch-read metadata as authoritative when the create response omits optional fields", () => {
+    expect(cycle4PitrOptionalEndpointId({ id: "ep-restored-123" })).toBe("ep-restored-123");
+    expect(cycle4PitrOptionalEndpointId({ host: "ep-restored.example.neon.tech" })).toBeNull();
+    expect(cycle4PitrOptionalEndpointId(null)).toBeNull();
+    expect(cycle4PitrTimestampMatches(undefined, "2026-10-19T11:58:00.000Z")).toBe(false);
+    expect(cycle4PitrTimestampMatches("2026-10-19T11:58:00.500Z", "2026-10-19T11:58:00.000Z")).toBe(
+      true,
+    );
+    expect(cycle4PitrTimestampMatches("2026-10-19T11:58:02.000Z", "2026-10-19T11:58:00.000Z")).toBe(
+      false,
     );
   });
 

@@ -58,6 +58,10 @@ type NeonEndpoint = {
   current_state: string;
   disabled?: boolean;
 };
+let lastNeonResponse: { endpoint: string | null; httpStatus: number | null } = {
+  endpoint: null,
+  httpStatus: null,
+};
 
 export function cycle4PitrTimestamp(
   nowMs = Date.now(),
@@ -117,6 +121,22 @@ export function cycle4PitrCompareSchemaRequest(input: {
 export function parseCycle4PitrSchemaDiff(value: unknown): { diffIsEmpty: true } | null {
   if (!isRecord(value) || typeof value.diff !== "string" || value.diff !== "") return null;
   return { diffIsEmpty: true };
+}
+
+export function cycle4PitrOptionalEndpointId(value: unknown): string | null {
+  if (!isRecord(value) || typeof value.id !== "string" || !value.id.trim()) return null;
+  return value.id;
+}
+
+export function cycle4PitrTimestampMatches(value: unknown, expected: string): boolean {
+  if (typeof value !== "string") return false;
+  const actualMs = Date.parse(value);
+  const expectedMs = Date.parse(expected);
+  return (
+    Number.isFinite(actualMs) &&
+    Number.isFinite(expectedMs) &&
+    Math.abs(actualMs - expectedMs) <= 1_000
+  );
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -229,14 +249,14 @@ export function isCycle4PitrEvidenceValid(
 
 function record(value: unknown, label: string): JsonRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} response shape invalid`);
+    throw responseShapeError(label, "response shape invalid");
   }
   return value as JsonRecord;
 }
 
 function text(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim())
-    throw new Error(`${label} response field missing`);
+    throw responseShapeError(label, "response field missing");
   return value;
 }
 
@@ -256,6 +276,10 @@ function safeError(
   httpStatus: number | null = null,
 ): Cycle4PitrSafeError {
   return new Cycle4PitrSafeError({ stage, endpoint, httpStatus, reason });
+}
+
+function responseShapeError(stage: string, reason: string): Cycle4PitrSafeError {
+  return safeError(stage, reason, lastNeonResponse.endpoint, lastNeonResponse.httpStatus);
 }
 
 export function cycle4PitrFailureRecord(
@@ -286,6 +310,7 @@ async function neonRequest<T>(
   options: { method?: "GET" | "POST"; body?: unknown } = {},
 ): Promise<T> {
   const endpoint = path.split("?", 1)[0] ?? path;
+  lastNeonResponse = { endpoint, httpStatus: null };
   let response: Response;
   try {
     response = await fetch(`${NEON_API}${path}`, {
@@ -305,6 +330,7 @@ async function neonRequest<T>(
       endpoint,
     );
   }
+  lastNeonResponse = { endpoint, httpStatus: response.status };
   if (!response.ok) {
     throw cycle4PitrHttpFailure(stage, endpoint, response.status);
   }
@@ -349,7 +375,7 @@ function parseNeonBranch(payload: unknown, label: string): NeonBranch {
     typeof branch.current_state !== "string" ||
     typeof branch.default !== "boolean"
   ) {
-    throw safeError(label, "branch identity fields are incomplete");
+    throw responseShapeError(label, "branch identity fields are incomplete");
   }
   return branch as NeonBranch;
 }
@@ -364,7 +390,7 @@ function parseNeonEndpoint(payload: unknown, label: string): NeonEndpoint {
     typeof endpoint.type !== "string" ||
     typeof endpoint.current_state !== "string"
   ) {
-    throw safeError(label, "endpoint identity fields are incomplete");
+    throw responseShapeError(label, "endpoint identity fields are incomplete");
   }
   return endpoint as NeonEndpoint;
 }
@@ -380,7 +406,10 @@ function assertBranchIdentity(
     branch.default !== expected.defaultValue ||
     (expected.parentId !== undefined && branch.parent_id !== expected.parentId)
   ) {
-    throw safeError(stage, "branch project/parent/default identity did not match approved target");
+    throw responseShapeError(
+      stage,
+      "branch project/parent/default identity did not match approved target",
+    );
   }
 }
 
@@ -777,7 +806,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
         stage,
       );
       if (target.name !== targetName || target.id === source.id) {
-        throw safeError(stage, "existing run-specific branch name/identity conflicted");
+        throw responseShapeError(stage, "existing run-specific branch name/identity conflicted");
       }
     } else {
       parentTimestamp = cycle4PitrTimestamp(Date.now());
@@ -809,22 +838,17 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       const createdPayload = record(created, "PITR branch creation");
       const endpoints = Array.isArray(createdPayload.endpoints) ? createdPayload.endpoints : [];
       const firstEndpoint = endpoints[0];
-      if (firstEndpoint)
-        endpointId = text(record(firstEndpoint, "created endpoint").id, "created endpoint id");
+      endpointId = cycle4PitrOptionalEndpointId(firstEndpoint);
       assertBranchIdentity(
         target,
         { projectId, branchId: target.id, defaultValue: false, parentId: source.id },
         stage,
       );
       if (target.name !== targetName || target.id === source.id) {
-        throw safeError(
+        throw responseShapeError(
           stage,
           "created PITR branch identity did not match requested isolated branch",
         );
-      }
-      const reportedTimestamp = text(target.parent_timestamp, "created PITR parent_timestamp");
-      if (Math.abs(Date.parse(reportedTimestamp) - Date.parse(parentTimestamp)) > 1_000) {
-        throw safeError(stage, "Neon returned a different PITR parent_timestamp");
       }
     }
     if (!endpointId) {
@@ -877,7 +901,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       annotationValue.github_run_id !== run.runId ||
       annotationValue.github_sha !== run.sha
     ) {
-      throw safeError(
+      throw responseShapeError(
         "PITR target verification",
         "restored branch is not annotated for this workflow run and commit",
       );
@@ -888,15 +912,13 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       "PITR target verification",
     );
     if (target.name !== targetName || target.current_state !== "ready" || target.id === source.id) {
-      throw safeError("PITR target verification", "restored branch is not isolated and ready");
+      throw responseShapeError(
+        "PITR target verification",
+        "restored branch is not isolated and ready",
+      );
     }
-    if (
-      Math.abs(
-        Date.parse(text(target.parent_timestamp, "target parent_timestamp")) -
-          Date.parse(parentTimestamp),
-      ) > 1_000
-    ) {
-      throw safeError(
+    if (!cycle4PitrTimestampMatches(target.parent_timestamp, parentTimestamp)) {
+      throw responseShapeError(
         "PITR target verification",
         "restored branch timestamp differs from requested timestamp",
       );
