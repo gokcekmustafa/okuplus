@@ -245,6 +245,7 @@ describe("P1-A Cycle 4 authored program", () => {
         endpointState: "idle",
       },
       parentTimestamp: "2026-10-19T11:58:00.000Z",
+      requestedParentTimestamp: "2026-10-19T11:58:00.000Z",
       schemaComparison: {
         result: "PASS",
         method: "NEON_COMPARE_SCHEMA_API",
@@ -308,6 +309,21 @@ describe("P1-A Cycle 4 authored program", () => {
     };
 
     expect(isCycle4PitrEvidenceValid(evidence, expected)).toBe(true);
+    const normalizedParentTimestamp = "2026-10-19T11:57:59.500Z";
+    expect(
+      isCycle4PitrEvidenceValid(
+        {
+          ...evidence,
+          targetBranch: { ...evidence.targetBranch, parentTimestamp: normalizedParentTimestamp },
+          parentTimestamp: normalizedParentTimestamp,
+          schemaComparison: {
+            ...evidence.schemaComparison,
+            baseTimestamp: normalizedParentTimestamp,
+          },
+        },
+        expected,
+      ),
+    ).toBe(true);
     expect(isCycle4PitrEvidenceValid(evidence, { ...expected, runAttempt: "2" })).toBe(false);
     expect(
       isCycle4PitrEvidenceValid(

@@ -162,10 +162,13 @@ export function isCycle4PitrEvidenceValid(
   const restoredRecord = restored as JsonRecord;
   const unchangedRecord = unchanged as JsonRecord;
   const timestamp = targetRecord.parentTimestamp;
+  const requestedTimestamp = value.requestedParentTimestamp;
   const counts = dataRecord.aggregateCounts;
   const requiredTables = dataRecord.requiredTables;
   const missingTables = dataRecord.missingTables;
   const ageMs = (expected.nowMs ?? Date.now()) - Date.parse(String(timestamp ?? ""));
+  const requestedAgeMs =
+    (expected.nowMs ?? Date.now()) - Date.parse(String(requestedTimestamp ?? ""));
   const countRecord = isRecord(counts) ? counts : null;
   return (
     value.status === "PASS" &&
@@ -198,6 +201,10 @@ export function isCycle4PitrEvidenceValid(
     typeof timestamp === "string" &&
     typeof value.parentTimestamp === "string" &&
     Date.parse(timestamp) === Date.parse(value.parentTimestamp) &&
+    typeof requestedTimestamp === "string" &&
+    Number.isFinite(requestedAgeMs) &&
+    requestedAgeMs >= 30_000 &&
+    requestedAgeMs <= CYCLE4_PITR_EXPECTED_RETENTION_SECONDS * 1_000 - 30_000 &&
     Number.isFinite(ageMs) &&
     ageMs >= 30_000 &&
     ageMs <= CYCLE4_PITR_EXPECTED_RETENTION_SECONDS * 1_000 - 30_000 &&
@@ -790,6 +797,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       .find((item) => item.name === targetName);
     let target: NeonBranch;
     let parentTimestamp: string;
+    let createdForThisRun = false;
     let endpointId: string | null = null;
     if (existing) {
       target = existing as unknown as NeonBranch;
@@ -809,6 +817,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
         throw responseShapeError(stage, "existing run-specific branch name/identity conflicted");
       }
     } else {
+      createdForThisRun = true;
       parentTimestamp = cycle4PitrTimestamp(Date.now());
       if (!isCycle4PitrTimestampInWindow(parentTimestamp, Date.now(), retention)) {
         throw safeError(
@@ -851,6 +860,8 @@ async function runPitrEvidence(): Promise<JsonRecord> {
         );
       }
     }
+    const requestedParentTimestamp = parentTimestamp;
+    evidence.requestedParentTimestamp = requestedParentTimestamp;
     if (!endpointId) {
       const endpointsResponse = record(
         await neonRequest<unknown>(
@@ -917,18 +928,18 @@ async function runPitrEvidence(): Promise<JsonRecord> {
         "restored branch is not isolated and ready",
       );
     }
-    if (!cycle4PitrTimestampMatches(target.parent_timestamp, parentTimestamp)) {
+    const verifiedParentTimestamp = text(target.parent_timestamp, "target parent_timestamp");
+    if (
+      (!createdForThisRun &&
+        !cycle4PitrTimestampMatches(verifiedParentTimestamp, parentTimestamp)) ||
+      !isCycle4PitrTimestampInWindow(verifiedParentTimestamp, Date.now(), retention)
+    ) {
       throw responseShapeError(
         "PITR target verification",
-        "restored branch timestamp differs from requested timestamp",
+        "restored branch parent_timestamp was inconsistent or outside the active retention window",
       );
     }
-    if (!isCycle4PitrTimestampInWindow(parentTimestamp, Date.now(), retention)) {
-      throw safeError(
-        "PITR target verification",
-        "restored branch timestamp fell outside retention during validation",
-      );
-    }
+    parentTimestamp = verifiedParentTimestamp;
     evidence.parentTimestamp = parentTimestamp;
     evidence.targetBranch = {
       id: target.id,

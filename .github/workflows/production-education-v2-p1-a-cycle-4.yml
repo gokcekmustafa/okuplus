@@ -203,12 +203,19 @@ jobs:
             const data = evidence.dataChecks || {};
             const restored = evidence.restoredDatabaseIdentity || {};
             const unchanged = evidence.productionSourceUnchanged || {};
+            const verifiedParentTimestamp = Date.parse(evidence.parentTimestamp || "");
+            const requestedParentTimestamp = Date.parse(evidence.requestedParentTimestamp || "");
+            const verifiedTimestampAge = Date.now() - verifiedParentTimestamp;
+            const requestedTimestampAge = Date.now() - requestedParentTimestamp;
             if (evidence.status !== "PASS" || evidence.schemaVersion !== 2 ||
                 evidence.projectId !== "aged-snow-31166248" ||
                 evidence.sourceBranchId !== "br-damp-truth-b17y4gog" ||
                 target.id === evidence.sourceBranchId || target.projectId !== evidence.projectId ||
                 target.parentId !== evidence.sourceBranchId || target.default !== false || target.state !== "ready" ||
                 target.annotationMatchesRun !== true ||
+                evidence.parentTimestamp !== target.parentTimestamp ||
+                !Number.isFinite(verifiedTimestampAge) || verifiedTimestampAge < 30000 || verifiedTimestampAge > 21570000 ||
+                !Number.isFinite(requestedTimestampAge) || requestedTimestampAge < 30000 || requestedTimestampAge > 21570000 ||
                 schema.result !== "PASS" || schema.method !== "NEON_COMPARE_SCHEMA_API" ||
                 schema.endpoint !== `/projects/${evidence.projectId}/branches/${target.id}/compare_schema` ||
                 schema.httpStatus !== 200 || schema.baseBranchId !== evidence.sourceBranchId ||
