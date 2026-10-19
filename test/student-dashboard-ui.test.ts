@@ -75,6 +75,41 @@ describe("student dashboard release 0.4", () => {
         ],
       },
     ];
+    context.plannedPaths = [
+      {
+        path: { area: "READING_COMPREHENSION", code: "EDUCATION_V2_P1_A_PLANNED" },
+        nodes: [
+          {
+            id: "planned-authored",
+            status: "locked",
+            type: "PRACTICE",
+            availability: "UNAVAILABLE",
+            planningStatus: "AUTHORED_UNRELEASED",
+            label: "Duyuruda gereken bilgiyi hızlı bul",
+          },
+          {
+            id: "planned-empty",
+            status: "locked",
+            type: "PLANNED",
+            availability: "UNAVAILABLE",
+            planningStatus: "CONTENT_NOT_AUTHORED",
+            label: "Henüz içerik tanımlanmadı",
+          },
+          {
+            id: "planned-graph",
+            status: "locked",
+            type: "PRACTICE",
+            availability: "UNAVAILABLE",
+            planningStatus: "GRAPH_NOT_AVAILABLE",
+            label: "Kanıt ve aktarım · Adım 1",
+          },
+        ],
+      },
+    ];
+    expect(
+      runInContext("learningPathEntriesFromData({paths:groups, plannedPaths})", context),
+    ).toHaveLength(7);
+    context.groups = context.groups.concat(context.plannedPaths);
     runInContext("renderLearningPathMap(groups, {name:'Mevcut seviye'})", context);
     const button = (id: string) =>
       container.innerHTML.match(new RegExp(`<button[^>]*data-node-id="${id}"[^>]*>`))?.[0] ?? "";
@@ -83,7 +118,25 @@ describe("student dashboard release 0.4", () => {
     expect(button("current")).not.toContain(" disabled");
     expect(button("future")).toContain(" disabled");
     expect(button("unavailable")).toContain(" disabled");
+    expect(button("planned-authored")).toContain(" disabled");
+    expect(button("planned-empty")).toContain(" disabled");
+    expect(button("planned-graph")).toContain(" disabled");
+    expect(container.innerHTML).toContain("Kilitli");
     expect(container.innerHTML).toContain("İçerik hazırlanıyor");
+    expect(container.innerHTML).toContain("İçerik planlanıyor");
+    expect(container.innerHTML).toContain("Yayın grafiği hazırlanıyor");
+    expect(container.innerHTML).toContain("Duyuruda gereken bilgiyi hızlı bul");
+    expect(styles).toContain("content-visibility: auto");
+    expect(styles).toContain("contain-intrinsic-size: auto 142px");
+    expect(
+      runInContext("learningPathCourseStatusLabel('locked', plannedPaths[0].nodes[0])", context),
+    ).toBe("İçerik hazırlanıyor");
+    expect(
+      runInContext("learningPathCourseStatusLabel('locked', plannedPaths[0].nodes[1])", context),
+    ).toBe("İçerik planlanıyor");
+    expect(
+      runInContext("learningPathCourseStatusLabel('locked', plannedPaths[0].nodes[2])", context),
+    ).toBe("Yayın grafiği hazırlanıyor");
     context.groups[0].nodes[1].status = "completed";
     runInContext("renderLearningPathMap(groups, {name:'Mevcut seviye'})", context);
     expect(button("current")).toContain('aria-current="step"');

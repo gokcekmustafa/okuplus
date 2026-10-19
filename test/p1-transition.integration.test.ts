@@ -524,6 +524,29 @@ describe.sequential("P1 learning cycle transition integration", () => {
           (node) => node.status === "locked" && !node.isCurrent,
         ),
       ).toBe(true);
+      const plannedNodes = preview?.plannedPaths?.flatMap((path) => path.nodes) ?? [];
+      expect(plannedNodes.length).toBeGreaterThan(0);
+      expect(18 + 7 + plannedNodes.length).toBe(300);
+      expect(plannedNodes[0]).toMatchObject({
+        learningPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_4_G8_12",
+        status: "locked",
+        availability: "UNAVAILABLE",
+        planningStatus: "AUTHORED_UNRELEASED",
+      });
+      expect(
+        plannedNodes.every(
+          (node) =>
+            node.status === "locked" &&
+            node.availability === "UNAVAILABLE" &&
+            node.contentVersionId === null &&
+            node.templateVersionId === null &&
+            node.assessmentId === null,
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(plannedNodes)).not.toMatch(/questions|correctOptionId|explanation/iu);
+      await expect(
+        assertLearningStepAccessible(cycle2Fixture.actor, plannedNodes[0]!.id),
+      ).rejects.toThrow();
       const first = preview!.upcomingPaths[0]!.nodes[0]!;
       await expect(assertLearningStepAccessible(cycle2Fixture.actor, first.id)).rejects.toThrow();
       await expect(

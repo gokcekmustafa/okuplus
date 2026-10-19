@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   LEARNING_ROUTE_CYCLES,
+  buildPlannedLearningRouteNodes,
+  LEARNING_ROUTE_VISIBLE_STATION_TARGET,
   learningRouteCycle,
   nextLearningRouteCycle,
   upcomingLearningRouteCycles,
@@ -43,6 +45,107 @@ function graph(cycle: LearningRouteCycle) {
 }
 
 describe("versioned learning routes", () => {
+  it("projects a 300-station roadmap without exposing draft learning content or unlocking it", () => {
+    const cycle3 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
+    )!;
+    const cycle4 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,
+    )!;
+    const nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycle3.pathCode,
+      visibleStationCount: 47,
+    });
+
+    expect(47 + nodes.length).toBe(LEARNING_ROUTE_VISIBLE_STATION_TARGET);
+    expect(nodes[0]).toMatchObject({
+      learningPathCode: cycle4.pathCode,
+      cycleSequence: 4,
+      stepOrder: 1,
+      status: "locked",
+      availability: "UNAVAILABLE",
+      planningStatus: "AUTHORED_UNRELEASED",
+    });
+    expect(cycle4.publicationApproved()).toBe(false);
+    expect(nodes.every((node) => node.status === "locked" && !node.isCurrent)).toBe(true);
+    expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
+    expect(nodes.some((node) => node.planningStatus === "CONTENT_NOT_AUTHORED")).toBe(true);
+    expect(nodes.some((node) => node.planningStatus === "AUTHORED_UNRELEASED")).toBe(true);
+    expect(
+      nodes.some(
+        (node) =>
+          node.contentVersionId !== null ||
+          node.templateVersionId !== null ||
+          node.assessmentId !== null,
+      ),
+    ).toBe(false);
+    const serialized = JSON.stringify(nodes);
+    expect(serialized).not.toMatch(/questions|correctOptionId|explanation|sourceUrl|passage/iu);
+  });
+
+  it("does not duplicate catalog cycles already represented by published roadmap groups", () => {
+    const cycle3 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
+    )!;
+    const cycle4 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,
+    )!;
+    const nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycle3.pathCode,
+      representedPathCodes: new Set([cycle4.pathCode]),
+      visibleStationCount: 25 + cycle4.manifest.steps.length,
+    });
+
+    expect(nodes.some((node) => node.learningPathCode === cycle4.pathCode)).toBe(false);
+    expect(25 + cycle4.manifest.steps.length + nodes.length).toBe(
+      LEARNING_ROUTE_VISIBLE_STATION_TARGET,
+    );
+  });
+
+  it("labels an approved cycle with no represented production graph as unavailable", () => {
+    const cycle2 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 2,
+    )!;
+    const cycle3 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
+    )!;
+    expect(cycle3.publicationApproved()).toBe(true);
+    const nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycle2.pathCode,
+      visibleStationCount: 18,
+    });
+
+    expect(nodes[0]).toMatchObject({
+      learningPathCode: cycle3.pathCode,
+      status: "locked",
+      availability: "UNAVAILABLE",
+      planningStatus: "GRAPH_NOT_AVAILABLE",
+    });
+  });
+
+  it("can extend each route family to the visible roadmap target", () => {
+    for (const routeFamily of ["A", "B", "C", "D"] as const) {
+      const releasedCycles = LEARNING_ROUTE_CYCLES.filter(
+        (cycle) => cycle.routeFamily === routeFamily && cycle.publicationApproved(),
+      ).sort((left, right) => left.sequence - right.sequence);
+      const current = releasedCycles.at(-1)!;
+      const visibleCount = releasedCycles.reduce(
+        (count, cycle) => count + cycle.manifest.steps.length,
+        0,
+      );
+      const nodes = buildPlannedLearningRouteNodes({
+        currentPathCode: current.pathCode,
+        visibleStationCount: visibleCount,
+      });
+
+      expect(visibleCount + nodes.length, routeFamily).toBeGreaterThanOrEqual(
+        LEARNING_ROUTE_VISIBLE_STATION_TARGET,
+      );
+      expect(nodes.every((node) => node.status === "locked")).toBe(true);
+      expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
+    }
+  });
+
   it("reports authored and released source counts separately from production publication", () => {
     const coverage = summarizeLearningRouteCoverage();
     expect(

@@ -6225,6 +6225,18 @@ textarea:focus-visible {
   background: #f2671d;
 }
 
+.student-shell #learning-path-card .learning-map-v6-legend .locked i {
+  background: #aab5c3;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .preparing i {
+  background: #9c73ff;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .graph i {
+  background: #efae32;
+}
+
 .student-shell #learning-path-card .learning-map-v6-legend .current i {
   background: #7048e8;
 }
@@ -6265,6 +6277,8 @@ textarea:focus-visible {
   grid-column: 1;
   min-width: 0;
   min-height: 142px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 142px;
 }
 
 .student-shell #learning-path-card .learning-map-v6-node {
@@ -6453,12 +6467,20 @@ textarea:focus-visible {
   line-height: 1.16;
 }
 
+.student-shell #learning-path-card .learning-map-v6-state {
+  max-width: 100%;
+  color: #7d899c;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
 .student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-kind {
   color: #287458;
 }
 
 .student-shell #learning-path-card .learning-map-v6-step.locked .learning-map-v6-copy {
-  opacity: 0.42;
+  opacity: 0.76;
 }
 
 .student-shell #learning-path-card .learning-map-v6-action {
@@ -7005,6 +7027,10 @@ textarea:focus-visible {
     min-height: 136px;
   }
 
+  .student-shell #learning-path-card .learning-map-v6-step {
+    contain-intrinsic-size: auto 136px;
+  }
+
   .student-shell #learning-path-card .learning-map-v6-marker-wrap {
     width: 66px;
     height: 66px;
@@ -7091,6 +7117,10 @@ textarea:focus-visible {
   .student-shell #learning-path-card .learning-map-v6-step,
   .student-shell #learning-path-card .learning-map-v6-node {
     min-height: 132px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-step {
+    contain-intrinsic-size: auto 132px;
   }
 
   .student-shell #learning-path-card .learning-map-v6-node {

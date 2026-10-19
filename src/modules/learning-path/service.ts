@@ -8,7 +8,9 @@ import { withTenantContext } from "../tenant/index.js";
 import { assertStudentActor, type StudentActor } from "../student-learning/policy.js";
 import { resolveTrainingRuntimeConfig } from "../training/exercise-contract.js";
 import {
+  buildPlannedLearningRouteNodes,
   learningRouteCycle,
+  LEARNING_ROUTE_VISIBLE_STATION_TARGET,
   matchesLearningRouteGraph,
   upcomingLearningRouteCycles,
 } from "../../curriculum/learning-route-catalog.js";
@@ -1069,11 +1071,50 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
           node.isCurrent = false;
         }
       }
+      const currentRouteCycle = currentPath ? learningRouteCycle(currentPath.code) : null;
+      const visibleRouteGroups = [...projections, ...upcomingPaths];
+      const visibleRouteStationCount = currentRouteCycle
+        ? visibleRouteGroups.reduce((count, projection) => {
+            const cycle = learningRouteCycle(projection.path.code);
+            return cycle?.routeFamily === currentRouteCycle.routeFamily
+              ? count + projection.nodes.length
+              : count;
+          }, 0)
+        : 0;
+      const plannedNodes =
+        currentPath && currentRouteCycle
+          ? buildPlannedLearningRouteNodes({
+              currentPathCode: currentPath.code,
+              representedPathCodes: new Set(
+                visibleRouteGroups.map((projection) => projection.path.code),
+              ),
+              visibleStationCount: visibleRouteStationCount,
+              targetStationCount: LEARNING_ROUTE_VISIBLE_STATION_TARGET,
+            })
+          : [];
+      const plannedPaths =
+        currentPath && currentRouteCycle && plannedNodes.length
+          ? [
+              {
+                path: {
+                  id: `planned-route-${currentRouteCycle.routeFamily}`,
+                  code: `EDUCATION_V2_P1_${currentRouteCycle.routeFamily}_PLANNED`,
+                  title: "Gelecekteki istasyonlar",
+                  area: currentPath.area,
+                  routeStatus: null,
+                  cycleSequence: null,
+                  nextCycleCode: null,
+                },
+                currentLevel: primary!.currentLevel,
+                nodes: plannedNodes,
+              },
+            ]
+          : [];
       const routeCompleted = projections.reduce(
         (sum, projection) => sum + projection.overallProgress.completed,
         0,
       );
-      const routeTotal = [...projections, ...upcomingPaths].reduce(
+      const routeTotal = [...projections, ...upcomingPaths, ...plannedPaths].reduce(
         (sum, projection) => sum + projection.nodes.length,
         0,
       );
@@ -1081,6 +1122,7 @@ export async function getStudentLearningPath(actor: LearningPathActor) {
         ...primary,
         paths: projections,
         upcomingPaths,
+        plannedPaths,
         routeProgress: {
           completed: routeCompleted,
           total: routeTotal,

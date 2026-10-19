@@ -2712,7 +2712,7 @@ function learningPathStatusLabel(status) {
       completed: "Tamamlandı",
       active: "Sıradaki adım",
       available: "Henüz açılmadı",
-      locked: "Henüz açılmadı",
+      locked: "Kilitli",
     }[status] || "Öğrenme adımı"
   );
 }
@@ -2724,6 +2724,7 @@ function learningPathVisualStatus(status) {
 function learningPathEntriesFromData(data) {
   var groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
   groups = groups.concat(Array.isArray(data?.upcomingPaths) ? data.upcomingPaths : []);
+  groups = groups.concat(Array.isArray(data?.plannedPaths) ? data.plannedPaths : []);
   return groups.flatMap(function (group) {
     var groupNodes = Array.isArray(group?.nodes) ? group.nodes : [];
     return groupNodes.filter(Boolean).map(function (node) {
@@ -2956,7 +2957,9 @@ function learningPathExerciseContextLabel(node) {
 
 function learningPathCourseModulesFromData(data) {
   const groups = Array.isArray(data?.paths) && data.paths.length ? data.paths : data ? [data] : [];
-  const routeGroups = groups.concat(Array.isArray(data?.upcomingPaths) ? data.upcomingPaths : []);
+  const routeGroups = groups
+    .concat(Array.isArray(data?.upcomingPaths) ? data.upcomingPaths : [])
+    .concat(Array.isArray(data?.plannedPaths) ? data.plannedPaths : []);
   const total = routeGroups.reduce(
     (count, group) => count + (Array.isArray(group?.nodes) ? group.nodes.length : 0),
     0,
@@ -2989,6 +2992,7 @@ function learningPathCourseModulesFromData(data) {
 }
 
 function learningPathCourseStepType(node) {
+  if (node?.planningStatus === "CONTENT_NOT_AUTHORED") return "Planlama";
   if (node?.type === "TEACHING") return "Öğretim";
   if (node?.type === "SMALL_STUDY") return "Küçük çalışma";
   if (node?.type === "PRACTICE") return "Uygulama";
@@ -3012,7 +3016,10 @@ function learningPathCourseSkillLabel(node, module) {
   return labels[skill] || node?.unit?.title || learningPathAreaLabel(module?.area);
 }
 
-function learningPathCourseStatusLabel(status) {
+function learningPathCourseStatusLabel(status, node = null) {
+  if (node?.planningStatus === "CONTENT_NOT_AUTHORED") return "İçerik planlanıyor";
+  if (node?.planningStatus === "GRAPH_NOT_AVAILABLE") return "Yayın grafiği hazırlanıyor";
+  if (node?.availability === "UNAVAILABLE") return "İçerik hazırlanıyor";
   if (status === "completed") return "Tamamlandı";
   if (status === "active") return "Şimdi burada";
   return "Kilitli";
@@ -3042,13 +3049,19 @@ function renderLearningPathCourseModule(module) {
       const skill = learningPathCourseSkillLabel(node, module);
       const position = String(node.learningPathPosition || 0).padStart(2, "0");
       const locked = visualStatus === "locked";
-      const statusLabel = learningPathCourseStatusLabel(visualStatus);
+      const statusLabel = learningPathCourseStatusLabel(visualStatus, node);
       const openHint =
-        visualStatus === "completed"
-          ? "Tamamlandı; tekrar incelemek için aç"
-          : visualStatus === "active"
-            ? "Şimdi başla"
-            : "Önceki adımları tamamla";
+        node.planningStatus === "CONTENT_NOT_AUTHORED"
+          ? "İçeriği henüz hazırlanmadı"
+          : node.planningStatus === "GRAPH_NOT_AVAILABLE"
+            ? "Yayın grafiği henüz kullanıma hazır değil"
+            : node.availability === "UNAVAILABLE"
+              ? "İçerik henüz kullanıma açık değil"
+              : visualStatus === "completed"
+                ? "Tamamlandı; tekrar incelemek için aç"
+                : visualStatus === "active"
+                  ? "Şimdi başla"
+                  : "Önceki adımları tamamla";
       return `<button type="button" class="learning-path-step-card ${escapeHtml(visualStatus)}" data-learning-path-course-step data-node-id="${escapeHtml(node.id)}" aria-label="${escapeHtml(`${position}. adım: ${node.label || "Öğrenme adımı"}. ${statusLabel}. ${openHint}.`)}"${locked ? " disabled" : ""}>
         <span class="learning-path-step-index" aria-hidden="true">${escapeHtml(position)}</span>
         <span class="learning-path-step-card-body">
@@ -3208,17 +3221,24 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     escapeHtml(String(progress.total || 0)) +
     ' durak</small></span><span class="learning-map-v6-progress" aria-hidden="true"><i style="width:' +
     escapeHtml(String(percent)) +
-    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span></div>';
+    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span><span class="locked"><i aria-hidden="true"></i>Kilitli</span><span class="preparing"><i aria-hidden="true"></i>İçerik hazırlanıyor</span><span class="graph"><i aria-hidden="true"></i>Yayın grafiği hazırlanıyor</span></div>';
   var nodeMarkup = entries
     .map(function (entry, index) {
       var node = nodes[index];
       var visualStatus = learningPathVisualStatus(node.status);
-      var kind = learningPathMapKind(node);
+      var kind =
+        node.planningStatus === "CONTENT_NOT_AUTHORED"
+          ? { className: "planned", label: "Henüz tasarlanmadı", icon: "•" }
+          : learningPathMapKind(node);
       var label = node.label || node.code || "Öğrenme adımı";
       var statusLabel =
-        node.availability === "UNAVAILABLE"
-          ? "İçerik hazırlanıyor"
-          : learningPathStatusLabel(visualStatus);
+        node.planningStatus === "CONTENT_NOT_AUTHORED"
+          ? "İçerik planlanıyor"
+          : node.planningStatus === "GRAPH_NOT_AVAILABLE"
+            ? "Yayın grafiği hazırlanıyor"
+            : node.availability === "UNAVAILABLE"
+              ? "İçerik hazırlanıyor"
+              : learningPathStatusLabel(visualStatus);
       var areaLabel = learningPathAreaLabel(entry.area);
       var stepNumber = index + 1;
       var disabled =
@@ -3294,7 +3314,9 @@ function renderLearningPathMap(pathGroups, currentLevel) {
           ? '<span class="learning-map-v6-action">' + escapeHtml(actionLabel) + " →</span>"
           : visualStatus === "completed"
             ? '<span class="learning-map-v6-completed-state">✓ Tamamlandı</span>'
-            : "") +
+            : visualStatus === "locked" || node.availability === "UNAVAILABLE"
+              ? '<span class="learning-map-v6-state">' + escapeHtml(statusLabel) + "</span>"
+              : "") +
         lockMarkup +
         "</span></button></article>"
       );
@@ -3400,7 +3422,9 @@ async function loadLearningPath() {
     pathGroups = pathGroups.filter(function (group) {
       return group && typeof group === "object";
     });
-    pathGroups = pathGroups.concat(Array.isArray(data.upcomingPaths) ? data.upcomingPaths : []);
+    pathGroups = pathGroups
+      .concat(Array.isArray(data.upcomingPaths) ? data.upcomingPaths : [])
+      .concat(Array.isArray(data.plannedPaths) ? data.plannedPaths : []);
     var nodes = pathGroups.flatMap(function (group) {
       return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });

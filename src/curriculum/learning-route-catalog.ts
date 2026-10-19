@@ -150,6 +150,135 @@ export function upcomingLearningRouteCycles(pathCode: string): LearningRouteCycl
   return result;
 }
 
+/** Minimum number of route positions visible on the student roadmap. */
+export const LEARNING_ROUTE_VISIBLE_STATION_TARGET = 300;
+
+export type PlannedLearningRouteNode = {
+  id: string;
+  learningPathId: null;
+  learningPathCode: string;
+  code: string;
+  type: string;
+  label: string;
+  status: "locked";
+  availability: "UNAVAILABLE";
+  planningStatus: "AUTHORED_UNRELEASED" | "GRAPH_NOT_AVAILABLE" | "CONTENT_NOT_AUTHORED";
+  cycleSequence: number | null;
+  stepOrder: number;
+  templateVersionId: null;
+  contentVersionId: null;
+  assessmentId: null;
+  prerequisiteStepId: null;
+  progress: null;
+  unit: { title: string };
+  isCurrent: false;
+};
+
+/**
+ * Produces a safe, read-only roadmap projection for future stations. The
+ * projection deliberately excludes passage bodies, questions, answers,
+ * explanations, source URLs, and database identifiers. It does not change
+ * publication or assignment eligibility.
+ */
+export function buildPlannedLearningRouteNodes(options: {
+  currentPathCode: string;
+  representedPathCodes?: ReadonlySet<string>;
+  visibleStationCount: number;
+  targetStationCount?: number;
+}): PlannedLearningRouteNode[] {
+  const current = learningRouteCycle(options.currentPathCode);
+  if (!current) return [];
+
+  const representedPathCodes = options.representedPathCodes ?? new Set<string>();
+  const targetStationCount = Math.max(
+    0,
+    options.targetStationCount ?? LEARNING_ROUTE_VISIBLE_STATION_TARGET,
+  );
+  const planned: PlannedLearningRouteNode[] = [];
+
+  for (const cycle of LEARNING_ROUTE_CYCLES) {
+    if (
+      cycle.routeFamily !== current.routeFamily ||
+      cycle.sequence <= current.sequence ||
+      representedPathCodes.has(cycle.pathCode)
+    ) {
+      continue;
+    }
+
+    const draft = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+      (candidate) => candidate.pathCode === cycle.pathCode,
+    );
+    const stationsByKey = new Map(draft?.sourceStations.map((station) => [station.key, station]));
+    for (const step of cycle.manifest.steps) {
+      const station = stationsByKey.get(step.stableKey);
+      const hasContentDefinition = Boolean(
+        station ||
+        ("content" in step && step.content) ||
+        ("exercise" in step && step.exercise) ||
+        ("assessment" in step && step.assessment),
+      );
+      planned.push({
+        id: `planned:${current.routeFamily}:${cycle.sequence}:${step.order}`,
+        learningPathId: null,
+        learningPathCode: cycle.pathCode,
+        code: step.stableKey,
+        type: step.type,
+        label: station
+          ? station.title || "İçerik başlığı hazırlanıyor"
+          : hasContentDefinition
+            ? `${cycle.title} · Adım ${step.order}`
+            : "Henüz içerik tanımlanmadı",
+        status: "locked",
+        availability: "UNAVAILABLE",
+        planningStatus: !hasContentDefinition
+          ? "CONTENT_NOT_AUTHORED"
+          : cycle.publicationApproved()
+            ? "GRAPH_NOT_AVAILABLE"
+            : "AUTHORED_UNRELEASED",
+        cycleSequence: cycle.sequence,
+        stepOrder: step.order,
+        templateVersionId: null,
+        contentVersionId: null,
+        assessmentId: null,
+        prerequisiteStepId: null,
+        progress: null,
+        unit: { title: cycle.title },
+        isCurrent: false,
+      });
+    }
+  }
+
+  const reservedCount = Math.max(
+    0,
+    targetStationCount - options.visibleStationCount - planned.length,
+  );
+  for (let index = 0; index < reservedCount; index += 1) {
+    const routePosition = options.visibleStationCount + planned.length + 1;
+    planned.push({
+      id: `planned:${current.routeFamily}:reserved:${routePosition}`,
+      learningPathId: null,
+      learningPathCode: `PLANNED_EDUCATION_V2_P1_${current.routeFamily}`,
+      code: `PLANNED_${current.routeFamily}_${routePosition}`,
+      type: "PLANNED",
+      label: "Henüz içerik tanımlanmadı",
+      status: "locked",
+      availability: "UNAVAILABLE",
+      planningStatus: "CONTENT_NOT_AUTHORED",
+      cycleSequence: null,
+      stepOrder: routePosition,
+      templateVersionId: null,
+      contentVersionId: null,
+      assessmentId: null,
+      prerequisiteStepId: null,
+      progress: null,
+      unit: { title: "Gelecekteki istasyonlar" },
+      isCurrent: false,
+    });
+  }
+
+  return planned;
+}
+
 export const LEARNING_ROUTE_STATION_TARGET = 200;
 
 export type LearningRouteCoverage = {
