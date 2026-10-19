@@ -27,6 +27,8 @@ export type EducationV2P1ExpansionSourceEvidence = {
   contentRelation: string;
 };
 
+export type EducationV2P1ExpansionContentOrigin = "ORIGINAL_AUTHORING" | "SOURCE_ADAPTED";
+
 type DraftQuestion = {
   key: string;
   prompt: string;
@@ -44,6 +46,7 @@ type DraftStation = {
   outcome: string;
   textTitle: string;
   text: string;
+  contentOrigin: EducationV2P1ExpansionContentOrigin;
   sourceReference: string;
   sourceEvidence?: EducationV2P1ExpansionSourceEvidence;
   provenanceStatus: "SOURCE_VERIFIED" | "REVIEW_REQUIRED";
@@ -1801,6 +1804,7 @@ const station = (
   outcome,
   textTitle,
   text,
+  contentOrigin: sourceEvidence ? "SOURCE_ADAPTED" : "ORIGINAL_AUTHORING",
   sourceReference,
   ...(sourceEvidence ? { sourceEvidence } : {}),
   provenanceStatus: sourceEvidence ? "SOURCE_VERIFIED" : "REVIEW_REQUIRED",
@@ -26295,7 +26299,7 @@ export type EducationV2P1ExpansionDraftStation = Omit<DraftStation, "questions">
 export type EducationV2P1ExpansionDraftCycle = LearningRouteCycle & {
   authoredStationCategories: readonly EducationV2P1ExpansionCategory[];
   sourceVerifiedStationCount: number;
-  authoringStatus: "DRAFT_NOT_RELEASED";
+  authoringStatus: "DRAFT_NOT_RELEASED" | "OWNER_RELEASE_APPROVED";
   sourceStations: readonly EducationV2P1ExpansionDraftStation[];
 };
 

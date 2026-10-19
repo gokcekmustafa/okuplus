@@ -118,14 +118,21 @@ describe("800-istasyon müfredat genişleme adayları", () => {
     }
   });
 
-  it("links each draft after its existing route cycle and does not make it assignable", () => {
+  it("links every source draft while applying only Cycle 4's separate owner release", () => {
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       const predecessor = LEARNING_ROUTE_CYCLES.find(
         (cycle) => cycle.routeFamily === draft.routeFamily && cycle.sequence === draft.sequence - 1,
       );
       expect(predecessor?.nextPathCode).toBe(draft.pathCode);
-      expect(nextLearningRouteCycle(predecessor!.pathCode)).toBe(draft);
+      const routeCycle = nextLearningRouteCycle(predecessor!.pathCode)!;
+      expect(routeCycle.pathCode).toBe(draft.pathCode);
       expect(draft.publicationApproved()).toBe(false);
+      if (draft.routeFamily === "A" && draft.sequence === 4) {
+        expect(routeCycle.publicationApproved()).toBe(true);
+        expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+      } else {
+        expect(routeCycle.publicationApproved()).toBe(false);
+      }
       expect(draft.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
       expect(draft.manifest.steps.map((step) => step.prerequisiteKeys)).toEqual([
         [],

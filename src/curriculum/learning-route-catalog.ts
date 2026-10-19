@@ -15,6 +15,10 @@ import {
   EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
   isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-3-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE,
+  isEducationV2P1ACycle4ProductionAssignmentEnabled,
+} from "./education-v2-p1-a-cycle-4-release.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -37,6 +41,7 @@ export type LearningRouteCycle = {
   authoredStationCategories?: readonly EducationV2P1ExpansionCategory[];
   /** Number of authored stations with a checked, content-linked source citation. */
   sourceVerifiedStationCount?: number;
+  authoringStatus?: "DRAFT_NOT_RELEASED" | "OWNER_RELEASE_APPROVED";
   /** Source permission; a PUBLISHED database graph is a separate requirement. */
   publicationApproved: () => boolean;
 };
@@ -115,10 +120,24 @@ const linkedBaseCycles = BASE_LEARNING_ROUTE_CYCLES.map((cycle) => {
   return draftNext ? { ...cycle, nextPathCode: draftNext.pathCode } : cycle;
 });
 
-/** Drafts extend source-chain metadata only; publication stays explicitly closed. */
+/**
+ * Expansion drafts extend the source chain. Cycle 4 has an explicit owner
+ * release decision, but remains unavailable until its complete PUBLISHED
+ * database graph is present and matches this manifest.
+ */
+const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) =>
+  cycle.pathCode === EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE
+    ? {
+        ...cycle,
+        authoringStatus: "OWNER_RELEASE_APPROVED" as const,
+        publicationApproved: isEducationV2P1ACycle4ProductionAssignmentEnabled,
+      }
+    : cycle,
+);
+
 export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
   ...linkedBaseCycles,
-  ...EDUCATION_V2_P1_800_DRAFT_CYCLES,
+  ...expansionRouteCycles,
 ];
 
 const cyclesByCode = new Map(LEARNING_ROUTE_CYCLES.map((cycle) => [cycle.pathCode, cycle]));
@@ -317,7 +336,11 @@ export function summarizeLearningRouteCoverage(
       0,
     );
     const releasedSourceStationCount = routeCycles.reduce(
-      (count, cycle) => count + (cycle.publicationApproved() ? cycle.manifest.steps.length : 0),
+      (count, cycle) =>
+        count +
+        (cycle.publicationApproved()
+          ? (cycle.sourceVerifiedStationCount ?? cycle.manifest.steps.length)
+          : 0),
       0,
     );
     const sourceVerifiedDraftStationCount = routeCycles.reduce(

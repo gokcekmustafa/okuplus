@@ -65,9 +65,9 @@ describe("versioned learning routes", () => {
       stepOrder: 1,
       status: "locked",
       availability: "UNAVAILABLE",
-      planningStatus: "AUTHORED_UNRELEASED",
+      planningStatus: "GRAPH_NOT_AVAILABLE",
     });
-    expect(cycle4.publicationApproved()).toBe(false);
+    expect(cycle4.publicationApproved()).toBe(true);
     expect(nodes.every((node) => node.status === "locked" && !node.isCurrent)).toBe(true);
     expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
     expect(nodes.some((node) => node.planningStatus === "CONTENT_NOT_AUTHORED")).toBe(true);
@@ -340,7 +340,7 @@ describe("versioned learning routes", () => {
     );
     expect(a[2]!.publicationApproved()).toBe(true);
     expect(nextLearningRouteCycle(a[2]!.pathCode)).toBe(a[3]);
-    expect(a[3]!.publicationApproved()).toBe(false);
+    expect(a[3]!.publicationApproved()).toBe(true);
     expect(a[3]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[3]!.pathCode)).toBe(a[4]);
     expect(a[4]!.publicationApproved()).toBe(false);
@@ -429,7 +429,7 @@ describe("versioned learning routes", () => {
     expect(nextLearningRouteCycle(a[32]!.pathCode)).toBe(a[33]);
     expect(a[33]!.publicationApproved()).toBe(false);
     expect(a[33]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
-    for (let index = 3; index < a.length; index += 1) {
+    for (let index = 4; index < a.length; index += 1) {
       expect(a[index]!.publicationApproved()).toBe(false);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");

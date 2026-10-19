@@ -6,7 +6,10 @@ import { requireAuth } from "../../middleware/authenticate.js";
 import { requirePlatformRole } from "../../middleware/require-platform.js";
 import type { AuthProvider } from "../auth/index.js";
 import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../../curriculum/education-v2-p1-800-draft-cycles.js";
-import { summarizeLearningRouteCoverage } from "../../curriculum/learning-route-catalog.js";
+import {
+  learningRouteCycle,
+  summarizeLearningRouteCoverage,
+} from "../../curriculum/learning-route-catalog.js";
 import { assessMultipleChoicePackageQuality } from "../../curriculum/option-length-quality.js";
 import {
   draftQuestionEntityId,
@@ -140,26 +143,29 @@ export async function curriculumDraftAdminRoutes(
       (cycle) =>
         (!query.routeFamily || cycle.routeFamily === query.routeFamily) &&
         (!query.sequence || cycle.sequence === query.sequence),
-    ).map((cycle) => ({
-      routeFamily: cycle.routeFamily,
-      sequence: cycle.sequence,
-      pathCode: cycle.pathCode,
-      title: cycle.title,
-      authoringStatus: cycle.authoringStatus,
-      publicationApproved: cycle.publicationApproved(),
-      stationCount: cycle.sourceStations.length,
-      questionQuality: questionQualitySummary(cycle),
-      stations: cycle.sourceStations.map((station) => ({
-        key: station.key,
-        title: station.title,
-        category: station.category,
-        skillCodes: station.skillCodes,
-        difficulty: station.difficulty,
-        provenanceStatus: station.provenanceStatus,
-        sourceTitle: sourceTitle(station),
-        sourcePageUseCount: sourcePageUseCount(station),
-      })),
-    }));
+    ).map((cycle) => {
+      const routeRelease = learningRouteCycle(cycle.pathCode);
+      return {
+        routeFamily: cycle.routeFamily,
+        sequence: cycle.sequence,
+        pathCode: cycle.pathCode,
+        title: cycle.title,
+        authoringStatus: routeRelease?.authoringStatus ?? cycle.authoringStatus,
+        publicationApproved: routeRelease?.publicationApproved() ?? cycle.publicationApproved(),
+        stationCount: cycle.sourceStations.length,
+        questionQuality: questionQualitySummary(cycle),
+        stations: cycle.sourceStations.map((station) => ({
+          key: station.key,
+          title: station.title,
+          category: station.category,
+          skillCodes: station.skillCodes,
+          difficulty: station.difficulty,
+          provenanceStatus: station.provenanceStatus,
+          sourceTitle: sourceTitle(station),
+          sourcePageUseCount: sourcePageUseCount(station),
+        })),
+      };
+    });
     const filteredCycles = search
       ? cycles
           .map((cycle) => ({
@@ -255,6 +261,7 @@ export async function curriculumDraftAdminRoutes(
           correctOption: options.find((option) => option.id === fields.correctOptionId)?.text,
         };
       });
+      const routeRelease = learningRouteCycle(cycle.pathCode);
 
       return ok({
         cycle: {
@@ -262,8 +269,8 @@ export async function curriculumDraftAdminRoutes(
           sequence: cycle.sequence,
           pathCode: cycle.pathCode,
           title: cycle.title,
-          authoringStatus: cycle.authoringStatus,
-          publicationApproved: cycle.publicationApproved(),
+          authoringStatus: routeRelease?.authoringStatus ?? cycle.authoringStatus,
+          publicationApproved: routeRelease?.publicationApproved() ?? cycle.publicationApproved(),
           questionQuality: questionQualitySummary(cycle),
         },
         station: {

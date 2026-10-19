@@ -6,6 +6,7 @@ import {
   P1_CYCLE_TRANSITION_POLICY_VERSION,
 } from "../src/modules/student-learning/p1-transition.js";
 import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
+import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
 import {
   EDUCATION_V2_P1_A_CYCLE_V2_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_V2_STATUS,
@@ -143,6 +144,14 @@ describe("P1 transition foundation contracts", () => {
     );
     expect(nextDraftCycle!.authoringStatus).toBe("DRAFT_NOT_RELEASED");
     expect(nextDraftCycle!.publicationApproved()).toBe(false);
+    const cycle4Release = learningRouteCycle(nextDraftCycle!.pathCode);
+    expect(cycle4Release?.publicationApproved()).toBe(true);
+    expect(cycle4Release?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    expect(
+      nextDraftCycle!.sourceStations.every(
+        (station) => station.contentOrigin === "ORIGINAL_AUTHORING",
+      ),
+    ).toBe(true);
     expect(nextDraftCycle!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(P1_CYCLE_TRANSITION_POLICY_VERSION).toBe("P1_CYCLE_TRANSITION_V1");
     expect(transition).toContain('"NEXT_CYCLE_UNAVAILABLE"');

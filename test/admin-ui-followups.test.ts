@@ -11,7 +11,7 @@ const indexHtml = readFileSync(new URL("../public/index.html", import.meta.url),
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 
 describe("management UI follow-ups", () => {
-  it("keeps A route's next authored group visible as pending without opening its release gate", () => {
+  it("keeps Cycle 4 owner-approved while accurately waiting for its production graph", () => {
     const cycle3 = LEARNING_ROUTE_CYCLES.find(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
     );
@@ -22,9 +22,15 @@ describe("management UI follow-ups", () => {
 
     expect(cycle3?.nextPathCode).toBe(cycle4?.pathCode);
     expect(cycle4?.manifest.steps).toHaveLength(5);
-    expect(cycle4?.publicationApproved()).toBe(false);
+    expect(cycle4?.publicationApproved()).toBe(true);
+    expect(cycle4?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(cycle4Source?.authoringStatus).toBe("DRAFT_NOT_RELEASED");
     expect(cycle4Source?.sourceStations).toHaveLength(5);
+    expect(
+      cycle4Source?.sourceStations.every(
+        (station) => station.contentOrigin === "ORIGINAL_AUTHORING",
+      ),
+    ).toBe(true);
     expect(
       cycle4Source?.sourceStations.every(
         (station) => station.provenanceStatus === "REVIEW_REQUIRED",

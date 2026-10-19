@@ -10,6 +10,14 @@ Her kaynak kaydı sürümü, üniteleri, değişken uzunluktaki istasyon dizisin
 yayın izni ve gerçek PUBLISHED veritabanı grafiği birlikte gereklidir. Veritabanı
 kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
+P1-A Cycle 4 için ürün sahibi yayın izni verilmiştir. Beş istasyon özgün
+OkuPratik içeriğidir; dış kaynakla doğrulanmış gibi sayılmaz. İzin yalnızca
+katalog yayın kapısını açar: Cycle 4'ün eksiksiz ve manifestle aynı
+`PUBLISHED` veritabanı grafiği doğrulanana kadar 48. istasyon açılamaz ve
+geçiş servisi atama yapmamalıdır. Bu sırada yol haritası durumu
+`GRAPH_NOT_AVAILABLE` olarak kalır. Cycle 4 dışındaki genişleme döngülerinin
+yayın kapıları kapalıdır.
+
 ## Gerçek içerik kapsamı
 
 | Rota      | Hazırlanmış toplam | Kaynakta yayın onaylı (üretim ayrı) | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
@@ -27,8 +35,10 @@ incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
 180 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 125'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 4–34 ve B/C/D Cycle 3–33 zincirleri `DRAFT_NOT_RELEASED`
-ve yayına kapalıdır; production grafiği ya da öğrenci ataması oluşturulmamıştır.
+sayısı değildir. A Cycle 5–34 ve B/C/D Cycle 3–33 zincirleri
+`DRAFT_NOT_RELEASED` ve yayına kapalıdır; production grafiği ya da öğrenci
+ataması oluşturulmamıştır. Cycle 4 izinli ancak grafiği üretimde
+doğrulanmamıştır.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
 olgusal iddia içermez. Öğrenme hedefleri MEB program çerçevesiyle, Türkçe yazım

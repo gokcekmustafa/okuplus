@@ -152,6 +152,33 @@ describe("protected curriculum draft preview and question editing", () => {
     expect(body.cycles[0].questionQuality).not.toHaveProperty("questionReports");
   });
 
+  it("reports the explicit Cycle 4 owner release separately from missing production graph", async () => {
+    const cycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+      (candidate) => candidate.routeFamily === "A" && candidate.sequence === 4,
+    )!;
+    const response = await app.inject({
+      method: "GET",
+      url: `/admin/curriculum-drafts?routeFamily=A&sequence=4`,
+      headers: { authorization: "Bearer super" },
+    });
+    expect(response.statusCode).toBe(200);
+    const listed = response.json().data.cycles[0];
+    expect(listed.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    expect(listed.publicationApproved).toBe(true);
+    expect(listed.stationCount).toBe(5);
+
+    const station = cycle.sourceStations[0]!;
+    const detail = await app.inject({
+      method: "GET",
+      url: `/admin/curriculum-drafts/A/4/${encodeURIComponent(station.key)}`,
+      headers: { authorization: "Bearer super" },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.cycle.publicationApproved).toBe(true);
+    expect(detail.json().data.station.contentOrigin).toBe("ORIGINAL_AUTHORING");
+    expect(detail.json().data.station.provenanceStatus).toBe("REVIEW_REQUIRED");
+  });
+
   it("makes reused source pages visible without treating reuse as duplicate content", async () => {
     const duplicate = EDUCATION_V2_P1_800_DRAFT_CYCLES.flatMap((cycle) =>
       cycle.sourceStations.map((station) => ({ cycle, station })),
