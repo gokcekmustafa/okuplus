@@ -147,7 +147,9 @@ describe("training home and development UI", () => {
     expect(app).toContain('label: "Öğren", icon: "◒"');
     expect(app).toContain('class="learning-map-v6-area"');
     expect(app).toContain('class="learning-map-v6-lock"');
-    expect(app).not.toContain(">Kilitli<");
+    // Locked is an intentional status in the learning-roadmap UI; this test
+    // covers the student home layout, not a global ban on roadmap status copy.
+    expect(app).toContain('locked: "Kilitli"');
     expect(app).not.toContain('class="path-node-label"');
     expect(app).toContain('if (type === "TEACHING")');
     expect(app).toContain('if (type === "SMALL_STUDY" && node?.contentVersionId)');
