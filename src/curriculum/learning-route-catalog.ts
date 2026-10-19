@@ -203,15 +203,14 @@ export function buildPlannedLearningRouteNodes(options: {
   );
   const planned: PlannedLearningRouteNode[] = [];
 
-  for (const cycle of LEARNING_ROUTE_CYCLES) {
-    if (
-      cycle.routeFamily !== current.routeFamily ||
-      cycle.sequence <= current.sequence ||
-      representedPathCodes.has(cycle.pathCode)
-    ) {
-      continue;
-    }
+  const futureCycles = LEARNING_ROUTE_CYCLES.filter(
+    (cycle) =>
+      cycle.routeFamily === current.routeFamily &&
+      cycle.sequence > current.sequence &&
+      !representedPathCodes.has(cycle.pathCode),
+  ).sort((left, right) => left.sequence - right.sequence);
 
+  for (const cycle of futureCycles) {
     const draft = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
       (candidate) => candidate.pathCode === cycle.pathCode,
     );

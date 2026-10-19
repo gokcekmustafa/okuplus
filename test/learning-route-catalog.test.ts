@@ -84,6 +84,33 @@ describe("versioned learning routes", () => {
     expect(serialized).not.toMatch(/questions|correctOptionId|explanation|sourceUrl|passage/iu);
   });
 
+  it("orders future authored stations by route sequence, not source-file insertion order", () => {
+    const cycle3 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
+    )!;
+    const nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycle3.pathCode,
+      visibleStationCount: 47,
+    });
+    const authoredNodes = nodes.filter((node) => node.cycleSequence !== null);
+
+    expect(
+      authoredNodes.slice(0, 15).map(({ cycleSequence, stepOrder }) => [cycleSequence, stepOrder]),
+    ).toEqual(
+      Array.from({ length: 15 }, (_, index) => [4 + Math.floor(index / 5), (index % 5) + 1]),
+    );
+    expect(
+      authoredNodes.every((node, index) => {
+        if (index === 0) return true;
+        const previous = authoredNodes[index - 1]!;
+        return (
+          node.cycleSequence! > previous.cycleSequence! ||
+          (node.cycleSequence === previous.cycleSequence && node.stepOrder > previous.stepOrder)
+        );
+      }),
+    ).toBe(true);
+  });
+
   it("counts P0 history with real P1 cycles before reserving the remainder", () => {
     const cycles = LEARNING_ROUTE_CYCLES.filter(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence <= 3,
