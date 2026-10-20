@@ -16,6 +16,10 @@ import {
   isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-3-program.js";
 import {
+  EDUCATION_V2_P1_A_CYCLE_4_MANIFEST,
+  EDUCATION_V2_P1_A_CYCLE_4_PROGRAM,
+} from "./education-v2-p1-a-cycle-4-program.js";
+import {
   EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE,
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-4-release.js";
@@ -129,6 +133,15 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) =>
   cycle.pathCode === EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE
     ? {
         ...cycle,
+        pathCode: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.code,
+        programId: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.programId,
+        version: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.cycleVersion,
+        sequence: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.sequence,
+        routeFamily: "A" as const,
+        scopeCode: "G8_12",
+        title: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.title,
+        units: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.units,
+        manifest: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST,
         authoringStatus: "OWNER_RELEASE_APPROVED" as const,
         publicationApproved: isEducationV2P1ACycle4ProductionAssignmentEnabled,
       }

@@ -2,16 +2,24 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { FAST_READING_RENDERERS } from "../src/modules/training/exercise-contract.js";
 import {
+  EDUCATION_V2_P1_A_CYCLE_4_ID,
   EDUCATION_V2_P1_A_CYCLE_4_PROGRAM,
   EDUCATION_V2_P1_A_CYCLE_4_SOURCE_CYCLE,
+  EDUCATION_V2_P1_A_CYCLE_4_VERSION,
+  p1ACycle4AssessmentId,
+  p1ACycle4ContentVersionId,
   p1ACycle4QuestionVersionId,
+  p1ACycle4TemplateVersionId,
 } from "../src/curriculum/education-v2-p1-a-cycle-4-program.js";
 import {
   EDUCATION_V2_P1_A_CYCLE_4_EXPLICIT_PUBLICATION_APPROVED,
   EDUCATION_V2_P1_A_CYCLE_4_STATUS,
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-4-release.js";
-import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
+import {
+  learningRouteCycle,
+  matchesLearningRouteGraph,
+} from "../src/curriculum/learning-route-catalog.js";
 import {
   CYCLE4_PITR_PROJECT_ID,
   CYCLE4_PITR_REQUIRED_TABLES,
@@ -73,6 +81,51 @@ describe("P1-A Cycle 4 authored program", () => {
     }
     expect(steps.at(-1)?.type).toBe("ASSESSMENT");
     expect(EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.assessments).toHaveLength(1);
+  });
+
+  it("matches the real published Cycle 4 program graph and immutable resource IDs", () => {
+    const program = EDUCATION_V2_P1_A_CYCLE_4_PROGRAM;
+    const cycle = learningRouteCycle(program.path.code);
+    expect(cycle).toBeTruthy();
+    expect(cycle?.programId).toBe(EDUCATION_V2_P1_A_CYCLE_4_ID);
+    expect(cycle?.version).toBe(EDUCATION_V2_P1_A_CYCLE_4_VERSION);
+    expect(cycle?.units.map(({ code }) => code)).toEqual(
+      program.path.units.map(({ code }) => code),
+    );
+
+    const stepIds = new Map(
+      program.path.units.flatMap((unit) =>
+        unit.steps.map((step) => [step.key, `production-cycle-4-step:${step.key}`] as const),
+      ),
+    );
+    const graph = {
+      code: program.path.code,
+      version: EDUCATION_V2_P1_A_CYCLE_4_VERSION,
+      units: program.path.units.map((unit) => ({
+        code: unit.code,
+        status: "PUBLISHED",
+        steps: unit.steps.map((step, index) => ({
+          id: stepIds.get(step.key)!,
+          stableKey: `${program.programId}:${step.key}`,
+          type: step.type,
+          position: index + 1,
+          status: "PUBLISHED",
+          isActive: true,
+          prerequisiteStepId: step.prerequisiteStepKeys?.[0]
+            ? stepIds.get(step.prerequisiteStepKeys[0])!
+            : null,
+          completionRule: {},
+          contentVersionId: step.contentKey ? p1ACycle4ContentVersionId(step.contentKey) : null,
+          exerciseTemplateVersionId: step.exerciseKey
+            ? p1ACycle4TemplateVersionId(step.exerciseKey)
+            : null,
+          assessmentId: step.assessmentKey ? p1ACycle4AssessmentId(step.assessmentKey) : null,
+        })),
+      })),
+    };
+
+    expect(matchesLearningRouteGraph(graph)).toBe(true);
+    expect(cycle?.publicationApproved()).toBe(true);
   });
 
   it("uses runtime renderers and deterministic choice scoring for each skill family", () => {
