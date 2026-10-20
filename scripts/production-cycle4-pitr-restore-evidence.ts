@@ -34,6 +34,9 @@ export type Cycle4PitrEvidenceExpectation = {
   port: string;
   nowMs?: number;
 };
+export type Cycle5To8PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & {
+  scope: "cycle5-8";
+};
 export type Cycle4PitrFailureRecord = {
   stage: string;
   endpoint: string | null;
@@ -147,6 +150,22 @@ export function isCycle4PitrEvidenceValid(
   value: unknown,
   expected: Cycle4PitrEvidenceExpectation,
 ): boolean {
+  return isPitrEvidenceValidForScope(value, expected, "cycle4", 2);
+}
+
+export function isCycle5To8PitrEvidenceValid(
+  value: unknown,
+  expected: Cycle5To8PitrEvidenceExpectation,
+): boolean {
+  return isPitrEvidenceValidForScope(value, expected, "cycle5-8", 3);
+}
+
+function isPitrEvidenceValidForScope(
+  value: unknown,
+  expected: Cycle4PitrEvidenceExpectation,
+  scope: "cycle4" | "cycle5-8",
+  schemaVersion: 2 | 3,
+): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
   const target = value.targetBranch;
@@ -170,9 +189,14 @@ export function isCycle4PitrEvidenceValid(
   const requestedAgeMs =
     (expected.nowMs ?? Date.now()) - Date.parse(String(requestedTimestamp ?? ""));
   const countRecord = isRecord(counts) ? counts : null;
+  const scopeMatches =
+    scope === "cycle4"
+      ? value.pitrScope === undefined || value.pitrScope === "cycle4"
+      : value.pitrScope === scope;
   return (
     value.status === "PASS" &&
-    value.schemaVersion === 2 &&
+    value.schemaVersion === schemaVersion &&
+    scopeMatches &&
     value.projectId === CYCLE4_PITR_PROJECT_ID &&
     value.sourceBranchId === CYCLE4_PITR_SOURCE_BRANCH_ID &&
     value.historyRetentionSeconds === CYCLE4_PITR_EXPECTED_RETENTION_SECONDS &&
@@ -623,10 +647,19 @@ async function neonConnectionUri(
 async function runPitrEvidence(): Promise<JsonRecord> {
   const now = Date.now();
   const run = runIdentity();
-  const evidencePath = process.env.CYCLE4_PITR_EVIDENCE_PATH?.trim();
-  if (!evidencePath) throw safeError("evidence output", "CYCLE4_PITR_EVIDENCE_PATH is required");
+  const pitrScope = process.env.CYCLE_PITR_SCOPE?.trim() || "cycle4";
+  if (pitrScope !== "cycle4" && pitrScope !== "cycle5-8") {
+    throw safeError("preflight", "unsupported PITR scope");
+  }
+  const evidencePath =
+    process.env.CYCLE_PITR_EVIDENCE_PATH?.trim() ||
+    (pitrScope === "cycle4"
+      ? process.env.CYCLE4_PITR_EVIDENCE_PATH?.trim()
+      : process.env.CYCLE58_PITR_EVIDENCE_PATH?.trim());
+  if (!evidencePath) throw safeError("evidence output", "PITR evidence path is required");
   const evidence: JsonRecord = {
-    schemaVersion: 2,
+    schemaVersion: pitrScope === "cycle4" ? 2 : 3,
+    pitrScope,
     status: "FAIL",
     createdAt: new Date(now).toISOString(),
     projectId: CYCLE4_PITR_PROJECT_ID,
@@ -647,7 +680,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       process.env.GITHUB_REF !== "refs/heads/master" ||
       process.env.APP_ENV !== "production" ||
       process.env.DB_FINGERPRINT_ENVIRONMENT !== "PRODUCTION" ||
-      process.env.CYCLE4_OPERATION !== "APPLY"
+      (process.env.CYCLE4_OPERATION ?? process.env.CYCLE58_OPERATION) !== "APPLY"
     ) {
       throw safeError(stage, "protected manual master APPLY workflow gate did not match");
     }
@@ -658,7 +691,12 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       await writeEvidence(evidencePath, evidence);
       return evidence;
     }
-    const productionUrl = process.env.EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_DATABASE_URL?.trim();
+    const productionUrl =
+      process.env[
+        pitrScope === "cycle4"
+          ? "EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_DATABASE_URL"
+          : "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_DATABASE_URL"
+      ]?.trim();
     const approvedFingerprint =
       process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT?.trim().toLowerCase();
     const expectedHost = process.env.PRODUCTION_DB_APPROVED_HOST?.trim()
@@ -782,7 +820,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     };
 
     stage = "PITR branch";
-    const targetName = `okupratik-cycle4-pitr-${run.runId}`;
+    const targetName = `okupratik-${pitrScope}-pitr-${run.runId}`;
     const branchesPayload = record(
       await neonRequest<unknown>(
         apiKey,
@@ -837,7 +875,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
           },
           endpoints: [{ type: "read_write" }],
           annotation_value: {
-            purpose: "cycle4-pitr-restore-validation",
+            purpose: `${pitrScope}-pitr-restore-validation`,
             github_run_id: run.runId,
             github_sha: run.sha,
           },
@@ -908,7 +946,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     const annotation = record(targetEnvelope.annotation, "PITR target annotation");
     const annotationValue = record(annotation.value, "PITR target annotation value");
     if (
-      annotationValue.purpose !== "cycle4-pitr-restore-validation" ||
+      annotationValue.purpose !== `${pitrScope}-pitr-restore-validation` ||
       annotationValue.github_run_id !== run.runId ||
       annotationValue.github_sha !== run.sha
     ) {

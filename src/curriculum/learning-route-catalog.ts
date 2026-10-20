@@ -21,6 +21,8 @@ import {
   EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE,
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-4-release.js";
+import { EDUCATION_V2_P1_A_CYCLE_5_8 } from "./education-v2-p1-a-cycle-5-8-program.js";
+import { isEducationV2P1ACycle5To8ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-5-8-release.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -123,28 +125,51 @@ const linkedBaseCycles = BASE_LEARNING_ROUTE_CYCLES.map((cycle) => {
 });
 
 /**
- * Expansion drafts extend the source chain. Cycle 4 has an explicit owner
- * release decision, but remains unavailable until its complete PUBLISHED
- * database graph is present and matches this manifest.
+ * Expansion drafts extend the source chain. Cycles with dedicated versioned
+ * programs use those exact manifests; their production graphs remain separate
+ * availability gates. Cycles 5–8 remain unavailable until their owner release
+ * decision is recorded in source as well as their graph being ready.
  */
-const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) =>
-  cycle.pathCode === EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE
-    ? {
-        ...cycle,
-        pathCode: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.code,
-        programId: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.programId,
-        version: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.cycleVersion,
-        sequence: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.sequence,
-        routeFamily: "A" as const,
-        scopeCode: "G8_12",
-        title: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.title,
-        units: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.units,
-        manifest: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST,
-        authoringStatus: "OWNER_RELEASE_APPROVED" as const,
-        publicationApproved: isEducationV2P1ACycle4ProductionAssignmentEnabled,
-      }
-    : cycle,
-);
+const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
+  if (cycle.pathCode === EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE) {
+    return {
+      ...cycle,
+      pathCode: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.code,
+      programId: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.programId,
+      version: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.cycleVersion,
+      sequence: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST.sequence,
+      routeFamily: "A" as const,
+      scopeCode: "G8_12",
+      title: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.title,
+      units: EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.units,
+      manifest: EDUCATION_V2_P1_A_CYCLE_4_MANIFEST,
+      authoringStatus: "OWNER_RELEASE_APPROVED" as const,
+      publicationApproved: isEducationV2P1ACycle4ProductionAssignmentEnabled,
+    };
+  }
+
+  const authoredCycle = EDUCATION_V2_P1_A_CYCLE_5_8.find(
+    (candidate) => candidate.sequence === cycle.sequence,
+  );
+  if (cycle.routeFamily === "A" && authoredCycle) {
+    return {
+      ...cycle,
+      pathCode: authoredCycle.program.path.code,
+      programId: authoredCycle.program.programId,
+      version: authoredCycle.manifest.cycleVersion,
+      sequence: authoredCycle.manifest.sequence,
+      routeFamily: "A" as const,
+      scopeCode: "G8_12",
+      title: authoredCycle.program.path.title,
+      units: authoredCycle.program.path.units,
+      manifest: authoredCycle.manifest,
+      authoringStatus: "DRAFT_NOT_RELEASED" as const,
+      publicationApproved: () =>
+        isEducationV2P1ACycle5To8ProductionAssignmentEnabled(authoredCycle.sequence),
+    };
+  }
+  return cycle;
+});
 
 export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
   ...linkedBaseCycles,

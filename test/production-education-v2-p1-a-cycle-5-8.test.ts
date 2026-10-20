@@ -1,0 +1,299 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { assessOptionLengthQuality } from "../src/curriculum/option-length-quality.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_5_8,
+  EDUCATION_V2_P1_A_CYCLE_5_8_SEQUENCES,
+  educationV2P1ACycle5To8AnswerKey,
+  isCompleteEducationV2P1ACycle5To8Source,
+  p1ACycle5To8AssessmentId,
+  p1ACycle5To8ContentVersionId,
+  p1ACycle5To8QuestionVersionId,
+  p1ACycle5To8TemplateVersionId,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS,
+  EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT,
+  EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID,
+  isEducationV2P1ACycle5To8ProductionAssignmentEnabled,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
+import { educationV2P1ACycle5To8SeedAction } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
+import { parseTrainingExerciseVersionConfig } from "../src/modules/training/exercise-contract.js";
+import { isCycle5To8PitrEvidenceValid } from "../scripts/production-cycle4-pitr-restore-evidence.js";
+import {
+  buildPlannedLearningRouteNodes,
+  matchesLearningRouteGraph,
+  nextLearningRouteCycle,
+  learningRouteCycle,
+} from "../src/curriculum/learning-route-catalog.js";
+
+const workflow = readFileSync(
+  new URL("../.github/workflows/production-education-v2-p1-a-cycle-5-8.yml", import.meta.url),
+  "utf8",
+);
+const seeder = readFileSync(
+  new URL("../scripts/seed-education-v2-p1-a-cycle-5-8.ts", import.meta.url),
+  "utf8",
+);
+
+function graphFor(sequence: (typeof EDUCATION_V2_P1_A_CYCLE_5_8_SEQUENCES)[number]) {
+  const cycle = EDUCATION_V2_P1_A_CYCLE_5_8.find((item) => item.sequence === sequence)!;
+  const { program } = cycle;
+  const stepIds = new Map(
+    program.path.units.flatMap((unit) =>
+      unit.steps.map((step) => [step.key, `test-cycle-${sequence}:${step.key}`] as const),
+    ),
+  );
+  return {
+    code: program.path.code,
+    version: cycle.manifest.cycleVersion,
+    units: program.path.units.map((unit) => ({
+      code: unit.code,
+      status: "PUBLISHED",
+      steps: unit.steps.map((step, index) => ({
+        id: stepIds.get(step.key)!,
+        stableKey: `${program.programId}:${step.key}`,
+        position: index + 1,
+        type: step.type,
+        status: "PUBLISHED",
+        isActive: true,
+        prerequisiteStepId: step.prerequisiteStepKeys?.[0]
+          ? stepIds.get(step.prerequisiteStepKeys[0])!
+          : null,
+        completionRule: {},
+        contentVersionId: step.contentKey
+          ? p1ACycle5To8ContentVersionId(sequence, step.contentKey)
+          : null,
+        exerciseTemplateVersionId: step.exerciseKey
+          ? p1ACycle5To8TemplateVersionId(sequence, step.exerciseKey)
+          : null,
+        assessmentId: step.assessmentKey
+          ? p1ACycle5To8AssessmentId(sequence, step.assessmentKey)
+          : null,
+      })),
+    })),
+  };
+}
+
+describe("P1-A Cycles 5–8 versioned curriculum", () => {
+  it("creates four complete five-step programs with 20 contents, exercises, 60 questions and four assessments", () => {
+    expect(EDUCATION_V2_P1_A_CYCLE_5_8).toHaveLength(4);
+    const resourceIds: string[] = [];
+    let totalContent = 0;
+    let totalExercises = 0;
+    let totalQuestions = 0;
+    let totalAssessments = 0;
+
+    for (const cycle of EDUCATION_V2_P1_A_CYCLE_5_8) {
+      const { sequence, sourceCycle, program, manifest } = cycle;
+      const steps = program.path.units.flatMap((unit) => unit.steps);
+      expect(sequence).toBeGreaterThanOrEqual(5);
+      expect(sequence).toBeLessThanOrEqual(8);
+      expect(sourceCycle.sourceStations).toHaveLength(5);
+      expect(steps).toHaveLength(5);
+      expect(program.content).toHaveLength(5);
+      expect(program.exercises).toHaveLength(5);
+      expect(program.assessments).toHaveLength(1);
+      expect(
+        program.exercises.reduce((count, exercise) => count + exercise.questions.length, 0),
+      ).toBe(15);
+      expect(manifest.steps.map((step) => step.order)).toEqual([1, 2, 3, 4, 5]);
+      expect(manifest.steps.map((step) => step.prerequisiteKeys)).toEqual([
+        [],
+        [steps[0]!.key],
+        [steps[1]!.key],
+        [steps[2]!.key],
+        [steps[3]!.key],
+      ]);
+      expect(manifest.resourceCatalog.contentVersions).toHaveLength(5);
+      expect(manifest.resourceCatalog.exerciseVersions).toHaveLength(5);
+      expect(manifest.resourceCatalog.assessmentVersions).toHaveLength(1);
+      expect(manifest.resourceCatalog.questionVersionIds).toHaveLength(15);
+
+      for (const [index, station] of sourceCycle.sourceStations.entries()) {
+        const content = program.content[index]!;
+        const exercise = program.exercises[index]!;
+        expect(content.key).toBe(station.key);
+        expect(content.body).toBe(station.text);
+        expect(exercise.contentKey).toBe(station.key);
+        expect(exercise.questions).toHaveLength(3);
+        for (const question of station.questions) {
+          const mapped = exercise.questions.find((item) => item.key === question.key);
+          expect(mapped).toBeDefined();
+          expect(mapped?.correctOptionId).toBe(question.correctOptionId);
+          expect(mapped?.options).toEqual(question.options);
+          expect(mapped?.options.map((option) => option.id)).toContain(mapped?.correctOptionId);
+          expect(educationV2P1ACycle5To8AnswerKey(question).correctOptionIds).toEqual([
+            question.correctOptionId,
+          ]);
+          const lengthQuality = assessOptionLengthQuality({
+            options: question.options,
+            correctOptionId: question.correctOptionId,
+          });
+          expect(lengthQuality?.clearOutlier, `${sequence}/${question.key}`).toBe(false);
+          resourceIds.push(
+            p1ACycle5To8QuestionVersionId(sequence, `${exercise.key}-${question.key}`),
+          );
+          totalQuestions += 1;
+        }
+        expect(parseTrainingExerciseVersionConfig(exercise.contract).scoring.mode).toBe(
+          "DETERMINISTIC",
+        );
+        expect(exercise.contract.eligibility.requiresPublishedContent).toBe(true);
+        expect(exercise.contract.eligibility.requiresPublishedQuestions).toBe(true);
+        resourceIds.push(p1ACycle5To8ContentVersionId(sequence, content.key));
+        resourceIds.push(p1ACycle5To8TemplateVersionId(sequence, exercise.key));
+        totalContent += 1;
+        totalExercises += 1;
+      }
+      const assessment = program.assessments[0]!;
+      expect(assessment.templateExerciseKey).toBe(program.exercises.at(-1)?.key);
+      expect(assessment.questionKeys).toEqual(
+        program.exercises.at(-1)?.questions.map((item) => item.key),
+      );
+      resourceIds.push(p1ACycle5To8AssessmentId(sequence, assessment.key));
+      totalAssessments += 1;
+      expect(matchesLearningRouteGraph(graphFor(sequence))).toBe(true);
+    }
+
+    expect(new Set(resourceIds).size).toBe(resourceIds.length);
+    expect({ totalContent, totalExercises, totalQuestions, totalAssessments }).toEqual({
+      totalContent: 20,
+      totalExercises: 20,
+      totalQuestions: 60,
+      totalAssessments: 4,
+    });
+  });
+
+  it("links Cycle 4 through Cycle 8 while keeping every new cycle locked pending owner release", () => {
+    for (let sequence = 4; sequence < 8; sequence += 1) {
+      const from =
+        [...EDUCATION_V2_P1_A_CYCLE_5_8].find((cycle) => cycle.sequence === sequence)?.program.path
+          .code ?? "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_4_G8_12";
+      const to = learningRouteCycle(from);
+      const next = nextLearningRouteCycle(from);
+      expect(to).toBeTruthy();
+      expect(next?.sequence).toBe(sequence + 1);
+      expect(next?.manifest.steps).toHaveLength(5);
+      expect(next?.publicationApproved()).toBe(false);
+    }
+    expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS).toEqual(
+      [5, 6, 7, 8].map((sequence) => ({
+        sequence,
+        status: "OWNER_RELEASE_REQUIRED",
+        explicitPublicationApproved: false,
+      })),
+    );
+    for (const sequence of [5, 6, 7, 8])
+      expect(isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence)).toBe(false);
+    expect(typeof EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT).toBe("string");
+    expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT).toMatch(/^[0-9a-f]{64}$/u);
+    expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID).toContain(
+      EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT,
+    );
+
+    const planned = buildPlannedLearningRouteNodes({
+      currentPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_4_G8_12",
+      visibleStationCount: 52,
+      targetStationCount: 72,
+    });
+    const plannedCycle5To8 = planned.filter(
+      ({ cycleSequence }) => cycleSequence !== null && cycleSequence >= 5 && cycleSequence <= 8,
+    );
+    expect(plannedCycle5To8).toHaveLength(20);
+    expect(
+      plannedCycle5To8.map(({ cycleSequence, stepOrder }) => [cycleSequence, stepOrder]),
+    ).toEqual(
+      Array.from({ length: 20 }, (_, index) => [5 + Math.floor(index / 5), (index % 5) + 1]),
+    );
+    expect(
+      plannedCycle5To8.every(
+        (node) => node.status === "locked" && node.availability === "UNAVAILABLE",
+      ),
+    ).toBe(true);
+    expect(plannedCycle5To8.every((node) => node.planningStatus === "AUTHORED_UNRELEASED")).toBe(
+      true,
+    );
+    expect(
+      plannedCycle5To8.every(
+        (node) =>
+          node.templateVersionId === null &&
+          node.contentVersionId === null &&
+          node.assessmentId === null,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps source provenance truthful: original Cycle 5 remains review-required", () => {
+    const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8.find((cycle) => cycle.sequence === 5)!;
+    expect(cycle5.sourceCycle.sourceVerifiedStationCount).toBe(0);
+    expect(
+      cycle5.sourceCycle.sourceStations.every(
+        (station) =>
+          station.contentOrigin === "ORIGINAL_AUTHORING" &&
+          station.provenanceStatus === "REVIEW_REQUIRED",
+      ),
+    ).toBe(true);
+    for (const cycle of EDUCATION_V2_P1_A_CYCLE_5_8.filter((item) => item.sequence >= 6)) {
+      expect(cycle.sourceCycle.sourceVerifiedStationCount).toBe(5);
+      expect(cycle.sourceCycle.sourceStations.every((station) => station.sourceEvidence?.url)).toBe(
+        true,
+      );
+    }
+  });
+
+  it("rejects missing/incomplete source and makes plan, repeat, create, and conflict actions explicit", () => {
+    const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8[0]!;
+    expect(isCompleteEducationV2P1ACycle5To8Source(undefined, 5)).toBe(false);
+    expect(
+      isCompleteEducationV2P1ACycle5To8Source(
+        { ...cycle5.sourceCycle, sourceStations: cycle5.sourceCycle.sourceStations.slice(0, 4) },
+        5,
+      ),
+    ).toBe(false);
+    expect(educationV2P1ACycle5To8SeedAction("MISSING", true)).toBe("PLAN_ONLY");
+    expect(educationV2P1ACycle5To8SeedAction("MISSING", false)).toBe("CREATE_MISSING");
+    expect(educationV2P1ACycle5To8SeedAction("EXISTING", false)).toBe("REUSE_EXISTING");
+    expect(educationV2P1ACycle5To8SeedAction("EXISTING", true)).toBe("PLAN_ONLY");
+    expect(educationV2P1ACycle5To8SeedAction("CONFLICT", false)).toBe("STOP_CONFLICT");
+  });
+
+  it("requires protected dispatch, live target/PITR evidence, explicit APPLY approval and only seeds cycle graphs", () => {
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("default: PLAN_ONLY");
+    expect(workflow).toContain("production-migration");
+    expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
+    expect(workflow).toContain("secrets.NEON_API_KEY");
+    expect(workflow).toContain("production_editorial_approval");
+    expect(workflow).toContain("production-cycle4-pitr-restore-evidence.ts");
+    expect(workflow).toContain("CYCLE_PITR_SCOPE: cycle5-8");
+    expect(workflow.indexOf("Enforce Cycle 5–8 PITR evidence")).toBeLessThan(
+      workflow.indexOf("Apply Cycle 5–8 graphs only"),
+    );
+    expect(workflow).toContain("refs/heads/master");
+    expect(workflow).toContain("CYCLE58_SEQUENCE");
+    expect(workflow).toContain("MIGRATIONS=NOT_RUN");
+    expect(seeder).toContain("isCycle5To8PitrEvidenceValid");
+    expect(seeder).toContain('action === "STOP_CONFLICT"');
+    expect(seeder.indexOf("if (!dryRun) assertPitrRestoreEvidence();")).toBeLessThan(
+      seeder.indexOf("const prisma = new PrismaClient("),
+    );
+    expect(
+      isCycle5To8PitrEvidenceValid(undefined, {
+        runId: "123456",
+        runAttempt: "1",
+        sha: "1".repeat(40),
+        database: "oku_plus",
+        role: "oku_app",
+        port: "5432",
+        scope: "cycle5-8",
+      }),
+    ).toBe(false);
+    expect(seeder).not.toMatch(
+      /tx\.(?:student|learningPathAssignment|studentLearningProgress)\.(?:create|createMany|update|updateMany|delete|deleteMany)/u,
+    );
+    expect(seeder).not.toMatch(
+      /prisma\.(?:student|learningPathAssignment|studentLearningProgress)\.(?:create|createMany|update|updateMany|delete|deleteMany)/u,
+    );
+  });
+});

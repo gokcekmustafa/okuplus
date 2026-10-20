@@ -429,7 +429,7 @@ describe("versioned learning routes", () => {
     expect(nextLearningRouteCycle(a[32]!.pathCode)).toBe(a[33]);
     expect(a[33]!.publicationApproved()).toBe(false);
     expect(a[33]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
-    for (let index = 4; index < a.length; index += 1) {
+    for (let index = 8; index < a.length; index += 1) {
       expect(a[index]!.publicationApproved()).toBe(false);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");

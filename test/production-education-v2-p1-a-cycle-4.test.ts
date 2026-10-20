@@ -32,6 +32,7 @@ import {
   cycle4PitrTimestamp,
   cycle4PitrTimestampMatches,
   isCycle4PitrEvidenceValid,
+  isCycle5To8PitrEvidenceValid,
   isCycle4PitrTimestampInWindow,
   normalizeNeonEndpointHost,
   parseCycle4PitrSchemaDiff,
@@ -266,6 +267,7 @@ describe("P1-A Cycle 4 authored program", () => {
     const nowMs = Date.parse("2026-10-19T12:00:00.000Z");
     const evidence = {
       schemaVersion: 2,
+      pitrScope: "cycle4",
       status: "PASS",
       projectId: CYCLE4_PITR_PROJECT_ID,
       sourceBranchId: CYCLE4_PITR_SOURCE_BRANCH_ID,
@@ -362,6 +364,16 @@ describe("P1-A Cycle 4 authored program", () => {
     };
 
     expect(isCycle4PitrEvidenceValid(evidence, expected)).toBe(true);
+    const legacyCycle4Evidence = { ...evidence };
+    delete (legacyCycle4Evidence as { pitrScope?: string }).pitrScope;
+    expect(isCycle4PitrEvidenceValid(legacyCycle4Evidence, expected)).toBe(true);
+    expect(
+      isCycle5To8PitrEvidenceValid(
+        { ...evidence, schemaVersion: 3, pitrScope: "cycle5-8" },
+        { ...expected, scope: "cycle5-8" },
+      ),
+    ).toBe(true);
+    expect(isCycle5To8PitrEvidenceValid(evidence, { ...expected, scope: "cycle5-8" })).toBe(false);
     const normalizedParentTimestamp = "2026-10-19T11:57:59.500Z";
     expect(
       isCycle4PitrEvidenceValid(
