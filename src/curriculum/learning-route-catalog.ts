@@ -15,10 +15,8 @@ import {
   EDUCATION_V2_P1_A_CYCLE_3_MANIFEST,
   isEducationV2P1ACycle3ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-3-program.js";
-import {
-  EDUCATION_V2_P1_A_CYCLE_4_MANIFEST,
-  EDUCATION_V2_P1_A_CYCLE_4_PROGRAM,
-} from "./education-v2-p1-a-cycle-4-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_4_PROGRAM } from "./education-v2-p1-a-cycle-4-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_4_MANIFEST } from "./education-v2-p1-a-cycle-4-manifest.js";
 import {
   EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE,
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
