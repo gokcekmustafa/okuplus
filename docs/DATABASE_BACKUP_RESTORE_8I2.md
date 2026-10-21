@@ -7,7 +7,22 @@ uygulayacağı ve kanıtlayacağı PostgreSQL backup/restore sözleşmesini tan�
 
 **NOT VERIFIED.** Bu görevde gerçek production backup, restore, failover veya snapshot alınmadı.
 Local `oku_plus_test` üzerinde veri cleanup/fingerprint kanıtı vardır; bu production backup kanıtı
-değildir. Staging/production host, provider ve backup hesabı repository’den bilinmiyor.
+değildir.
+
+21 Ekim 2026 tarihli [Production Forensics #39](https://github.com/gokcekmustafa/okuplus/actions/runs/39647112930)
+salt-okunur çalışmasında PostgreSQL sağlayıcısı Neon olarak tanındı ve onaylı production hedef
+fingerprint’i eşleşti. Proje/dal metadata’sı SQL kimlik sorgusuyla doğrulanmadı. Bu çalışmada Neon
+Console için yetkili oturum bulunmadığından backup kaydı veya izole restore kanıtı incelenemedi;
+durum bu nedenle **NOT VERIFIED** olarak kalır. Provider proje/dal kimlikleri ve backup hesabı/rolü
+de repository’de kayıtlı değildir.
+
+**Gereken kanıt ve sorumlu:** Neon projesine yetkili erişimi olan platform/DB operatörü, provider
+paneli veya yetkili API üzerinden başarılı ve şifreli backup/PITR kaydını doğrulamalı; bunu ayrı
+bir hedefe geri yükleyip hedefin production’dan ayrı kimliğini, zaman noktasını, migration/şema
+durumunu ve salt-okunur uygulama smoke sonucunu doğrulamalıdır. Yalnızca non-secret kanıt özeti
+(kaynak/hedef kimlikleri, zaman damgası, doğrulama sonuçları ve release SHA) saklanmalıdır; dump,
+bağlantı bilgileri ve kişisel veriler rapora/loglara konmamalıdır. Bu doğrulamalar henüz yapılmış
+değildir.
 
 ## Zorunlu politika alanları
 
