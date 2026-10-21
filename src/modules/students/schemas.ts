@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
+import { rejectNationalIdPayload, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Öğrenci ve kurum akademik yıl yönetimi Zod şemaları.
@@ -47,39 +47,41 @@ export const listStudentsQuerySchema = z.object({
 });
 
 /** Yeni öğrenci oluşturma gövdesi. */
-export const createStudentSchema = z.object({
-  displayName: displayNameSchema,
-  email: emailSchema,
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  password: z
-    .string()
-    .min(8, "Parola en az 8 karakter olmalı")
-    .max(128, "Parola en fazla 128 karakter"),
-  tenantId: z.string().trim().min(1, "Kurum gerekli"),
-  status: userStatusSchema.optional(),
-  currentLevelId: levelIdSchema,
-  targetLevelId: levelIdSchema,
-  academicYearId: z.string().trim().min(1).optional(),
-  classId: z.string().trim().min(1).optional(),
-});
+export const createStudentSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema,
+    email: emailSchema,
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    password: z
+      .string()
+      .min(8, "Parola en az 8 karakter olmalı")
+      .max(128, "Parola en fazla 128 karakter"),
+    tenantId: z.string().trim().min(1, "Kurum gerekli"),
+    status: userStatusSchema.optional(),
+    currentLevelId: levelIdSchema,
+    targetLevelId: levelIdSchema,
+    academicYearId: z.string().trim().min(1).optional(),
+    classId: z.string().trim().min(1).optional(),
+  }),
+);
 
 /** Öğrenci güncelleme gövdesi (kısmi; kişisel + hesap + profil). */
-export const updateStudentSchema = z.object({
-  displayName: displayNameSchema.optional(),
-  email: emailSchema.optional(),
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  status: userStatusSchema.optional(),
-  currentLevelId: levelIdSchema,
-  targetLevelId: levelIdSchema,
-  startedAt: z.coerce.date().optional(),
-  enrollmentId: z.string().trim().min(1).nullable().optional(),
-  academicYearId: z.string().trim().min(1).nullable().optional(),
-  classId: z.string().trim().min(1).nullable().optional(),
-});
+export const updateStudentSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema.optional(),
+    email: emailSchema.optional(),
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    status: userStatusSchema.optional(),
+    currentLevelId: levelIdSchema,
+    targetLevelId: levelIdSchema,
+    startedAt: z.coerce.date().optional(),
+    enrollmentId: z.string().trim().min(1).nullable().optional(),
+    academicYearId: z.string().trim().min(1).nullable().optional(),
+    classId: z.string().trim().min(1).nullable().optional(),
+  }),
+);
 
 const enrollmentStatusSchema = z.enum(["ACTIVE", "LEFT", "COMPLETED"]);
 

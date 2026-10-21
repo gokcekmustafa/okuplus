@@ -305,8 +305,28 @@ describe("user + membership admin", () => {
     expect(body.data.birthYear).toBe(1995);
     expect(body.data.status).toBe("INVITED");
     expect(body.data.memberships).toEqual([]);
+    expect(body.data.nationalId).toBeNull();
 
     await prisma.user.deleteMany({ where: { email: "yeni-kullanici@example.com" } });
+  });
+
+  it("TCKN içeren eski kullanıcı oluşturma isteğini reddeder ve kullanıcı oluşturmaz", async () => {
+    const email = "legacy-national-id-user@example.com";
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/users",
+      headers: await superAdminHeaders(),
+      payload: {
+        displayName: "Eski TCKN isteği",
+        email,
+        password: "legacy-user-pass-123!",
+        nationalId: "12345678901",
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
   });
 
   it("Duplike e-posta: 409 döner", async () => {
@@ -398,6 +418,11 @@ describe("user + membership admin", () => {
   });
 
   it("Super Admin: kullanıcı bilgilerini düzenler", async () => {
+    const legacyNationalId = "12345678901";
+    await prisma.user.update({
+      where: { id: USER_A_ID },
+      data: { nationalId: legacyNationalId },
+    });
     const res = await app.inject({
       method: "PATCH",
       url: `/admin/users/${USER_A_ID}`,
@@ -410,6 +435,28 @@ describe("user + membership admin", () => {
     expect(body.data.displayName).toBe("Kullanıcı A Güncel");
     expect(body.data.phone).toBe("0 (555) 000 00 00");
     expect(body.data.birthYear).toBe(1992);
+    expect(body.data.nationalId).toBe(legacyNationalId);
+    expect(
+      (await prisma.user.findUnique({ where: { id: USER_A_ID }, select: { nationalId: true } }))
+        ?.nationalId,
+    ).toBe(legacyNationalId);
+  });
+
+  it("TCKN içeren eski kullanıcı güncelleme isteğini reddeder ve mevcut değeri korur", async () => {
+    const legacyNationalId = "12345678901";
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/admin/users/${USER_A_ID}`,
+      headers: await superAdminHeaders(),
+      payload: { nationalId: "10987654321" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(
+      (await prisma.user.findUnique({ where: { id: USER_A_ID }, select: { nationalId: true } }))
+        ?.nationalId,
+    ).toBe(legacyNationalId);
   });
 
   it("Düzenlemede başkasının e-postasına geçme: 409 döner", async () => {

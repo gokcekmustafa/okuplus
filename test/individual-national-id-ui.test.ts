@@ -12,15 +12,17 @@ function between(source: string, start: string, end: string): string {
   return source.slice(startAt, endAt);
 }
 
-describe("individual and tenant-admin TCKN minimization UI contract", () => {
-  it("removes TCKN from signup, personal profile, and initial tenant admin only", () => {
+describe("TCKN minimization UI contract", () => {
+  it("removes TCKN inputs and normalization from all account-management forms", () => {
     expect(index).not.toContain('id="signup-national-id"');
     expect(index).not.toContain('id="account-profile-national-id"');
     expect(index).not.toContain('id="tenant-form-admin-national-id"');
-    expect(index).toContain('id="user-form-national-id"');
-    expect(index).toContain('id="student-form-national-id"');
-    expect(index).toContain('id="teacher-form-national-id"');
+    expect(index).not.toContain('id="user-form-national-id"');
+    expect(index).not.toContain('id="student-form-national-id"');
+    expect(index).not.toContain('id="teacher-form-national-id"');
+    expect(index).not.toContain('id="user-detail-national-id"');
     expect(app).not.toContain("tenant-form-admin-national-id");
+    expect(app).not.toContain("normalizeNationalIdValue");
 
     const personDataEvents = between(
       app,
@@ -34,7 +36,54 @@ describe("individual and tenant-admin TCKN minimization UI contract", () => {
       "student-form-national-id",
       "teacher-form-national-id",
     ]) {
-      expect(personDataEvents).toContain(`"${managementField}"`);
+      expect(personDataEvents).not.toContain(`"${managementField}"`);
+    }
+  });
+
+  it("does not load TCKN into, or submit it from, create/update management forms", () => {
+    const userForm = between(
+      app,
+      "function openUserForm(",
+      "async function populateUserFormTenantSelect(",
+    );
+    const userSubmit = between(
+      app,
+      "async function submitUserForm(",
+      "async function openUserDetail(",
+    );
+    const userDetailSubmit = between(
+      app,
+      "async function submitUserDetailForm(",
+      "async function resetAdminUserPassword(",
+    );
+    const studentForm = between(
+      app,
+      "async function openStudentForm(",
+      "function closeStudentForm(",
+    );
+    const studentSubmit = between(
+      app,
+      "async function submitStudentForm(",
+      "async function openStudentDetail(",
+    );
+    const teacherForm = between(app, "function openTeacherForm(", "function closeTeacherForm(");
+    const teacherSubmit = between(
+      app,
+      "async function submitTeacherForm(",
+      "async function openTeacherDetail(",
+    );
+
+    for (const source of [
+      userForm,
+      userSubmit,
+      userDetailSubmit,
+      studentForm,
+      studentSubmit,
+      teacherForm,
+      teacherSubmit,
+    ]) {
+      expect(source).not.toContain("nationalId");
+      expect(source).not.toContain("national-id");
     }
   });
 

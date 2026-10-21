@@ -704,7 +704,6 @@ export async function createOrganizationTeacher(
           displayName: input.displayName,
           email: input.email,
           phone: input.phone ?? null,
-          nationalId: input.nationalId ?? null,
           birthYear: input.birthYear ?? null,
           status: input.status ?? "ACTIVE",
           passwordHash,
@@ -1045,7 +1044,6 @@ export async function createOrganizationStudent(
           displayName: input.displayName,
           email: input.email,
           phone: input.phone ?? null,
-          nationalId: input.nationalId ?? null,
           birthYear: input.birthYear ?? null,
           status: input.status ?? "ACTIVE",
           passwordHash,
@@ -1114,7 +1112,6 @@ export async function updateOrganizationStudent(
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
         ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       },
@@ -1921,10 +1918,7 @@ export async function listOrganizationTeacherCandidates(actor: OrganizationAssig
 
 function translateOrganizationError(error: unknown, message: string): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-    const target = String(error.meta?.target ?? "").toLowerCase();
-    throw conflictError(
-      target.includes("nationalid") ? "Bu TC Kimlik No zaten kullanımda" : message,
-    );
+    throw conflictError(message);
   }
   throw error;
 }

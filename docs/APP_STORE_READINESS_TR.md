@@ -236,6 +236,16 @@ Kabul ve regresyon planı:
 
 **P0-3B doğrulama kaydı:** Yalnızca bu tasarım bölümü eklendi. UI, API, Zod davranışı, servis, Prisma modeli/migration, geçmiş kayıtlar, üretim veritabanı ve öğrenci ilerlemesi değiştirilmedi.
 
+## P0-3C — Yönetim akışlarında yeni TCKN toplamayı durdurma
+
+Bu uygulama adımı platform kullanıcı, öğrenci ve öğretmen yönetimindeki ve kurum öğrenci/öğretmen yönetimindeki create/update akışlarından yeni TCKN alımını ve yazımını kaldırır. Yönetim formlarındaki TCKN girişleri, formdan yükleme/normalleştirme ve istek gövdesi alanları kaldırılmıştır. Ortak kullanıcı/öğrenci/öğretmen şemaları `nationalId` anahtarını (değer `null` olsa dahi) açıkça `400 VALIDATION_ERROR` ile reddeder; böylece eski istemciler TCKN yazamaz. Diğer bilinmeyen alanların mevcut Zod davranışı değişmemiştir. Servislerin create/update veri nesneleri `nationalId` içermez; e-posta benzersizliği ve diğer üyelik/şube çakışma davranışları korunur.
+
+Bu değişiklik `User.nationalId` alanını, global `@unique` kısıtını veya migration'ları değiştirmez; geçmiş değerleri dönüştürmez/silmez ve üretim veritabanına bağlanmaz. Öğrenci/öğretmen ilişkileri, mevcut ilerleme, cevaplar, puanlar ve ölçüm kayıtları değiştirilmez. Kullanıcı/öğrenci/öğretmen ayrıntı servislerinin mevcut tam TCKN okuması ile yönetim arayüzündeki maskeli gösterim de bu kapsamda korunmuştur; bu, tam değerin her role gösterilmesi için gerekçe bulunduğu anlamına gelmez.
+
+**Açık veri sorumlusu kararı:** Tam TCKN'nin hangi yönetici rolüne hangi amaçla gösterilebileceği; alanın API ayrıntı yanıtında tam, maskeli veya hiç bulunmaması; liste, dışa aktarma, log/audit ve rapor politikaları; geçmiş değerlerin saklanması veya silinmesi hâlâ karara bağlanmalıdır. Bu adım yalnızca yeni yönetim TCKN yazımını durdurur; TCKN okuma yetkisini genişletmez veya daraltmaz. Prisma kolonu/indexi ve tarihsel kayıtlar için ayrı etki analizi ve karar gerekir.
+
+**P0-3C doğrulama kapsamı:** Şema sözleşme testleri altı platform create/update gövdesinde TCKN olmadan geçerli isteği, eski `nationalId` anahtarının reddini ve ilgisiz bilinmeyen alanların önceki gibi ayıklanmasını doğrular. PostgreSQL yönetim testleri kullanıcı, öğrenci ve öğretmen create işlemlerinin TCKN olmadan kaydedildiğini; eski payload'ların kayıt oluşturmadan reddedildiğini; TCKN taşımayan güncellemelerin mevcut tarihsel değeri koruduğunu ve eski TCKN update payload'larının mevcut değeri değiştirmeden reddedildiğini sınar. UI testi yönetim formu alanı, yükleme/normalleştirme ve create/update payload'larında TCKN olmadığını denetler. Prisma alanı ve unique niteliğinin korunduğu ayrıca kontrol edilir. Bu görevde UI/API/service davranışı dışında şema veya tarihsel veri değişikliği yapılmaz.
+
 ## Ürün sahibi / veri sorumlusu karar listesi
 
 1. **Hedef kullanıcı yaşı:** Uygulama hangi yaş grupları için tasarlanıyor; çocuk hedef kitle beyanı/Play Families kapsamı var mı? Doğum yılına göre tek başına karar vermeyin.

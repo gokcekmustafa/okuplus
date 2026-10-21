@@ -340,6 +340,7 @@ describe("teacher admin", () => {
     expect(body.data.user.displayName).toBe("Ayşe Hoca");
     expect(body.data.user.email).toBe(ORG_EMAIL);
     expect(body.data.user.birthYear).toBe(1985);
+    expect(body.data.user.nationalId).toBeNull();
 
     // TEACHER membership oluştu.
     const teacherMembership = body.data.memberships.find(
@@ -352,6 +353,27 @@ describe("teacher admin", () => {
     // Başlangıçta şube üyeliği ve sınıf ataması yok.
     expect(body.data.branches).toHaveLength(0);
     expect(body.data.classAssignments).toHaveLength(0);
+  });
+
+  it("TCKN içeren eski öğretmen oluşturma isteğini reddeder ve öğretmen oluşturmaz", async () => {
+    const email = "legacy-national-id-teacher@example.com";
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/teachers",
+      headers: await superAdminHeaders(),
+      payload: {
+        displayName: "Eski TCKN isteği",
+        email,
+        password: "legacy-teacher-pass-123!",
+        tenantId: ORG_TENANT,
+        nationalId: "12345678901",
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+    expect(await prisma.membership.count({ where: { user: { email }, role: "TEACHER" } })).toBe(0);
   });
 
   it("Aynı e-posta ile ikinci öğretmen: 409 (email unique)", async () => {
@@ -598,6 +620,11 @@ describe("teacher admin", () => {
   });
 
   it("Öğretmen düzenlenir (ad + telefon + durum)", async () => {
+    const legacyNationalId = "12345678901";
+    await prisma.user.update({
+      where: { id: orgTeacherUserId },
+      data: { nationalId: legacyNationalId },
+    });
     const res = await app.inject({
       method: "PATCH",
       url: `/admin/teachers/${orgTeacherUserId}`,
@@ -608,7 +635,29 @@ describe("teacher admin", () => {
     const body = res.json().data;
     expect(body.user.displayName).toBe("Ayşe Yılmaz");
     expect(body.user.phone).toBe("0 (555) 111 22 44");
+    expect(body.user.nationalId).toBe(legacyNationalId);
     expect(body.user.status).toBe("SUSPENDED");
+  });
+
+  it("TCKN içeren eski öğretmen güncelleme isteğini reddeder ve mevcut değeri korur", async () => {
+    const legacyNationalId = "12345678901";
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/admin/teachers/${orgTeacherUserId}`,
+      headers: await superAdminHeaders(),
+      payload: { nationalId: "10987654321" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(
+      (
+        await prisma.user.findUnique({
+          where: { id: orgTeacherUserId },
+          select: { nationalId: true },
+        })
+      )?.nationalId,
+    ).toBe(legacyNationalId);
   });
 
   it("Durum filtresi: SUSPENDED öğretmenler listelenir", async () => {

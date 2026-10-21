@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
+import { rejectNationalIdPayload, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * Öğretmen yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
@@ -47,30 +47,32 @@ export const listTeachersQuerySchema = z.object({
 });
 
 /** Yeni öğretmen oluşturma gövdesi (User + TEACHER Membership tek tx). */
-export const createTeacherSchema = z.object({
-  displayName: displayNameSchema,
-  email: emailSchema,
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  password: z
-    .string()
-    .min(8, "Parola en az 8 karakter olmalı")
-    .max(128, "Parola en fazla 128 karakter"),
-  tenantId: z.string().trim().min(1, "Kurum gerekli"),
-  branchId: z.string().trim().min(1).optional(),
-  status: userStatusSchema.optional(),
-});
+export const createTeacherSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema,
+    email: emailSchema,
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    password: z
+      .string()
+      .min(8, "Parola en az 8 karakter olmalı")
+      .max(128, "Parola en fazla 128 karakter"),
+    tenantId: z.string().trim().min(1, "Kurum gerekli"),
+    branchId: z.string().trim().min(1).optional(),
+    status: userStatusSchema.optional(),
+  }),
+);
 
 /** Öğretmen güncelleme gövdesi (kısmi; kişisel + hesap). */
-export const updateTeacherSchema = z.object({
-  displayName: displayNameSchema.optional(),
-  email: emailSchema.optional(),
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  status: userStatusSchema.optional(),
-});
+export const updateTeacherSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema.optional(),
+    email: emailSchema.optional(),
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    status: userStatusSchema.optional(),
+  }),
+);
 
 /** Şube üyeliği ekleme gövdesi. */
 export const createTeacherBranchSchema = z.object({

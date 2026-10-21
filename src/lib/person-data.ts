@@ -77,3 +77,22 @@ export const turkishNationalIdSchema = z
   )
   .nullable()
   .optional();
+
+/** Reject a retired TCKN request key while preserving each body's other Zod compatibility rules. */
+export function rejectNationalIdPayload<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((value, ctx) => {
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      Object.prototype.hasOwnProperty.call(value, "nationalId")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["nationalId"],
+        message: "TCKN bu yönetim isteğinde kabul edilmiyor",
+      });
+      return z.NEVER;
+    }
+    return value;
+  }, schema);
+}

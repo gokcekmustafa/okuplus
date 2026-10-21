@@ -352,7 +352,6 @@ export async function createStudent(input: CreateStudentInput): Promise<StudentD
           displayName: input.displayName,
           email: input.email,
           ...(input.phone ? { phone: input.phone } : {}),
-          ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
           ...(input.birthYear ? { birthYear: input.birthYear } : {}),
           ...(input.status ? { status: input.status } : {}),
           passwordHash,
@@ -441,7 +440,6 @@ export async function updateStudent(
         ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
-        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
         ...(input.birthYear !== undefined ? { birthYear: input.birthYear } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       };
@@ -521,9 +519,6 @@ function translateStudentError(err: unknown): never {
       const target = Array.isArray(err.meta?.target) ? String(err.meta.target[0]) : "";
       if (target === "email") {
         throw conflictError("Bu e-posta adresi zaten kullanımda");
-      }
-      if (target.toLowerCase().includes("nationalid")) {
-        throw conflictError("Bu TC Kimlik No zaten kullanımda");
       }
       if (
         String(err.meta?.target ?? "")

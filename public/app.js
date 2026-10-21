@@ -97,18 +97,6 @@ function setupPersonDataEvents() {
       if (formatted) input.value = formatted;
     });
   }
-  const nationalIdIds = [
-    "user-form-national-id",
-    "student-form-national-id",
-    "teacher-form-national-id",
-  ];
-  for (const id of nationalIdIds) {
-    const input = $(id);
-    if (!input) continue;
-    input.addEventListener("input", () => {
-      input.value = normalizeNationalIdValue(input.value);
-    });
-  }
 }
 
 let inFlight = false;
@@ -5342,12 +5330,6 @@ function formatTurkishPhoneValue(value) {
     : "";
 }
 
-function normalizeNationalIdValue(value) {
-  return String(value ?? "")
-    .replace(/\D/g, "")
-    .slice(0, 11);
-}
-
 function openTenantForm(mode, tenant = null) {
   tenantFormMode = mode;
   tenantEditingId = tenant?.id ?? null;
@@ -6035,15 +6017,7 @@ function membershipRoleOptions(tenantType) {
     .join("");
 }
 
-async function openUserForm(mode, user = null) {
-  if (mode === "edit" && user?.id && user.nationalId === undefined) {
-    try {
-      user = await parseResponse(await userApi(`/${encodeURIComponent(user.id)}`));
-    } catch (err) {
-      showUserError(err.message || "Kullanıcı bilgileri yüklenemedi.");
-      return;
-    }
-  }
+function openUserForm(mode, user = null) {
   userFormMode = mode;
   userEditingId = user?.id ?? null;
   $("user-form-title").textContent = mode === "create" ? "Yeni kullanıcı" : "Kullanıcıyı düzenle";
@@ -6051,7 +6025,6 @@ async function openUserForm(mode, user = null) {
   $("user-form-name").value = user?.displayName ?? "";
   $("user-form-email").value = user?.email ?? "";
   $("user-form-phone").value = user?.phone ?? "";
-  $("user-form-national-id").value = user?.nationalId ?? "";
   $("user-form-birthyear").value = user?.birthYear ?? "";
   $("user-form-status").value = user?.status ?? "ACTIVE";
   $("user-form-password").value = "";
@@ -6111,10 +6084,8 @@ async function submitUserForm(event) {
     status: $("user-form-status").value,
   };
   const phone = $("user-form-phone").value.trim();
-  const nationalId = $("user-form-national-id").value.trim();
   const birthYear = $("user-form-birthyear").value.trim();
   payload.phone = userFormMode === "create" ? phone || undefined : phone || null;
-  payload.nationalId = userFormMode === "create" ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
   if (userFormMode === "create") payload.password = $("user-form-password").value;
 
@@ -6277,7 +6248,6 @@ function renderUserDetail(u, notice = "") {
         <label class="field"><span>Ad soyad *</span><input id="user-detail-name" type="text" maxlength="120" required value="${escapeHtml(u.displayName ?? "")}" /></label>
         <label class="field"><span>E-posta *</span><input id="user-detail-email" type="email" maxlength="254" required value="${escapeHtml(u.email ?? "")}" /></label>
         <label class="field"><span>Telefon</span><input id="user-detail-phone" type="text" maxlength="30" value="${escapeHtml(u.phone ?? "")}" /></label>
-        <label class="field"><span>TC Kimlik No</span><input id="user-detail-national-id" type="text" inputmode="numeric" maxlength="11" value="${escapeHtml(u.nationalId ?? "")}" /></label>
         <label class="field"><span>Doğum yılı</span><input id="user-detail-birthyear" type="number" min="1900" max="${new Date().getFullYear()}" value="${u.birthYear ?? ""}" /></label>
         <label class="field"><span>Durum *</span><select id="user-detail-status">${setSelectedOption(
           Object.entries(USER_STATUS_LABELS)
@@ -6407,7 +6377,6 @@ async function submitUserDetailForm(event) {
     displayName: $("user-detail-name").value.trim(),
     email: $("user-detail-email").value.trim(),
     phone: $("user-detail-phone").value.trim() || null,
-    nationalId: $("user-detail-national-id").value.trim() || null,
     status: $("user-detail-status").value,
   };
   const birthYear = $("user-detail-birthyear").value.trim();
@@ -6966,7 +6935,6 @@ async function openStudentForm(mode, student = null) {
   $("student-form-name").value = student?.user?.displayName ?? "";
   $("student-form-email").value = student?.user?.email ?? "";
   $("student-form-phone").value = student?.user?.phone ?? "";
-  $("student-form-national-id").value = student?.user?.nationalId ?? "";
   $("student-form-birthyear").value = student?.user?.birthYear ?? "";
   $("student-form-status").value = student?.user?.status ?? "ACTIVE";
   $("student-form-password").value = "";
@@ -7034,10 +7002,8 @@ async function submitStudentForm(event) {
     status: $("student-form-status").value,
   };
   const phone = $("student-form-phone").value.trim();
-  const nationalId = $("student-form-national-id").value.trim();
   const birthYear = $("student-form-birthyear").value.trim();
   payload.phone = isCreate ? phone || undefined : phone || null;
-  payload.nationalId = isCreate ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
 
   if (!payload.displayName) {
@@ -7775,7 +7741,6 @@ function openTeacherForm(mode, teacher = null) {
   $("teacher-form-name").value = teacher?.user?.displayName ?? "";
   $("teacher-form-email").value = teacher?.user?.email ?? "";
   $("teacher-form-phone").value = teacher?.user?.phone ?? "";
-  $("teacher-form-national-id").value = teacher?.user?.nationalId ?? "";
   $("teacher-form-birthyear").value = teacher?.user?.birthYear ?? "";
   $("teacher-form-status").value = teacher?.user?.status ?? "ACTIVE";
   $("teacher-form-password").value = "";
@@ -7820,10 +7785,8 @@ async function submitTeacherForm(event) {
     status: $("teacher-form-status").value,
   };
   const phone = $("teacher-form-phone").value.trim();
-  const nationalId = $("teacher-form-national-id").value.trim();
   const birthYear = $("teacher-form-birthyear").value.trim();
   payload.phone = isCreate ? phone || undefined : phone || null;
-  payload.nationalId = isCreate ? nationalId || undefined : nationalId || null;
   if (birthYear) payload.birthYear = Number(birthYear);
 
   if (!payload.displayName) {

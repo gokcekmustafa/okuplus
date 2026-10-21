@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { turkishNationalIdSchema, turkishPhoneSchema } from "../../lib/person-data.js";
+import { rejectNationalIdPayload, turkishPhoneSchema } from "../../lib/person-data.js";
 
 /**
  * User + Membership yönetimi Zod şemaları (yalnızca SUPER_ADMIN).
@@ -35,28 +35,30 @@ const displayNameSchema = z
   .max(120, "Ad en fazla 120 karakter olmalı");
 
 /** Yeni kullanıcı oluşturma gövdesi. */
-export const createUserSchema = z.object({
-  displayName: displayNameSchema,
-  email: emailSchema,
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  status: userStatusSchema.optional(),
-  password: z
-    .string()
-    .min(8, "Parola en az 8 karakter olmalı")
-    .max(128, "Parola en fazla 128 karakter"),
-});
+export const createUserSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema,
+    email: emailSchema,
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    status: userStatusSchema.optional(),
+    password: z
+      .string()
+      .min(8, "Parola en az 8 karakter olmalı")
+      .max(128, "Parola en fazla 128 karakter"),
+  }),
+);
 
 /** Kullanıcı güncelleme gövdesi (kısmi). */
-export const updateUserSchema = z.object({
-  displayName: displayNameSchema.optional(),
-  email: emailSchema.optional(),
-  phone: turkishPhoneSchema,
-  nationalId: turkishNationalIdSchema,
-  birthYear: birthYearSchema,
-  status: userStatusSchema.optional(),
-});
+export const updateUserSchema = rejectNationalIdPayload(
+  z.object({
+    displayName: displayNameSchema.optional(),
+    email: emailSchema.optional(),
+    phone: turkishPhoneSchema,
+    birthYear: birthYearSchema,
+    status: userStatusSchema.optional(),
+  }),
+);
 
 export const resetUserPasswordSchema = z.object({
   password: z

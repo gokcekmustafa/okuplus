@@ -373,6 +373,7 @@ describe("student admin", () => {
     expect(body.data.user.email).toBe(ORG_EMAIL);
     expect(body.data.user.phone).toBe("0 (555) 111 22 33");
     expect(body.data.user.birthYear).toBe(2012);
+    expect(body.data.user.nationalId).toBeNull();
     expect(body.data.tenant.id).toBe(ORG_TENANT);
     expect(body.data.profile.currentLevel?.code).toBe("A1");
     expect(body.data.profile.targetLevel?.code).toBe("A2");
@@ -397,6 +398,27 @@ describe("student admin", () => {
     });
     expect(dbProfile).toBeTruthy();
     expect(dbProfile?.student.email).toBe(ORG_EMAIL);
+  });
+
+  it("TCKN içeren eski öğrenci oluşturma isteğini reddeder ve öğrenci oluşturmaz", async () => {
+    const email = "legacy-national-id-student@example.com";
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/students",
+      headers: await superAdminHeaders(),
+      payload: {
+        displayName: "Eski TCKN isteği",
+        email,
+        password: "legacy-student-pass-123!",
+        tenantId: ORG_TENANT,
+        nationalId: "12345678901",
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+    expect(await prisma.studentProfile.count({ where: { student: { email } } })).toBe(0);
   });
 
   it("Oluşturulan öğrenci listede görünür ve sınıfı gösterilir", async () => {
@@ -596,6 +618,11 @@ describe("student admin", () => {
   });
 
   it("StudentProfile güncellenir (seviye değişimi)", async () => {
+    const legacyNationalId = "12345678901";
+    await prisma.user.update({
+      where: { id: orgUserId },
+      data: { nationalId: legacyNationalId },
+    });
     const res = await app.inject({
       method: "PATCH",
       url: `/admin/students/${orgStudentId}`,
@@ -613,6 +640,28 @@ describe("student admin", () => {
     expect(body.data.user.birthYear).toBe(2011);
     expect(body.data.profile.currentLevel?.code).toBe("A2");
     expect(body.data.profile.targetLevel).toBeNull();
+    expect(body.data.user.nationalId).toBe(legacyNationalId);
+    expect(
+      (await prisma.user.findUnique({ where: { id: orgUserId }, select: { nationalId: true } }))
+        ?.nationalId,
+    ).toBe(legacyNationalId);
+  });
+
+  it("TCKN içeren eski öğrenci güncelleme isteğini reddeder ve mevcut değeri korur", async () => {
+    const legacyNationalId = "12345678901";
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/admin/students/${orgStudentId}`,
+      headers: await superAdminHeaders(),
+      payload: { nationalId: "10987654321" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe("VALIDATION_ERROR");
+    expect(
+      (await prisma.user.findUnique({ where: { id: orgUserId }, select: { nationalId: true } }))
+        ?.nationalId,
+    ).toBe(legacyNationalId);
   });
 
   it("Öğrenci hesap durumu değiştirilir", async () => {
