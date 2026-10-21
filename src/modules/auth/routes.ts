@@ -48,7 +48,6 @@ const signupBodySchema = {
     password: { type: "string", minLength: 8, maxLength: 128 },
     displayName: { type: "string", minLength: 1, maxLength: 120 },
     phone: { type: "string", maxLength: 30 },
-    nationalId: { type: "string", minLength: 11, maxLength: 11 },
     deviceName: { type: "string", minLength: 1, maxLength: 120 },
     platform: { type: "string", enum: ["WEB", "IOS", "ANDROID", "UNKNOWN"] },
   },

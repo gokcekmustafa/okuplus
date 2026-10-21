@@ -98,7 +98,6 @@ function setupPersonDataEvents() {
     });
   }
   const nationalIdIds = [
-    "signup-national-id",
     "tenant-form-admin-national-id",
     "user-form-national-id",
     "student-form-national-id",
@@ -1017,7 +1016,7 @@ async function login(email, password) {
   return parseResponse(res);
 }
 
-async function signup(displayName, email, password, phone, nationalId) {
+async function signup(displayName, email, password, phone) {
   const res = await fetch("/auth/signup", {
     method: "POST",
     credentials: "include",
@@ -1027,7 +1026,6 @@ async function signup(displayName, email, password, phone, nationalId) {
       email,
       password,
       ...(phone ? { phone } : {}),
-      ...(nationalId ? { nationalId } : {}),
     }),
   });
   return parseResponse(res);
@@ -1429,7 +1427,6 @@ async function loadAccountProfile() {
     $("account-profile-name").value = data.displayName ?? "";
     $("account-profile-email").value = data.email ?? "";
     $("account-profile-phone").value = data.phone ?? "";
-    $("account-profile-national-id").value = data.nationalId ?? "";
     $("account-profile-birthyear").value = data.birthYear ?? "";
     $("account-profile-error").classList.add("hidden");
   } catch (error) {
@@ -1448,7 +1445,6 @@ async function submitAccountProfile(event) {
     displayName: $("account-profile-name").value.trim(),
     email: $("account-profile-email").value.trim(),
     phone: $("account-profile-phone").value.trim() || null,
-    nationalId: $("account-profile-national-id").value.trim() || null,
     birthYear: $("account-profile-birthyear").value
       ? Number($("account-profile-birthyear").value)
       : null,
@@ -1472,7 +1468,6 @@ async function submitAccountProfile(event) {
     $("account-profile-name").value = data.displayName ?? "";
     $("account-profile-email").value = data.email ?? "";
     $("account-profile-phone").value = data.phone ?? "";
-    $("account-profile-national-id").value = data.nationalId ?? "";
     $("account-profile-birthyear").value = data.birthYear ?? "";
     $("user-name").textContent = data.displayName ?? "";
     $("welcome-name").textContent = data.displayName ?? "";
@@ -5650,7 +5645,6 @@ $("signup-form").addEventListener("submit", async (event) => {
   const email = $("signup-email").value.trim();
   const password = $("signup-password").value;
   const phone = $("signup-phone").value.trim();
-  const nationalId = $("signup-national-id").value.trim();
 
   if (!displayName || !email || password.length < 8) {
     $("signup-error").textContent = "Ad, geçerli e-posta ve en az 8 karakter şifre gereklidir.";
@@ -5661,7 +5655,7 @@ $("signup-form").addEventListener("submit", async (event) => {
   inFlight = true;
   setSignupLoading(true);
   try {
-    const session = await signup(displayName, email, password, phone, nationalId);
+    const session = await signup(displayName, email, password, phone);
     setStoredSession(session);
     await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);

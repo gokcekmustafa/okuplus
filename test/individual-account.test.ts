@@ -265,7 +265,29 @@ describe.sequential("individual account foundation", () => {
     expect(await prisma.user.findUnique({ where: { id: userAId } })).toMatchObject({
       email: EMAIL_A,
       status: "ACTIVE",
+      nationalId: null,
     });
+  });
+
+  it("signup TCKN alanını reddeder ve User veya kişisel tenant oluşturmaz", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: {
+        email: ROLLBACK_EMAIL,
+        password: PASSWORD,
+        displayName: "TCKN gönderim denemesi",
+        nationalId: "12345678901",
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(await prisma.user.count({ where: { email: ROLLBACK_EMAIL } })).toBe(0);
+    expect(
+      await prisma.tenant.count({
+        where: { memberships: { some: { user: { email: ROLLBACK_EMAIL } } } },
+      }),
+    ).toBe(0);
   });
 
   it("3. personal tenant oluşturulur", async () => {
@@ -344,6 +366,47 @@ describe.sequential("individual account foundation", () => {
       tenantId: tenantAId,
       tenantType: "INDIVIDUAL",
       tenantName: "Kişisel",
+    });
+  });
+
+  it("self-service profil TCKN'yi göstermez, kabul etmez veya mevcut değeri değiştirmez", async () => {
+    const legacyValue = "00000000001";
+    await prisma.user.update({ where: { id: userAId }, data: { nationalId: legacyValue } });
+
+    const profileResponse = await app.inject({
+      method: "GET",
+      url: "/auth/profile",
+      headers: await authHeaders(),
+    });
+    expect(profileResponse.statusCode).toBe(200);
+    expect(profileResponse.json().data).not.toHaveProperty("nationalId");
+
+    const rejectedUpdate = await app.inject({
+      method: "PATCH",
+      url: "/auth/profile",
+      headers: await authHeaders(),
+      payload: {
+        displayName: "Ada",
+        email: EMAIL_A,
+        phone: null,
+        birthYear: null,
+        nationalId: "12345678901",
+      },
+    });
+    expect(rejectedUpdate.statusCode).toBe(400);
+
+    const validUpdate = await app.inject({
+      method: "PATCH",
+      url: "/auth/profile",
+      headers: await authHeaders(),
+      payload: { displayName: "Ada Güncel", email: EMAIL_A, phone: null, birthYear: null },
+    });
+    expect(validUpdate.statusCode).toBe(200);
+    expect(validUpdate.json().data).not.toHaveProperty("nationalId");
+    expect(
+      await prisma.user.findUnique({ where: { id: userAId }, select: { nationalId: true } }),
+    ).toEqual({
+      nationalId: legacyValue,
     });
   });
 

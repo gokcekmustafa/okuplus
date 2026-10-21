@@ -8,7 +8,6 @@ const ACCOUNT_PROFILE_SELECT = {
   displayName: true,
   email: true,
   phone: true,
-  nationalId: true,
   birthYear: true,
 } satisfies Prisma.UserSelect;
 
@@ -34,19 +33,13 @@ export async function updateAccountProfile(
         displayName: input.displayName,
         email: input.email,
         phone: input.phone ?? null,
-        nationalId: input.nationalId ?? null,
         birthYear: input.birthYear ?? null,
       },
       select: ACCOUNT_PROFILE_SELECT,
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      const target = String(error.meta?.target ?? "").toLowerCase();
-      throw conflictError(
-        target.includes("nationalid")
-          ? "Bu TC Kimlik No zaten kullanımda"
-          : "Bu e-posta adresi zaten kullanımda",
-      );
+      throw conflictError("Bu e-posta adresi zaten kullanımda");
     }
     throw error;
   }
