@@ -25,6 +25,7 @@ import {
 import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
 import { accountProfileSchema } from "./schemas.js";
 import { getAccountProfile, updateAccountProfile } from "./profile-service.js";
+import { validationError } from "../../lib/errors.js";
 
 const loginSchema = {
   type: "object",
@@ -85,6 +86,17 @@ const allowEmptyRefreshBody = async (request: FastifyRequest): Promise<void> => 
   if (request.body === undefined) request.body = {};
 };
 
+const rejectSignupNationalId = async (request: FastifyRequest): Promise<void> => {
+  const body = request.body;
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    Object.prototype.hasOwnProperty.call(body, "nationalId")
+  ) {
+    throw validationError("Bireysel kayıtta T.C. kimlik numarası kabul edilmiyor");
+  }
+};
+
 /**
  * Auth uçları.
  *  POST /auth/signup   — bireysel hesap + personal context oluşturur ve giriş yapar
@@ -132,7 +144,11 @@ export async function authRoutes(
 
   app.post<{ Body: SignupInput & SessionMetadata }>(
     "/auth/signup",
-    { schema: { body: signupBodySchema }, preHandler: authOriginPreHandler },
+    {
+      schema: { body: signupBodySchema },
+      preValidation: rejectSignupNationalId,
+      preHandler: authOriginPreHandler,
+    },
     async (request, reply) => {
       const input = signupSchema.parse(request.body);
       await signupPersonalAccount(input);
