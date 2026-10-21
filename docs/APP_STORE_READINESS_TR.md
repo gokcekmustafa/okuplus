@@ -149,7 +149,8 @@ Tam advisories, etkilenmiş lockfile sürümleri ve güvenli hedef sürüm matri
 - Kapsam: yalnızca repository/schema/migration/mobile/workflow statik incelemesi ve npm audit; üretim veritabanı veya öğrenci hesabı kullanılmadı.
 - `npm audit`: root tam ağacı ve production-only; mobile tam ağaç ve production-only ayrı çalıştırıldı. Bulgular yukarıda.
 - Uygulama testleri: bu dokümantasyon denetiminde uygulama davranışı değiştirilmediği için çalıştırılmadı; bu, store davranışı doğrulaması değildir.
-- Format/diff doğrulaması ve CI: belge eklendikten sonra çalıştırılacak ve sonuç commit/push raporuna yazılacak.
+- Doküman doğrulaması: `npx prettier --check docs/APP_STORE_READINESS_TR.md` ve staged `git diff --cached --check` başarılı.
+- GitHub CI: [run #39574044616](https://github.com/gokcekmustafa/okuplus/actions/runs/39574044616) — `quality` başarılı. Vercel commit status'u `success` oldu; bu belge-only değişiklik uygulama mağazası paketini veya mağaza gönderimini doğrulamaz.
 - Üretim verisi, migration, seed, ödeme, yayın durumu ve öğrenci ilerlemesi: DEĞİŞTİRİLMEDİ.
 
 ## Resmî politika kaynakları
