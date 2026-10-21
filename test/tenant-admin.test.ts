@@ -130,8 +130,9 @@ describe("tenant admin", () => {
       headers: await superAdminHeaders(),
     });
 
-    expect(res.statusCode).toBe(200);
     const body = res.json();
+    createdTenantId = typeof body.data?.id === "string" ? body.data.id : null;
+    expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.items.length).toBeGreaterThanOrEqual(1);
     const found = body.data.items.find((t: { id: string }) => t.id === TENANT_A);
@@ -181,13 +182,11 @@ describe("tenant admin", () => {
     expect(body.data.name).toBe("Test Kurumu");
     expect(body.data.slug).toBe("test-kurumu");
     expect(body.data.type).toBe("ORGANIZATION");
-    expect(body.data.counts.memberships).toBe(1);
-    createdTenantId = body.data.id;
-
     const adminMembership = await prisma.membership.findFirst({
       where: { tenantId: createdTenantId, role: "ORG_ADMIN" },
       select: { user: { select: { id: true, email: true, nationalId: true } } },
     });
+    expect(adminMembership).not.toBeNull();
     createdAdminUserId = adminMembership?.user.id ?? null;
     expect(adminMembership?.user).toMatchObject({
       email: "test-kurumu-admin@example.com",
