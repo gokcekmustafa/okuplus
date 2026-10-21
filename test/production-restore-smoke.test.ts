@@ -79,7 +79,11 @@ describe("isolated production restore smoke contract", () => {
       script.indexOf('import("../src/app.js")'),
     );
     expect(script).toContain('app.inject({ method: "GET", url });');
-    expect(script).toContain("prisma.accountDeletionRequest.count()");
+    expect(script).toContain(
+      `SELECT to_regclass('public."AccountDeletionRequest"')::text AS table_name`,
+    );
+    expect(script).not.toContain("prisma.accountDeletionRequest.count()");
+    expect(script).toContain("accountDeletionRequestSchema");
     expect(script).toContain("role.rolsuper AS is_superuser");
     expect(script).toContain("role.rolbypassrls AS bypasses_rls");
     expect(script).not.toContain("$executeRaw");

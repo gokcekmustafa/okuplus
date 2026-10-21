@@ -70,7 +70,7 @@ jobs:
               health: "NOT_RUN",
               healthDb: "NOT_RUN",
               ready: "NOT_RUN",
-              accountDeletionRequestRead: "NOT_RUN",
+              accountDeletionRequestSchema: "NOT_RUN",
             },
             databaseRolePrivileges: {
               status: "NOT_RUN",
@@ -89,7 +89,7 @@ jobs:
               typeof parsed === "object" &&
               ["NOT_RUN", "PASS", "BLOCKED", "FAIL"].includes(parsed.targetValidation?.status) &&
               typeof parsed.targetValidation.reason === "string" &&
-              ["appInitialization", "health", "healthDb", "ready", "accountDeletionRequestRead"].every(
+              ["appInitialization", "health", "healthDb", "ready", "accountDeletionRequestSchema"].every(
                 (key) => validCheck(parsed.checks?.[key]),
               ) &&
               validCheck(parsed.databaseRolePrivileges?.status) &&
@@ -106,7 +106,7 @@ jobs:
                   health: parsed.checks.health,
                   healthDb: parsed.checks.healthDb,
                   ready: parsed.checks.ready,
-                  accountDeletionRequestRead: parsed.checks.accountDeletionRequestRead,
+                  accountDeletionRequestSchema: parsed.checks.accountDeletionRequestSchema,
                 },
                 databaseRolePrivileges: {
                   status: parsed.databaseRolePrivileges.status,
@@ -130,7 +130,7 @@ jobs:
             `- GET /health: ${report.checks.health}`,
             `- GET /health/db: ${report.checks.healthDb}`,
             `- GET /ready: ${report.checks.ready}`,
-            `- AccountDeletionRequest read: ${report.checks.accountDeletionRequestRead}`,
+            `- AccountDeletionRequest schema: ${report.checks.accountDeletionRequestSchema}`,
             `- DB role flags: ${JSON.stringify(report.databaseRolePrivileges)}`,
             `- Commit: ${report.commitSha}`,
           ];

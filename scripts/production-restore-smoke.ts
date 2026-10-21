@@ -11,7 +11,7 @@ type SmokeReport = {
     health: Check;
     healthDb: Check;
     ready: Check;
-    accountDeletionRequestRead: Check;
+    accountDeletionRequestSchema: Check;
   };
   databaseRolePrivileges: {
     status: Check;
@@ -29,7 +29,7 @@ function newReport(): SmokeReport {
       health: "NOT_RUN",
       healthDb: "NOT_RUN",
       ready: "NOT_RUN",
-      accountDeletionRequestRead: "NOT_RUN",
+      accountDeletionRequestSchema: "NOT_RUN",
     },
     databaseRolePrivileges: {
       status: "NOT_RUN",
@@ -120,9 +120,15 @@ async function run(): Promise<void> {
     activeCheck = "ready";
     report.checks.ready = await checkGet(app, "/ready", { status: "ok", ready: true });
 
-    activeCheck = "accountDeletionRequestRead";
-    await prisma.accountDeletionRequest.count();
-    report.checks.accountDeletionRequestRead = "PASS";
+    activeCheck = "accountDeletionRequestSchema";
+    const accountDeletionRequestTable = await prisma.$queryRaw<
+      Array<{ table_name: string | null }>
+    >`SELECT to_regclass('public."AccountDeletionRequest"')::text AS table_name`;
+    if (!accountDeletionRequestTable[0]?.table_name) {
+      report.checks.accountDeletionRequestSchema = "FAIL";
+    } else {
+      report.checks.accountDeletionRequestSchema = "PASS";
+    }
     activeCheck = null;
 
     roleQueryActive = true;
