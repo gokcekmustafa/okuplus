@@ -569,6 +569,7 @@ model User {
   billingWebhookEvents     BillingWebhookEvent[]
   authIdentities           AuthIdentity[]
   authSessions             AuthSession[]
+  accountDeletionRequests  AccountDeletionRequest[]
   learningPathRouteOverrides StudentLearningPath[] @relation("LearningPathRouteOverride")
 
   @@index([status])
@@ -611,6 +612,19 @@ model AuthSession {
   @@index([userId, revokedAt])
   @@index([tokenFamilyId])
   @@index([expiresAt])
+}
+
+/// Self-service silme talebinin yalnızca teknik kaydıdır; veri işçisi/anonimleştirme değildir.
+model AccountDeletionRequest {
+  id        String   @id @default(dbgenerated("uuidv7()"))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status    String   @default("IDENTITY_REQUIRED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
 }
 
 model Tenant {

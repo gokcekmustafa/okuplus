@@ -26,6 +26,10 @@ import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
 import { accountProfileSchema } from "./schemas.js";
 import { getAccountProfile, updateAccountProfile } from "./profile-service.js";
 import { validationError } from "../../lib/errors.js";
+import {
+  createAccountDeletionRequest,
+  getCurrentAccountDeletionRequest,
+} from "./account-deletion-requests.js";
 
 const loginSchema = {
   type: "object",
@@ -80,6 +84,12 @@ const refreshSchema = {
   properties: {
     refreshToken: { type: "string", minLength: 1, maxLength: 4096 },
   },
+} as const;
+
+const accountDeletionRequestBodySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {},
 } as const;
 
 const allowEmptyRefreshBody = async (request: FastifyRequest): Promise<void> => {
@@ -338,4 +348,34 @@ export async function authRoutes(
       request.tenantContext.role === "STUDENT";
     return ok({ contexts, locked });
   });
+
+  app.post(
+    "/auth/account-deletion-requests",
+    {
+      schema: { body: accountDeletionRequestBodySchema },
+      preHandler: [requireAuth(authProvider)],
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const result = await createAccountDeletionRequest(request.authUser!.id);
+      return reply.code(202).send(
+        ok({
+          request: result.request,
+          created: result.created,
+          message:
+            "Talebin kaydedildi. Ek kimlik doğrulaması ve kapsam değerlendirmesi tamamlanana kadar bekleyecek; bu kayıt hesabını veya verilerini silmez.",
+        }),
+      );
+    },
+  );
+
+  app.get(
+    "/auth/account-deletion-requests/current",
+    { preHandler: [requireAuth(authProvider)] },
+    async (request, reply) => {
+      setNoStore(reply);
+      const current = await getCurrentAccountDeletionRequest(request.authUser!.id);
+      return reply.send(ok({ request: current }));
+    },
+  );
 }

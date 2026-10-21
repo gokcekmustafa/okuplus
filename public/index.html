@@ -6346,6 +6346,26 @@
                 </button>
               </form>
             </section>
+            <section class="settings-card card" aria-labelledby="account-deletion-request-title">
+              <div>
+                <span class="eyebrow">HESAP TALEBİ</span>
+                <h3 id="account-deletion-request-title">Hesap silme talebi</h3>
+                <p class="muted">
+                  Talep kaydı hesabını kapatmaz ve verilerini silmez. Ek kimlik doğrulaması ile
+                  kapsam ve saklama kararları tamamlanana kadar işlem başlatılmaz.
+                </p>
+              </div>
+              <p id="account-deletion-request-error" class="error hidden" role="alert"></p>
+              <p
+                id="account-deletion-request-status"
+                class="muted"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <button id="account-deletion-request-submit" type="button" class="btn btn-secondary">
+                Talep oluştur
+              </button>
+            </section>
             <section
               class="card premium-account-card"
               data-personal-billing

@@ -35,6 +35,8 @@ const app = new PrismaClient({
 const TENANT_A = "99999995-0000-7000-8000-00000000000a";
 const TENANT_B = "99999995-0000-7000-8000-00000000000b";
 const USER_ID = "99999995-0000-7000-8000-000000000001";
+const OTHER_USER_ID = "99999995-0000-7000-8000-000000000002";
+const ACCOUNT_DELETION_REQUEST_ID = "99999995-0000-7000-8000-0000000000d1";
 
 const GLOBAL_CONTENT = "99999995-0000-7000-8000-0000000000c1";
 const CONTENT_A = "99999995-0000-7000-8000-0000000000a1";
@@ -54,8 +56,23 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
 
     // Olası kesinti kalıntısını temizle (idempotent): yalnızca bu testin
     // kendi ID'lerini siler, demo/gerçek veriye dokunmaz.
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: { in: [USER_ID, OTHER_USER_ID] } },
+    });
+    await prisma.user.deleteMany({ where: { id: { in: [USER_ID, OTHER_USER_ID] } } });
     await prisma.content.deleteMany({ where: { id: { in: testContentIds } } });
     await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
+
+    await prisma.user.createMany({
+      data: [
+        { id: USER_ID, email: "rls-deletion-owner@example.test", displayName: "RLS Owner" },
+        {
+          id: OTHER_USER_ID,
+          email: "rls-deletion-other@example.test",
+          displayName: "RLS Other",
+        },
+      ],
+    });
 
     // Tenant tablosunda RLS yok; oku_app INSERT yetkisine sahip.
     await app.tenant.create({
@@ -120,7 +137,11 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
   afterAll(async () => {
     // Yalnızca bu testin oluşturduğu kayıtları siler; TRUNCATE kullanmaz,
     // böylece demo/gerçek geliştirme verisi asla silinmez.
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: { in: [USER_ID, OTHER_USER_ID] } },
+    });
     await prisma.content.deleteMany({ where: { id: { in: testContentIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: [USER_ID, OTHER_USER_ID] } } });
     await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
     await app.$disconnect();
   });
@@ -224,5 +245,48 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
     );
 
     expect(visibleCount).toBe(0);
+  });
+
+  it("silme talebi RLS'i yalnız sahibine SELECT/INSERT verir; güncelleme ve başkasının kaydı engellenir", async () => {
+    const request = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) =>
+        tx.accountDeletionRequest.create({
+          data: { id: ACCOUNT_DELETION_REQUEST_ID, userId: USER_ID },
+        }),
+      app,
+    );
+
+    const ownRows = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.accountDeletionRequest.findMany({ select: { id: true } }),
+      app,
+    );
+    const otherRows = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.accountDeletionRequest.findMany({ select: { id: true } }),
+      app,
+    );
+
+    expect(ownRows.map(({ id }) => id)).toContain(request.id);
+    expect(otherRows.map(({ id }) => id)).not.toContain(request.id);
+    await expect(
+      withTenantContext(
+        { userId: USER_ID, tenantId: null, platformRole: null },
+        (tx) =>
+          tx.accountDeletionRequest.update({
+            where: { id: request.id },
+            data: { status: "COMPLETED" },
+          }),
+        app,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withTenantContext(
+        { userId: USER_ID, tenantId: null, platformRole: null },
+        (tx) => tx.accountDeletionRequest.create({ data: { userId: OTHER_USER_ID } }),
+        app,
+      ),
+    ).rejects.toThrow();
   });
 });

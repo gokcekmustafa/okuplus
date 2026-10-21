@@ -1471,6 +1471,75 @@ function setupAccountProfileEvents() {
   $("account-profile-form")?.addEventListener("submit", submitAccountProfile);
 }
 
+function accountDeletionRequestStatusMessage(request) {
+  if (!request) return "Henüz bir hesap silme talebin yok.";
+  if (request.status === "IDENTITY_REQUIRED") {
+    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor. Bu kayıt hesabını veya verilerini silmez.";
+  }
+  return "Talebin kayıtlı. Hesabın veya verilerin silindiği anlamına gelmez.";
+}
+
+async function loadAccountDeletionRequest() {
+  const status = $("account-deletion-request-status");
+  const errorEl = $("account-deletion-request-error");
+  const button = $("account-deletion-request-submit");
+  if (!status || !errorEl || !button) return;
+
+  errorEl.classList.add("hidden");
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/auth/account-deletion-requests/current", {
+        headers: authHeaders(tokens.accessToken, tokens.tenantId),
+        cache: "no-store",
+      }),
+    );
+    const request = data.request ?? null;
+    status.textContent = accountDeletionRequestStatusMessage(request);
+    button.hidden = Boolean(request);
+  } catch (error) {
+    errorEl.textContent = error.message || "Talep durumu yüklenemedi.";
+    errorEl.classList.remove("hidden");
+    button.hidden = false;
+  }
+}
+
+async function submitAccountDeletionRequest() {
+  const status = $("account-deletion-request-status");
+  const errorEl = $("account-deletion-request-error");
+  const button = $("account-deletion-request-submit");
+  if (!status || !errorEl || !button || button.disabled) return;
+
+  errorEl.classList.add("hidden");
+  setAsyncButtonState(button, true, "Talep kaydediliyor…");
+  try {
+    const tokens = getStoredTokens();
+    const data = await parseResponse(
+      await fetch("/auth/account-deletion-requests", {
+        method: "POST",
+        headers: {
+          ...authHeaders(tokens.accessToken, tokens.tenantId),
+          ...csrfHeaders(),
+        },
+        body: JSON.stringify({}),
+      }),
+    );
+    status.textContent = data.message || accountDeletionRequestStatusMessage(data.request ?? null);
+    button.hidden = true;
+  } catch (error) {
+    errorEl.textContent = error.message || "Talep kaydedilemedi. Tekrar deneyebilirsin.";
+    errorEl.classList.remove("hidden");
+  } finally {
+    setAsyncButtonState(button, false, "Talep kaydediliyor…");
+  }
+}
+
+function setupAccountDeletionRequestEvents() {
+  $("account-deletion-request-submit")?.addEventListener("click", () => {
+    void submitAccountDeletionRequest();
+  });
+}
+
 function configureOrganizationScopeUi() {
   if (!isOrganizationUser || !currentTenantId) return;
   for (const id of [
@@ -4976,6 +5045,7 @@ function navigate(page, { continuation = null } = {}) {
     void loadBillingAccount();
   } else if (page === "settings") {
     void loadAccountProfile();
+    void loadAccountDeletionRequest();
   } else if (page === "tenants") {
     void loadTenants();
   } else if (page === "users") {
@@ -18273,6 +18343,7 @@ async function init() {
   setupThemeEvents();
   setupPersonDataEvents();
   setupAccountProfileEvents();
+  setupAccountDeletionRequestEvents();
   restoreSession();
   setupModalAccessibility();
   setupTenantEvents();

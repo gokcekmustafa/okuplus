@@ -29,6 +29,9 @@ const PASSWORD = "test-pass-123!";
 describe("auth", () => {
   beforeAll(async () => {
     await prisma.$connect();
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: { in: [USER_ID, SUSPENDED_USER_ID, PLATFORM_USER_ID] } },
+    });
     await prisma.studentBadge.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
@@ -55,6 +58,15 @@ describe("auth", () => {
         email: "student@example.com",
         displayName: "Normal Student",
         passwordHash,
+      },
+    });
+    await prisma.authIdentity.create({
+      data: {
+        userId: USER_ID,
+        provider: "GOOGLE",
+        subject: "auth-test-account-deletion-subject",
+        providerEmail: "student@example.com",
+        emailVerified: true,
       },
     });
     await prisma.user.create({
@@ -88,6 +100,9 @@ describe("auth", () => {
   });
 
   afterAll(async () => {
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: { in: [USER_ID, SUSPENDED_USER_ID, PLATFORM_USER_ID] } },
+    });
     await prisma.studentBadge.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
@@ -332,6 +347,156 @@ describe("auth", () => {
     });
 
     expect(values?.tenant_id).toBe(TENANT_A);
+
+    await app.close();
+  });
+
+  it("hesap silme talebi uçları oturum gerektirir ve cookie CSRF korumasını devralır", async () => {
+    const app = await buildApp(env);
+    await app.ready();
+
+    const createWithoutAuth = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests",
+      payload: {},
+    });
+    const statusWithoutAuth = await app.inject({
+      method: "GET",
+      url: "/auth/account-deletion-requests/current",
+    });
+    const cookieWithoutCsrf = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests",
+      headers: { cookie: "__Host-oku_access=fake-session" },
+      payload: {},
+    });
+
+    expect(createWithoutAuth.statusCode).toBe(401);
+    expect(statusWithoutAuth.statusCode).toBe(401);
+    expect(cookieWithoutCsrf.statusCode).toBe(403);
+
+    await app.close();
+  });
+
+  it("yalnız kendi teknik talebini idempotent alır; durum ve kullanıcı verileri değiştirilemez", async () => {
+    const app = await buildApp(env);
+    await app.ready();
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "student@example.com", password: PASSWORD },
+    });
+    const { accessToken } = login.json().data.tokens;
+    const headers = { authorization: `Bearer ${accessToken}` };
+    const context = { userId: USER_ID, tenantId: null, platformRole: null } as const;
+    const snapshot = async () =>
+      withTenantContext(context, async (tx) => ({
+        user: await tx.user.findUnique({
+          where: { id: USER_ID },
+          select: { deletedAt: true, status: true },
+        }),
+        sessions: await tx.authSession.findMany({
+          where: { userId: USER_ID },
+          orderBy: { id: "asc" },
+          select: { id: true, revokedAt: true, lastUsedAt: true, expiresAt: true },
+        }),
+        identities: await tx.authIdentity.findMany({
+          where: { userId: USER_ID },
+          orderBy: { id: "asc" },
+          select: { id: true, provider: true, subject: true, lastUsedAt: true },
+        }),
+        memberships: await tx.membership.findMany({
+          where: { userId: USER_ID },
+          orderBy: { id: "asc" },
+          select: { id: true, status: true, endedAt: true, deletedAt: true, updatedAt: true },
+        }),
+        progress: await tx.studentLearningStepProgress.findMany({
+          where: { studentId: USER_ID },
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            status: true,
+            attemptCount: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        }),
+      }));
+    const before = await snapshot();
+
+    const forgedBody = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests",
+      headers,
+      payload: { userId: PLATFORM_USER_ID, status: "COMPLETED" },
+    });
+    expect(forgedBody.statusCode).toBe(400);
+
+    const submissions = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        app.inject({
+          method: "POST",
+          url: "/auth/account-deletion-requests",
+          headers,
+          payload: {},
+        }),
+      ),
+    );
+    for (const response of submissions) {
+      expect(response.statusCode).toBe(202);
+      expect(response.headers["x-ratelimit-limit"]).toBeTruthy();
+      expect(response.json().data.request.status).toBe("IDENTITY_REQUIRED");
+      expect(response.json().data.message).toContain("silmez");
+      expect(response.json().data.request.userId).toBeUndefined();
+    }
+    const requestIds = submissions.map((response) => response.json().data.request.id);
+    expect(new Set(requestIds).size).toBe(1);
+    expect(submissions.filter((response) => response.json().data.created)).toHaveLength(1);
+
+    const current = await app.inject({
+      method: "GET",
+      url: "/auth/account-deletion-requests/current?userId=" + PLATFORM_USER_ID,
+      headers,
+    });
+    expect(current.statusCode).toBe(200);
+    expect(current.headers["cache-control"]).toContain("no-store");
+    expect(current.json().data.request.id).toBe(requestIds[0]);
+
+    const statusMutation = await app.inject({
+      method: "PATCH",
+      url: "/auth/account-deletion-requests/current",
+      headers,
+      payload: { status: "COMPLETED" },
+    });
+    expect(statusMutation.statusCode).toBe(404);
+    const completedWrite = withTenantContext(context, (tx) =>
+      tx.accountDeletionRequest.update({
+        where: { id: requestIds[0] },
+        data: { status: "COMPLETED" },
+      }),
+    );
+    await expect(completedWrite).rejects.toThrow();
+
+    const after = await snapshot();
+    expect(after).toEqual(before);
+    const requestCount = await withTenantContext(context, (tx) =>
+      tx.accountDeletionRequest.count({ where: { userId: USER_ID } }),
+    );
+    expect(requestCount).toBe(1);
+
+    const otherLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: "platform@example.com", password: PASSWORD },
+    });
+    const otherStatus = await app.inject({
+      method: "GET",
+      url: "/auth/account-deletion-requests/current",
+      headers: { authorization: `Bearer ${otherLogin.json().data.tokens.accessToken}` },
+    });
+    expect(otherStatus.statusCode).toBe(200);
+    expect(otherStatus.json().data.request).toBeNull();
 
     await app.close();
   });
