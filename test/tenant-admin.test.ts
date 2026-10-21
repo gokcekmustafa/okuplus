@@ -24,6 +24,7 @@ const TENANT_B = "99999999-0000-7000-8000-00000000000b";
 
 // POST /admin/tenants ile oluşturulan kurum; afterAll'da temizlenir.
 let createdTenantId: string | null = null;
+let createdAdminUserId: string | null = null;
 
 describe("tenant admin", () => {
   let app: FastifyInstance;
@@ -92,8 +93,13 @@ describe("tenant admin", () => {
     });
     // API üzerinden oluşturulan "Test Kurumu" da temizlenir.
     if (createdTenantId) {
+      await prisma.membership.deleteMany({ where: { tenantId: createdTenantId } });
       await prisma.tenant.deleteMany({ where: { id: createdTenantId } });
     }
+    if (createdAdminUserId) {
+      await prisma.user.deleteMany({ where: { id: createdAdminUserId } });
+    }
+    await prisma.user.deleteMany({ where: { email: "test-kurumu-admin@example.com" } });
     await prisma.user.deleteMany({
       where: { id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID] } },
     });
@@ -151,7 +157,7 @@ describe("tenant admin", () => {
     expect(res.json().error.code).toBe("UNAUTHORIZED");
   });
 
-  it("Super Admin: kurum oluşturur", async () => {
+  it("Super Admin: TCKN olmadan kurum ve ilk yöneticisini oluşturur", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/tenants",
@@ -161,6 +167,11 @@ describe("tenant admin", () => {
         name: "Test Kurumu",
         slug: "test-kurumu",
         logoUrl: "https://example.com/logo.png",
+        admin: {
+          displayName: "Test Kurum Yöneticisi",
+          email: "test-kurumu-admin@example.com",
+          password: PASSWORD,
+        },
       },
     });
 
@@ -170,8 +181,18 @@ describe("tenant admin", () => {
     expect(body.data.name).toBe("Test Kurumu");
     expect(body.data.slug).toBe("test-kurumu");
     expect(body.data.type).toBe("ORGANIZATION");
-    expect(body.data.counts.memberships).toBe(0);
+    expect(body.data.counts.memberships).toBe(1);
     createdTenantId = body.data.id;
+
+    const adminMembership = await prisma.membership.findFirst({
+      where: { tenantId: createdTenantId, role: "ORG_ADMIN" },
+      select: { user: { select: { id: true, email: true, nationalId: true } } },
+    });
+    createdAdminUserId = adminMembership?.user.id ?? null;
+    expect(adminMembership?.user).toMatchObject({
+      email: "test-kurumu-admin@example.com",
+      nationalId: null,
+    });
   });
 
   it("Duplike slug: 409 conflict döner", async () => {

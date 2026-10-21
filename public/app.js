@@ -98,7 +98,6 @@ function setupPersonDataEvents() {
     });
   }
   const nationalIdIds = [
-    "tenant-form-admin-national-id",
     "user-form-national-id",
     "student-form-national-id",
     "teacher-form-national-id",
@@ -5361,7 +5360,6 @@ function openTenantForm(mode, tenant = null) {
   $("tenant-form-admin-name").value = "";
   $("tenant-form-admin-email").value = "";
   $("tenant-form-admin-phone").value = "";
-  $("tenant-form-admin-national-id").value = "";
   $("tenant-form-admin-password").value = "";
   updateTenantAdminFields();
   $("tenant-form-error").classList.add("hidden");
@@ -5406,9 +5404,7 @@ async function submitTenantForm(event) {
       password: $("tenant-form-admin-password").value,
     };
     const adminPhone = $("tenant-form-admin-phone").value.trim();
-    const adminNationalId = $("tenant-form-admin-national-id").value.trim();
     if (adminPhone) admin.phone = adminPhone;
-    if (adminNationalId) admin.nationalId = adminNationalId;
     if (!admin.displayName || !admin.email || admin.password.length < 8) {
       errorEl.textContent =
         "Kurum yöneticisi adı, e-postası ve en az 8 karakterli ilk şifre gereklidir.";

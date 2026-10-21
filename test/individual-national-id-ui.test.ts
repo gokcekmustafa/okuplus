@@ -12,14 +12,15 @@ function between(source: string, start: string, end: string): string {
   return source.slice(startAt, endAt);
 }
 
-describe("individual TCKN minimization UI contract", () => {
-  it("removes TCKN from signup and personal profile while keeping management forms", () => {
+describe("individual and tenant-admin TCKN minimization UI contract", () => {
+  it("removes TCKN from signup, personal profile, and initial tenant admin only", () => {
     expect(index).not.toContain('id="signup-national-id"');
     expect(index).not.toContain('id="account-profile-national-id"');
-    expect(index).toContain('id="tenant-form-admin-national-id"');
+    expect(index).not.toContain('id="tenant-form-admin-national-id"');
     expect(index).toContain('id="user-form-national-id"');
     expect(index).toContain('id="student-form-national-id"');
     expect(index).toContain('id="teacher-form-national-id"');
+    expect(app).not.toContain("tenant-form-admin-national-id");
 
     const personDataEvents = between(
       app,
@@ -27,14 +28,24 @@ describe("individual TCKN minimization UI contract", () => {
       "let inFlight = false;",
     );
     expect(personDataEvents).not.toContain('"signup-national-id"');
+    expect(personDataEvents).not.toContain('"tenant-form-admin-national-id"');
     for (const managementField of [
-      "tenant-form-admin-national-id",
       "user-form-national-id",
       "student-form-national-id",
       "teacher-form-national-id",
     ]) {
       expect(personDataEvents).toContain(`"${managementField}"`);
     }
+  });
+
+  it("never reads or sends TCKN in the initial tenant administrator payload", () => {
+    const submitTenant = between(
+      app,
+      "async function submitTenantForm(",
+      "async function openTenantDetail(",
+    );
+    expect(submitTenant).not.toContain("nationalId");
+    expect(submitTenant).not.toContain("tenant-form-admin-national-id");
   });
 
   it("never reads or sends TCKN in individual signup/profile requests", () => {
