@@ -161,6 +161,8 @@ jobs:
             "initSchemaCompatibility",
             "targetIdentityMatch",
             "targetIdentityDiagnostics",
+            "databaseUrlRoleAttributes",
+            "vercelApplicationRuntimeRole",
           ];
 
            for (const field of requiredFields) {
@@ -187,6 +189,14 @@ jobs:
             if (!identityStatuses.includes(identityDiagnostics.comparison[field])) {
               throw new Error(`invalid target identity status: ${field}`);
             }
+          }
+          if (
+            report.databaseUrlRoleAttributes?.source !== "PRODUCTION_DATABASE_URL" ||
+            typeof report.databaseUrlRoleAttributes.isSuperuser !== "boolean" ||
+            typeof report.databaseUrlRoleAttributes.bypassesRls !== "boolean" ||
+            report.vercelApplicationRuntimeRole?.status !== "UNVERIFIED"
+          ) {
+            throw new Error("invalid database role privilege diagnostics");
           }
 
           const migrationSummary = (rows) => rows.map((row) => ({
@@ -290,6 +300,8 @@ jobs:
               comparison: identityDiagnostics.comparison,
               neon: identityDiagnostics.neon,
             },
+            databaseUrlRoleAttributes: report.databaseUrlRoleAttributes,
+            vercelApplicationRuntimeRole: report.vercelApplicationRuntimeRole,
             migrationHistoryCount: report.migrationHistoryCount,
             pendingMigrations: report.pendingMigrations,
             initMigrationChecksumAudit,
@@ -347,6 +359,8 @@ jobs:
             `**TARGET_IDENTITY_FIELDS:** ${JSON.stringify(safe.targetIdentityDiagnostics.comparison)}`,
             `**TARGET_IDENTITY_ACTUAL_MASKED:** ${JSON.stringify(safe.targetIdentityDiagnostics.actual)}`,
             `**NEON_METADATA:** ${JSON.stringify(safe.targetIdentityDiagnostics.neon)}`,
+            `**DATABASE_URL_ROLE_ATTRIBUTES:** ${JSON.stringify(safe.databaseUrlRoleAttributes)}`,
+            `**VERCEL_APPLICATION_RUNTIME_ROLE:** ${JSON.stringify(safe.vercelApplicationRuntimeRole)}`,
             "",
             `**MIGRATION_HISTORY_COUNT:** ${safe.migrationHistoryCount}`,
             `**PENDING_MIGRATIONS:** ${JSON.stringify(safe.pendingMigrations)}`,

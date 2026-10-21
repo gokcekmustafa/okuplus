@@ -1,0 +1,150 @@
+name: Manual isolated production-restore application smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-restore-smoke
+  cancel-in-progress: false
+
+jobs:
+  isolated-restore-smoke:
+    name: Read-only smoke on the approved isolated restore branch
+    runs-on: ubuntu-latest
+    environment:
+      name: production-migration
+    timeout-minutes: 20
+    env:
+      NODE_ENV: production
+
+    steps:
+      - name: Enforce master-only manual execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+
+      - name: Checkout canonical master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Run isolated restore read-only application smoke
+        env:
+          ISOLATED_RESTORE_DATABASE_URL: ${{ secrets.ISOLATED_RESTORE_DATABASE_URL }}
+          ISOLATED_RESTORE_DATABASE_HOST: ${{ vars.ISOLATED_RESTORE_DATABASE_HOST }}
+          PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_file="${RUNNER_TEMP}/production-restore-smoke.json"
+          stderr_file="${RUNNER_TEMP}/production-restore-smoke.stderr"
+          set +e
+          npx tsx scripts/production-restore-smoke.ts >"${report_file}" 2>"${stderr_file}"
+          smoke_exit_code=$?
+          set -e
+
+          node --input-type=module - "${report_file}" "${smoke_exit_code}" <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const source = process.argv[2];
+          const smokeExitCode = Number(process.argv[3]);
+          const fallback = {
+            targetValidation: { status: "FAIL", reason: "SANITIZED_REPORT_UNAVAILABLE" },
+            checks: {
+              appInitialization: "NOT_RUN",
+              health: "NOT_RUN",
+              healthDb: "NOT_RUN",
+              ready: "NOT_RUN",
+              accountDeletionRequestRead: "NOT_RUN",
+            },
+            databaseRolePrivileges: {
+              status: "NOT_RUN",
+              isSuperuser: null,
+              bypassesRls: null,
+            },
+            commitSha: process.env.GITHUB_SHA ?? "UNKNOWN",
+          };
+
+          let report = fallback;
+          try {
+            const parsed = JSON.parse(readFileSync(source, "utf8"));
+            const validCheck = (value) => ["NOT_RUN", "PASS", "FAIL"].includes(value);
+            const valid =
+              parsed &&
+              typeof parsed === "object" &&
+              ["NOT_RUN", "PASS", "BLOCKED", "FAIL"].includes(parsed.targetValidation?.status) &&
+              typeof parsed.targetValidation.reason === "string" &&
+              ["appInitialization", "health", "healthDb", "ready", "accountDeletionRequestRead"].every(
+                (key) => validCheck(parsed.checks?.[key]),
+              ) &&
+              validCheck(parsed.databaseRolePrivileges?.status) &&
+              (parsed.databaseRolePrivileges.isSuperuser === null ||
+                typeof parsed.databaseRolePrivileges.isSuperuser === "boolean") &&
+              (parsed.databaseRolePrivileges.bypassesRls === null ||
+                typeof parsed.databaseRolePrivileges.bypassesRls === "boolean") &&
+              typeof parsed.commitSha === "string";
+            if (valid) {
+              report = {
+                targetValidation: parsed.targetValidation,
+                checks: {
+                  appInitialization: parsed.checks.appInitialization,
+                  health: parsed.checks.health,
+                  healthDb: parsed.checks.healthDb,
+                  ready: parsed.checks.ready,
+                  accountDeletionRequestRead: parsed.checks.accountDeletionRequestRead,
+                },
+                databaseRolePrivileges: {
+                  status: parsed.databaseRolePrivileges.status,
+                  isSuperuser: parsed.databaseRolePrivileges.isSuperuser,
+                  bypassesRls: parsed.databaseRolePrivileges.bypassesRls,
+                },
+                commitSha: /^[a-f0-9]{40}$/u.test(parsed.commitSha) ? parsed.commitSha : "UNKNOWN",
+              };
+            }
+          } catch {
+            // Keep a minimal sanitized failure report; never print raw stderr or input.
+          }
+
+          const json = `${JSON.stringify(report, null, 2)}\n`;
+          writeFileSync(source, json, "utf8");
+          const lines = [
+            "## Isolated restore application smoke",
+            "",
+            `- Target validation: ${report.targetValidation.status} (${report.targetValidation.reason})`,
+            `- App initialization: ${report.checks.appInitialization}`,
+            `- GET /health: ${report.checks.health}`,
+            `- GET /health/db: ${report.checks.healthDb}`,
+            `- GET /ready: ${report.checks.ready}`,
+            `- AccountDeletionRequest read: ${report.checks.accountDeletionRequestRead}`,
+            `- DB role flags: ${JSON.stringify(report.databaseRolePrivileges)}`,
+            `- Commit: ${report.commitSha}`,
+          ];
+          writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, "utf8");
+          if (smokeExitCode !== 0 || report.targetValidation.status !== "PASS") {
+            console.log("Isolated restore smoke did not pass; see the sanitized summary.");
+            process.exitCode = 1;
+          }
+          NODE
+
+      - name: Upload sanitized smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-restore-smoke-summary
+          path: ${{ runner.temp }}/production-restore-smoke.json
+          if-no-files-found: warn

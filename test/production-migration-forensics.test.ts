@@ -62,6 +62,10 @@ describe("protected production migration forensics", () => {
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_DATABASE");
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_USER");
     expect(workflow).toContain("targetIdentityDiagnostics");
+    expect(workflow).toContain("databaseUrlRoleAttributes");
+    expect(workflow).toContain("vercelApplicationRuntimeRole");
+    expect(workflow).toContain("DATABASE_URL_ROLE_ATTRIBUTES");
+    expect(workflow).toContain("VERCEL_APPLICATION_RUNTIME_ROLE");
     expect(workflow).toContain("TARGET_IDENTITY_FIELDS");
     expect(workflow).toContain(
       "production target identity mismatch; see field-level diagnostic summary",
@@ -122,6 +126,11 @@ describe("protected production migration forensics", () => {
     expect(script).toContain('"\\r\\n"');
     expect(script).toContain("current_database()");
     expect(script).toContain("current_user");
+    expect(script).toContain("rolsuper AS current_user_is_superuser");
+    expect(script).toContain("rolbypassrls AS current_user_bypasses_rls");
+    expect(script).toContain('source: "PRODUCTION_DATABASE_URL"');
+    expect(script).toContain('status: "UNVERIFIED"');
+    expect(script).toContain("the Vercel runtime connection role");
     expect(script).toContain("inet_server_addr()");
     expect(script).toContain("inet_server_port()");
     expect(script).toContain('"BLOCKED_TARGET_IDENTITY"');

@@ -27,6 +27,8 @@ type IdentityRow = {
   current_user: string;
   server_address: string | null;
   server_port: number | null;
+  current_user_is_superuser: boolean;
+  current_user_bypasses_rls: boolean;
 };
 
 type IdentityMatch = "MATCH" | "MISMATCH" | "UNVERIFIED";
@@ -383,7 +385,11 @@ async function main(): Promise<void> {
                  current_schema() AS schema,
                  current_user AS current_user,
                  inet_server_addr()::text AS server_address,
-                 inet_server_port() AS server_port
+                 inet_server_port() AS server_port,
+                 role.rolsuper AS current_user_is_superuser,
+                 role.rolbypassrls AS current_user_bypasses_rls
+          FROM pg_roles AS role
+          WHERE role.rolname = current_user
         `,
         prisma.$queryRaw<Array<{ migration_table: string | null }>>`
           SELECT to_regclass('public._prisma_migrations')::text AS migration_table
@@ -934,6 +940,16 @@ async function main(): Promise<void> {
           connectedReadOnly: true,
           targetIdentityMatch,
           targetIdentityDiagnostics: targetIdentity,
+          databaseUrlRoleAttributes: {
+            source: "PRODUCTION_DATABASE_URL",
+            isSuperuser: identity.current_user_is_superuser,
+            bypassesRls: identity.current_user_bypasses_rls,
+          },
+          vercelApplicationRuntimeRole: {
+            status: "UNVERIFIED",
+            reason:
+              "PRODUCTION_DATABASE_URL role attributes do not prove the Vercel runtime connection role; obtain an authorized read-only runtime identity diagnostic",
+          },
           migrationTableExists,
           migrationHistoryCount: migrations.length,
           pendingMigrations,
