@@ -131,7 +131,6 @@ describe("tenant admin", () => {
     });
 
     const body = res.json();
-    createdTenantId = typeof body.data?.id === "string" ? body.data.id : null;
     expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.items.length).toBeGreaterThanOrEqual(1);
@@ -176,8 +175,9 @@ describe("tenant admin", () => {
       },
     });
 
-    expect(res.statusCode).toBe(200);
     const body = res.json();
+    createdTenantId = typeof body.data?.id === "string" ? body.data.id : null;
+    expect(res.statusCode).toBe(200);
     expect(body.success).toBe(true);
     expect(body.data.name).toBe("Test Kurumu");
     expect(body.data.slug).toBe("test-kurumu");
