@@ -92,6 +92,18 @@ const accountDeletionRequestBodySchema = {
   properties: {},
 } as const;
 
+const rejectAccountDeletionRequestBodyFields = async (request: FastifyRequest): Promise<void> => {
+  const body = request.body;
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.keys(body).length > 0
+  ) {
+    throw validationError("Hesap silme talebi isteğinde ek alan kabul edilmiyor");
+  }
+};
+
 const allowEmptyRefreshBody = async (request: FastifyRequest): Promise<void> => {
   if (request.body === undefined) request.body = {};
 };
@@ -353,6 +365,7 @@ export async function authRoutes(
     "/auth/account-deletion-requests",
     {
       schema: { body: accountDeletionRequestBodySchema },
+      preValidation: [rejectAccountDeletionRequestBodyFields],
       preHandler: [requireAuth(authProvider)],
     },
     async (request, reply) => {
