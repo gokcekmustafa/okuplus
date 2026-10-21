@@ -105,6 +105,15 @@ describe("protected production migration forensics", () => {
     expect(script).toContain("safeErrorSummary");
     expect(script).toContain("repositoryChecksum");
     expect(script).toContain("migrationFileHistory");
+    expect(script).toContain("classifyMigrationHistoryReconciliation");
+    expect(script).toContain("migrationHistoryReconciliations");
+    expect(script).toContain("unresolvedFailedMigrations");
+    expect(script).toContain("gpMetadataSchemaPreconditions");
+    expect(script).toContain("AchievementCategory");
+    expect(script).toContain("Badge_category_status_displayOrder_idx");
+    expect(workflow).toContain('"migrationHistoryReconciliations"');
+    expect(workflow).toContain('"unresolvedFailedMigrations"');
+    expect(workflow).toContain("**MIGRATION_HISTORY_RECONCILIATIONS:**");
     expect(script).toContain("approvedHistoricalChecksums");
     expect(script).toContain("repositoryChecksumVariants");
     expect(script).toContain("historicalChecksumAcknowledgements");

@@ -11,9 +11,14 @@ import {
   sanitizedTrainingConfigIssues,
   type ExerciseTemplateVersionConfigRow,
 } from "../src/lib/exercise-template-version-config-policy.js";
+import {
+  classifyMigrationHistoryReconciliation,
+  type MigrationHistoryRecord,
+} from "./production-migration-history-reconciliation.js";
 
 const MIGRATION_1 = "20260905090000_add_exercise_template_version_config";
 const MIGRATION_2 = "20260907150000_add_training_session_models";
+const MIGRATION_GP_METADATA = "20260907170000_add_gp_achievement_metadata";
 const INIT_MIGRATION = "20260817000000_init";
 
 type IdentityRow = {
@@ -422,7 +427,9 @@ async function main(): Promise<void> {
           SELECT t.typname AS type_name, e.enumlabel AS enum_value
           FROM pg_type AS t
           JOIN pg_enum AS e ON e.enumtypid = t.oid
-          WHERE t.typname IN (
+          JOIN pg_namespace AS n ON n.oid = t.typnamespace
+          WHERE n.nspname = 'public'
+            AND t.typname IN (
             'TrainingSessionStatus', 'TrainingSessionItemStatus',
             'AchievementCategory', 'AchievementKind', 'PointEventType'
           )
@@ -631,6 +638,86 @@ async function main(): Promise<void> {
       ],
     });
 
+    const expectedAchievementCategories = [
+      "TRAINING",
+      "READING",
+      "COMPREHENSION",
+      "CONSISTENCY",
+      "MILESTONE",
+    ];
+    const expectedAchievementKinds = ["BADGE", "TROPHY"];
+    const actualEnumValues = (typeName: string) =>
+      enums.filter((row) => row.type_name === typeName).map((row) => row.enum_value);
+    const gpMetadataSchema = checkSchema(columns, indexes, constraints, enums, policies, {
+      columns: ["Badge.category", "Badge.kind", "Badge.targetValue"],
+      indexes: ["Badge_category_status_displayOrder_idx"],
+      constraints: [],
+      enums: [
+        ...expectedAchievementCategories.map((value) => `AchievementCategory.${value}`),
+        ...expectedAchievementKinds.map((value) => `AchievementKind.${value}`),
+        "PointEventType.TRAINING_SESSION_COMPLETED",
+      ],
+      policies: [],
+    });
+    const badgeColumn = (name: string) =>
+      columns.find((row) => row.table_name === "Badge" && row.column_name === name);
+    const gpMetadataSchemaPreconditions = {
+      schema: gpMetadataSchema,
+      achievementCategoryCanonical:
+        JSON.stringify(actualEnumValues("AchievementCategory")) ===
+        JSON.stringify(expectedAchievementCategories),
+      achievementKindCanonical:
+        JSON.stringify(actualEnumValues("AchievementKind")) ===
+        JSON.stringify(expectedAchievementKinds),
+      badgeColumnTypesMatch:
+        badgeColumn("category")?.udt_name === "AchievementCategory" &&
+        badgeColumn("kind")?.udt_name === "AchievementKind" &&
+        badgeColumn("targetValue")?.data_type === "integer",
+      badgeIndexPresent: indexes.some(
+        (row) =>
+          row.tablename === "Badge" && row.indexname === "Badge_category_status_displayOrder_idx",
+      ),
+      pointEventTypePresent: actualEnumValues("PointEventType").includes(
+        "TRAINING_SESSION_COMPLETED",
+      ),
+    };
+    const gpMetadataSchemaReady =
+      gpMetadataSchema.status === "COMPLETE" &&
+      gpMetadataSchemaPreconditions.achievementCategoryCanonical &&
+      gpMetadataSchemaPreconditions.achievementKindCanonical &&
+      gpMetadataSchemaPreconditions.badgeColumnTypesMatch &&
+      gpMetadataSchemaPreconditions.badgeIndexPresent &&
+      gpMetadataSchemaPreconditions.pointEventTypePresent;
+
+    const migrationHistoryRecords: MigrationHistoryRecord[] = migrations.map((row) => ({
+      migrationName: row.migration_name,
+      checksum: row.checksum,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      rolledBackAt: row.rolled_back_at,
+      appliedStepsCount: row.applied_steps_count,
+    }));
+    const migrationHistoryReconciliations = [
+      ...new Set(migrations.map((row) => row.migration_name)),
+    ].map((migrationName) =>
+      classifyMigrationHistoryReconciliation(
+        migrationName,
+        migrationHistoryRecords,
+        migrationName === MIGRATION_GP_METADATA && gpMetadataSchemaReady,
+        checksums.get(migrationName) ?? null,
+      ),
+    );
+    const reconciliationByName = new Map(
+      migrationHistoryReconciliations.map((resolution) => [resolution.migrationName, resolution]),
+    );
+    const unresolvedFailed = failed.filter((row) => {
+      const resolution = reconciliationByName.get(row.migrationName);
+      return !(
+        row.state === "ROLLED_BACK" &&
+        resolution?.classification === "HISTORICAL_ROLLBACK_RECONCILED"
+      );
+    });
+
     let configDataState: "YES" | "NO" | "UNKNOWN" = "UNKNOWN";
     let migration1DataPreflight: Migration1DataPreflight = {
       status: "UNKNOWN",
@@ -802,32 +889,43 @@ async function main(): Promise<void> {
     }
 
     const partialSchema =
-      migration1Schema.status === "PARTIAL" || migration2Schema.status === "PARTIAL";
+      migration1Schema.status === "PARTIAL" ||
+      migration2Schema.status === "PARTIAL" ||
+      gpMetadataSchema.status === "PARTIAL";
     const schemaAhead =
       (stateOf(byName.get(MIGRATION_1)) !== "APPLIED" && migration1Schema.status === "COMPLETE") ||
-      (stateOf(byName.get(MIGRATION_2)) !== "APPLIED" && migration2Schema.status === "COMPLETE");
+      (stateOf(byName.get(MIGRATION_2)) !== "APPLIED" && migration2Schema.status === "COMPLETE") ||
+      (stateOf(byName.get(MIGRATION_GP_METADATA)) !== "APPLIED" &&
+        gpMetadataSchema.status === "COMPLETE");
     const historyAhead =
       (stateOf(byName.get(MIGRATION_1)) === "APPLIED" && migration1Schema.status === "ABSENT") ||
-      (stateOf(byName.get(MIGRATION_2)) === "APPLIED" && migration2Schema.status === "ABSENT");
+      (stateOf(byName.get(MIGRATION_2)) === "APPLIED" && migration2Schema.status === "ABSENT") ||
+      (stateOf(byName.get(MIGRATION_GP_METADATA)) === "APPLIED" &&
+        gpMetadataSchema.status === "ABSENT");
     const multipleConflicts =
-      failed.length > 0 &&
+      unresolvedFailed.length > 0 &&
       (partialSchema || unresolvedChecksumMismatches.length > 0 || schemaAhead || historyAhead);
     const remediationClass =
       unresolvedChecksumMismatches.length > 0
         ? "D_CHECKSUM_MISMATCH"
-        : historicalChecksumAcknowledgements.length > 0
+        : unresolvedFailed.length === 0 && historicalChecksumAcknowledgements.length > 0
           ? "I_HISTORICAL_CHECKSUM_ACKNOWLEDGED"
           : multipleConflicts
             ? "G_MULTIPLE_CONFLICTS"
-            : failed.length > 0 && partialSchema
+            : unresolvedFailed.length > 0 && partialSchema
               ? "B_FAILED_RECORD_PARTIAL_SCHEMA"
-              : failed.length > 0
+              : unresolvedFailed.length > 0
                 ? "A_FAILED_RECORD_NO_PARTIAL_SCHEMA_OR_UNKNOWN"
                 : schemaAhead
                   ? "E_SCHEMA_AHEAD_OF_HISTORY"
                   : historyAhead
                     ? "F_HISTORY_AHEAD_OF_SCHEMA"
-                    : "H_UNKNOWN";
+                    : migrationHistoryReconciliations.some(
+                          (resolution) =>
+                            resolution.classification === "HISTORICAL_ROLLBACK_RECONCILED",
+                        )
+                      ? "J_HISTORICAL_ROLLBACK_RECONCILED"
+                      : "H_UNKNOWN";
 
     console.log(
       JSON.stringify(
@@ -853,6 +951,9 @@ async function main(): Promise<void> {
           })),
           failedMigrations: failed,
           rolledBackMigrations: rolledBack,
+          unresolvedFailedMigrations: unresolvedFailed,
+          migrationHistoryReconciliations,
+          gpMetadataSchemaPreconditions,
           checksumMismatch: checksumMismatches.length > 0,
           checksumMismatches,
           historicalChecksumAcknowledgements,
@@ -874,6 +975,12 @@ async function main(): Promise<void> {
             schema: migration2Schema,
             partial: migration2Schema.status === "PARTIAL",
           },
+          gpMetadataMigration: {
+            name: MIGRATION_GP_METADATA,
+            history: stateOf(byName.get(MIGRATION_GP_METADATA)),
+            schema: gpMetadataSchema,
+            schemaPreconditions: gpMetadataSchemaPreconditions,
+          },
           initSchemaCompatibility: initSchema.status === "COMPLETE" ? "PASS" : "FAIL",
           schemaSummary: { columns, indexes, constraints, enums, policies },
           schemaDrift: partialSchema || schemaAhead || historyAhead,
@@ -881,12 +988,12 @@ async function main(): Promise<void> {
           partialDataState: configDataState,
           remediationClass,
           migrateDeploySafe:
-            failed.length === 0 &&
+            unresolvedFailed.length === 0 &&
             unresolvedChecksumMismatches.length === 0 &&
             !partialSchema &&
             !schemaAhead &&
             !historyAhead,
-          resolveRequired: failed.length > 0,
+          resolveRequired: unresolvedFailed.length > 0,
           forwardFixRequired: partialSchema || schemaAhead || historyAhead,
           manualSqlRequired: "NO",
           productionDbWrite: "NO",
