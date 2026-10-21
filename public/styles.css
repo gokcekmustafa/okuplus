@@ -6281,6 +6281,10 @@ textarea:focus-visible {
   contain-intrinsic-size: auto 142px;
 }
 
+.student-shell #learning-path-card .learning-map-v6-step.is-current {
+  content-visibility: visible;
+}
+
 .student-shell #learning-path-card .learning-map-v6-node {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 78px minmax(0, 1fr);

@@ -11,6 +11,15 @@ const index = readFileSync("public/index.html", "utf8");
 const styles = readFileSync("public/styles.css", "utf8");
 
 describe("student dashboard release 0.4", () => {
+  it("keeps the current learning-map row visible without disabling lazy rendering for other rows", () => {
+    expect(styles).toMatch(
+      /\.student-shell\s+#learning-path-card\s+\.learning-map-v6-step\s*\{[^}]*content-visibility:\s*auto\s*;?[^}]*\}/u,
+    );
+    expect(styles).toMatch(
+      /\.student-shell\s+#learning-path-card\s+\.learning-map-v6-step\.is-current\s*\{[^}]*content-visibility:\s*visible\s*;?[^}]*\}/u,
+    );
+  });
+
   it("uses real student APIs for the dashboard summary", () => {
     expect(app).toContain('authenticatedFetch("/student/today"');
     expect(app).toContain("async function insightApi(path)");
