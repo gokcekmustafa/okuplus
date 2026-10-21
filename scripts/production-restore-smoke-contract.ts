@@ -18,6 +18,89 @@ function endpointHost(host: string): string {
   return host.replace(/-pooler(?=\.|$)/u, "");
 }
 
+export const RESTORE_SMOKE_FAILURE_STAGES = [
+  "TARGET_VALIDATION",
+  "ENVIRONMENT_VALIDATION",
+  "MODULE_LOADING",
+  "APP_BUILD",
+  "FASTIFY_READY",
+  "HEALTH",
+  "HEALTH_DB",
+  "READY",
+  "ACCOUNT_DELETION_SCHEMA",
+  "DATABASE_ROLE_PRIVILEGES",
+] as const;
+
+export const RESTORE_SMOKE_ERROR_CLASSES = [
+  "Error",
+  "TypeError",
+  "SyntaxError",
+  "ReferenceError",
+  "RangeError",
+  "AggregateError",
+  "ZodError",
+  "FastifyError",
+  "PrismaClientInitializationError",
+  "PrismaClientKnownRequestError",
+  "OtherError",
+] as const;
+
+export const RESTORE_SMOKE_ERROR_CODES = [
+  "ERR_MODULE_NOT_FOUND",
+  "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  "ERR_REQUIRE_ESM",
+  "MODULE_NOT_FOUND",
+  "ENOENT",
+  "EACCES",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "P1000",
+  "P1001",
+  "P1012",
+  "P2021",
+  "P2022",
+] as const;
+
+export type RestoreSmokeFailureStage = (typeof RESTORE_SMOKE_FAILURE_STAGES)[number];
+export type RestoreSmokeErrorClass = (typeof RESTORE_SMOKE_ERROR_CLASSES)[number];
+export type RestoreSmokeErrorCode = (typeof RESTORE_SMOKE_ERROR_CODES)[number];
+
+export type RestoreSmokeFailureDiagnostic = {
+  stage: RestoreSmokeFailureStage;
+  errorClass: RestoreSmokeErrorClass;
+  errorCode: RestoreSmokeErrorCode | null;
+};
+
+export function sanitizeRestoreSmokeFailure(
+  stage: RestoreSmokeFailureStage,
+  error: unknown,
+): RestoreSmokeFailureDiagnostic {
+  const errorName = error instanceof Error ? error.name : "";
+  const errorClass: RestoreSmokeErrorClass = RESTORE_SMOKE_ERROR_CLASSES.includes(
+    errorName as RestoreSmokeErrorClass,
+  )
+    ? (errorName as RestoreSmokeErrorClass)
+    : "OtherError";
+
+  let errorCode: RestoreSmokeErrorCode | null = null;
+  if (error && typeof error === "object") {
+    try {
+      const candidate = (error as { code?: unknown }).code;
+      if (
+        typeof candidate === "string" &&
+        RESTORE_SMOKE_ERROR_CODES.includes(candidate as RestoreSmokeErrorCode)
+      ) {
+        errorCode = candidate as RestoreSmokeErrorCode;
+      }
+    } catch {
+      // Ignore hostile or throwing code accessors; diagnostics remain allowlisted.
+    }
+  }
+
+  return { stage, errorClass, errorCode };
+}
+
 /** Validates a restore-only URL without returning or logging any URL component. */
 export function validateIsolatedRestoreTarget(input: {
   databaseUrl: string | undefined;

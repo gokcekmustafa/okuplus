@@ -1,12 +1,20 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import { validateIsolatedRestoreTarget } from "./production-restore-smoke-contract.js";
+import {
+  sanitizeRestoreSmokeFailure,
+  validateIsolatedRestoreTarget,
+  type RestoreSmokeFailureStage,
+} from "./production-restore-smoke-contract.js";
 
 type Check = "NOT_RUN" | "PASS" | "FAIL";
 
 type SmokeReport = {
   targetValidation: { status: "NOT_RUN" | "PASS" | "BLOCKED" | "FAIL"; reason: string };
   checks: {
+    environmentValidation: Check;
+    moduleLoading: Check;
+    appBuild: Check;
+    fastifyReady: Check;
     appInitialization: Check;
     health: Check;
     healthDb: Check;
@@ -19,12 +27,17 @@ type SmokeReport = {
     bypassesRls: boolean | null;
   };
   commitSha: string;
+  failureDiagnostic: ReturnType<typeof sanitizeRestoreSmokeFailure> | null;
 };
 
 function newReport(): SmokeReport {
   return {
     targetValidation: { status: "NOT_RUN", reason: "NOT_RUN" },
     checks: {
+      environmentValidation: "NOT_RUN",
+      moduleLoading: "NOT_RUN",
+      appBuild: "NOT_RUN",
+      fastifyReady: "NOT_RUN",
       appInitialization: "NOT_RUN",
       health: "NOT_RUN",
       healthDb: "NOT_RUN",
@@ -39,6 +52,7 @@ function newReport(): SmokeReport {
     commitSha: /^[a-f0-9]{40}$/u.test(process.env.GITHUB_SHA ?? "")
       ? process.env.GITHUB_SHA!
       : "UNKNOWN",
+    failureDiagnostic: null,
   };
 }
 
@@ -62,8 +76,7 @@ async function run(): Promise<void> {
   const report = newReport();
   let app: FastifyInstance | undefined;
   let prisma: typeof import("../src/lib/prisma.js").prisma | undefined;
-  let activeCheck: keyof SmokeReport["checks"] | null = null;
-  let roleQueryActive = false;
+  let activeStage: RestoreSmokeFailureStage | null = "TARGET_VALIDATION";
 
   try {
     if (process.env.GITHUB_EVENT_NAME !== "workflow_dispatch") {
@@ -82,7 +95,10 @@ async function run(): Promise<void> {
       };
     }
 
-    if (report.targetValidation.status !== "PASS") return emit(report, false);
+    if (report.targetValidation.status !== "PASS") {
+      activeStage = null;
+      return emit(report, false);
+    }
 
     // Prisma is imported only after the exact isolated endpoint check succeeds.
     const isolatedUrl = process.env.ISOLATED_RESTORE_DATABASE_URL!.trim();
@@ -91,7 +107,7 @@ async function run(): Promise<void> {
     process.env.NODE_ENV = "production";
     process.env.LOG_LEVEL = "silent";
 
-    activeCheck = "appInitialization";
+    activeStage = "ENVIRONMENT_VALIDATION";
     const { parseEnv } = await import("../src/config/env.js");
     const env = parseEnv({
       APP_ENV: "staging",
@@ -100,27 +116,35 @@ async function run(): Promise<void> {
       JWT_SECRET: randomBytes(48).toString("base64url"),
       LOG_LEVEL: "silent",
     });
+    report.checks.environmentValidation = "PASS";
+    activeStage = "MODULE_LOADING";
 
     const [{ buildApp }, prismaModule] = await Promise.all([
       import("../src/app.js"),
       import("../src/lib/prisma.js"),
     ]);
+    report.checks.moduleLoading = "PASS";
     prisma = prismaModule.prisma;
+    activeStage = "APP_BUILD";
     app = await buildApp(env);
+    report.checks.appBuild = "PASS";
+    activeStage = "FASTIFY_READY";
+    await app.ready();
+    report.checks.fastifyReady = "PASS";
     report.checks.appInitialization = "PASS";
-    activeCheck = null;
+    activeStage = null;
 
-    activeCheck = "health";
+    activeStage = "HEALTH";
     report.checks.health = await checkGet(app, "/health", { status: "ok" });
-    activeCheck = "healthDb";
+    activeStage = "HEALTH_DB";
     report.checks.healthDb = await checkGet(app, "/health/db", {
       status: "ok",
       database: "up",
     });
-    activeCheck = "ready";
+    activeStage = "READY";
     report.checks.ready = await checkGet(app, "/ready", { status: "ok", ready: true });
 
-    activeCheck = "accountDeletionRequestSchema";
+    activeStage = "ACCOUNT_DELETION_SCHEMA";
     const accountDeletionRequestTable = await prisma.$queryRaw<
       Array<{ table_name: string | null }>
     >`SELECT to_regclass('public."AccountDeletionRequest"')::text AS table_name`;
@@ -129,9 +153,8 @@ async function run(): Promise<void> {
     } else {
       report.checks.accountDeletionRequestSchema = "PASS";
     }
-    activeCheck = null;
 
-    roleQueryActive = true;
+    activeStage = "DATABASE_ROLE_PRIVILEGES";
     const roleRows = await prisma.$queryRaw<
       Array<{ is_superuser: boolean; bypasses_rls: boolean }>
     >`
@@ -150,15 +173,39 @@ async function run(): Promise<void> {
     } else {
       report.databaseRolePrivileges.status = "FAIL";
     }
-    roleQueryActive = false;
+    activeStage = null;
 
     const passed =
       Object.values(report.checks).every((check) => check === "PASS") &&
       report.databaseRolePrivileges.status === "PASS";
     emit(report, passed);
-  } catch {
-    if (activeCheck) report.checks[activeCheck] = "FAIL";
-    if (roleQueryActive) report.databaseRolePrivileges.status = "FAIL";
+  } catch (error) {
+    if (activeStage) {
+      report.failureDiagnostic = sanitizeRestoreSmokeFailure(activeStage, error);
+      const checkByStage: Partial<Record<RestoreSmokeFailureStage, keyof SmokeReport["checks"]>> = {
+        ENVIRONMENT_VALIDATION: "environmentValidation",
+        MODULE_LOADING: "moduleLoading",
+        APP_BUILD: "appBuild",
+        FASTIFY_READY: "fastifyReady",
+        HEALTH: "health",
+        HEALTH_DB: "healthDb",
+        READY: "ready",
+        ACCOUNT_DELETION_SCHEMA: "accountDeletionRequestSchema",
+      };
+      const failedCheck = checkByStage[activeStage];
+      if (failedCheck) report.checks[failedCheck] = "FAIL";
+      if (
+        activeStage === "ENVIRONMENT_VALIDATION" ||
+        activeStage === "MODULE_LOADING" ||
+        activeStage === "APP_BUILD" ||
+        activeStage === "FASTIFY_READY"
+      ) {
+        report.checks.appInitialization = "FAIL";
+      }
+      if (activeStage === "DATABASE_ROLE_PRIVILEGES") {
+        report.databaseRolePrivileges.status = "FAIL";
+      }
+    }
     report.targetValidation =
       report.targetValidation.status === "PASS"
         ? report.targetValidation
@@ -178,5 +225,6 @@ function emit(report: SmokeReport, passed: boolean): void {
 void run().catch(() => {
   const report = newReport();
   report.targetValidation = { status: "FAIL", reason: "SMOKE_INTERNAL_ERROR" };
+  report.failureDiagnostic = sanitizeRestoreSmokeFailure("TARGET_VALIDATION", new Error());
   emit(report, false);
 });

@@ -1,6 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { validateIsolatedRestoreTarget } from "../scripts/production-restore-smoke-contract.js";
+import {
+  sanitizeRestoreSmokeFailure,
+  validateIsolatedRestoreTarget,
+} from "../scripts/production-restore-smoke-contract.js";
 
 const workflow = readFileSync(
   new URL("../.github/workflows/production-restore-smoke.yml", import.meta.url),
@@ -8,6 +12,10 @@ const workflow = readFileSync(
 );
 const script = readFileSync(
   new URL("../scripts/production-restore-smoke.ts", import.meta.url),
+  "utf8",
+);
+const guestDiagnosticIndex = readFileSync(
+  new URL("../src/modules/guest-diagnostic/index.ts", import.meta.url),
   "utf8",
 );
 
@@ -71,6 +79,55 @@ describe("isolated production restore smoke contract", () => {
     ).toEqual({ ok: false, reason: "PRODUCTION_HOST_MISSING" });
   });
 
+  it("reports only allowlisted failure stage, class and code", () => {
+    const secretMessage =
+      "postgresql://private-user:private-password@private-host/db?sslmode=require token=private";
+    const error = Object.assign(new SyntaxError(secretMessage), {
+      code: "ERR_MODULE_NOT_FOUND",
+    });
+    const diagnostic = sanitizeRestoreSmokeFailure("MODULE_LOADING", error);
+
+    expect(diagnostic).toEqual({
+      stage: "MODULE_LOADING",
+      errorClass: "SyntaxError",
+      errorCode: "ERR_MODULE_NOT_FOUND",
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain(secretMessage);
+    expect(JSON.stringify(diagnostic)).not.toContain("private-password");
+  });
+
+  it("omits unrecognized error names and codes", () => {
+    const error = Object.assign(new Error("sensitive text"), {
+      name: "private-user@private-host",
+      code: "PASSWORD=private",
+    });
+
+    expect(sanitizeRestoreSmokeFailure("APP_BUILD", error)).toEqual({
+      stage: "APP_BUILD",
+      errorClass: "OtherError",
+      errorCode: null,
+    });
+  });
+
+  it("keeps the guest diagnostic entrypoint valid under Node ESM", () => {
+    expect(guestDiagnosticIndex).toContain(
+      'export type { GuestDiagnosticOperation, ValidatedGuestSession } from "./context.js";',
+    );
+    expect(() =>
+      execFileSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "--eval",
+          "await import('./src/modules/guest-diagnostic/index.ts')",
+        ],
+        { cwd: process.cwd(), stdio: "ignore" },
+      ),
+    ).not.toThrow();
+  });
+
   it("does not expose a URL or load Prisma until the target is validated", () => {
     expect(script.indexOf("validateIsolatedRestoreTarget")).toBeLessThan(
       script.indexOf('import("../src/app.js")'),
@@ -78,6 +135,15 @@ describe("isolated production restore smoke contract", () => {
     expect(script.indexOf("process.env.DATABASE_URL = isolatedUrl")).toBeLessThan(
       script.indexOf('import("../src/app.js")'),
     );
+    for (const stage of ["environmentValidation", "moduleLoading", "appBuild", "fastifyReady"]) {
+      expect(script).toContain(`${stage}: Check`);
+      expect(workflow).toContain(`${stage}:`);
+    }
+    expect(script).toContain("await app.ready();");
+    expect(script).toContain("sanitizeRestoreSmokeFailure(activeStage, error)");
+    expect(script).not.toMatch(/error\.message|error\.stack/iu);
+    expect(workflow).toContain("report.failureDiagnostic");
+    expect(workflow).toContain("Failure diagnostic:");
     expect(script).toContain('app.inject({ method: "GET", url });');
     expect(script).toContain(
       `SELECT to_regclass('public."AccountDeletionRequest"')::text AS table_name`,

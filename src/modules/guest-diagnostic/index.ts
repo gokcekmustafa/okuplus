@@ -1,6 +1,5 @@
 export {
   GuestDiagnosticSecurityError,
-  ValidatedGuestSession,
   createGuestToken,
   getGuestDbClient,
   guestDatabaseUrl,
@@ -10,7 +9,7 @@ export {
   withGuestSessionContext,
   withGuestUserContext,
 } from "./context.js";
-export type { GuestDiagnosticOperation } from "./context.js";
+export type { GuestDiagnosticOperation, ValidatedGuestSession } from "./context.js";
 export {
   GUEST_RATE_LIMIT_POLICIES,
   GuestRateLimitConfigurationError,

@@ -66,6 +66,10 @@ jobs:
           const fallback = {
             targetValidation: { status: "FAIL", reason: "SANITIZED_REPORT_UNAVAILABLE" },
             checks: {
+              environmentValidation: "NOT_RUN",
+              moduleLoading: "NOT_RUN",
+              appBuild: "NOT_RUN",
+              fastifyReady: "NOT_RUN",
               appInitialization: "NOT_RUN",
               health: "NOT_RUN",
               healthDb: "NOT_RUN",
@@ -78,20 +82,79 @@ jobs:
               bypassesRls: null,
             },
             commitSha: process.env.GITHUB_SHA ?? "UNKNOWN",
+            failureDiagnostic: null,
           };
 
           let report = fallback;
           try {
             const parsed = JSON.parse(readFileSync(source, "utf8"));
             const validCheck = (value) => ["NOT_RUN", "PASS", "FAIL"].includes(value);
+            const diagnosticStages = [
+              "TARGET_VALIDATION",
+              "ENVIRONMENT_VALIDATION",
+              "MODULE_LOADING",
+              "APP_BUILD",
+              "FASTIFY_READY",
+              "HEALTH",
+              "HEALTH_DB",
+              "READY",
+              "ACCOUNT_DELETION_SCHEMA",
+              "DATABASE_ROLE_PRIVILEGES",
+            ];
+            const diagnosticClasses = [
+              "Error",
+              "TypeError",
+              "SyntaxError",
+              "ReferenceError",
+              "RangeError",
+              "AggregateError",
+              "ZodError",
+              "FastifyError",
+              "PrismaClientInitializationError",
+              "PrismaClientKnownRequestError",
+              "OtherError",
+            ];
+            const diagnosticCodes = [
+              "ERR_MODULE_NOT_FOUND",
+              "ERR_PACKAGE_PATH_NOT_EXPORTED",
+              "ERR_REQUIRE_ESM",
+              "MODULE_NOT_FOUND",
+              "ENOENT",
+              "EACCES",
+              "ECONNREFUSED",
+              "ETIMEDOUT",
+              "ENOTFOUND",
+              "P1000",
+              "P1001",
+              "P1012",
+              "P2021",
+              "P2022",
+            ];
+            const diagnostic = parsed?.failureDiagnostic;
+            const validDiagnostic =
+              diagnostic === null ||
+              (diagnostic &&
+                typeof diagnostic === "object" &&
+                diagnosticStages.includes(diagnostic.stage) &&
+                diagnosticClasses.includes(diagnostic.errorClass) &&
+                (diagnostic.errorCode === null || diagnosticCodes.includes(diagnostic.errorCode)));
             const valid =
               parsed &&
               typeof parsed === "object" &&
               ["NOT_RUN", "PASS", "BLOCKED", "FAIL"].includes(parsed.targetValidation?.status) &&
               typeof parsed.targetValidation.reason === "string" &&
-              ["appInitialization", "health", "healthDb", "ready", "accountDeletionRequestSchema"].every(
-                (key) => validCheck(parsed.checks?.[key]),
-              ) &&
+              [
+                "environmentValidation",
+                "moduleLoading",
+                "appBuild",
+                "fastifyReady",
+                "appInitialization",
+                "health",
+                "healthDb",
+                "ready",
+                "accountDeletionRequestSchema",
+              ].every((key) => validCheck(parsed.checks?.[key])) &&
+              validDiagnostic &&
               validCheck(parsed.databaseRolePrivileges?.status) &&
               (parsed.databaseRolePrivileges.isSuperuser === null ||
                 typeof parsed.databaseRolePrivileges.isSuperuser === "boolean") &&
@@ -102,6 +165,10 @@ jobs:
               report = {
                 targetValidation: parsed.targetValidation,
                 checks: {
+                  environmentValidation: parsed.checks.environmentValidation,
+                  moduleLoading: parsed.checks.moduleLoading,
+                  appBuild: parsed.checks.appBuild,
+                  fastifyReady: parsed.checks.fastifyReady,
                   appInitialization: parsed.checks.appInitialization,
                   health: parsed.checks.health,
                   healthDb: parsed.checks.healthDb,
@@ -114,6 +181,14 @@ jobs:
                   bypassesRls: parsed.databaseRolePrivileges.bypassesRls,
                 },
                 commitSha: /^[a-f0-9]{40}$/u.test(parsed.commitSha) ? parsed.commitSha : "UNKNOWN",
+                failureDiagnostic:
+                  diagnostic === null
+                    ? null
+                    : {
+                        stage: diagnostic.stage,
+                        errorClass: diagnostic.errorClass,
+                        errorCode: diagnostic.errorCode,
+                      },
               };
             }
           } catch {
@@ -126,12 +201,17 @@ jobs:
             "## Isolated restore application smoke",
             "",
             `- Target validation: ${report.targetValidation.status} (${report.targetValidation.reason})`,
+            `- Environment validation: ${report.checks.environmentValidation}`,
+            `- Module loading: ${report.checks.moduleLoading}`,
+            `- App build: ${report.checks.appBuild}`,
+            `- Fastify ready: ${report.checks.fastifyReady}`,
             `- App initialization: ${report.checks.appInitialization}`,
             `- GET /health: ${report.checks.health}`,
             `- GET /health/db: ${report.checks.healthDb}`,
             `- GET /ready: ${report.checks.ready}`,
             `- AccountDeletionRequest schema: ${report.checks.accountDeletionRequestSchema}`,
             `- DB role flags: ${JSON.stringify(report.databaseRolePrivileges)}`,
+            `- Failure diagnostic: ${report.failureDiagnostic ? JSON.stringify(report.failureDiagnostic) : "none"}`,
             `- Commit: ${report.commitSha}`,
           ];
           writeFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join("\n")}\n`, "utf8");
