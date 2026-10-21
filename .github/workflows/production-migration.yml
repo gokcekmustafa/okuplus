@@ -7,6 +7,10 @@ on:
         description: "Type MIGRATE to allow the protected production migration step"
         required: true
         type: string
+      approved_migration_scope:
+        description: "Exact comma-separated Prisma migration names expected to be pending; type none when there should be no pending migrations"
+        required: true
+        type: string
       seed_p0:
         description: "Explicitly select the Education V2 P0 production seed"
         required: true
@@ -101,7 +105,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
 
+      - name: Validate approved migration scope input
+        id: approved-migration-scope-input
+        env:
+          PRODUCTION_APPROVED_MIGRATION_SCOPE: ${{ inputs.approved_migration_scope }}
+        run: npx tsx scripts/verify-production-migration-scope.ts --validate-only
+
       - name: Verify production migration gate
+        id: production-migration-gate
         env:
           PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
@@ -121,6 +132,7 @@ jobs:
           PRODUCTION_DATABASE_HOST: ${{ vars.PRODUCTION_DATABASE_HOST }}
           COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID: ${{ vars.EDUCATION_V2_COMMON_REINFORCEMENT_TEMPLATE_VERSION_ID }}
           COMMON_ASSESSMENT_ID: ${{ vars.EDUCATION_V2_COMMON_ASSESSMENT_ID }}
+          PRODUCTION_APPROVED_MIGRATION_SCOPE: ${{ inputs.approved_migration_scope }}
         shell: bash
         run: |
           set -euo pipefail
@@ -204,20 +216,32 @@ jobs:
             }
           fi
 
-          if git grep -n -i -E 'DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE([[:space:]]|;)|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP' -- \
+          migration_files=(
             prisma/migrations/20260905090000_add_exercise_template_version_config/migration.sql \
             prisma/migrations/20260907150000_add_training_session_models/migration.sql \
             prisma/migrations/20260914100000_add_learning_experience_foundation/migration.sql \
             prisma/migrations/20260917120000_reconcile_release_0_6_schema/migration.sql \
-            prisma/migrations/20260927100000_add_persistent_learning_path/migration.sql; then
+            prisma/migrations/20260927100000_add_persistent_learning_path/migration.sql \
+            prisma/migrations/20261021150000_add_account_deletion_requests/migration.sql
+          )
+          if [ "${PRODUCTION_APPROVED_MIGRATION_SCOPE}" != "none" ]; then
+            IFS=',' read -r -a approved_migrations <<< "${PRODUCTION_APPROVED_MIGRATION_SCOPE}"
+            for migration in "${approved_migrations[@]}"; do
+              migration="${migration//[[:space:]]/}"
+              migration_files+=("prisma/migrations/${migration}/migration.sql")
+            done
+          fi
+          if git grep -n -i -E 'DROP[[:space:]]+(DATABASE|SCHEMA|TABLE)|TRUNCATE([[:space:]]|;)|DELETE[[:space:]]+FROM|ALTER[[:space:]]+TABLE[^;]*[[:space:]]DROP' -- "${migration_files[@]}"; then
             echo "FAIL: destructive SQL found in the production candidate migrations"
             exit 1
           fi
           echo "MIGRATION_SQL_SAFETY=PASS"
 
       - name: Verify production database identity and pre-migration state
+        id: production-db-precheck
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          PRODUCTION_APPROVED_MIGRATION_SCOPE: ${{ inputs.approved_migration_scope }}
         shell: bash
         run: |
           set -euo pipefail
@@ -243,9 +267,11 @@ jobs:
             echo "FAIL: unresolved production migration exists"
             exit 1
           }
+          printf '%s' "${report}" | npx tsx scripts/verify-production-migration-scope.ts
           echo "PRODUCTION_DB_IDENTITY=PASS"
 
       - name: Verify production migration history integrity
+        id: production-migration-history
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS: ${{ vars.PRODUCTION_DB_APPROVED_HISTORICAL_MIGRATION_CHECKSUMS }}
@@ -292,21 +318,25 @@ jobs:
           echo "PRODUCTION_MIGRATION_HISTORY_INTEGRITY=PASS"
 
       - name: Validate Prisma schema
+        id: production-schema-validation
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: npx prisma validate --schema=prisma/schema.prisma
 
       - name: Apply production migrations
+        id: production-migrations-deploy
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: npx prisma migrate deploy --schema=prisma/schema.prisma
 
       - name: Verify production migration status
+        id: production-migrations-status
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: npx prisma migrate status --schema=prisma/schema.prisma
 
       - name: Verify production database identity and post-migration state
+        id: production-db-postcheck
         env:
           DB_FINGERPRINT_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         shell: bash
@@ -490,6 +520,17 @@ jobs:
       - name: Migration summary
         if: always()
         env:
+          APPROVED_SCOPE_INPUT_OUTCOME: ${{ steps.approved-migration-scope-input.outcome }}
+          MIGRATION_GATE_OUTCOME: ${{ steps.production-migration-gate.outcome }}
+          DB_PRECHECK_OUTCOME: ${{ steps.production-db-precheck.outcome }}
+          MIGRATION_HISTORY_OUTCOME: ${{ steps.production-migration-history.outcome }}
+          SCHEMA_VALIDATION_OUTCOME: ${{ steps.production-schema-validation.outcome }}
+          MIGRATIONS_DEPLOY_OUTCOME: ${{ steps.production-migrations-deploy.outcome }}
+          MIGRATIONS_STATUS_OUTCOME: ${{ steps.production-migrations-status.outcome }}
+          DB_POSTCHECK_OUTCOME: ${{ steps.production-db-postcheck.outcome }}
+          SEED_P0: ${{ inputs.seed_p0 }}
+          SEED_P1_A: ${{ inputs.seed_p1_a }}
+          SEED_P1_BCD: ${{ inputs.seed_p1_bcd }}
           P0_CONTENT_OUTCOME: ${{ steps.education-v2-content-seed.outcome }}
           P0_LESSON_OUTCOME: ${{ steps.education-v2-lesson-seed.outcome }}
           P0_PROVISION_OUTCOME: ${{ steps.education-v2-provision.outcome }}
@@ -499,7 +540,22 @@ jobs:
           P1_BCD_SEED_OUTCOME: ${{ steps.education-v2-p1-bcd-seed.outcome }}
           P1_BCD_VERIFY_OUTCOME: ${{ steps.education-v2-p1-bcd-verify.outcome }}
         run: |
-          echo "PRODUCTION_MIGRATION=PASS"
+          set -euo pipefail
+          result="PASS"
+          for check in \
+            "APPROVED_MIGRATION_SCOPE_INPUT:${APPROVED_SCOPE_INPUT_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_MIGRATION_GATE:${MIGRATION_GATE_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_DB_PRECHECK:${DB_PRECHECK_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_MIGRATION_HISTORY:${MIGRATION_HISTORY_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_SCHEMA_VALIDATION:${SCHEMA_VALIDATION_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_MIGRATIONS_DEPLOY:${MIGRATIONS_DEPLOY_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_MIGRATIONS_STATUS:${MIGRATIONS_STATUS_OUTCOME:-NOT_RUN}" \
+            "PRODUCTION_DB_POSTCHECK:${DB_POSTCHECK_OUTCOME:-NOT_RUN}"; do
+            name="${check%%:*}"
+            outcome="${check#*:}"
+            echo "${name}=${outcome}"
+            if [ "${outcome}" != "success" ]; then result="FAIL"; fi
+          done
           echo "EDUCATION_V2_P0_CONTENT_SEED=${P0_CONTENT_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P0_LESSON_SEED=${P0_LESSON_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P0_PROVISION=${P0_PROVISION_OUTCOME:-NOT_RUN}"
@@ -509,3 +565,16 @@ jobs:
           echo "EDUCATION_V2_P1_BCD_SEED=${P1_BCD_SEED_OUTCOME:-NOT_RUN}"
           echo "EDUCATION_V2_P1_BCD_VERIFY=${P1_BCD_VERIFY_OUTCOME:-NOT_RUN}"
           echo "PRODUCTION_SMOKE=NOT_RUN"
+          if [ "${SEED_P0}" = "education-v2-p0" ] && { \
+            [ "${P0_CONTENT_OUTCOME:-NOT_RUN}" != "success" ] || \
+            [ "${P0_LESSON_OUTCOME:-NOT_RUN}" != "success" ] || \
+            [ "${P0_PROVISION_OUTCOME:-NOT_RUN}" != "success" ] || \
+            [ "${P0_VERIFY_OUTCOME:-NOT_RUN}" != "success" ]; }; then result="FAIL"; fi
+          if [ "${SEED_P1_A}" = "education-v2-p1-a" ] && { \
+            [ "${P1_A_SEED_OUTCOME:-NOT_RUN}" != "success" ] || \
+            [ "${P1_A_VERIFY_OUTCOME:-NOT_RUN}" != "success" ]; }; then result="FAIL"; fi
+          if [ "${SEED_P1_BCD}" = "education-v2-p1-bcd" ] && { \
+            [ "${P1_BCD_SEED_OUTCOME:-NOT_RUN}" != "success" ] || \
+            [ "${P1_BCD_VERIFY_OUTCOME:-NOT_RUN}" != "success" ]; }; then result="FAIL"; fi
+          echo "PRODUCTION_MIGRATION=${result}"
+          if [ "${result}" != "PASS" ]; then exit 1; fi
