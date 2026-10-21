@@ -58,6 +58,7 @@ export const RESTORE_SMOKE_ERROR_CODES = [
   "P1000",
   "P1001",
   "P1012",
+  "P2010",
   "P2021",
   "P2022",
 ] as const;

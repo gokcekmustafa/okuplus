@@ -109,6 +109,19 @@ describe("isolated production restore smoke contract", () => {
     });
   });
 
+  it("keeps Prisma raw-query diagnostics allowlisted without exposing database details", () => {
+    const error = Object.assign(new Error("permission denied at private database"), {
+      code: "P2010",
+      meta: { code: "42501", message: "private database details" },
+    });
+
+    expect(sanitizeRestoreSmokeFailure("READY", error)).toEqual({
+      stage: "READY",
+      errorClass: "Error",
+      errorCode: "P2010",
+    });
+  });
+
   it("keeps the guest diagnostic entrypoint valid under Node ESM", () => {
     expect(guestDiagnosticIndex).toContain(
       'export type { GuestDiagnosticOperation, ValidatedGuestSession } from "./context.js";',

@@ -102,7 +102,34 @@ jobs:
           GRANT SELECT ON "ExerciseTemplateVersionContent" TO oku_guest_app;
           GRANT SELECT ON "ExerciseTemplateVersionQuestion" TO oku_guest_app;
           GRANT SELECT ON "Skill" TO oku_guest_app;
+          -- CI-only grant to exercise the definer function with a role that
+          -- intentionally has no SELECT privilege on _prisma_migrations.
+          GRANT EXECUTE ON FUNCTION public.readiness_has_incomplete_migrations() TO oku_guest_app;
           SQL
+
+      - name: Verify readiness function least-privilege contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          table_select="$(psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
+            "SELECT has_table_privilege('oku_guest_app', 'public.\"_prisma_migrations\"', 'SELECT')")"
+          function_execute="$(psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
+            "SELECT has_function_privilege('oku_guest_app', 'public.readiness_has_incomplete_migrations()', 'EXECUTE')")"
+          test "$table_select" = "f" || { echo "FAIL: CI guest role can read the migration ledger"; exit 1; }
+          test "$function_execute" = "t" || { echo "FAIL: CI guest role cannot execute the readiness function"; exit 1; }
+          readiness_status="$(psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 -qAt <<'SQL'
+          BEGIN;
+          INSERT INTO public."_prisma_migrations"
+            ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
+          VALUES
+            ('readiness-contract-test', repeat('0', 64), 'readiness_contract_test', now(), 0);
+          SET LOCAL ROLE oku_guest_app;
+          SELECT public.readiness_has_incomplete_migrations();
+          ROLLBACK;
+          SQL
+          )"
+          test "$readiness_status" = "t" || { echo "FAIL: readiness function missed an incomplete migration"; exit 1; }
+          echo "READINESS_FUNCTION_LEAST_PRIVILEGE=PASS"
 
       - name: Prepare Guest Diagnostic RLS fixtures
         env:

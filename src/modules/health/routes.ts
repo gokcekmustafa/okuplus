@@ -29,6 +29,12 @@ function endpointIdFromHost(host: string): string | null {
   return label && /^ep-[a-z0-9-]+$/u.test(label) ? label : null;
 }
 
+function isMissingReadinessFunction(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const prismaError = error as { code?: unknown; meta?: { code?: unknown } };
+  return prismaError.code === "P2010" && prismaError.meta?.code === "42883";
+}
+
 /**
  * GET /health — proses sağlığı
  * GET /health/db — veritabanı bağlantı kontrolü
@@ -119,19 +125,40 @@ export async function healthRoutes(
   app.get("/ready", async (request, reply) => {
     try {
       await db.$queryRaw`SELECT 1`;
-      const migrationRows = await db.$queryRaw<Array<{ count: bigint }>>`
-        SELECT count(*)::bigint AS count
-        FROM "_prisma_migrations"
-        WHERE "finished_at" IS NULL AND "rolled_back_at" IS NULL
-      `;
-      if (Number(migrationRows[0]?.count ?? 0) > 0) {
+      let hasIncompleteMigrations: boolean;
+      try {
+        const migrationRows = await db.$queryRaw<
+          Array<{ has_incomplete_migrations: boolean }>
+        >`SELECT public.readiness_has_incomplete_migrations() AS has_incomplete_migrations`;
+        if (typeof migrationRows[0]?.has_incomplete_migrations !== "boolean") {
+          return reply.status(503).send({ status: "not_ready", ready: false });
+        }
+        hasIncompleteMigrations = migrationRows[0].has_incomplete_migrations;
+      } catch (err) {
+        // Preserve readiness across deploy-before-migration for roles that can
+        // still perform the original check. Only a missing function permits
+        // this legacy query; permission and all other errors remain fail-closed.
+        if (!isMissingReadinessFunction(err)) throw err;
+        const legacyRows = await db.$queryRaw<Array<{ count: bigint }>>`
+          SELECT count(*)::bigint AS count
+          FROM public."_prisma_migrations"
+          WHERE "finished_at" IS NULL AND "rolled_back_at" IS NULL
+        `;
+        const legacyCount = legacyRows[0]?.count;
+        if (typeof legacyCount !== "bigint") {
+          return reply.status(503).send({ status: "not_ready", ready: false });
+        }
+        hasIncompleteMigrations = legacyCount > 0n;
+      }
+
+      if (hasIncompleteMigrations) {
         request.log.warn("Başarısız veya tamamlanmamış migration nedeniyle readiness reddedildi");
         return reply.status(503).send({ status: "not_ready", ready: false });
       }
 
       return { status: "ok", ready: true };
-    } catch (err) {
-      request.log.error({ err }, "Readiness kontrolü başarısız");
+    } catch {
+      request.log.error("Readiness kontrolü başarısız");
       return reply.status(503).send({ status: "not_ready", ready: false });
     }
   });
