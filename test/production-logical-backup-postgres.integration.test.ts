@@ -43,13 +43,14 @@ const roleNames = [
   groupRole,
 ];
 
-const describePostgres = databaseUrl ? describe : describe.skip;
+const describePostgres = process.env.CI === "true" ? describe : describe.skip;
 
 describePostgres("production backup identity SQL on PostgreSQL 18", () => {
   let admin: PrismaClient;
   let ownerDatabaseClient: PrismaClient | undefined;
   let databaseName = "";
   let largeObjectOid: number | undefined;
+  let restorePublicDatabaseTemp = false;
 
   function identifier(value: string): string {
     return `"${value.replaceAll('"', '""')}"`;
@@ -123,18 +124,30 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
   }
 
   beforeAll(async () => {
-    if (!databaseUrl) return;
+    if (!databaseUrl) {
+      throw new Error("PostgreSQL backup integration tests require PSQL_DATABASE_URL in CI");
+    }
     const parsed = new URL(databaseUrl);
-    if (!["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+    if (
+      !["localhost", "127.0.0.1", "::1"].includes(parsed.hostname) ||
+      (parsed.port && parsed.port !== "5432")
+    ) {
       throw new Error("PostgreSQL backup integration tests require a loopback-only test database");
     }
     admin = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-    const versionRows = await admin.$queryRaw<Array<{ version: number; database: string }>>`
-      SELECT current_setting('server_version_num')::integer AS version, current_database() AS database
+    const versionRows = await admin.$queryRaw<
+      Array<{ version: number; database: string; role: string }>
+    >`
+      SELECT current_setting('server_version_num')::integer AS version,
+        current_database() AS database,
+        current_user AS role
     `;
     const version = versionRows[0];
     if (!version || version.version < 180000 || version.version >= 190000) {
       throw new Error("PostgreSQL backup integration tests require PostgreSQL 18");
+    }
+    if (version.database !== "oku_plus_test" || version.role !== "postgres") {
+      throw new Error("PostgreSQL backup integration tests require the disposable CI database");
     }
     databaseName = version.database;
 
@@ -180,6 +193,13 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     for (const name of roleNames) {
       if (name !== groupRole) await grantCompleteRead(name);
     }
+    const publicTempRows = await admin.$queryRaw<Array<{ granted: boolean }>>`
+      SELECT has_database_privilege(${fullRole}, current_database(), 'TEMP') AS granted
+    `;
+    restorePublicDatabaseTemp = publicTempRows[0]?.granted ?? false;
+    await admin.$executeRawUnsafe(
+      `REVOKE TEMP ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
+    );
     await admin.$executeRawUnsafe(
       `REVOKE SELECT ON ${identifier(schemaName)}.read_fixture FROM ${identifier(missingTableRole)}`,
     );
@@ -202,6 +222,11 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
       .catch(() => undefined);
     if (largeObjectOid !== undefined) {
       await admin.$queryRawUnsafe(`SELECT lo_unlink(${largeObjectOid})`).catch(() => undefined);
+    }
+    if (restorePublicDatabaseTemp) {
+      await admin
+        .$executeRawUnsafe(`GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`)
+        .catch(() => undefined);
     }
     await admin
       .$executeRawUnsafe(`REVOKE ${identifier(groupRole)} FROM ${identifier(membershipRole)}`)
@@ -312,6 +337,16 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     } finally {
       await admin.$executeRawUnsafe(
         `REVOKE CREATE ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
+      );
+    }
+
+    await admin.$executeRawUnsafe(`GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`);
+    try {
+      const publicDatabaseTemp = await readIdentity(fullRole);
+      expect(publicDatabaseTemp.role.hasWritePrivileges).toBe(true);
+    } finally {
+      await admin.$executeRawUnsafe(
+        `REVOKE TEMP ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
       );
     }
   });

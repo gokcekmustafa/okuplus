@@ -109,8 +109,10 @@ Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermeli
 - Bütün kullanıcı sequence'larında yalnızca `SELECT`; `USAGE` ve `UPDATE` verilmemeli.
 - Varsa her large object için `SELECT`; hiçbirine `UPDATE` verilmemeli. PostgreSQL `pg_dump` large
   object'leri varsayılan olarak dahil eder.
-- Database/schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım yetkisi; rol
-  üyeliği, rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli.
+- Database `CREATE`/`TEMP` (ikincisi `PUBLIC` üzerinden varsayılan olarak gelse bile),
+  schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım yetkisi; rol üyeliği,
+  rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli. `PUBLIC` ACL'leri de efektif yetki
+  olarak değerlendirilir; bunlardan biri varsa preflight reddeder.
 
 `GRANT SELECT ON ALL TABLES IN SCHEMA ...` ve
 `GRANT SELECT ON ALL SEQUENCES IN SCHEMA ...` mevcut nesneleri kapsar; gelecek nesnelerin default
