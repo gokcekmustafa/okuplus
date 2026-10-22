@@ -29,7 +29,7 @@ concurrency:
 jobs:
   android:
     name: Android debug, instrumentation-test, and release validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -82,6 +82,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
+          emulator-boot-timeout: 900
           disable-animations: true
           script: |
             ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain
