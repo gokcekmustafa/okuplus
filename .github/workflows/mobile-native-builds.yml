@@ -83,6 +83,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           test -c /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
 
       - name: Run Secure Storage instrumentation test on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -93,7 +96,7 @@ jobs:
           arch: x86_64
           force-avd-creation: true
           emulator-boot-timeout: 180
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
             ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain

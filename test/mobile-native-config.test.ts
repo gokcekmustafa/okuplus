@@ -103,12 +103,13 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("runs-on: ubuntu-22.04");
     expect(workflow).toContain("Enable KVM for Android emulator");
     expect(workflow).toContain("test -c /dev/kvm");
+    expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
     expect(workflow).toContain("timeout-minutes: 20");
     expect(workflow).toContain("api-level: 34");
     expect(workflow).toContain("force-avd-creation: true");
     expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(
-      "emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim",
+      "emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim",
     );
     expect(workflow).toContain("set -o pipefail");
     expect(workflow).toContain("id: debug-apk");
