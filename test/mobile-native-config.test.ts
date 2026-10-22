@@ -104,7 +104,7 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("timeout-minutes: 20");
     expect(workflow).toContain("api-level: 34");
     expect(workflow).toContain("force-avd-creation: true");
-    expect(workflow).toContain("emulator-boot-timeout: 900");
+    expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(
       "emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim",
     );
