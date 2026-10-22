@@ -82,6 +82,36 @@ kurumsal kasada tutulan private identity'nin eşleşmesini sınamalıdır. Uygul
 doğrulanmış sayılmaz. **Private age identity GitHub'a, repoya, Actions çıktısına veya loglara
 konmamalıdır.** Açık recipient gizli değildir; yine de rapora yazılmaz.
 
+### 22 Ekim 2026 salt-okunur hazırlık denetimi
+
+Vercel CLI ile doğrulanmış proje `okuplus` ve production URL'si `https://www.okupratik.com`.
+Production environment değişken adları/metadata'sı `DATABASE_URL` ve `GUEST_DATABASE_URL` için
+`sensitive` gösteriyor; değerleri, kullanıcı adlarını ve bağlantı ayrıntılarını okumadım veya
+çıktılamadım. `vercel env run` bu hassas değerleri yerel komuta vermeyi reddetti (5 hassas değer
+aktarılmadı). Bu nedenle gerçek bağlantı üzerinden `current_user` doğrulaması yapılmadı; ana ve
+guest uygulama rolleri **UNKNOWN / UNVERIFIED**. `PRODUCTION_APP_RUNTIME_DB_USER` tek başına
+ayarlanmış olsa bile uygulamanın gerçek runtime rolü kanıtlanmış sayılmaz. Yedek rolünün her iki
+runtime rolünden de farklı olduğu ayrıca kanıtlanmalıdır.
+
+GitHub `production-migration` Environment metadata'sında yalnızca ad varlığı denetlendi; variable
+değerleri ve secret içeriği okunmadı. Bu nedenle var olan ancak hedefle eşleşmesi kanıtlanmayan
+değerler `UNKNOWN` olarak tutulmuştur:
+
+| Environment alanı                          | Durum       | Kanıt / eksik                                                                                    |
+| ------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------ |
+| Secret `PRODUCTION_BACKUP_DATABASE_URL`    | **MISSING** | Environment secret metadata'sında ad yok.                                                        |
+| Variable `PRODUCTION_BACKUP_AGE_RECIPIENT` | **MISSING** | Environment variable metadata'sında ad yok.                                                      |
+| Variable `PRODUCTION_DB_APPROVED_HOST`     | **UNKNOWN** | Ad var; değer production endpoint'e karşı okunup doğrulanmadı.                                   |
+| Variable `PRODUCTION_DB_APPROVED_DATABASE` | **UNKNOWN** | Ad var; değer onaylı production veritabanına karşı okunup doğrulanmadı.                          |
+| Variable `PRODUCTION_BACKUP_APPROVED_USER` | **MISSING** | Environment variable metadata'sında ad yok.                                                      |
+| Variable `PRODUCTION_APP_RUNTIME_DB_USER`  | **MISSING** | Environment variable metadata'sında ad yok; Vercel runtime rolü de bağımsız olarak doğrulanmadı. |
+
+Bu kanıt, workflow'a bağlanmış bir yedek login/credential bulunmadığını gösterir; Neon rol kataloğunun
+tam envanteri alınmadığı için veritabanında aynı adlı veya kullanılmayan başka bir rolün bulunmadığı
+iddia edilmez. Ayrı backup rolü Neon üzerinde **kanıtlanmış değildir**. Workflow hazır değildir ve
+backup dispatch edilmemiştir. Bu denetim sırasında production DB'ye bağlantı veya SQL sorgusu
+yapılmadı.
+
 ### Yalnızca yedekleme için DB rolü
 
 Yedekleme bağlantısı uygulama kullanıcısı, veritabanı sahibi veya superuser olamaz. Secret'taki
@@ -113,6 +143,45 @@ Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermeli
   schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım yetkisi; rol üyeliği,
   rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli. `PUBLIC` ACL'leri de efektif yetki
   olarak değerlendirilir; bunlardan biri varsa preflight reddeder.
+
+### Veritabanı yöneticisine hazırlık prosedürü (henüz uygulanmadı)
+
+Bu adımlar Neon/DB yöneticisine change request olarak sunulmalıdır; bu kod görevi kapsamında hiçbir
+adım çalıştırılmadı. Önce Vercel `DATABASE_URL` ve `GUEST_DATABASE_URL` bağlantılarından, hassas
+bilgiyi açığa çıkarmayan yetkili salt-okunur `SELECT current_user, current_database()` kanıtı
+alınmalı; hedefin production olduğu deployment/environment metadata'sıyla bağlanmalıdır. İki runtime
+rolü de tespit edilmeden ve yeni backup rolünden farklı oldukları doğrulanmadan ilerlenmemelidir.
+
+Yönetici, onaylı production database'de ayrı backup login'i oluşturmalı; `BYPASSRLS` yalnızca bütün
+RLS-korumalı satırları eksiksiz yedekleme gereksinimi ve risk kabulü kayda geçirildikten sonra,
+superuser yetkili yönetici oturumunda vermelidir. Rolün kendisi `NOSUPERUSER`, `NOCREATEDB`,
+`NOCREATEROLE`, `NOREPLICATION`, `NOINHERIT` kalmalı; uygulama rolleriyle veya başka rollerle
+üyelik almamalı, hiçbir DB/schema/table/sequence/large object sahibi olmamalı ve yönetim/yazma
+yetkisi almamalıdır. `BYPASSRLS` yalnızca RLS politikalarını aşar; SELECT izni sağlamaz.
+
+Yönetici, her kullanıcı şeması için (preflight envanterinden alınan açık şema listesiyle) şu asgari
+erişimleri ayrı ayrı değerlendirmelidir; aşağıdaki örnekler placeholder'dır ve çalıştırılmamıştır:
+
+```sql
+GRANT CONNECT ON DATABASE <production_database> TO <backup_role>;
+GRANT USAGE ON SCHEMA <user_schema> TO <backup_role>;
+GRANT SELECT ON ALL TABLES IN SCHEMA <user_schema> TO <backup_role>;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA <user_schema> TO <backup_role>;
+```
+
+Mevcut large object'lerde yalnızca `SELECT` ayrıca gerekir; her nesne için OID'ler yönetici tarafından
+incelenmeli ve gerekiyorsa `GRANT SELECT ON LARGE OBJECT <oid> TO <backup_role>` verilmelidir.
+`UPDATE` hiçbir large object'e verilmemelidir. Gelecekte yaratılacak nesneler için default privilege
+değişikliği ancak ilgili her nesne sahibi ve etkisi incelendikten sonra ayrı kararla yapılmalıdır.
+
+Son olarak yönetici, efektif yetkileri (doğrudan, rol üyeliği ve `PUBLIC` dahil), database `TEMP` ve
+`CREATE`, şema/nesne yazma ACL'leri, tüm database'leri kapsayan sahiplik bağımlılıkları ve eksiksiz
+tablo/sequence/large-object SELECT erişimini salt-okunur kontrollerle doğrulamalıdır. `PUBLIC` üzerinden
+örneğin database `TEMP` varsa backup preflight bunu reddeder; uygulamalara etkisi incelenmeden
+`PUBLIC` yetkileri değiştirilmemelidir. Herhangi bir belirsizlik veya sorgu/izin hatası NO-GO'dur.
+Yalnızca yönetici kanıtı ve Environment yapılandırması tamamlandıktan sonra workflow preflight'ı
+geçirip yedeği başlatmaya elverişli olabilir; bu, yedeğin veya restore provasının başarıyla
+tamamlandığı anlamına gelmez.
 
 `GRANT SELECT ON ALL TABLES IN SCHEMA ...` ve
 `GRANT SELECT ON ALL SEQUENCES IN SCHEMA ...` mevcut nesneleri kapsar; gelecek nesnelerin default
