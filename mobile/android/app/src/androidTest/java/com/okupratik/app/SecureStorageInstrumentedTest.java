@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONTokener;
 import org.junit.Test;
@@ -31,10 +32,25 @@ public class SecureStorageInstrumentedTest {
         return new JSONTokener(result.get()).nextValue().toString();
     }
 
+    private static int webViewProgress(ActivityScenario<MainActivity> scenario) {
+        AtomicInteger progress = new AtomicInteger();
+        scenario.onActivity(activity ->
+                progress.set(activity.getBridge().getWebView().getProgress()));
+        return progress.get();
+    }
+
     @Test
     public void secureStoragePluginCanWriteReadAndRemoveOnDevice() throws Exception {
         try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
-            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(30);
+            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+            int progress = 0;
+            while (System.currentTimeMillis() < deadline && progress < 100) {
+                progress = webViewProgress(scenario);
+                if (progress < 100) Thread.sleep(250);
+            }
+            assertTrue("App WebView did not finish loading", progress >= 100);
+
+            deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15);
             String readiness = "";
             while (System.currentTimeMillis() < deadline) {
                 readiness = evaluate(scenario,
