@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 
 import type { Env } from "../../config/env.js";
+import { getAllowedOrigins } from "../../config/allowed-origins.js";
 import { ok } from "../../lib/response.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import type { AuthProvider } from "../auth/index.js";
@@ -39,9 +40,7 @@ function requestParams(request: FastifyRequest): string {
 }
 
 function allowedOrigins(env: Env): readonly string[] {
-  return env.CORS_ORIGIN.split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  return getAllowedOrigins(env.CORS_ORIGIN);
 }
 
 export async function guestDiagnosticRoutes(

@@ -35,6 +35,31 @@ describe("OkuPratik mobile foundation", () => {
       expect(app).toContain('const SECURE_SESSION_KEY = "oku.session.v1";');
       expect(app).toContain("globalThis.fetch = (input, init)");
       expect(app).toContain("nativeMobileRuntime");
+      expect(app).toContain(
+        "await secureStoragePlugin.setItem(SECURE_SESSION_KEY, JSON.stringify(session))",
+      );
+      expect(app).toContain("SECURE_STORAGE_UNAVAILABLE");
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults the APK runtime to the canonical production web/API origin", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "okupratik-mobile-production-origin-"));
+    try {
+      const env = { ...process.env };
+      delete env.OKUPRATIK_API_BASE_URL;
+      await execFile(process.execPath, [prepareScript], {
+        cwd: repoRoot,
+        env: { ...env, OKUPRATIK_MOBILE_OUTPUT_DIR: outputDir },
+      });
+
+      const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
+      const index = await readFile(join(outputDir, "index.html"), "utf8");
+      expect(runtime).toContain('apiBaseUrl: "https://www.okupratik.com"');
+      expect(index.indexOf('src="/mobile-runtime.js"')).toBeLessThan(
+        index.indexOf('src="/app.js"'),
+      );
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

@@ -21,6 +21,10 @@ npm run open:ios
 HTTPS origin olarak ayrıca verilmelidir; wildcard, kullanıcı adı veya parola kabul
 edilmez.
 
+Android WebView istekleri `https://localhost` origin'inden gelir. Backend bu tek,
+sabit origin'i CORS ve cookie-auth origin kontrolünde kabul eder; diğer origin'ler
+`CORS_ORIGIN` allowlist'inde açıkça tanımlı olmalıdır.
+
 ## Oturum güvenliği
 
 Web uygulaması web tarayıcısında mevcut davranışını korur. Native kabukta erişim,

@@ -1,19 +1,14 @@
 import cors from "@fastify/cors";
 import type { FastifyInstance } from "fastify";
 import type { Env } from "../config/env.js";
+import { getAllowedOrigins } from "../config/allowed-origins.js";
 
 /**
- * CORS yapılandırması config üzerinden yönetilir. Production default'u boş
- * `CORS_ORIGIN` = cross-origin istek kapalıdır (wildcard kullanılmaz).
+ * Browser CORS origins come from the explicit config allowlist. The only
+ * built-in native origin is the exact Capacitor Android WebView origin.
  */
 export async function corsPlugin(app: FastifyInstance, env: Env): Promise<void> {
-  const origin = env.CORS_ORIGIN.split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (origin.length === 0) {
-    return;
-  }
+  const origin = getAllowedOrigins(env.CORS_ORIGIN);
 
   await app.register(cors, {
     origin,

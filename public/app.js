@@ -1,5 +1,6 @@
 // OkuPratik — minimal SPA (vanilla JS)
 import { createUiMotion, loadingSkeleton } from "./ui-motion.js";
+import { formatLoginError, setupPasswordVisibilityToggle } from "./auth-ui.js";
 
 const uiMotion = createUiMotion();
 // Web'de access + refresh token localStorage'da tutulur. Native kabukta
@@ -391,12 +392,22 @@ function hideCelebration() {
   celebrationLastFocus = null;
 }
 
-function setStoredSession(data) {
+async function setStoredSession(data) {
   if (nativeMobileRuntime) {
+    if (typeof secureStoragePlugin?.setItem !== "function") {
+      throw Object.assign(new Error("Native secure storage is unavailable"), {
+        code: "SECURE_STORAGE_UNAVAILABLE",
+      });
+    }
+    const session = {
+      accessToken: data.tokens.accessToken,
+      refreshToken: data.tokens.refreshToken,
+      tenantId: data.tenantContext?.tenantId ?? "",
+    };
+    await secureStoragePlugin.setItem(SECURE_SESSION_KEY, JSON.stringify(session));
     nativeSession.accessToken = data.tokens.accessToken;
     nativeSession.refreshToken = data.tokens.refreshToken;
     nativeSession.tenantId = data.tenantContext?.tenantId ?? "";
-    void secureStoragePlugin?.setItem?.(SECURE_SESSION_KEY, JSON.stringify(nativeSession));
     return;
   }
   localStorage.setItem(STORAGE_KEYS.accessToken, data.tokens.accessToken);
@@ -620,16 +631,6 @@ function formatStudentError(error, fallback = "Bir sorun oluştu. Lütfen tekrar
   if (error?.status === 409) return "Bu işlem zaten kaydedilmiş olabilir. Biraz sonra tekrar dene.";
   if (error?.status >= 500) return "Bir bağlantı sorunu oldu. Biraz sonra tekrar dene.";
   return fallback;
-}
-
-function formatLoginError(error) {
-  if (error?.status === 401 || error?.code === "UNAUTHORIZED")
-    return "E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.";
-  if (error?.status >= 500) return "Giriş sırasında bir bağlantı sorunu oluştu. Tekrar dene.";
-  return formatStudentError(
-    error,
-    "E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.",
-  );
 }
 
 function setGuestPhase(phase) {
@@ -1040,7 +1041,7 @@ async function socialLogin(provider, idToken, nonce, displayName) {
 
 async function completeSocialLogin(provider, idToken, nonce, displayName) {
   const session = await socialLogin(provider, idToken, nonce, displayName);
-  setStoredSession(session);
+  await setStoredSession(session);
   await claimGuestDiagnosticForCurrentUser();
   showDashboard(session);
   return session;
@@ -5652,6 +5653,8 @@ function setupTenantEvents() {
 
 // ---------- Login formu ----------
 
+setupPasswordVisibilityToggle($("login-password"), $("login-password-toggle"));
+
 function setLoading(isLoading) {
   const submitBtn = $("login-submit");
   submitBtn.disabled = isLoading;
@@ -5716,7 +5719,7 @@ $("signup-form").addEventListener("submit", async (event) => {
   setSignupLoading(true);
   try {
     const session = await signup(displayName, email, password, phone);
-    setStoredSession(session);
+    await setStoredSession(session);
     await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
     recordPilotTelemetry("SIGNUP_COMPLETED");
@@ -5746,7 +5749,7 @@ $("login-form").addEventListener("submit", async (event) => {
   setLoading(true);
   try {
     const session = await login(email, password);
-    setStoredSession(session);
+    await setStoredSession(session);
     await claimGuestDiagnosticForCurrentUser();
     showDashboard(session);
   } catch (err) {

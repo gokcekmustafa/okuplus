@@ -66,14 +66,26 @@
           </label>
           <label class="field">
             <span>Şifre</span>
-            <input
-              id="login-password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-              placeholder="••••••••"
-            />
+            <div class="password-input-wrap">
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                placeholder="••••••••"
+              />
+              <button
+                id="login-password-toggle"
+                class="password-visibility-toggle"
+                type="button"
+                aria-label="Şifreyi göster"
+                aria-controls="login-password"
+                aria-pressed="false"
+              >
+                Göster
+              </button>
+            </div>
           </label>
           <p id="login-error" class="error hidden" role="alert"></p>
           <button id="login-submit" type="submit" class="btn btn-primary btn-block">

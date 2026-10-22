@@ -51,6 +51,7 @@ import { userAdminRoutes } from "./modules/users/index.js";
 import { guestDiagnosticRoutes } from "./modules/guest-diagnostic/index.js";
 import { curriculumDraftAdminRoutes } from "./modules/curriculum-drafts/admin-routes.js";
 import { corsPlugin } from "./plugins/cors.js";
+import { getAllowedOrigins } from "./config/allowed-origins.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { staticPlugin } from "./plugins/static.js";
 import { securityPlugin } from "./plugins/security.js";
@@ -103,9 +104,7 @@ export async function buildApp(
   // Call the wrapper in the root context so its CORS hook covers every route.
   // (Registering this non-fastify-plugin wrapper would encapsulate the hook.)
   await corsPlugin(app, env);
-  const allowedOrigins = env.CORS_ORIGIN.split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const allowedOrigins = getAllowedOrigins(env.CORS_ORIGIN);
   app.addHook(
     "preHandler",
     createCookieCsrfGuard(env.JWT_SECRET, allowedOrigins, {

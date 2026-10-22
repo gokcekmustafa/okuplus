@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { parseEnv } from "../src/config/env.js";
 import { loggerOptions } from "../src/lib/logger.js";
+import { CAPACITOR_ANDROID_ORIGIN, getAllowedOrigins } from "../src/config/allowed-origins.js";
+import { checkRequestOrigin } from "../src/modules/auth/csrf.js";
 
 const databaseUrl = process.env.DATABASE_URL ?? "";
 
@@ -160,8 +162,38 @@ describe("8I-2 security hardening", () => {
         headers: { origin: "https://evil.example.test" },
       });
       expect(denied.headers["access-control-allow-origin"]).toBeUndefined();
+
+      const nativePreflight = await app.inject({
+        method: "OPTIONS",
+        url: "/auth/login",
+        headers: {
+          origin: CAPACITOR_ANDROID_ORIGIN,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type,x-auth-transport",
+        },
+      });
+      expect(nativePreflight.statusCode).toBe(204);
+      expect(nativePreflight.headers["access-control-allow-origin"]).toBe(CAPACITOR_ANDROID_ORIGIN);
+      expect(nativePreflight.headers["access-control-allow-credentials"]).toBe("true");
+      expect(nativePreflight.headers["access-control-allow-headers"]).toContain("x-auth-transport");
     } finally {
       await app.close();
     }
+  });
+
+  it("adds only the exact Capacitor Android origin to configured auth origins", () => {
+    expect(getAllowedOrigins("https://www.okupratik.com")).toEqual([
+      "https://www.okupratik.com",
+      CAPACITOR_ANDROID_ORIGIN,
+    ]);
+    expect(getAllowedOrigins(CAPACITOR_ANDROID_ORIGIN)).toEqual([CAPACITOR_ANDROID_ORIGIN]);
+    expect(getAllowedOrigins("")).toEqual([CAPACITOR_ANDROID_ORIGIN]);
+    expect(getAllowedOrigins("https://www.okupratik.com")).not.toContain("*");
+    expect(
+      checkRequestOrigin(
+        { headers: { origin: CAPACITOR_ANDROID_ORIGIN } } as never,
+        getAllowedOrigins("https://www.okupratik.com"),
+      ),
+    ).toEqual({ ok: true, source: "origin" });
   });
 });
