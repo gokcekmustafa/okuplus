@@ -33,8 +33,11 @@ yazmaz ve oturum açma güvenli biçimde başarısız olur.
 
 `assets/okupratik-app-icon-master.png` marka simgesinin kaynak görselidir. iOS için
 1024×1024 App Store simgesi, Android için yoğunluğa göre launcher ve adaptive
-icon görselleri projeye eklenmiştir. `test/mobile-native-config.test.ts` bu dosya
-ölçülerini ve platform kimliklerinin eşleşmesini denetler.
+icon görselleri projeye eklenmiştir. `assets/okupratik-splash-source.png` ise
+Android yön/density varyantları ve iOS açılış ekranı için kaynak görseldir.
+Native splash çıktıları JPEG biçimindedir; böylece yüksek çözünürlüklü degrade
+görseller gereksiz PNG boyutu oluşturmaz. `test/mobile-native-config.test.ts`
+görsel ölçülerini ve platform kimliklerinin eşleşmesini denetler.
 
 ## Durum ve mağaza öncesi sınırlar
 
