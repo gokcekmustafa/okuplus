@@ -75,11 +75,23 @@ jobs:
             exit 1
           fi
 
+      - name: Locate generated Android debug APK
+        id: debug-apk
+        shell: bash
+        run: |
+          apk="$(find mobile/android/app/build/outputs -type f -name 'app-debug.apk' -print -quit 2>/dev/null || true)"
+          if [ -z "$apk" ] || [ ! -s "$apk" ]; then
+            echo "::error::Gradle completed but no non-empty app-debug.apk was found. Available APK outputs:"
+            find mobile/android/app/build/outputs -type f -name '*.apk' -print 2>/dev/null || true
+            exit 1
+          fi
+          printf 'path=%s\n' "$apk" >> "$GITHUB_OUTPUT"
+
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
         with:
           name: okupratik-android-debug-${{ github.sha }}
-          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.debug-apk.outputs.path }}
           if-no-files-found: error
 
   ios:

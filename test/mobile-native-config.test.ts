@@ -91,6 +91,14 @@ describe("mobile native app identity", () => {
     );
   });
 
+  it("uploads the verified debug APK path discovered after the Android build", () => {
+    const workflow = read("../.github/workflows/mobile-native-builds.yml");
+    expect(workflow).toContain("id: debug-apk");
+    expect(workflow).toContain("-name 'app-debug.apk'");
+    expect(workflow).toContain("${{ steps.debug-apk.outputs.path }}");
+    expect(workflow).toContain("no non-empty app-debug.apk was found");
+  });
+
   it("ships branded square icons at the required native density sizes", () => {
     const iosContents = JSON.parse(
       read("../mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json"),
