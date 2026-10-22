@@ -93,7 +93,11 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
       );
       const row = rows[0];
       if (!row) throw new Error("identity query returned no row");
-      return JSON.parse(row.identity) as ProductionBackupIdentity;
+      const parsed = JSON.parse(row.identity) as ProductionBackupIdentity["role"] & {
+        database: string;
+      };
+      const { database, ...role } = parsed;
+      return { database, role };
     });
   }
 
