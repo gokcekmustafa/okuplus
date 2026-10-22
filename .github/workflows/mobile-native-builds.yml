@@ -63,6 +63,7 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x gradlew
+          set -o pipefail
           if ! ./gradlew assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/android-gradle.log"; then
             diagnostic="$(awk '/^\* What went wrong:/ { print; for (i = 0; i < 8; i++) { if (getline) print; else exit } }' "$RUNNER_TEMP/android-gradle.log" | head -n 9 | tr '\n' ' ' | sed -E 's#https?://[^[:space:]]+#\[URL\]#g; s#(password|token|secret)[=:][^[:space:]]+#\1=[REDACTED]#Ig')"
             if [ -z "$diagnostic" ]; then

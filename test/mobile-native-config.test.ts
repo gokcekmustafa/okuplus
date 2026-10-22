@@ -93,6 +93,7 @@ describe("mobile native app identity", () => {
 
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
+    expect(workflow).toContain("set -o pipefail");
     expect(workflow).toContain("id: debug-apk");
     expect(workflow).toContain("-name 'app-debug.apk'");
     expect(workflow).toContain("${{ steps.debug-apk.outputs.path }}");
