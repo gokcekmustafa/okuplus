@@ -84,6 +84,8 @@ describe("mobile native app identity", () => {
     expect(googlePlugin).toContain("GoogleIdTokenCredential.createFrom");
     expect(googlePlugin).toContain('"GOOGLE_SIGN_IN_CANCELLED"');
     expect(googlePlugin).toContain('"GOOGLE_INVALID_CREDENTIAL"');
+    expect(googlePlugin).toContain("catch (IllegalArgumentException error)");
+    expect(googlePlugin).not.toContain("GoogleIdTokenParsingException");
     expect(googlePlugin).not.toContain("Log.");
     expect(androidGradle).toContain("androidx.credentials:credentials:1.6.0");
     expect(androidGradle).toContain(

@@ -17,7 +17,6 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
-import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException;
 import java.util.concurrent.Executor;
 
 @CapacitorPlugin(name = "GoogleSignIn")
@@ -93,7 +92,7 @@ public class GoogleSignInPlugin extends Plugin {
             String displayName = googleCredential.getDisplayName();
             if (displayName != null) result.put("displayName", displayName);
             call.resolve(result);
-        } catch (GoogleIdTokenParsingException error) {
+        } catch (IllegalArgumentException error) {
             call.reject("Google hesabı doğrulanamadı.", "GOOGLE_INVALID_CREDENTIAL");
         }
     }
