@@ -84,8 +84,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: |
-            cd mobile/android
-            ./gradlew connectedDebugAndroidTest --no-daemon --console=plain
+            ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain
 
       - name: Locate generated Android debug APK
         id: debug-apk
