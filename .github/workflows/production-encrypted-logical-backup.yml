@@ -1,0 +1,110 @@
+name: Manual encrypted production logical backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_backup:
+        description: "Type CREATE_ENCRYPTED_PRODUCTION_LOGICAL_BACKUP to create a read-only encrypted backup"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-encrypted-logical-backup
+  cancel-in-progress: false
+
+jobs:
+  encrypted-production-backup:
+    if: github.ref == 'refs/heads/master'
+    name: Create encrypted read-only logical backup
+    runs-on: ubuntu-24.04
+    environment:
+      name: production-migration
+    timeout-minutes: 180
+    env:
+      PRODUCTION_DB_APPROVED_HOST: ${{ vars.PRODUCTION_DB_APPROVED_HOST }}
+      PRODUCTION_DB_APPROVED_DATABASE: ${{ vars.PRODUCTION_DB_APPROVED_DATABASE }}
+      PRODUCTION_BACKUP_AGE_RECIPIENT: ${{ vars.PRODUCTION_BACKUP_AGE_RECIPIENT }}
+
+    steps:
+      - name: Checkout master release
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Verify protected dispatch and release
+        shell: bash
+        env:
+          BACKUP_CONFIRMATION: ${{ inputs.confirm_backup }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = "refs/heads/master"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "${BACKUP_CONFIRMATION}" = "CREATE_ENCRYPTED_PRODUCTION_LOGICAL_BACKUP"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: npm
+
+      - name: Install repository dependencies
+        run: npm ci --include=dev
+
+      - name: Install PostgreSQL client and age
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends curl ca-certificates postgresql-common
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl --fail --silent --show-error --location \
+            --output /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          sudo tee /etc/apt/sources.list.d/pgdg.sources >/dev/null <<'EOF'
+          Types: deb
+          URIs: https://apt.postgresql.org/pub/repos/apt
+          Suites: noble-pgdg
+          Architectures: amd64
+          Components: main
+          Signed-By: /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          EOF
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends age postgresql-client-18
+          /usr/lib/postgresql/18/bin/pg_dump --version | grep -Eq 'PostgreSQL\) 18\.'
+          age --version
+
+      - name: Verify protected backup configuration
+        shell: bash
+        env:
+          PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.PRODUCTION_BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in PRODUCTION_BACKUP_DATABASE_URL PRODUCTION_DB_APPROVED_HOST PRODUCTION_DB_APPROVED_DATABASE PRODUCTION_BACKUP_AGE_RECIPIENT; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'Required protected configuration is missing: %s\n' "${name}"
+              missing=1
+            fi
+          done
+          test "${missing}" -eq 0
+
+      - name: Dump, validate target, and encrypt as a stream
+        env:
+          PRODUCTION_BACKUP_DATABASE_URL: ${{ secrets.PRODUCTION_BACKUP_DATABASE_URL }}
+          PRODUCTION_BACKUP_ENCRYPTED_FILE: ${{ runner.temp }}/okuplus-production-backup-${{ github.run_id }}-${{ github.run_attempt }}/database.dump.age
+          PRODUCTION_BACKUP_REPORT_FILE: ${{ runner.temp }}/okuplus-production-backup-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+        run: npx --no-install tsx scripts/production-logical-backup.ts
+
+      - name: Upload encrypted backup and non-sensitive manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: okupratik-production-encrypted-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/okuplus-production-backup-${{ github.run_id }}-${{ github.run_attempt }}/database.dump.age
+            ${{ runner.temp }}/okuplus-production-backup-${{ github.run_id }}-${{ github.run_attempt }}/manifest.json
+          if-no-files-found: error
+          retention-days: 7
