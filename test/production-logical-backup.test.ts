@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  buildProductionBackupIdentitySql,
   isAgePublicRecipient,
   validateProductionBackupRole,
   validateProductionBackupTarget,
@@ -13,6 +14,10 @@ const workflow = readFileSync(
 );
 const backupScript = readFileSync(
   new URL("../scripts/production-logical-backup.ts", import.meta.url),
+  "utf8",
+);
+const backupContract = readFileSync(
+  new URL("../scripts/production-logical-backup-contract.ts", import.meta.url),
   "utf8",
 );
 
@@ -203,16 +208,17 @@ describe("production encrypted logical backup contract", () => {
     expect(backupScript).toContain('["--format=custom", "--no-password"]');
     expect(backupScript).toContain("/usr/lib/postgresql/18/bin");
     expect(backupScript).toContain("dump.stdout.pipe(encrypt.stdin)");
-    expect(backupScript).toContain('"BEGIN READ ONLY;"');
+    expect(backupScript).toContain("`BEGIN READ ONLY; ${buildProductionBackupIdentitySql(");
     expect(backupScript).toContain('PGSSLMODE: "verify-full"');
     expect(backupScript).toContain('PGOPTIONS: "-c default_transaction_read_only=on"');
-    expect(backupScript).toContain("has_table_privilege");
-    expect(backupScript).toContain("has_sequence_privilege");
-    expect(backupScript).toContain("has_largeobject_privilege");
-    expect(backupScript).toContain("pg_shdepend");
-    expect(backupScript).toContain("pg_parameter_acl");
-    expect(backupScript).toContain("approved_backup_role");
-    expect(backupScript).toContain("approved_application_role");
+    expect(backupContract).toContain("has_table_privilege");
+    expect(backupContract).toContain("has_sequence_privilege");
+    expect(backupContract).toContain("has_largeobject_privilege");
+    expect(backupContract).toContain("pg_shdepend");
+    expect(backupContract).toContain("pg_parameter_acl");
+    expect(backupContract).toContain("buildProductionBackupIdentitySql");
+    expect(backupContract).toContain("runBackupAfterIdentityCheck");
+    expect(backupScript).toContain("buildProductionBackupIdentitySql");
     expect(backupScript).not.toContain("--enable-row-security");
     expect(backupScript).toContain("DATABASE_ROLE_PRIVILEGES_TOO_BROAD");
     expect(backupScript).not.toContain("pg_restore");
@@ -220,6 +226,13 @@ describe("production encrypted logical backup contract", () => {
     expect(backupScript).not.toMatch(
       /console\.(log|error)\([^\n]*(databaseUrl|password|passFile|recipient)/iu,
     );
+  });
+
+  it("quotes approved role names as SQL literals without allowing interpolation", () => {
+    const sql = buildProductionBackupIdentitySql("backup' OR true --", "app\\role");
+    expect(sql).toContain("E'backup'' OR true --'");
+    expect(sql).toContain("E'app\\\\role'");
+    expect(sql).not.toContain("current_user = 'backup' OR true");
   });
 
   it("is manually dispatched on master only, protected, encrypted-only, and short lived", () => {

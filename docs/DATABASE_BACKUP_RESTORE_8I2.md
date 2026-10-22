@@ -68,12 +68,16 @@ başarısı kanıtı değildir; genel kabul durumu **PARTIAL / NO-GO** olarak ka
 | Existing variable | `PRODUCTION_DB_APPROVED_HOST`     | Onaylı doğrudan Neon endpoint host'u.                                                                                                         |
 | Existing variable | `PRODUCTION_DB_APPROVED_DATABASE` | Beklenen üretim veritabanı adı.                                                                                                               |
 | Variable          | `PRODUCTION_BACKUP_APPROVED_USER` | Ayrı yedekleme LOGIN rolünün tam adı; bağlantıdaki `current_user` ile eşleşmelidir.                                                           |
-| Variable          | `PRODUCTION_APP_RUNTIME_DB_USER`  | Yetkili, salt-okunur kanıtla doğrulanmış gerçek Vercel runtime DB rolü; yedekleme rolünden farklı olmalıdır.                                  |
+| Variable          | `PRODUCTION_APP_RUNTIME_DB_USER`  | Gerçek uygulama bağlantısından yetkili, salt-okunur kanıtla çıkarılmış runtime DB rolü; yedekleme rolünden farklı olmalıdır.                  |
 
 Bu Environment değerlerinin mevcut olduğu bu görevde doğrulanmadı. Workflow çalıştırılmadan önce
-Environment yöneticisi host/veritabanı değişkenlerini doğrulamalı; Vercel runtime rolünü yetkili,
-salt-okunur konfigürasyon kanıtından belirleyip `PRODUCTION_APP_RUNTIME_DB_USER` olarak kaydetmeli;
-ayrı yedekleme rolünü `PRODUCTION_BACKUP_APPROVED_USER` ile sabitlemeli ve recipient ile çevrimdışı/
+Environment yöneticisi host/veritabanı değişkenlerini doğrulamalı. `PRODUCTION_APP_RUNTIME_DB_USER`
+değerinin tek başına girilmiş veya başka bir ortam ayarından kopyalanmış olması Vercel'in gerçek
+bağlantı rolünü kanıtlamaz. Bu rol, Vercel'in fiilen kullandığı DB bağlantısından alınan yetkili ve
+salt-okunur kanıtla (ör. bağlantı üzerinden `current_user` döndüren, hassas olmayan runtime
+telemetrisi) belirlenmeli; kanıtın ortam/deployment bağlamı doğrulanmalı ve ancak sonra variable
+olarak kaydedilmelidir. Yedek rolü aynı rol olamaz. Ayrı yedekleme rolü
+`PRODUCTION_BACKUP_APPROVED_USER` ile sabitlenmeli ve recipient ile çevrimdışı/
 kurumsal kasada tutulan private identity'nin eşleşmesini sınamalıdır. Uygulama rolü bu görevde
 doğrulanmış sayılmaz. **Private age identity GitHub'a, repoya, Actions çıktısına veya loglara
 konmamalıdır.** Açık recipient gizli değildir; yine de rapora yazılmaz.
@@ -112,9 +116,15 @@ Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermeli
 `GRANT SELECT ON ALL SEQUENCES IN SCHEMA ...` mevcut nesneleri kapsar; gelecek nesnelerin default
 privilege'ları her nesneyi oluşturan rol bazında ayrıca incelenmelidir. Large object izinleri de
 nesne bazında doğrulanmalıdır. Workflow; rolün onaylı yedek rolüyle eşleşmesini, LOGIN niteliğini,
-uygulama rolünden ayrılığını, rol üyeliği/sahipliği bulunmamasını, RLS için gerekli `BYPASSRLS`'ı,
+uygulama rolünden ayrılığını, rol üyeliği ve cluster genelindeki `pg_shdepend` sahip bağımlılıklarının
+bulunmamasını (hedef dışındaki veritabanlarının nesneleri dâhil), RLS için gerekli `BYPASSRLS`'ı,
 tüm kullanıcı şemalarında USAGE'i ve tablo/sequence/large-object SELECT kapsamını dump öncesi
-doğrular. Yazma/yönetim izni, eksik okuma yetkisi veya katalog sorgusu hatasında fail-closed olur;
+doğrular. Efektif privilege fonksiyonları rol üyeliği ve `PUBLIC` ACL'lerini de hesaba katar; tablo,
+kolon, sequence, şema, veritabanı, large object, tablespace ve parametre ACL'lerindeki yazma/yönetim
+imkânları reddedilir. PostgreSQL 18 entegrasyon testi, sorgudaki
+`has_table_privilege`/`has_any_column_privilege`/`has_sequence_privilege` privilege-list
+argümanlarını gerçek sunucuda çalıştırır. Yazma/yönetim izni, eksik okuma yetkisi veya katalog
+sorgusu hatasında fail-closed olur;
 nesne adı ya da veri satırlarını rapora çıkarmaz.
 
 ### Workflow'un güvenlik kontrolleri ve çıktısı
@@ -126,7 +136,7 @@ nesne adı ya da veri satırlarını rapora çıkarmaz.
   Yalnızca `sslmode` ve isteğe bağlı `channel_binding` URL parametreleri kabul edilir. TLS,
   sertifika/hostname doğrulamasıyla `verify-full` zorlanır.
 - Önce `BEGIN READ ONLY` içinde hedef veritabanı, onaylı yedek rolü/LOGIN eşleşmesi, uygulama
-  rolünden ayrılık, rol üyeliği/sahipliği, superuser ve yönetim bayrakları, efektif yazma izinleri,
+  rolünden ayrılık, tüm veritabanlarını kapsayan rol sahipliği, rol üyeliği, superuser ve yönetim bayrakları, efektif yazma izinleri,
   kullanıcı şemalarının USAGE'i, tablo/sequence/large-object SELECT erişimi ve RLS kapsamı sorgulanır.
   `pg_dump` istemci oturumları da `default_transaction_read_only=on` ile başlar. RLS tabloları varsa
   ayrı backup role için `BYPASSRLS` gerekir; bu SELECT izninin yerine geçmez. Herhangi bir yazma/
