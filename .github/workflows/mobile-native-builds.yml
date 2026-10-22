@@ -63,7 +63,17 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --stacktrace
+          if ! ./gradlew assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --stacktrace --console=plain 2>&1 | tee "$RUNNER_TEMP/android-gradle.log"; then
+            diagnostic="$(awk '/^\* What went wrong:/ { print; for (i = 0; i < 8; i++) { if (getline) print; else exit } }' "$RUNNER_TEMP/android-gradle.log" | head -n 9 | tr '\n' ' ' | sed -E 's#https?://[^[:space:]]+#\[URL\]#g; s#(password|token|secret)[=:][^[:space:]]+#\1=[REDACTED]#Ig')"
+            if [ -z "$diagnostic" ]; then
+              diagnostic="Gradle failed; detailed diagnostic section was unavailable."
+            fi
+            diagnostic="${diagnostic//'%'/'%25'}"
+            diagnostic="${diagnostic//$'\r'/'%0D'}"
+            diagnostic="${diagnostic//$'\n'/'%0A'}"
+            echo "::error title=Android Gradle failure::$diagnostic"
+            exit 1
+          fi
 
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
