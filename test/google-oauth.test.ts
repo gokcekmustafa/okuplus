@@ -118,6 +118,8 @@ describe("Google web OAuth", () => {
 
     expect(config.statusCode).toBe(200);
     expect(config.json().data.google.configured).toBe(true);
+    expect(config.json().data.google.clientId).toBe("google-web-client.apps.googleusercontent.com");
+    expect(JSON.stringify(config.json())).not.toContain("google-client-secret-value");
     expect(start.statusCode).toBe(302);
     expect(start.headers.location).toContain("accounts.google.com/o/oauth2/v2/auth");
     expect(start.headers["set-cookie"]).toBeTruthy();

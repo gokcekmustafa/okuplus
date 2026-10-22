@@ -43,6 +43,11 @@ export class GoogleOAuthClient {
     );
   }
 
+  /** OAuth client IDs are public identifiers used by native sign-in clients. */
+  publicClientId(): string {
+    return this.options.clientId;
+  }
+
   begin(): { authorizationUrl: string; stateCookie: string } {
     this.assertConfigured();
     const state = this.randomValue();

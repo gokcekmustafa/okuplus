@@ -1,6 +1,15 @@
 // OkuPratik — minimal SPA (vanilla JS)
 import { createUiMotion, loadingSkeleton } from "./ui-motion.js";
-import { formatLoginError, setupPasswordVisibilityToggle } from "./auth-ui.js";
+import {
+  formatGoogleLoginError,
+  formatLoginError,
+  setupPasswordVisibilityToggle,
+} from "./auth-ui.js";
+import {
+  createOidcNonce,
+  createSecureStorageBridge,
+  requestNativeGoogleCredential,
+} from "./mobile-auth.js";
 
 const uiMotion = createUiMotion();
 // Web'de access + refresh token localStorage'da tutulur. Native kabukta
@@ -11,7 +20,12 @@ const runtimeConfig = globalThis.__OKUPRATIK_RUNTIME__ ?? {};
 const configuredApiBaseUrl =
   typeof runtimeConfig.apiBaseUrl === "string" ? runtimeConfig.apiBaseUrl.replace(/\/$/u, "") : "";
 const nativeMobileRuntime = runtimeConfig.nativeMobile === true;
-const secureStoragePlugin = runtimeConfig.secureStoragePlugin ?? null;
+const secureStoragePlugin = nativeMobileRuntime
+  ? createSecureStorageBridge(runtimeConfig.secureStorageNativePlugin)
+  : null;
+const googleSignInPlugin = runtimeConfig.googleSignInPlugin ?? null;
+const nativePlatform = runtimeConfig.platform ?? "web";
+let googleSocialConfig = null;
 const SECURE_SESSION_KEY = "oku.session.v1";
 const nativeSession = { accessToken: null, refreshToken: null, tenantId: null };
 let currentPage = null;
@@ -1056,12 +1070,20 @@ async function loadSocialLoginConfig() {
   try {
     const response = await fetch("/auth/social/config");
     const config = await parseResponse(response);
-    $("google-login-btn").disabled = !config.google.configured;
+    googleSocialConfig = config.google;
+    const nativeAndroid = nativeMobileRuntime && nativePlatform === "android";
+    const googleButtonUnavailable =
+      !config.google.configured ||
+      (nativeAndroid &&
+        (!config.google.clientId || typeof googleSignInPlugin?.signIn !== "function"));
+    $("google-login-btn").disabled = googleButtonUnavailable;
     $("apple-login-btn").disabled = !config.apple.configured;
     status.textContent =
-      config.google.configured || config.apple.configured
-        ? "Sağlayıcı ile devam etmek için güvenli giriş penceresini kullanın."
-        : "Google/Apple giriş yapılandırması bu ortamda etkin değil.";
+      nativeAndroid && config.google.configured && googleButtonUnavailable
+        ? "Android Google girişi için sağlayıcı veya sunucu yapılandırması eksik."
+        : config.google.configured || config.apple.configured
+          ? "Sağlayıcı ile devam etmek için güvenli giriş penceresini kullanın."
+          : "Google/Apple giriş yapılandırması bu ortamda etkin değil.";
   } catch (_e) {
     void _e;
     $("google-login-btn").disabled = true;
@@ -1074,10 +1096,29 @@ function providerButtonMessage(provider) {
   $("social-login-status").textContent = `${provider} ile giriş şu anda kullanılamıyor.`;
 }
 
-function startGoogleLogin() {
+async function startGoogleLogin() {
   const button = $("google-login-btn");
   if (!button || button.disabled) return;
   if (nativeMobileRuntime) {
+    if (nativePlatform === "android") {
+      setAsyncButtonState(button, true, "Yükleniyor…");
+      $("social-login-status").textContent = "Google ile güvenli giriş başlatılıyor…";
+      try {
+        const nonce = createOidcNonce();
+        const credential = await requestNativeGoogleCredential(
+          googleSignInPlugin,
+          googleSocialConfig?.clientId,
+          nonce,
+        );
+        await completeSocialLogin("google", credential.idToken, nonce, credential.displayName);
+        $("social-login-status").textContent = "";
+      } catch (error) {
+        $("social-login-status").textContent = formatGoogleLoginError(error);
+      } finally {
+        setAsyncButtonState(button, false);
+      }
+      return;
+    }
     providerButtonMessage("Google");
     $("social-login-status").textContent =
       "Mobil Google girişi, native sağlayıcı bağlantısı tamamlandığında etkinleştirilecek.";
@@ -1136,9 +1177,13 @@ function authenticatedRequestHeaders(headers, accessToken, tenantId) {
 async function refreshStoredTokens(refreshToken, tenantId) {
   if (!authRefreshPromise) {
     authRefreshPromise = refreshTokens(refreshToken, tenantId)
-      .then((tokens) => {
-        localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
-        localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+      .then(async (tokens) => {
+        if (nativeMobileRuntime) {
+          await setStoredSession({ tokens, tenantContext: { tenantId: tenantId ?? "" } });
+        } else {
+          localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
+          localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+        }
         return tokens;
       })
       .finally(() => {

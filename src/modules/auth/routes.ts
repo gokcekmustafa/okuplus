@@ -228,10 +228,12 @@ export async function authRoutes(
   };
 
   app.get("/auth/social/config", async () => {
+    const googleConfigured =
+      socialAuthService.providerConfigured("GOOGLE") && googleOAuthClient.isConfigured();
     return ok({
       google: {
-        configured:
-          socialAuthService.providerConfigured("GOOGLE") && googleOAuthClient.isConfigured(),
+        configured: googleConfigured,
+        clientId: googleConfigured ? googleOAuthClient.publicClientId() : null,
       },
       apple: { configured: socialAuthService.providerConfigured("APPLE") },
     });

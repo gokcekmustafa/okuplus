@@ -26,11 +26,14 @@ describe("OkuPratik mobile foundation", () => {
       const index = await readFile(join(outputDir, "index.html"), "utf8");
       const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
       const app = await readFile(join(outputDir, "app.js"), "utf8");
+      const mobileAuth = await readFile(join(outputDir, "mobile-auth.js"), "utf8");
 
       expect(index).toContain('src="/mobile-runtime.js"');
       expect(index).toContain("viewport-fit=cover");
       expect(runtime).toContain('apiBaseUrl: "https://api.example.test"');
       expect(runtime).toContain('registerPlugin("SecureStorage")');
+      expect(runtime).toContain('registerPlugin("GoogleSignIn")');
+      expect(runtime).toContain("secureStorageNativePlugin");
       expect(runtime).toContain('addListener("backButton"');
       expect(app).toContain('const SECURE_SESSION_KEY = "oku.session.v1";');
       expect(app).toContain("globalThis.fetch = (input, init)");
@@ -39,6 +42,12 @@ describe("OkuPratik mobile foundation", () => {
         "await secureStoragePlugin.setItem(SECURE_SESSION_KEY, JSON.stringify(session))",
       );
       expect(app).toContain("SECURE_STORAGE_UNAVAILABLE");
+      expect(app).toContain(
+        'await setStoredSession({ tokens, tenantContext: { tenantId: tenantId ?? "" } })',
+      );
+      expect(mobileAuth).toContain("nativePlugin.internalSetItem");
+      expect(mobileAuth).toContain("nativePlugin.internalGetItem");
+      expect(mobileAuth).toContain("capacitor-storage_");
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

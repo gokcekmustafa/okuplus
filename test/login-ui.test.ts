@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { formatLoginError, setupPasswordVisibilityToggle } from "../public/auth-ui.js";
+import {
+  formatGoogleLoginError,
+  formatLoginError,
+  setupPasswordVisibilityToggle,
+} from "../public/auth-ui.js";
 
 const index = readFileSync("public/index.html", "utf8");
 
@@ -20,6 +24,18 @@ describe("login UI behavior", () => {
     expect(formatLoginError({ code: "SECURE_STORAGE_UNAVAILABLE" })).toContain(
       "güvenli biçimde kaydedilemedi",
     );
+  });
+
+  it("distinguishes native Google cancellation, configuration, verification, network and server failures", () => {
+    expect(formatGoogleLoginError({ code: "GOOGLE_SIGN_IN_CANCELLED" })).toContain("iptal edildi");
+    expect(formatGoogleLoginError({ code: "GOOGLE_CONFIGURATION_ERROR" })).toContain(
+      "yapılandırılmamış",
+    );
+    expect(formatGoogleLoginError({ code: "GOOGLE_INVALID_CREDENTIAL" })).toContain(
+      "doğrulanamadı",
+    );
+    expect(formatGoogleLoginError(new TypeError("fetch failed"))).toContain("bağlanılamadı");
+    expect(formatGoogleLoginError({ status: 503 })).toContain("geçici bir sorun");
   });
 
   it("keeps the password hidden by default and toggles its accessible state", () => {

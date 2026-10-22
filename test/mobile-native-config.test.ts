@@ -69,6 +69,28 @@ describe("mobile native app identity", () => {
     expect(iosBundleIds.every((bundleId) => bundleId === appId)).toBe(true);
   });
 
+  it("registers Android Credential Manager and pins its supported dependencies", () => {
+    const mainActivity = read(
+      "../mobile/android/app/src/main/java/com/okupratik/app/MainActivity.java",
+    );
+    const googlePlugin = read(
+      "../mobile/android/app/src/main/java/com/okupratik/app/GoogleSignInPlugin.java",
+    );
+    const androidGradle = read("../mobile/android/app/build.gradle");
+
+    expect(mainActivity).toContain("registerPlugin(GoogleSignInPlugin.class)");
+    expect(googlePlugin).toContain("GetSignInWithGoogleOption");
+    expect(googlePlugin).toContain("setNonce(nonce)");
+    expect(googlePlugin).toContain("GoogleIdTokenCredential.createFrom");
+    expect(googlePlugin).toContain('"GOOGLE_SIGN_IN_CANCELLED"');
+    expect(googlePlugin).toContain('"GOOGLE_INVALID_CREDENTIAL"');
+    expect(googlePlugin).not.toContain("Log.");
+    expect(androidGradle).toContain("androidx.credentials:credentials:1.6.0");
+    expect(androidGradle).toContain(
+      "com.google.android.libraries.identity.googleid:googleid:1.2.1",
+    );
+  });
+
   it("ships branded square icons at the required native density sizes", () => {
     const iosContents = JSON.parse(
       read("../mobile/ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json"),

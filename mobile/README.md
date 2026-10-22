@@ -33,6 +33,20 @@ Keychain ve Android Keystore destekli depolamaya alınır. Native secure-storage
 köprüsü kullanılamazsa mobil çalışma zamanı tokenları kalıcı `localStorage`'a
 yazmaz ve oturum açma güvenli biçimde başarısız olur.
 
+Secure Storage köprüsü, eklentinin `internalGetItem`/`internalSetItem` native
+yöntemlerini kendi `capacitor-storage_` anahtar öneki ve erişim seçenekleriyle
+çağırır. Capacitor'ın çıplak `registerPlugin` proxy'si eklentinin JavaScript
+sarmalayıcısının yerine geçmez. Android'de sosyal giriş, Credential Manager ile
+Google ID tokenı alır; her denemede üretilen nonce tokena eklenir ve backend
+tokenın imzasını, issuer, audience, süresini ve nonce eşleşmesini doğrular.
+
+Android Google girişi için Google Auth Platform'da sunucu/web OAuth istemcisi ve
+`com.okupratik.app` paket kimliği ile dağıtılan imza sertifikasına bağlı Android
+OAuth istemcisi doğru yapılandırılmış olmalıdır. Sunucu/web istemci kimliği
+`/auth/social/config` yanıtında herkese açık OAuth tanımlayıcısı olarak verilir;
+istemci sırrı hiçbir zaman mobil pakete gönderilmez. Test APK'sının imza SHA-1'i
+ile Google Cloud kaydının eşleşmesi hesap sahibi tarafından doğrulanmalıdır.
+
 ## Uygulama simgeleri
 
 `assets/okupratik-app-icon-master.png` marka simgesinin kaynak görselidir. iOS için

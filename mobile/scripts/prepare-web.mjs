@@ -36,7 +36,7 @@ if (updatedIndex === index) {
 }
 await writeFile(indexPath, updatedIndex, "utf8");
 
-const runtime = `const capacitor = globalThis.Capacitor;\nconst secureStoragePlugin =\n  capacitor?.isNativePlatform?.() && capacitor.registerPlugin\n    ? capacitor.registerPlugin("SecureStorage")\n    : null;\nglobalThis.__OKUPRATIK_RUNTIME__ = Object.freeze({\n  apiBaseUrl: ${JSON.stringify(resolvedApiBaseUrl)},\n  nativeMobile: Boolean(capacitor?.isNativePlatform?.()),\n  secureStoragePlugin,\n});\n`;
+const runtime = `const capacitor = globalThis.Capacitor;\nconst nativeMobile = Boolean(capacitor?.isNativePlatform?.());\nconst platform = nativeMobile ? capacitor?.getPlatform?.() || "unknown" : "web";\nconst secureStorageNativePlugin =\n  nativeMobile && capacitor.registerPlugin\n    ? capacitor.registerPlugin("SecureStorage")\n    : null;\nconst googleSignInPlugin =\n  platform === "android" && capacitor?.registerPlugin\n    ? capacitor.registerPlugin("GoogleSignIn")\n    : null;\nglobalThis.__OKUPRATIK_RUNTIME__ = Object.freeze({\n  apiBaseUrl: ${JSON.stringify(resolvedApiBaseUrl)},\n  nativeMobile,\n  platform,\n  secureStorageNativePlugin,\n  googleSignInPlugin,\n});\n`;
 const nativeNavigation = `\nconst appPlugin =\n  capacitor?.isNativePlatform?.() && capacitor.registerPlugin\n    ? capacitor.registerPlugin("App")\n    : null;\nif (appPlugin?.addListener) {\n  void appPlugin.addListener("backButton", () => {\n    const handler = globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__;\n    if (typeof handler === "function") handler();\n    else void appPlugin.exitApp?.();\n  });\n}\n`;
 await writeFile(join(outputDir, "mobile-runtime.js"), runtime + nativeNavigation, "utf8");
 

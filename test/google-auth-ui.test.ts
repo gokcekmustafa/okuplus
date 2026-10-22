@@ -17,6 +17,16 @@ describe("Google login UI contract", () => {
     expect(app).not.toContain("Web SDK bu dağıtımda başlatılmadı; sahte giriş yapılmadı.");
   });
 
+  it("uses Android Credential Manager credentials with a fresh nonce and backend verification", () => {
+    expect(app).toContain("requestNativeGoogleCredential(");
+    expect(app).toContain("const nonce = createOidcNonce();");
+    expect(app).toContain(
+      'completeSocialLogin("google", credential.idToken, nonce, credential.displayName)',
+    );
+    expect(app).toContain("googleSocialConfig?.clientId");
+    expect(app).toContain("formatGoogleLoginError(error)");
+  });
+
   it("callback ile gelen cookie session'ı mevcut auth ve refresh katmanına bağlar", () => {
     expect(app).toContain("const me = await fetchMe(null, tenantId);");
     expect(app).toContain('"x-auth-transport": "cookie"');
