@@ -67,12 +67,55 @@ başarısı kanıtı değildir; genel kabul durumu **PARTIAL / NO-GO** olarak ka
 | Variable          | `PRODUCTION_BACKUP_AGE_RECIPIENT` | `age-keygen` ile oluşturulmuş `age1…` **açık** alıcı anahtarı.                                                                                |
 | Existing variable | `PRODUCTION_DB_APPROVED_HOST`     | Onaylı doğrudan Neon endpoint host'u.                                                                                                         |
 | Existing variable | `PRODUCTION_DB_APPROVED_DATABASE` | Beklenen üretim veritabanı adı.                                                                                                               |
+| Variable          | `PRODUCTION_BACKUP_APPROVED_USER` | Ayrı yedekleme LOGIN rolünün tam adı; bağlantıdaki `current_user` ile eşleşmelidir.                                                           |
+| Variable          | `PRODUCTION_APP_RUNTIME_DB_USER`  | Yetkili, salt-okunur kanıtla doğrulanmış gerçek Vercel runtime DB rolü; yedekleme rolünden farklı olmalıdır.                                  |
 
 Bu Environment değerlerinin mevcut olduğu bu görevde doğrulanmadı. Workflow çalıştırılmadan önce
-Environment yöneticisi host/veritabanı değişkenlerini doğrulamalı, ayrı yedekleme rolünün yalnızca
-gerekli okuma erişimini verdiğini teyit etmeli ve recipient ile çevrimdışı/kurumsal kasada tutulan
-private identity'nin eşleşmesini sınamalıdır. **Private age identity GitHub'a, repoya, Actions
-çıktısına veya loglara konmamalıdır.** Açık recipient gizli değildir; yine de rapora yazılmaz.
+Environment yöneticisi host/veritabanı değişkenlerini doğrulamalı; Vercel runtime rolünü yetkili,
+salt-okunur konfigürasyon kanıtından belirleyip `PRODUCTION_APP_RUNTIME_DB_USER` olarak kaydetmeli;
+ayrı yedekleme rolünü `PRODUCTION_BACKUP_APPROVED_USER` ile sabitlemeli ve recipient ile çevrimdışı/
+kurumsal kasada tutulan private identity'nin eşleşmesini sınamalıdır. Uygulama rolü bu görevde
+doğrulanmış sayılmaz. **Private age identity GitHub'a, repoya, Actions çıktısına veya loglara
+konmamalıdır.** Açık recipient gizli değildir; yine de rapora yazılmaz.
+
+### Yalnızca yedekleme için DB rolü
+
+Yedekleme bağlantısı uygulama kullanıcısı, veritabanı sahibi veya superuser olamaz. Secret'taki
+bağlantı yalnızca yedekleme amacıyla açılmış ayrı bir `LOGIN` rolüne ait olmalıdır. Rolün oluşturulması
+ve nesne izinleri bu kod görevinin dışındadır; bunlar ayrı bir sahiplik/onay akışında hazırlanır.
+Başlangıç rol modeli:
+
+```sql
+CREATE ROLE <dedicated_backup_role>
+  LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
+```
+
+Mevcut 67 RLS-korumalı kullanıcı tablosunun bütün satırlarını almak için `BYPASSRLS` gereklidir:
+PostgreSQL `pg_dump`, varsayılan olarak RLS'yi kapatıp bütün satırları dump etmeye çalışır; rol bunu
+aşamıyorsa hata verir. `--enable-row-security` erişilebilen satırlarla sınırlı kısmi dump
+oluşturabileceğinden yasaktır. `BYPASSRLS` kendi başına tablo okuma izni vermez; tüm okuma izinleri
+ayrıca kontrol edilir. PostgreSQL 18'de bu niteliği rol oluştururken atamak superuser yetkisi
+gerektirir; bu ayrı yönetici işlemi backup rolüne `CREATEROLE` veya başka yönetim yetkileri vermeyi
+gerektirmez.
+
+Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermelidir:
+
+- Hedef DB'ye `CONNECT`; dump kapsamındaki kullanıcı şemalarında `USAGE`.
+- Bütün kullanıcı tablo, view, materialized view, partition ve foreign-table nesnelerinde `SELECT`.
+- Bütün kullanıcı sequence'larında yalnızca `SELECT`; `USAGE` ve `UPDATE` verilmemeli.
+- Varsa her large object için `SELECT`; hiçbirine `UPDATE` verilmemeli. PostgreSQL `pg_dump` large
+  object'leri varsayılan olarak dahil eder.
+- Database/schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım yetkisi; rol
+  üyeliği, rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli.
+
+`GRANT SELECT ON ALL TABLES IN SCHEMA ...` ve
+`GRANT SELECT ON ALL SEQUENCES IN SCHEMA ...` mevcut nesneleri kapsar; gelecek nesnelerin default
+privilege'ları her nesneyi oluşturan rol bazında ayrıca incelenmelidir. Large object izinleri de
+nesne bazında doğrulanmalıdır. Workflow; rolün onaylı yedek rolüyle eşleşmesini, LOGIN niteliğini,
+uygulama rolünden ayrılığını, rol üyeliği/sahipliği bulunmamasını, RLS için gerekli `BYPASSRLS`'ı,
+tüm kullanıcı şemalarında USAGE'i ve tablo/sequence/large-object SELECT kapsamını dump öncesi
+doğrular. Yazma/yönetim izni, eksik okuma yetkisi veya katalog sorgusu hatasında fail-closed olur;
+nesne adı ya da veri satırlarını rapora çıkarmaz.
 
 ### Workflow'un güvenlik kontrolleri ve çıktısı
 
@@ -82,15 +125,21 @@ private identity'nin eşleşmesini sınamalıdır. **Private age identity GitHub
   olmalı, `-pooler` içermemeli, port 5432 olmalı ve URL veritabanı adı onaylı adla aynı olmalıdır.
   Yalnızca `sslmode` ve isteğe bağlı `channel_binding` URL parametreleri kabul edilir. TLS,
   sertifika/hostname doğrulamasıyla `verify-full` zorlanır.
-- Önce `BEGIN READ ONLY` içinde hedef veritabanı, efektif tablo/sequence yazma izinleri ve rol
-  bayrakları sorgulanır. `pg_dump` istemci oturumları da `default_transaction_read_only=on` ile
-  başlar. Superuser, `BYPASSRLS`, rol/veritabanı yönetim yetkisi veya kalıcı yazma izni reddedilir.
-  Veritabanı kimliği uyuşmazsa veya okuma/izin kontrolü başarısızsa dump yapılmaz.
+- Önce `BEGIN READ ONLY` içinde hedef veritabanı, onaylı yedek rolü/LOGIN eşleşmesi, uygulama
+  rolünden ayrılık, rol üyeliği/sahipliği, superuser ve yönetim bayrakları, efektif yazma izinleri,
+  kullanıcı şemalarının USAGE'i, tablo/sequence/large-object SELECT erişimi ve RLS kapsamı sorgulanır.
+  `pg_dump` istemci oturumları da `default_transaction_read_only=on` ile başlar. RLS tabloları varsa
+  ayrı backup role için `BYPASSRLS` gerekir; bu SELECT izninin yerine geçmez. Herhangi bir yazma/
+  yönetim hakkı, eksik okuma izni veya hedef uyuşmazlığı dump başlamadan reddedilir.
 - `pg_dump --format=custom` stdout'u doğrudan `age` şifreleme sürecine pipe edilir. Şifresiz dump
   dosyası oluşturulmaz; `.pgpass` geçici dosyası 0600 izinle kullanılır ve işlem sonunda silinir.
 - Workflow, PostgreSQL 18 istemcisini resmi PGDG paket kaynağından sabitler. `pg_dump`, kendi major
   sürümünden daha yeni PostgreSQL sunucularını dışa aktaramaz; sunucu sürümü 18'den yeniyse adım
   güvenli biçimde başarısız olur ve istemci sürümü ayrıca güncellenip test edilmelidir.
+- `pg_dump` yalnızca tek veritabanını yedekler; cluster-global roller, tablespace'ler ve diğer
+  global nesneleri otomatik olarak içermez. Bu workflow global nesneler için export yapmaz; bunlar
+  ayrı prosedür ve kanıt gerektirir. Tek veritabanı yedeği tek başına tüm cluster için kurtarma kanıtı
+  değildir.
 - Artifact yalnızca `database.dump.age` ve hassas olmayan `manifest.json` içerir; manifest şifreli
   dosyanın SHA-256 özeti/boyutu, commit ve güvenli hedef eşleşme bayraklarını taşır, bağlantı/rol
   adı veya veritabanı içeriği taşımaz. GitHub Artifact saklama süresi 7 gündür. Artifact erişimi

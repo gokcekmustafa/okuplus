@@ -16,6 +16,83 @@ export type ProductionBackupTargetResult =
         | "UNSUPPORTED_URL_PARAMETER";
     };
 
+export type ProductionBackupRoleIdentity = {
+  approvedRoleMatches: boolean;
+  applicationRole: boolean;
+  canLogin: boolean;
+  inheritsPrivileges: boolean;
+  readOnly: boolean;
+  hasWritePrivileges: boolean;
+  superuser: boolean;
+  bypassesRls: boolean;
+  hasRlsTables: boolean;
+  canManageRolesOrDatabases: boolean;
+  hasRoleMemberships: boolean;
+  allUserSchemasUsable: boolean;
+  allTableLikeRelationsSelectable: boolean;
+  allSequencesSelectable: boolean;
+  allLargeObjectsSelectable: boolean;
+};
+
+export type ProductionBackupRoleResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "DATABASE_ROLE_NOT_APPROVED"
+        | "DATABASE_ROLE_IS_APPLICATION_ROLE"
+        | "DATABASE_ROLE_NOT_LOGIN"
+        | "DATABASE_ROLE_NOT_READ_ONLY"
+        | "DATABASE_ROLE_PRIVILEGES_TOO_BROAD"
+        | "DATABASE_RLS_BYPASS_REQUIRED"
+        | "DATABASE_RLS_BYPASS_UNNECESSARY"
+        | "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE";
+    };
+
+/**
+ * Fail closed unless the connection is the explicitly approved, standalone
+ * backup login and has only the read privileges needed for a complete dump.
+ */
+export function validateProductionBackupRole(
+  identity: ProductionBackupRoleIdentity,
+): ProductionBackupRoleResult {
+  if (!identity.approvedRoleMatches) {
+    return { ok: false, reason: "DATABASE_ROLE_NOT_APPROVED" };
+  }
+  if (identity.applicationRole) {
+    return { ok: false, reason: "DATABASE_ROLE_IS_APPLICATION_ROLE" };
+  }
+  if (!identity.canLogin) {
+    return { ok: false, reason: "DATABASE_ROLE_NOT_LOGIN" };
+  }
+  if (!identity.readOnly || identity.hasWritePrivileges) {
+    return { ok: false, reason: "DATABASE_ROLE_NOT_READ_ONLY" };
+  }
+  if (
+    identity.superuser ||
+    identity.canManageRolesOrDatabases ||
+    identity.hasRoleMemberships ||
+    identity.inheritsPrivileges
+  ) {
+    return { ok: false, reason: "DATABASE_ROLE_PRIVILEGES_TOO_BROAD" };
+  }
+  if (identity.hasRlsTables && !identity.bypassesRls) {
+    return { ok: false, reason: "DATABASE_RLS_BYPASS_REQUIRED" };
+  }
+  if (!identity.hasRlsTables && identity.bypassesRls) {
+    return { ok: false, reason: "DATABASE_RLS_BYPASS_UNNECESSARY" };
+  }
+  if (
+    !identity.allUserSchemasUsable ||
+    !identity.allTableLikeRelationsSelectable ||
+    !identity.allSequencesSelectable ||
+    !identity.allLargeObjectsSelectable
+  ) {
+    return { ok: false, reason: "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE" };
+  }
+  return { ok: true };
+}
+
 export function validateProductionBackupTarget(input: {
   databaseUrl: string | undefined;
   approvedHost: string | undefined;

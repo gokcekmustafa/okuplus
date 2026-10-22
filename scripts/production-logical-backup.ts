@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   isAgePublicRecipient,
+  validateProductionBackupRole,
   validateProductionBackupTarget,
+  type ProductionBackupRoleIdentity,
 } from "./production-logical-backup-contract.js";
 
 type BackupStage =
@@ -22,6 +24,18 @@ type BackupReport = {
   databaseRoleReadOnly: boolean | null;
   databaseRoleSuperuser: boolean | null;
   databaseRoleBypassesRls: boolean | null;
+  databaseRoleApproved: boolean | null;
+  databaseRoleIsApplication: boolean | null;
+  databaseRoleLogin: boolean | null;
+  databaseRoleInheritsPrivileges: boolean | null;
+  databaseRoleHasWritePrivileges: boolean | null;
+  databaseRoleCanManageRolesOrDatabases: boolean | null;
+  databaseRoleHasMemberships: boolean | null;
+  databaseHasRlsTables: boolean | null;
+  databaseRoleSchemaUsageComplete: boolean | null;
+  databaseRoleTableSelectComplete: boolean | null;
+  databaseRoleSequenceSelectComplete: boolean | null;
+  databaseRoleLargeObjectSelectComplete: boolean | null;
   archiveFormat: "pg_dump_custom";
   encryption: "age";
   encryptedBytes: number | null;
@@ -44,8 +58,14 @@ const FAILURE_REASONS = [
   "UNSUPPORTED_URL_PARAMETER",
   "AGE_RECIPIENT_MISSING_OR_INVALID",
   "DATABASE_IDENTITY_QUERY_FAILED",
+  "DATABASE_ROLE_NOT_APPROVED",
+  "DATABASE_ROLE_IS_APPLICATION_ROLE",
+  "DATABASE_ROLE_NOT_LOGIN",
   "DATABASE_ROLE_NOT_READ_ONLY",
   "DATABASE_ROLE_PRIVILEGES_TOO_BROAD",
+  "DATABASE_RLS_BYPASS_REQUIRED",
+  "DATABASE_RLS_BYPASS_UNNECESSARY",
+  "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE",
   "PG_DUMP_OR_AGE_FAILED",
   "ENCRYPTED_ARCHIVE_INVALID",
   "OUTPUT_PATH_UNSAFE",
@@ -82,6 +102,18 @@ function baseReport(): BackupReport {
     databaseRoleReadOnly: null,
     databaseRoleSuperuser: null,
     databaseRoleBypassesRls: null,
+    databaseRoleApproved: null,
+    databaseRoleIsApplication: null,
+    databaseRoleLogin: null,
+    databaseRoleInheritsPrivileges: null,
+    databaseRoleHasWritePrivileges: null,
+    databaseRoleCanManageRolesOrDatabases: null,
+    databaseRoleHasMemberships: null,
+    databaseHasRlsTables: null,
+    databaseRoleSchemaUsageComplete: null,
+    databaseRoleTableSelectComplete: null,
+    databaseRoleSequenceSelectComplete: null,
+    databaseRoleLargeObjectSelectComplete: null,
     archiveFormat: "pg_dump_custom",
     encryption: "age",
     encryptedBytes: null,
@@ -145,24 +177,56 @@ function connectionEnvironment(databaseUrl: string, passFile: string): NodeJS.Pr
   };
 }
 
-async function identityCheck(env: NodeJS.ProcessEnv): Promise<{
-  database: string;
-  readOnly: boolean;
-  hasWritePrivileges: boolean;
-  superuser: boolean;
-  bypassesRls: boolean;
-  canManageRolesOrDatabases: boolean;
-}> {
+async function identityCheck(
+  env: NodeJS.ProcessEnv,
+  approvedBackupRole: string,
+  approvedApplicationRole: string,
+): Promise<{ database: string; role: ProductionBackupRoleIdentity }> {
   const sql = [
     "BEGIN READ ONLY;",
     `SELECT json_build_object(
       'database', current_database(),
       'readOnly', current_setting('transaction_read_only')::boolean,
+      'approvedRoleMatches', current_user = :'approved_backup_role',
+      'applicationRole', current_user = :'approved_application_role' OR current_user = 'oku_guest_app',
+      'canLogin', role.rolcanlogin,
+      'inheritsPrivileges', role.rolinherit,
       'superuser', role.rolsuper,
       'bypassesRls', role.rolbypassrls,
       'canManageRolesOrDatabases', role.rolcreatedb OR role.rolcreaterole OR role.rolreplication,
+      'hasRoleMemberships', EXISTS (
+        SELECT 1 FROM pg_roles AS member_of
+        WHERE member_of.oid <> role.oid
+          AND pg_has_role(current_user, member_of.oid, 'MEMBER')
+      ),
+      'hasRlsTables', EXISTS (
+        SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f') AND c.relrowsecurity
+      ),
+      'allUserSchemasUsable', NOT EXISTS (
+        SELECT 1 FROM pg_namespace AS n
+        WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+          AND NOT has_schema_privilege(current_user, n.oid, 'USAGE')
+      ),
+      'allTableLikeRelationsSelectable', NOT EXISTS (
+        SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND NOT has_table_privilege(current_user, c.oid, 'SELECT')
+      ),
+      'allSequencesSelectable', NOT EXISTS (
+        SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
+        WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+          AND c.relkind = 'S' AND NOT has_sequence_privilege(current_user, c.oid, 'SELECT')
+      ),
+      'allLargeObjectsSelectable', NOT EXISTS (
+        SELECT 1 FROM pg_largeobject_metadata AS lo
+        WHERE NOT has_largeobject_privilege(current_user, lo.oid, 'SELECT')
+      ),
       'hasWritePrivileges',
         has_database_privilege(current_user, current_database(), 'CREATE')
+        OR has_database_privilege(current_user, current_database(), 'TEMP')
         OR EXISTS (
           SELECT 1 FROM pg_namespace AS n
           WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
@@ -172,50 +236,106 @@ async function identityCheck(env: NodeJS.ProcessEnv): Promise<{
           SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
           WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
             AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
-            AND (
-              has_table_privilege(current_user, c.oid, 'INSERT')
-              OR has_table_privilege(current_user, c.oid, 'UPDATE')
-              OR has_table_privilege(current_user, c.oid, 'DELETE')
-              OR has_table_privilege(current_user, c.oid, 'TRUNCATE')
-              OR has_table_privilege(current_user, c.oid, 'TRIGGER')
-              OR has_any_column_privilege(current_user, c.oid, 'INSERT')
-              OR has_any_column_privilege(current_user, c.oid, 'UPDATE')
+            AND has_table_privilege(
+              current_user, c.oid,
+              'INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES, MAINTAIN'
             )
         )
         OR EXISTS (
           SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
           WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
+            AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+            AND has_any_column_privilege(current_user, c.oid, 'INSERT, UPDATE, REFERENCES')
+        )
+        OR EXISTS (
+          SELECT 1 FROM pg_class AS c JOIN pg_namespace AS n ON n.oid = c.relnamespace
+          WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'
             AND c.relkind = 'S'
-            AND has_sequence_privilege(current_user, c.oid, 'UPDATE')
+            AND has_sequence_privilege(current_user, c.oid, 'UPDATE, USAGE')
+        )
+        OR EXISTS (
+          SELECT 1 FROM pg_largeobject_metadata AS lo
+          WHERE has_largeobject_privilege(current_user, lo.oid, 'UPDATE')
+        )
+        OR EXISTS (
+          SELECT 1 FROM pg_tablespace AS ts
+          WHERE has_tablespace_privilege(current_user, ts.oid, 'CREATE')
+        )
+        OR EXISTS (
+          SELECT 1 FROM pg_parameter_acl AS parameter_acl
+          WHERE has_parameter_privilege(current_user, parameter_acl.parname, 'ALTER SYSTEM')
+        )
+        OR EXISTS (
+          SELECT 1 FROM pg_shdepend AS dependency
+          WHERE dependency.refclassid = 'pg_authid'::regclass
+            AND dependency.refobjid = role.oid AND dependency.deptype = 'o'
+            AND (dependency.dbid = 0 OR dependency.dbid = (SELECT oid FROM pg_database WHERE datname = current_database()))
         )
     )::text FROM pg_roles AS role WHERE role.rolname = current_user;`,
     "COMMIT;",
   ].join(" ");
   const result = await captureStdout(
     join(POSTGRES_CLIENT_BIN, "psql"),
-    ["-X", "-qAt", "-v", "ON_ERROR_STOP=1", "--no-password", "-c", sql],
+    [
+      "-X",
+      "-qAt",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-v",
+      `approved_backup_role=${approvedBackupRole}`,
+      "-v",
+      `approved_application_role=${approvedApplicationRole}`,
+      "--no-password",
+      "-c",
+      sql,
+    ],
     env,
   );
   if (result.code !== 0 || !result.stdout) throw new Error("DATABASE_IDENTITY_QUERY_FAILED");
   try {
     const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    const booleans = [
+      "readOnly",
+      "approvedRoleMatches",
+      "applicationRole",
+      "canLogin",
+      "inheritsPrivileges",
+      "superuser",
+      "bypassesRls",
+      "canManageRolesOrDatabases",
+      "hasRoleMemberships",
+      "hasRlsTables",
+      "allUserSchemasUsable",
+      "allTableLikeRelationsSelectable",
+      "allSequencesSelectable",
+      "allLargeObjectsSelectable",
+      "hasWritePrivileges",
+    ];
     if (
       typeof parsed.database !== "string" ||
-      typeof parsed.readOnly !== "boolean" ||
-      typeof parsed.hasWritePrivileges !== "boolean" ||
-      typeof parsed.superuser !== "boolean" ||
-      typeof parsed.bypassesRls !== "boolean" ||
-      typeof parsed.canManageRolesOrDatabases !== "boolean"
+      booleans.some((key) => typeof parsed[key] !== "boolean")
     ) {
       throw new Error("DATABASE_IDENTITY_QUERY_FAILED");
     }
     return {
       database: parsed.database,
-      readOnly: parsed.readOnly,
-      hasWritePrivileges: parsed.hasWritePrivileges,
-      superuser: parsed.superuser,
-      bypassesRls: parsed.bypassesRls,
-      canManageRolesOrDatabases: parsed.canManageRolesOrDatabases,
+      role: {
+        readOnly: parsed.readOnly as boolean,
+        approvedRoleMatches: parsed.approvedRoleMatches as boolean,
+        applicationRole: parsed.applicationRole as boolean,
+        canLogin: parsed.canLogin as boolean,
+        inheritsPrivileges: parsed.inheritsPrivileges as boolean,
+        superuser: parsed.superuser as boolean,
+        bypassesRls: parsed.bypassesRls as boolean,
+        canManageRolesOrDatabases: parsed.canManageRolesOrDatabases as boolean,
+        hasRoleMemberships: parsed.hasRoleMemberships as boolean,
+        hasRlsTables: parsed.hasRlsTables as boolean,
+        allUserSchemasUsable: parsed.allUserSchemasUsable as boolean,
+        allTableLikeRelationsSelectable: parsed.allTableLikeRelationsSelectable as boolean,
+        allSequencesSelectable: parsed.allSequencesSelectable as boolean,
+        allLargeObjectsSelectable: parsed.allLargeObjectsSelectable as boolean,
+        hasWritePrivileges: parsed.hasWritePrivileges as boolean,
+      },
     };
   } catch {
     throw new Error("DATABASE_IDENTITY_QUERY_FAILED");
@@ -292,6 +412,10 @@ async function run(): Promise<void> {
     const url = environment("PRODUCTION_BACKUP_DATABASE_URL");
     const recipient = environment("PRODUCTION_BACKUP_AGE_RECIPIENT");
     if (!isAgePublicRecipient(recipient)) throw new Error("AGE_RECIPIENT_MISSING_OR_INVALID");
+    const approvedBackupRole = environment("PRODUCTION_BACKUP_APPROVED_USER");
+    const approvedApplicationRole = environment("PRODUCTION_APP_RUNTIME_DB_USER");
+    if (!approvedBackupRole) throw new Error("DATABASE_ROLE_NOT_APPROVED");
+    if (!approvedApplicationRole) throw new Error("DATABASE_ROLE_IS_APPLICATION_ROLE");
 
     report.targetValidation = "PASS";
     report.stage = "DATABASE_IDENTITY";
@@ -312,25 +436,34 @@ async function run(): Promise<void> {
     await writeFile(passFile, `${passLine}\n`, { mode: 0o600 });
     await chmod(passFile, 0o600);
     const pgEnv = connectionEnvironment(url!, passFile);
-    const identity = await identityCheck(pgEnv);
+    const identity = await identityCheck(pgEnv, approvedBackupRole, approvedApplicationRole);
     report.targetHostMatched = true;
     report.targetDatabaseMatched =
       identity.database === environment("PRODUCTION_DB_APPROVED_DATABASE");
     report.databaseRoleReadOnly =
-      identity.readOnly &&
-      !identity.hasWritePrivileges &&
-      !identity.superuser &&
-      !identity.bypassesRls &&
-      !identity.canManageRolesOrDatabases;
-    report.databaseRoleSuperuser = identity.superuser;
-    report.databaseRoleBypassesRls = identity.bypassesRls;
+      identity.role.readOnly &&
+      !identity.role.hasWritePrivileges &&
+      !identity.role.superuser &&
+      !identity.role.canManageRolesOrDatabases &&
+      !identity.role.hasRoleMemberships &&
+      !identity.role.applicationRole;
+    report.databaseRoleSuperuser = identity.role.superuser;
+    report.databaseRoleBypassesRls = identity.role.bypassesRls;
+    report.databaseRoleApproved = identity.role.approvedRoleMatches;
+    report.databaseRoleIsApplication = identity.role.applicationRole;
+    report.databaseRoleLogin = identity.role.canLogin;
+    report.databaseRoleInheritsPrivileges = identity.role.inheritsPrivileges;
+    report.databaseRoleHasWritePrivileges = identity.role.hasWritePrivileges;
+    report.databaseRoleCanManageRolesOrDatabases = identity.role.canManageRolesOrDatabases;
+    report.databaseRoleHasMemberships = identity.role.hasRoleMemberships;
+    report.databaseHasRlsTables = identity.role.hasRlsTables;
+    report.databaseRoleSchemaUsageComplete = identity.role.allUserSchemasUsable;
+    report.databaseRoleTableSelectComplete = identity.role.allTableLikeRelationsSelectable;
+    report.databaseRoleSequenceSelectComplete = identity.role.allSequencesSelectable;
+    report.databaseRoleLargeObjectSelectComplete = identity.role.allLargeObjectsSelectable;
     if (!report.targetDatabaseMatched) throw new Error("DATABASE_NAME_MISMATCH");
-    if (identity.hasWritePrivileges || !identity.readOnly) {
-      throw new Error("DATABASE_ROLE_NOT_READ_ONLY");
-    }
-    if (identity.superuser || identity.bypassesRls || identity.canManageRolesOrDatabases) {
-      throw new Error("DATABASE_ROLE_PRIVILEGES_TOO_BROAD");
-    }
+    const roleValidation = validateProductionBackupRole(identity.role);
+    if (!roleValidation.ok) throw new Error(roleValidation.reason);
 
     report.stage = "DUMP_AND_ENCRYPT";
     process.umask(0o077);

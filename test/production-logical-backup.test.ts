@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   isAgePublicRecipient,
+  validateProductionBackupRole,
   validateProductionBackupTarget,
+  type ProductionBackupRoleIdentity,
 } from "../scripts/production-logical-backup-contract.js";
 
 const workflow = readFileSync(
@@ -16,6 +18,23 @@ const backupScript = readFileSync(
 
 const host = "ep-prod-123.c-2.eu-central-1.aws.neon.tech";
 const databaseUrl = `postgresql://backup_user:encoded%3Asecret@${host}/okuplus?sslmode=require`;
+const eligibleRole: ProductionBackupRoleIdentity = {
+  approvedRoleMatches: true,
+  applicationRole: false,
+  canLogin: true,
+  inheritsPrivileges: false,
+  readOnly: true,
+  hasWritePrivileges: false,
+  superuser: false,
+  bypassesRls: true,
+  hasRlsTables: true,
+  canManageRolesOrDatabases: false,
+  hasRoleMemberships: false,
+  allUserSchemasUsable: true,
+  allTableLikeRelationsSelectable: true,
+  allSequencesSelectable: true,
+  allLargeObjectsSelectable: true,
+};
 
 describe("production encrypted logical backup contract", () => {
   it("accepts only a direct Neon URL matching both approved host and database", () => {
@@ -121,7 +140,66 @@ describe("production encrypted logical backup contract", () => {
     expect(isAgePublicRecipient(undefined)).toBe(false);
   });
 
-  it("streams custom pg_dump output directly into age and never stages plaintext", () => {
+  it("accepts a separate login backup role with BYPASSRLS and complete read access", () => {
+    expect(validateProductionBackupRole(eligibleRole)).toEqual({ ok: true });
+  });
+
+  it.each([
+    ["unapproved login", { approvedRoleMatches: false }, "DATABASE_ROLE_NOT_APPROVED"],
+    ["application login", { applicationRole: true }, "DATABASE_ROLE_IS_APPLICATION_ROLE"],
+    ["non-login role", { canLogin: false }, "DATABASE_ROLE_NOT_LOGIN"],
+    ["not a read-only transaction", { readOnly: false }, "DATABASE_ROLE_NOT_READ_ONLY"],
+    ["inherited privileges", { inheritsPrivileges: true }, "DATABASE_ROLE_PRIVILEGES_TOO_BROAD"],
+    ["superuser", { superuser: true }, "DATABASE_ROLE_PRIVILEGES_TOO_BROAD"],
+    ["write access", { hasWritePrivileges: true }, "DATABASE_ROLE_NOT_READ_ONLY"],
+    [
+      "role administration",
+      { canManageRolesOrDatabases: true },
+      "DATABASE_ROLE_PRIVILEGES_TOO_BROAD",
+    ],
+    ["role membership", { hasRoleMemberships: true }, "DATABASE_ROLE_PRIVILEGES_TOO_BROAD"],
+    [
+      "missing schema usage",
+      { allUserSchemasUsable: false },
+      "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE",
+    ],
+    [
+      "missing table SELECT",
+      { allTableLikeRelationsSelectable: false },
+      "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE",
+    ],
+    [
+      "missing sequence SELECT",
+      { allSequencesSelectable: false },
+      "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE",
+    ],
+    [
+      "missing large-object SELECT",
+      { allLargeObjectsSelectable: false },
+      "DATABASE_ROLE_READ_PRIVILEGES_INCOMPLETE",
+    ],
+  ] as const)("rejects %s", (_label, change, reason) => {
+    expect(validateProductionBackupRole({ ...eligibleRole, ...change })).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+
+  it("requires RLS bypass when RLS tables exist and rejects unnecessary bypass", () => {
+    expect(validateProductionBackupRole({ ...eligibleRole, bypassesRls: false })).toEqual({
+      ok: false,
+      reason: "DATABASE_RLS_BYPASS_REQUIRED",
+    });
+    expect(validateProductionBackupRole({ ...eligibleRole, hasRlsTables: false })).toEqual({
+      ok: false,
+      reason: "DATABASE_RLS_BYPASS_UNNECESSARY",
+    });
+    expect(
+      validateProductionBackupRole({ ...eligibleRole, hasRlsTables: false, bypassesRls: false }),
+    ).toEqual({ ok: true });
+  });
+
+  it("preflights full read coverage and streams custom pg_dump output directly into age", () => {
     expect(backupScript).toContain('["--format=custom", "--no-password"]');
     expect(backupScript).toContain("/usr/lib/postgresql/18/bin");
     expect(backupScript).toContain("dump.stdout.pipe(encrypt.stdin)");
@@ -130,6 +208,12 @@ describe("production encrypted logical backup contract", () => {
     expect(backupScript).toContain('PGOPTIONS: "-c default_transaction_read_only=on"');
     expect(backupScript).toContain("has_table_privilege");
     expect(backupScript).toContain("has_sequence_privilege");
+    expect(backupScript).toContain("has_largeobject_privilege");
+    expect(backupScript).toContain("pg_shdepend");
+    expect(backupScript).toContain("pg_parameter_acl");
+    expect(backupScript).toContain("approved_backup_role");
+    expect(backupScript).toContain("approved_application_role");
+    expect(backupScript).not.toContain("--enable-row-security");
     expect(backupScript).toContain("DATABASE_ROLE_PRIVILEGES_TOO_BROAD");
     expect(backupScript).not.toContain("pg_restore");
     expect(backupScript).not.toContain("PRODUCTION_DATABASE_URL");
@@ -145,6 +229,8 @@ describe("production encrypted logical backup contract", () => {
     expect(workflow).toContain("name: production-migration");
     expect(workflow).toContain("secrets.PRODUCTION_BACKUP_DATABASE_URL");
     expect(workflow).toContain("vars.PRODUCTION_BACKUP_AGE_RECIPIENT");
+    expect(workflow).toContain("vars.PRODUCTION_BACKUP_APPROVED_USER");
+    expect(workflow).toContain("vars.PRODUCTION_APP_RUNTIME_DB_USER");
     expect(workflow).toContain("retention-days: 7");
     expect(workflow).toContain("database.dump.age");
     expect(workflow).not.toContain("PRODUCTION_DATABASE_URL");
