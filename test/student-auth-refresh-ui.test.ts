@@ -14,15 +14,25 @@ function response(status: number) {
   };
 }
 
-function harness(fetchImpl: (url: string, options: Record<string, unknown>) => Promise<unknown>) {
+function harness(
+  fetchImpl: (url: string, options: Record<string, unknown>) => Promise<unknown>,
+  nativeMobileRuntime = false,
+) {
   const values = new Map<string, string>([
     ["oku.accessToken", "expired-access"],
     ["oku.refreshToken", "refresh-token"],
     ["oku.tenantId", "tenant-1"],
   ]);
+  const localStorageWrites: Array<[string, string]> = [];
+  let nativeSession = {
+    accessToken: "expired-access",
+    refreshToken: "refresh-token",
+    tenantId: "tenant-1",
+  };
   let refreshCalls = 0;
   let loginCalls = 0;
   const context = createContext({
+    nativeMobileRuntime,
     STORAGE_KEYS: {
       accessToken: "oku.accessToken",
       refreshToken: "oku.refreshToken",
@@ -30,14 +40,30 @@ function harness(fetchImpl: (url: string, options: Record<string, unknown>) => P
     },
     localStorage: {
       getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => values.set(key, value),
+      setItem: (key: string, value: string) => {
+        localStorageWrites.push([key, value]);
+        values.set(key, value);
+      },
       removeItem: (key: string) => values.delete(key),
     },
-    getStoredTokens: () => ({
-      accessToken: values.get("oku.accessToken") ?? null,
-      refreshToken: values.get("oku.refreshToken") ?? null,
-      tenantId: values.get("oku.tenantId") ?? null,
-    }),
+    getStoredTokens: () =>
+      nativeMobileRuntime
+        ? { ...nativeSession }
+        : {
+            accessToken: values.get("oku.accessToken") ?? null,
+            refreshToken: values.get("oku.refreshToken") ?? null,
+            tenantId: values.get("oku.tenantId") ?? null,
+          },
+    setStoredSession: async (data: {
+      tokens: { accessToken: string; refreshToken: string };
+      tenantContext: { tenantId: string };
+    }) => {
+      nativeSession = {
+        accessToken: data.tokens.accessToken,
+        refreshToken: data.tokens.refreshToken,
+        tenantId: data.tenantContext.tenantId,
+      };
+    },
     authHeaders: (accessToken: string | null, tenantId: string | null) => ({
       "content-type": "application/json",
       ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
@@ -66,7 +92,10 @@ function harness(fetchImpl: (url: string, options: Record<string, unknown>) => P
     get loginCalls() {
       return loginCalls;
     },
-    accessToken: () => values.get("oku.accessToken"),
+    accessToken: () =>
+      nativeMobileRuntime ? nativeSession.accessToken : values.get("oku.accessToken"),
+    secureSession: () => ({ ...nativeSession }),
+    localStorageWrites: () => localStorageWrites,
   };
 }
 
@@ -118,5 +147,26 @@ describe("student authenticated API session recovery", () => {
     expect(results).toHaveLength(2);
     expect(results.every((item: { status: number }) => item.status === 200)).toBe(true);
     expect(h.refreshCalls).toBe(1);
+  });
+
+  it("stores refreshed native tokens through the secure session writer only", async () => {
+    let firstRequest = true;
+    const h = harness(async () => {
+      if (firstRequest) {
+        firstRequest = false;
+        return response(401);
+      }
+      return response(200);
+    }, true);
+
+    const result = await runInContext("authenticatedFetch('/student/today')", h.context);
+
+    expect(result.status).toBe(200);
+    expect(h.secureSession()).toEqual({
+      accessToken: "fresh-access",
+      refreshToken: "fresh-refresh",
+      tenantId: "tenant-1",
+    });
+    expect(h.localStorageWrites()).toHaveLength(0);
   });
 });
