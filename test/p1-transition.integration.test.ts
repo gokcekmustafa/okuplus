@@ -553,21 +553,33 @@ describe.sequential("P1 learning cycle transition integration", () => {
         publicationApproved: true,
         graphAvailable: true,
       });
-      expect(preview?.upcomingPaths).toHaveLength(1);
+      expect(preview?.upcomingPaths).toHaveLength(2);
+      expect(preview?.upcomingPaths[0]?.path.code).toBe(
+        EDUCATION_V2_P1_A_CYCLE_3_PROGRAM.path.code,
+      );
       expect(preview?.upcomingPaths[0]?.nodes).toHaveLength(7);
       expect(
         preview?.upcomingPaths[0]?.nodes.every(
           (node) => node.status === "locked" && !node.isCurrent,
         ),
       ).toBe(true);
+      expect(preview?.upcomingPaths[1]?.path.code).toBe(
+        EDUCATION_V2_P1_A_CYCLE_4_PROGRAM.path.code,
+      );
+      expect(preview?.upcomingPaths[1]?.nodes).toHaveLength(5);
+      expect(
+        preview?.upcomingPaths[1]?.nodes.every(
+          (node) => node.status === "locked" && node.availability === "READY",
+        ),
+      ).toBe(true);
       const plannedNodes = preview?.plannedPaths?.flatMap((path) => path.nodes) ?? [];
       expect(plannedNodes.length).toBeGreaterThan(0);
-      expect(18 + 7 + plannedNodes.length).toBe(300);
+      expect(18 + 7 + 5 + plannedNodes.length).toBe(300);
       expect(plannedNodes[0]).toMatchObject({
-        learningPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_4_G8_12",
+        learningPathCode: "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_5_G8_12",
         status: "locked",
         availability: "UNAVAILABLE",
-        planningStatus: "GRAPH_NOT_AVAILABLE",
+        planningStatus: "AUTHORED_UNRELEASED",
       });
       expect(
         plannedNodes.every(
