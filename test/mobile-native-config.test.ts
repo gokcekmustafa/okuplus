@@ -101,6 +101,8 @@ describe("mobile native app identity", () => {
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
     expect(workflow).toContain("runs-on: ubuntu-22.04");
+    expect(workflow).toContain("Enable KVM for Android emulator");
+    expect(workflow).toContain("test -c /dev/kvm");
     expect(workflow).toContain("timeout-minutes: 20");
     expect(workflow).toContain("api-level: 34");
     expect(workflow).toContain("force-avd-creation: true");
