@@ -29,6 +29,13 @@ Keychain ve Android Keystore destekli depolamaya alınır. Native secure-storage
 köprüsü kullanılamazsa mobil çalışma zamanı tokenları kalıcı `localStorage`'a
 yazmaz ve oturum açma güvenli biçimde başarısız olur.
 
+## Uygulama simgeleri
+
+`assets/okupratik-app-icon-master.png` marka simgesinin kaynak görselidir. iOS için
+1024×1024 App Store simgesi, Android için yoğunluğa göre launcher ve adaptive
+icon görselleri projeye eklenmiştir. `test/mobile-native-config.test.ts` bu dosya
+ölçülerini ve platform kimliklerinin eşleşmesini denetler.
+
 ## Durum ve mağaza öncesi sınırlar
 
 - `com.okupratik.app` teknik bir aday kimliktir; Google Play/App Store kaydının

@@ -23,7 +23,7 @@
     "@capacitor/keyboard": "6.0.4"
   },
   "devDependencies": {
-    "@capacitor/cli": "6.2.2",
+    "@capacitor/cli": "7.6.9",
     "typescript": "^5.7.3"
   }
 }

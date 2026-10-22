@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   android:
-    name: Android debug APK
+    name: Android debug, instrumentation-test, and release validation
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -46,7 +46,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -59,11 +59,11 @@ jobs:
       - name: Sync Capacitor web assets
         run: npm run sync --prefix mobile
 
-      - name: Build Android debug APK
+      - name: Build Android debug APK, instrumentation test APK, and unsigned release bundle
         working-directory: mobile/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug assembleDebugAndroidTest bundleRelease --no-daemon --stacktrace
 
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
@@ -104,6 +104,19 @@ jobs:
             -derivedDataPath mobile/ios/build \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Build unsigned iOS release archive for validation
+        run: |
+          xcodebuild \
+            -project mobile/ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath mobile/ios/build/Archive/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            archive
 
       - name: Upload iOS simulator app
         uses: actions/upload-artifact@v4
