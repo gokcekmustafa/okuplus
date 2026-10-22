@@ -190,9 +190,6 @@ export function validateProductionBackupRole(
   if (!identity.canLogin) {
     return { ok: false, reason: "DATABASE_ROLE_NOT_LOGIN" };
   }
-  if (!identity.readOnly || identity.hasWritePrivileges) {
-    return { ok: false, reason: "DATABASE_ROLE_NOT_READ_ONLY" };
-  }
   if (
     identity.superuser ||
     identity.canManageRolesOrDatabases ||
@@ -200,6 +197,9 @@ export function validateProductionBackupRole(
     identity.inheritsPrivileges
   ) {
     return { ok: false, reason: "DATABASE_ROLE_PRIVILEGES_TOO_BROAD" };
+  }
+  if (!identity.readOnly || identity.hasWritePrivileges) {
+    return { ok: false, reason: "DATABASE_ROLE_NOT_READ_ONLY" };
   }
   if (identity.hasRlsTables && !identity.bypassesRls) {
     return { ok: false, reason: "DATABASE_RLS_BYPASS_REQUIRED" };
