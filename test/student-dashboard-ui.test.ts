@@ -242,6 +242,32 @@ describe("student dashboard release 0.4", () => {
     }
     expect(nodeAtStation(47)).toContain("completed");
     expect(container.innerHTML).toContain("İçerik hazırlanıyor");
+
+    const cycle4 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,
+    );
+    expect(cycle4).toBeDefined();
+    realGroups.push({
+      path: { area: "READING_COMPREHENSION", code: cycle4!.pathCode },
+      nodes: cycle4!.manifest.steps.map((step, index) => ({
+        id: `cycle-4-step-${step.order}`,
+        learningPathCode: cycle4!.pathCode,
+        code: step.stableKey,
+        type: step.type,
+        status: index === 0 ? "active" : "locked",
+        availability: "READY",
+      })),
+    });
+    plannedGroup.nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: cycle4!.pathCode,
+      visibleStationCount: 52,
+    });
+    runInContext("renderLearningPathMap(realGroups.concat([plannedGroup]), null)", context);
+    expect(nodeAtStation(48)).toContain('data-node-id="cycle-4-step-1"');
+    expect(nodeAtStation(48)).toContain('aria-current="step"');
+    expect(nodeAtStation(48)).not.toContain(" disabled");
+    expect(nodeAtStation(52)).toContain('data-node-id="cycle-4-step-5"');
+    expect(nodeAtStation(53)).toContain('data-node-id="planned:A:5:1"');
   });
 
   it("uses the Learning Path response for the dashboard today card", () => {

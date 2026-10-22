@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 const appSource = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const htmlSource = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+const deletionPageSource = readFileSync(
+  new URL("../public/account-deletion.html", import.meta.url),
+  "utf8",
+);
 
 function functionSource(start: string, end: string): string {
   const startIndex = appSource.indexOf(start);
@@ -50,6 +54,63 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
 }
 
 describe("account deletion request UI", () => {
+  it("provides a public Turkish deletion-request page without claiming the account was deleted", () => {
+    expect(deletionPageSource).toContain('<html lang="tr">');
+    expect(deletionPageSource).toContain("OkuPratik");
+    expect(deletionPageSource).toContain('href="/?account-deletion=1"');
+    expect(deletionPageSource).toContain("Talep kaydı hesabı veya verileri silmez.");
+    expect(deletionPageSource).toContain("belirli bir sürede yapılacağı sözü verilmez");
+  });
+
+  it("opens account settings after sign-in from the external deletion link and removes its marker", () => {
+    const navigate = vi.fn();
+    const replaceState = vi.fn();
+    const context = createContext({
+      URL,
+      window: {
+        location: { href: "https://www.okupratik.com/?account-deletion=1&campaign=store#request" },
+        history: { replaceState },
+      },
+      canAccessPage: () => true,
+      navigate,
+    });
+    const helper = functionSource(
+      "function openAccountDeletionRequestFromExternalLink()",
+      "function organizationTenantOption(select)",
+    );
+
+    expect(runInContext(`${helper}; openAccountDeletionRequestFromExternalLink()`, context)).toBe(
+      true,
+    );
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/?campaign=store#request");
+    expect(navigate).toHaveBeenCalledExactlyOnceWith("settings");
+    expect(appSource).toContain("if (openAccountDeletionRequestFromExternalLink()) return;");
+  });
+
+  it("does not send an external link to settings when the signed-in role cannot access them", () => {
+    const navigate = vi.fn();
+    const replaceState = vi.fn();
+    const context = createContext({
+      URL,
+      window: {
+        location: { href: "https://www.okupratik.com/?account-deletion=1" },
+        history: { replaceState },
+      },
+      canAccessPage: () => false,
+      navigate,
+    });
+    const helper = functionSource(
+      "function openAccountDeletionRequestFromExternalLink()",
+      "function organizationTenantOption(select)",
+    );
+
+    expect(runInContext(`${helper}; openAccountDeletionRequestFromExternalLink()`, context)).toBe(
+      false,
+    );
+    expect(replaceState).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it("adds an accessible settings entry point that clearly says no data is deleted", () => {
     expect(htmlSource).toContain('aria-labelledby="account-deletion-request-title"');
     expect(htmlSource).toContain('id="account-deletion-request-status"');

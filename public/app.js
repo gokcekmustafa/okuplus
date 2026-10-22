@@ -1383,6 +1383,7 @@ function showDashboard(me) {
     void loadTenants();
   }
   void loadContextsAndRender();
+  if (openAccountDeletionRequestFromExternalLink()) return;
   if (isPlatform) {
     navigate("dashboard");
   } else if (isBranchManagerUser) {
@@ -1394,6 +1395,17 @@ function showDashboard(me) {
   } else {
     void maybeShowOnboarding();
   }
+}
+
+function openAccountDeletionRequestFromExternalLink() {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("account-deletion") !== "1" || !canAccessPage("settings")) {
+    return false;
+  }
+  url.searchParams.delete("account-deletion");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  navigate("settings");
+  return true;
 }
 
 function organizationTenantOption(select) {

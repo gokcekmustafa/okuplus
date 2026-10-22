@@ -139,4 +139,29 @@ describe("mobile native app identity", () => {
       statSync(new URL("../mobile/assets/okupratik-splash-source.png", import.meta.url)).size,
     ).toBeGreaterThan(0);
   });
+
+  it("bundles the source-audited iOS privacy manifest with user-linked product data and no tracking", () => {
+    const manifest = read("../mobile/ios/App/App/PrivacyInfo.xcprivacy");
+    const iosProject = read("../mobile/ios/App/App.xcodeproj/project.pbxproj");
+    const declaredTypes = [
+      ...manifest.matchAll(/<key>NSPrivacyCollectedDataType<\/key>\s*<string>([^<]+)<\/string>/gu),
+    ].map((match) => match[1]);
+
+    expect(manifest).toContain("<key>NSPrivacyTracking</key>\n\t<false/>");
+    expect(manifest).toContain("<key>NSPrivacyAccessedAPITypes</key>");
+    expect(declaredTypes).toEqual([
+      "NSPrivacyCollectedDataTypeName",
+      "NSPrivacyCollectedDataTypeEmailAddress",
+      "NSPrivacyCollectedDataTypePhoneNumber",
+      "NSPrivacyCollectedDataTypeUserID",
+      "NSPrivacyCollectedDataTypeProductInteraction",
+      "NSPrivacyCollectedDataTypeOtherUserContent",
+      "NSPrivacyCollectedDataTypePurchaseHistory",
+      "NSPrivacyCollectedDataTypeOtherDataTypes",
+    ]);
+    expect(
+      manifest.match(/<key>NSPrivacyCollectedDataTypeLinked<\/key>\s*<true\/>/gu),
+    ).toHaveLength(declaredTypes.length);
+    expect(iosProject).toContain("PrivacyInfo.xcprivacy in Resources");
+  });
 });
