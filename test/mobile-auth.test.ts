@@ -43,6 +43,21 @@ describe("native mobile authentication bridge", () => {
     expect(bridge).toBeNull();
   });
 
+  it("propagates native write failures without substituting browser storage", async () => {
+    const nativeFailure = Object.assign(new Error("native storage failure"), { code: "osError" });
+    const nativePlugin = {
+      internalGetItem: vi.fn(),
+      internalSetItem: vi.fn().mockRejectedValue(nativeFailure),
+      internalRemoveItem: vi.fn(),
+    };
+    const storage = createSecureStorageBridge(nativePlugin);
+
+    await expect(storage!.setItem("oku.session.v1", "session-json")).rejects.toMatchObject({
+      code: "osError",
+    });
+    expect(nativePlugin.internalSetItem).toHaveBeenCalledOnce();
+  });
+
   it("creates a cryptographically random URL-safe OIDC nonce", () => {
     const cryptoApi = {
       getRandomValues: (bytes: Uint8Array) => {
