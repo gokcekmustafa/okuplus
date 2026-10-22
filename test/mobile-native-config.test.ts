@@ -77,7 +77,7 @@ describe("mobile native app identity", () => {
       "../mobile/android/app/src/main/java/com/okupratik/app/GoogleSignInPlugin.java",
     );
     const androidGradle = read("../mobile/android/app/build.gradle");
-    const cordovaGradle = read("../mobile/android/capacitor-cordova-android-plugins/build.gradle");
+    const androidRootGradle = read("../mobile/android/build.gradle");
 
     expect(mainActivity).toContain("registerPlugin(GoogleSignInPlugin.class)");
     expect(googlePlugin).toContain("GetSignInWithGoogleOption");
@@ -92,10 +92,10 @@ describe("mobile native app identity", () => {
     expect(androidGradle).toContain(
       "com.google.android.libraries.identity.googleid:googleid:1.2.1",
     );
-    expect(cordovaGradle).toContain(
+    expect(androidRootGradle).toContain(
       "details.requested.name in ['kotlin-stdlib-jdk7', 'kotlin-stdlib-jdk8']",
     );
-    expect(cordovaGradle).toContain("details.useVersion '1.8.22'");
+    expect(androidRootGradle).toContain("details.useVersion '1.8.22'");
   });
 
   it("uploads the verified debug APK path discovered after the Android build", () => {
