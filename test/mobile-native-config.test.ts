@@ -107,9 +107,11 @@ describe("mobile native app identity", () => {
     expect(workflow).not.toContain("udevadm");
     expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
     expect(workflow).toContain("timeout-minutes: 20");
-    expect(workflow).toContain("api-level: 33");
-    expect(workflow).toContain("target: default");
-    expect(workflow).toContain("arch: x86_64");
+    expect(workflow).toContain("api-level: 30");
+    expect(workflow).toContain("target: aosp_atd");
+    expect(workflow).toContain("arch: x86");
+    expect(workflow).toContain("channel: canary");
+    expect(workflow).toContain("cores: 2");
     expect(workflow).toContain("force-avd-creation: true");
     expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(

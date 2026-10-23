@@ -107,10 +107,12 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 20
         with:
-          # The secure-storage test only needs the AOSP framework; Google APIs are not required.
-          api-level: 33
-          target: default
-          arch: x86_64
+          # ATD images remove unrelated apps/services and reduce resource use for instrumentation tests.
+          api-level: 30
+          target: aosp_atd
+          arch: x86
+          channel: canary
+          cores: 2
           force-avd-creation: true
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
