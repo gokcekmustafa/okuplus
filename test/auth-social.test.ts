@@ -453,6 +453,17 @@ describe.sequential("social auth + persistent session", () => {
     ).toBe(401);
   });
 
+  it("17b. Google tokenı web client audience ile eşleşmiyorsa reddedilir", async () => {
+    expect(
+      (
+        await social(
+          "GOOGLE",
+          await token("GOOGLE", { subject: "stage8b-google-bad-aud", audience: "wrong-client" }),
+        )
+      ).statusCode,
+    ).toBe(401);
+  });
+
   it("18. invalid signature reddedilir", async () => {
     expect(
       (
@@ -470,6 +481,17 @@ describe.sequential("social auth + persistent session", () => {
         await social(
           "APPLE",
           await token("APPLE", { subject: "stage8b-bad-nonce", nonce: "different-nonce" }),
+        )
+      ).statusCode,
+    ).toBe(401);
+  });
+
+  it("19b. Google nonce istemci isteğiyle eşleşmiyorsa reddedilir", async () => {
+    expect(
+      (
+        await social(
+          "GOOGLE",
+          await token("GOOGLE", { subject: "stage8b-google-bad-nonce", nonce: "different-nonce" }),
         )
       ).statusCode,
     ).toBe(401);

@@ -63,6 +63,40 @@ export function formatGoogleLoginError(error) {
   return "Google ile giriş tamamlanamadı. Lütfen tekrar dene.";
 }
 
+const GOOGLE_LOGIN_DIAGNOSTIC_PHASES = new Set([
+  "BUTTON_EVENT",
+  "REQUEST_PREPARATION",
+  "CREDENTIAL_MANAGER",
+  "SERVER_EXCHANGE",
+  "SECURE_STORAGE_WRITE",
+  "SESSION_SETUP",
+  "STUDENT_SCREEN",
+]);
+
+/** Return only support-safe fields; never include an exception message or token data. */
+export function createGoogleLoginDiagnostic(phase, error) {
+  const rawCode =
+    typeof error?.code === "string" && /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/u.test(error.code)
+      ? error.code
+      : null;
+  const code = rawCode?.toUpperCase().replace(/[.-]/gu, "_") ?? null;
+  const status =
+    Number.isInteger(error?.status) && error.status >= 100 && error.status <= 599
+      ? error.status
+      : null;
+  const requestId =
+    typeof error?.requestId === "string" && /^[A-Za-z0-9_-]{1,128}$/u.test(error.requestId)
+      ? error.requestId
+      : null;
+
+  return Object.freeze({
+    phase: GOOGLE_LOGIN_DIAGNOSTIC_PHASES.has(phase) ? phase : "UNKNOWN",
+    code,
+    status,
+    requestId,
+  });
+}
+
 export function setupPasswordVisibilityToggle(passwordInput, toggleButton) {
   if (!passwordInput || !toggleButton) return;
 

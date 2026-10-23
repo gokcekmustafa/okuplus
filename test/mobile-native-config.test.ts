@@ -96,6 +96,12 @@ describe("mobile native app identity", () => {
       "details.requested.name in ['kotlin-stdlib-jdk7', 'kotlin-stdlib-jdk8']",
     );
     expect(androidRootGradle).toContain("details.useVersion '1.8.22'");
+    expect(androidGradle).toContain("OKUPRATIK_ANDROID_TEST_KEYSTORE_PATH");
+    expect(androidGradle).toContain("OKUPRATIK_ANDROID_TEST_STORE_PASSWORD");
+    expect(androidGradle).toContain(
+      "if (androidTestSigningConfigured) signingConfig signingConfigs.stableTest",
+    );
+    expect(androidGradle).toContain("androidTestSigningPartial");
   });
 
   it("keeps SecureStorage native discovery and the real device round-trip test wired", () => {
@@ -162,6 +168,18 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("set -o pipefail");
     expect(workflow).toContain("id: debug-apk");
     expect(workflow).toContain("-name 'app-debug.apk'");
+    expect(workflow).toContain("id: debug-apk-identity");
+    expect(workflow).toContain('verify --print-certs "$APK_PATH"');
+    expect(workflow).toContain("Signer #1 certificate SHA-1 digest:");
+    expect(workflow).toContain("com.okupratik.app");
+    expect(workflow).toContain("ANDROID_TEST_KEYSTORE_BASE64");
+    expect(workflow).toContain("ANDROID_TEST_STORE_PASSWORD");
+    expect(workflow).toContain("ANDROID_TEST_KEY_ALIAS");
+    expect(workflow).toContain("ANDROID_TEST_KEY_PASSWORD");
+    expect(workflow).toContain(
+      "if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'",
+    );
+    expect(workflow).toContain("Test APK uses the runner's debug key");
     expect(workflow).toContain("${{ steps.debug-apk.outputs.path }}");
     expect(workflow).toContain("name: okupratik-android-instrumentation-${{ github.sha }}");
     expect(workflow).toContain("app-debug-androidTest.apk");

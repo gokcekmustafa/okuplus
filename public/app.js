@@ -1,6 +1,7 @@
 // OkuPratik — minimal SPA (vanilla JS)
 import { createUiMotion, loadingSkeleton } from "./ui-motion.js";
 import {
+  createGoogleLoginDiagnostic,
   formatGoogleLoginError,
   formatLoginError,
   setupPasswordVisibilityToggle,
@@ -1055,10 +1056,14 @@ async function socialLogin(provider, idToken, nonce, displayName) {
   return parseResponse(res);
 }
 
-async function completeSocialLogin(provider, idToken, nonce, displayName) {
+async function completeSocialLogin(provider, idToken, nonce, displayName, onPhase = () => {}) {
+  onPhase("SERVER_EXCHANGE");
   const session = await socialLogin(provider, idToken, nonce, displayName);
+  onPhase("SECURE_STORAGE_WRITE");
   await setStoredSession(session);
+  onPhase("SESSION_SETUP");
   await claimGuestDiagnosticForCurrentUser();
+  onPhase("STUDENT_SCREEN");
   showDashboard(session);
   return session;
 }
@@ -1103,19 +1108,41 @@ async function startGoogleLogin() {
   if (!button || button.disabled) return;
   if (nativeMobileRuntime) {
     if (nativePlatform === "android") {
+      let phase = "BUTTON_EVENT";
+      const status = $("social-login-status");
       setAsyncButtonState(button, true, "Yükleniyor…");
-      $("social-login-status").textContent = "Google ile güvenli giriş başlatılıyor…";
+      status.textContent = "Google ile güvenli giriş başlatılıyor…";
+      status.removeAttribute("data-google-login-diagnostic");
       try {
+        phase = "REQUEST_PREPARATION";
         const nonce = createOidcNonce();
+        phase = "CREDENTIAL_MANAGER";
         const credential = await requestNativeGoogleCredential(
           googleSignInPlugin,
           googleSocialConfig?.clientId,
           nonce,
         );
-        await completeSocialLogin("google", credential.idToken, nonce, credential.displayName);
-        $("social-login-status").textContent = "";
+        await completeSocialLogin(
+          "google",
+          credential.idToken,
+          nonce,
+          credential.displayName,
+          (nextPhase) => {
+            phase = nextPhase;
+          },
+        );
+        status.textContent = "";
       } catch (error) {
-        $("social-login-status").textContent = formatGoogleLoginError(error);
+        const diagnostic = createGoogleLoginDiagnostic(phase, error);
+        const details = [
+          diagnostic.phase,
+          diagnostic.code,
+          diagnostic.status === null ? null : `HTTP ${diagnostic.status}`,
+          diagnostic.requestId === null ? null : `İstek ${diagnostic.requestId}`,
+        ].filter(Boolean);
+        console.warn("Google giriş tanılaması", diagnostic);
+        status.dataset.googleLoginDiagnostic = JSON.stringify(diagnostic);
+        status.textContent = `${formatGoogleLoginError(error)}\nTanılama: ${details.join(" · ")}`;
       } finally {
         setAsyncButtonState(button, false);
       }

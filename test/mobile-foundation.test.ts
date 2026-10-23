@@ -5,7 +5,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createContext, runInContext } from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { requestNativeGoogleCredential } from "../public/mobile-auth.js";
 
 const execFile = promisify(execFileCallback);
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -212,6 +213,47 @@ describe("OkuPratik mobile foundation", () => {
       expect(index.indexOf('src="/mobile-runtime.js"')).toBeLessThan(
         index.indexOf('src="/app.js"'),
       );
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("registers the native Google plugin before app startup and passes the configured server client ID", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "okupratik-mobile-google-runtime-"));
+    try {
+      await execFile(process.execPath, [prepareScript], {
+        cwd: repoRoot,
+        env: { ...process.env, OKUPRATIK_MOBILE_OUTPUT_DIR: outputDir },
+      });
+      const index = await readFile(join(outputDir, "index.html"), "utf8");
+      const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
+      const plugin = { signIn: async (input: unknown) => ({ idToken: "test-id-token", input }) };
+      const registerPlugin = vi.fn((name: string) => (name === "GoogleSignIn" ? plugin : null));
+      const context = createContext({
+        Capacitor: {
+          isNativePlatform: () => true,
+          getPlatform: () => "android",
+          registerPlugin,
+        },
+        androidBridge: { postMessage: () => undefined },
+      });
+      runInContext(runtime, context);
+
+      const runtimeConfig = context.__OKUPRATIK_RUNTIME__ as {
+        googleSignInPlugin: typeof plugin;
+      };
+      expect(index.indexOf('src="/mobile-runtime.js"')).toBeLessThan(
+        index.indexOf('src="/app.js"'),
+      );
+      expect(registerPlugin).toHaveBeenCalledWith("GoogleSignIn");
+      expect(runtimeConfig.googleSignInPlugin).toBe(plugin);
+      await expect(
+        requestNativeGoogleCredential(
+          runtimeConfig.googleSignInPlugin,
+          "production-web-client.apps.googleusercontent.com",
+          "test-nonce-value-123456",
+        ),
+      ).resolves.toMatchObject({ idToken: "test-id-token" });
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

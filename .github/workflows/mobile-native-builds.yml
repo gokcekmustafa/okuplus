@@ -32,6 +32,8 @@ jobs:
     # Build APKs on the standard hosted runner; native instrumentation requires an explicitly configured KVM runner.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      OKUPRATIK_ANDROID_SIGNING_MODE: ephemeral-debug
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -60,9 +62,47 @@ jobs:
       - name: Sync Capacitor web assets
         run: npm run sync --prefix mobile
 
+      - name: Configure optional stable Android test signing
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        shell: bash
+        env:
+          ANDROID_TEST_KEYSTORE_BASE64: ${{ secrets.ANDROID_TEST_KEYSTORE_BASE64 }}
+          ANDROID_TEST_STORE_PASSWORD: ${{ secrets.ANDROID_TEST_STORE_PASSWORD }}
+          ANDROID_TEST_KEY_ALIAS: ${{ secrets.ANDROID_TEST_KEY_ALIAS }}
+          ANDROID_TEST_KEY_PASSWORD: ${{ secrets.ANDROID_TEST_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          values=("$ANDROID_TEST_KEYSTORE_BASE64" "$ANDROID_TEST_STORE_PASSWORD" "$ANDROID_TEST_KEY_ALIAS" "$ANDROID_TEST_KEY_PASSWORD")
+          configured=0
+          for value in "${values[@]}"; do
+            if [ -n "$value" ]; then configured=$((configured + 1)); fi
+          done
+          if [ "$configured" -eq 0 ]; then
+            echo "OKUPRATIK_ANDROID_SIGNING_MODE=ephemeral-debug" >> "$GITHUB_ENV"
+            echo "Test APK uses the runner's debug key; its SHA-1 may differ on another runner." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$configured" -ne "${#values[@]}" ]; then
+            echo "::error::Stable Android test signing secrets are only partially configured."
+            exit 1
+          fi
+          keystore="$RUNNER_TEMP/okupratik-android-test-signing.jks"
+          printf '%s' "$ANDROID_TEST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          test -s "$keystore"
+          chmod 600 "$keystore"
+          {
+            echo "OKUPRATIK_ANDROID_TEST_KEYSTORE_PATH=$keystore"
+            echo "OKUPRATIK_ANDROID_SIGNING_MODE=stable-test-key"
+          } >> "$GITHUB_ENV"
+          echo "Test APK uses the configured stable test signing key." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build Android debug APK, instrumentation test APK, and unsigned release bundle
         id: android-build
         working-directory: mobile/android
+        env:
+          OKUPRATIK_ANDROID_TEST_STORE_PASSWORD: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && secrets.ANDROID_TEST_STORE_PASSWORD || '' }}
+          OKUPRATIK_ANDROID_TEST_KEY_ALIAS: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && secrets.ANDROID_TEST_KEY_ALIAS || '' }}
+          OKUPRATIK_ANDROID_TEST_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && secrets.ANDROID_TEST_KEY_PASSWORD || '' }}
         run: |
           chmod +x gradlew
           set -o pipefail
@@ -90,6 +130,48 @@ jobs:
             exit 1
           fi
           printf 'path=%s\n' "$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Android test package and signing fingerprint
+        id: debug-apk-identity
+        if: always() && steps.debug-apk.outcome == 'success'
+        shell: bash
+        env:
+          APK_PATH: ${{ steps.debug-apk.outputs.path }}
+        run: |
+          set -euo pipefail
+          aapt=""
+          apksigner=""
+          for build_tools in "$ANDROID_HOME"/build-tools/*; do
+            if [ -x "$build_tools/aapt" ]; then aapt="$build_tools/aapt"; fi
+            if [ -x "$build_tools/apksigner" ]; then apksigner="$build_tools/apksigner"; fi
+          done
+          test -n "$aapt" && test -n "$apksigner"
+          badging="$("$aapt" dump badging "$APK_PATH")"
+          package_name="$(printf '%s\n' "$badging" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          version_name="$(printf '%s\n' "$badging" | sed -n "s/^package:.*versionName='\\([^']*\\)'.*/\\1/p" | head -n 1)"
+          certificate="$("$apksigner" verify --print-certs "$APK_PATH")"
+          sha1="$(printf '%s\n' "$certificate" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          if [ "$package_name" != "com.okupratik.app" ]; then
+            echo "::error::Unexpected Android package name in debug APK."
+            exit 1
+          fi
+          if ! [[ "$sha1" =~ ^[0-9A-F]{40}$ ]]; then
+            echo "::error::Could not verify the Android debug APK signing certificate fingerprint."
+            exit 1
+          fi
+          {
+            echo "package_name=$package_name"
+            echo "version_name=$version_name"
+            echo "sha1=$sha1"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Android test APK identity"
+            echo "- Package: \`$package_name\`"
+            echo "- Version: \`$version_name\`"
+            echo "- Signing certificate SHA-1: \`$sha1\`"
+            echo "- Signing mode: \`$OKUPRATIK_ANDROID_SIGNING_MODE\`"
+            echo "- Android OAuth package/SHA-1 match is not queried by this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Locate generated Android instrumentation APK
         id: instrumentation-apk
