@@ -129,6 +129,8 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("needs: android");
     expect(workflow).toContain("runs-on: macos-14");
     expect(workflow).toContain("macos-14 is Apple Silicon; API 30 ATD provides an ARM64 image");
+    expect(workflow).toContain("Start Android Debug Bridge before emulator launch");
+    expect(workflow).toContain("run: adb start-server");
     expect(workflow).not.toContain("ANDROID_I_WANT_MY_TCG");
     expect(workflow).not.toContain("/dev/kvm");
     expect(workflow).not.toContain("udevadm");

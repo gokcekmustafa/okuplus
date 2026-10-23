@@ -151,6 +151,9 @@ jobs:
         with:
           packages: "platform-tools"
 
+      - name: Start Android Debug Bridge before emulator launch
+        run: adb start-server
+
       - name: Run Secure Storage instrumentation test on accelerated macOS emulator
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 12
