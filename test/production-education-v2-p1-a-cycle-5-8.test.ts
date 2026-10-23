@@ -255,6 +255,132 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(question.explanation).not.toContain("onarım alanının dışı");
   });
 
+  it("editorially verifies all 15 original Cycle 5 answers against explicit passage evidence", () => {
+    const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8.find((cycle) => cycle.sequence === 5)!;
+    const stations = cycle5.sourceCycle.sourceStations;
+    const expectedStations = [
+      {
+        category: "FAST_READING",
+        difficulty: "FOUNDATION",
+        skills: ["FAST_ATTENTION", "RC_DETAIL"],
+      },
+      {
+        category: "READING_COMPREHENSION",
+        difficulty: "INTERMEDIATE",
+        skills: ["RC_MAIN_IDEA", "RC_DETAIL"],
+      },
+      {
+        category: "COMMON_STRATEGIES",
+        difficulty: "INTERMEDIATE",
+        skills: ["RC_RELATION", "RC_CONNECTOR"],
+      },
+      {
+        category: "INTEGRATED_PRACTICE",
+        difficulty: "ADVANCED",
+        skills: ["RC_DETAIL", "RC_INFERENCE", "RC_RELATION"],
+      },
+      {
+        category: "MULTI_SKILL_ASSESSMENT",
+        difficulty: "ADVANCED",
+        skills: ["RC_MAIN_IDEA", "RC_DETAIL", "RC_INFERENCE"],
+      },
+    ];
+    const answerEvidence: Record<string, { answer: string; evidence: string }> = {
+      "a5-fast-1": { answer: "Cuma 19.00'da", evidence: "cuma günü 19.00'da başlayacak" },
+      "a5-fast-2": {
+        answer: "Batı bahçesindeki danışma noktasında",
+        evidence: "batı bahçesindeki danışma noktasında buluşacak",
+      },
+      "a5-fast-3": {
+        answer: "Salon sunumuna dönüşecek",
+        evidence: "Hava kapalı olursa gözlem salon sunumuna dönüşecek",
+      },
+      "a5-comp-1": {
+        answer: "Eşyaları onarıp bakım yöntemlerini gösteriyor",
+        evidence:
+          "bozulan küçük ev eşyalarını onarıyor ve sahiplerine basit bakım yöntemlerini gösteriyor",
+      },
+      "a5-comp-2": {
+        answer: "Eşyaların onarılarak yeniden kullanılması",
+        evidence: "kullanılabilir eşyalar atılmak yerine yeniden değerlendiriliyor",
+      },
+      "a5-comp-3": {
+        answer: "Eşyaların onarılması ve bakımın öğrenilmesi",
+        evidence: "onarıyor ve sahiplerine basit bakım yöntemlerini gösteriyor",
+      },
+      "a5-strategy-1": {
+        answer: "Onarıma rağmen güzergâhın değişmediğini",
+        evidence: "ancak yürüyüş güzergâhı bu hafta değişmedi",
+      },
+      "a5-strategy-2": {
+        answer: "Çalışma alanına uyarı levhaları konması",
+        evidence: "Çalışma alanının çevresine uyarı levhaları kondu",
+      },
+      "a5-strategy-3": {
+        answer: "Güzergâhın açık bölümünden",
+        evidence: "ziyaretçiler açık bölümden güvenle geçebildi",
+      },
+      "a5-integrated-1": {
+        answer: "Pazartesi ve çarşamba",
+        evidence: "pazartesi ve çarşamba günleri ölçüm yapıyor",
+      },
+      "a5-integrated-2": {
+        answer: "Toprak kuruduğunda",
+        evidence: "Bitkiler yalnızca toprak kuruduğunda sulanıyor",
+      },
+      "a5-integrated-3": {
+        answer: "Pano kayıtlarını kullanarak",
+        evidence: "gözlemlerini panodaki kayıtlarla paylaşacak",
+      },
+      "a5-assess-1": {
+        answer: "Ses kayıtları ve tarihli fotoğraflar",
+        evidence: "ses kayıtlarını ve tarihli fotoğrafları birlikte sergiliyor",
+      },
+      "a5-assess-2": {
+        answer: "Tezgâh düzeninin zamanla değiştiğini",
+        evidence: "tezgâh düzeninin yıllar içinde değiştiğini görebiliyor",
+      },
+      "a5-assess-3": {
+        answer: "Değişikliğin hangi kararla yapıldığı",
+        evidence: "değişikliğin hangi kararla yapıldığını belirtmiyor",
+      },
+    };
+
+    expect(stations).toHaveLength(5);
+    expect(Object.keys(answerEvidence)).toHaveLength(15);
+    for (const [index, station] of stations.entries()) {
+      const expected = expectedStations[index]!;
+      expect(station.category).toBe(expected.category);
+      expect(station.difficulty).toBe(expected.difficulty);
+      expect(station.skillCodes).toEqual(expected.skills);
+      expect(station.prerequisiteKey).toBe(index === 0 ? null : stations[index - 1]!.key);
+      expect(station.contentOrigin).toBe("ORIGINAL_AUTHORING");
+      expect(station.provenanceStatus).toBe("REVIEW_REQUIRED");
+      expect(station.questions).toHaveLength(3);
+
+      for (const question of station.questions) {
+        const expectedAnswer = answerEvidence[question.key];
+        expect(expectedAnswer, question.key).toBeDefined();
+        expect(question.correct, question.key).toBe(expectedAnswer!.answer);
+        expect(station.text.toLocaleLowerCase("tr-TR"), question.key).toContain(
+          expectedAnswer!.evidence.toLocaleLowerCase("tr-TR"),
+        );
+        expect(question.options).toHaveLength(4);
+        expect(new Set(question.options.map((option) => option.text)).size).toBe(4);
+        expect(question.options.map((option) => option.id)).toContain(question.correctOptionId);
+        expect(question.explanation.trim().length, question.key).toBeGreaterThan(0);
+        expect(question.hint.trim().length, question.key).toBeGreaterThan(0);
+      }
+    }
+    expect(cycle5.program.assessments[0]?.questionKeys).toEqual(
+      stations[4]?.questions.map((question) => question.key),
+    );
+    expect(cycle5.program.assessments[0]?.config.completionMinimumScore).toBe(0.75);
+    expect(
+      cycle5.program.path.units[0]?.steps.map((step) => step.prerequisiteStepKeys ?? []),
+    ).toEqual([[], [stations[0]!.key], [stations[1]!.key], [stations[2]!.key], [stations[3]!.key]]);
+  });
+
   it("rejects missing/incomplete source and makes plan, repeat, create, and conflict actions explicit", () => {
     const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8[0]!;
     expect(isCompleteEducationV2P1ACycle5To8Source(undefined, 5)).toBe(false);
