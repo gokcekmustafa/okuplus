@@ -11,6 +11,14 @@ describe("8I-2 security hardening", () => {
   it("structured logger redaction listesi secret ve token alanlarını kapsar", () => {
     const logger = loggerOptions(parseEnv({ NODE_ENV: "test", DATABASE_URL: databaseUrl })) as {
       redact?: { paths?: string[] };
+      serializers?: {
+        req?: (request: {
+          id: string;
+          method: string;
+          url: string;
+          ip: string;
+        }) => Record<string, unknown>;
+      };
     };
     expect(logger.redact?.paths).toEqual(
       expect.arrayContaining([
@@ -26,6 +34,17 @@ describe("8I-2 security hardening", () => {
         "*.apiKey",
       ]),
     );
+    const serializedRequest = logger.serializers?.req?.({
+      id: "request-id",
+      method: "GET",
+      url: "/auth/social/google/callback?code=secret-code&state=secret-state",
+      ip: "127.0.0.1",
+    });
+    expect(serializedRequest?.url).toBe("/auth/social/google/callback");
+    expect(JSON.stringify(serializedRequest)).not.toContain("secret-code");
+    expect(JSON.stringify(serializedRequest)).not.toContain("secret-state");
+    expect(serializedRequest).not.toHaveProperty("query");
+    expect(serializedRequest).not.toHaveProperty("headers");
   });
 
   it("security headers and production HSTS are emitted", async () => {

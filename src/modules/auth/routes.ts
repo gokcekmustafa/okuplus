@@ -9,7 +9,7 @@ import type {
 } from "./index.js";
 import { signupPersonalAccount, signupSchema } from "./index.js";
 import type { SocialAuthService } from "./social-service.js";
-import { GoogleOAuthClient } from "./google-oauth.js";
+import { GoogleOAuthClient, safeGoogleOAuthDiagnostic } from "./google-oauth.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import {
   clearAuthCookies,
@@ -250,28 +250,54 @@ export async function authRoutes(
     async (request, reply) => {
       setNoStore(reply);
       if (request.query.error || !request.query.code || !request.query.state) {
+        request.log.warn(
+          {
+            event: "google_oauth_callback_failed",
+            stage: "callback_parameters",
+            errorClass: "OAuthCallbackError",
+            errorCode: request.query.error
+              ? "PROVIDER_RETURNED_ERROR"
+              : !request.query.code
+                ? "AUTHORIZATION_CODE_MISSING"
+                : "STATE_PARAMETER_MISSING",
+            idTokenReceived: false,
+          },
+          "Google OAuth callback failed",
+        );
         return reply
           .header("Set-Cookie", clearGoogleOAuthStateCookie())
           .redirect(googleOAuthClient.errorRedirect());
       }
 
+      let stage = "oauth_exchange";
+      let idTokenReceived = false;
       try {
         const { idToken, nonce } = await googleOAuthClient.exchangeCode(
           request,
           request.query.code,
           request.query.state,
         );
+        idTokenReceived = true;
+        stage = "social_auth_service";
         const session = await socialAuthService.login(
           "GOOGLE",
           { idToken, nonce },
           { platform: "WEB", deviceName: "Google OAuth" },
         );
+        stage = "session_cookie";
         reply.header("Set-Cookie", [
           clearGoogleOAuthStateCookie(),
           ...authCookieHeaders(session.tokens, createCsrfToken(csrfSecret)),
         ]);
         return reply.redirect(googleOAuthClient.successRedirect());
-      } catch {
+      } catch (error) {
+        request.log.warn(
+          {
+            event: "google_oauth_callback_failed",
+            ...safeGoogleOAuthDiagnostic(error, stage, idTokenReceived),
+          },
+          "Google OAuth callback failed",
+        );
         return reply
           .header("Set-Cookie", clearGoogleOAuthStateCookie())
           .redirect(googleOAuthClient.errorRedirect());

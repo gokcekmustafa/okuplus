@@ -7,6 +7,17 @@ const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/a
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const STATE_TTL_SECONDS = 600;
 const GOOGLE_ERROR_REDIRECT_REASON = "google-error";
+const SAFE_GOOGLE_PROVIDER_ERRORS = new Set([
+  "access_denied",
+  "invalid_client",
+  "invalid_grant",
+  "invalid_request",
+  "invalid_scope",
+  "server_error",
+  "temporarily_unavailable",
+  "unauthorized_client",
+  "unsupported_grant_type",
+]);
 
 type GoogleOAuthState = {
   state: string;
@@ -17,6 +28,7 @@ type GoogleOAuthState = {
 
 type GoogleTokenResponse = {
   id_token?: unknown;
+  error?: unknown;
 };
 
 export interface GoogleOAuthOptions {
@@ -25,6 +37,125 @@ export interface GoogleOAuthOptions {
   callbackUrl: string;
   stateSecret: string;
   fetchImpl?: typeof fetch;
+}
+
+export type GoogleOAuthFailureStage = "configuration" | "state_validation" | "token_exchange";
+
+export class GoogleOAuthDiagnosticError extends Error {
+  constructor(
+    readonly stage: GoogleOAuthFailureStage,
+    readonly diagnosticCode: string,
+    readonly upstreamStatus?: number,
+    readonly providerErrorCode?: string,
+  ) {
+    super("Google OAuth flow failed");
+    this.name = "GoogleOAuthDiagnosticError";
+  }
+}
+
+const SAFE_API_ERROR_CODES = new Set([
+  "VALIDATION_ERROR",
+  "UNAUTHORIZED",
+  "FORBIDDEN",
+  "NOT_FOUND",
+  "CONFLICT",
+  "SERVICE_UNAVAILABLE",
+  "INTERNAL_ERROR",
+]);
+const SAFE_GOOGLE_OAUTH_ERROR_CODES = new Set([
+  "OAUTH_CONFIGURATION_MISSING",
+  "STATE_COOKIE_INVALID",
+  "TOKEN_ENDPOINT_TIMEOUT",
+  "TOKEN_ENDPOINT_UNREACHABLE",
+  "TOKEN_RESPONSE_INVALID",
+  "TOKEN_ENDPOINT_REJECTED",
+  "ID_TOKEN_MISSING",
+]);
+const SAFE_SOCIAL_TOKEN_CODES = new Set([
+  "TOKEN_AUDIENCE_INVALID",
+  "TOKEN_ISSUER_INVALID",
+  "TOKEN_EXPIRED",
+  "TOKEN_NOT_YET_VALID",
+  "TOKEN_NONCE_MISSING",
+  "TOKEN_SUBJECT_INVALID",
+  "TOKEN_NONCE_MISMATCH",
+  "TOKEN_SIGNATURE_INVALID",
+  "SIGNING_KEY_NOT_FOUND",
+  "SIGNING_KEYS_UNAVAILABLE",
+  "TOKEN_INVALID",
+]);
+
+/** Returns only fixed diagnostic labels; never returns an exception message or cause. */
+export function safeGoogleOAuthDiagnostic(
+  error: unknown,
+  fallbackStage: string,
+  idTokenReceived: boolean,
+): {
+  stage: string;
+  errorClass: string;
+  errorCode: string;
+  upstreamStatus?: number;
+  providerErrorCode?: string;
+  idTokenReceived: boolean;
+} {
+  if (error instanceof GoogleOAuthDiagnosticError) {
+    return {
+      stage:
+        error.stage === "configuration" ||
+        error.stage === "state_validation" ||
+        error.stage === "token_exchange"
+          ? error.stage
+          : "oauth_flow",
+      errorClass: "GoogleOAuthDiagnosticError",
+      errorCode: SAFE_GOOGLE_OAUTH_ERROR_CODES.has(error.diagnosticCode)
+        ? error.diagnosticCode
+        : "OAUTH_FLOW_FAILED",
+      ...(Number.isInteger(error.upstreamStatus) &&
+      error.upstreamStatus! >= 400 &&
+      error.upstreamStatus! <= 599
+        ? { upstreamStatus: error.upstreamStatus }
+        : {}),
+      ...(error.providerErrorCode && SAFE_GOOGLE_PROVIDER_ERRORS.has(error.providerErrorCode)
+        ? { providerErrorCode: error.providerErrorCode }
+        : {}),
+      idTokenReceived,
+    };
+  }
+
+  if (error instanceof Error && error.name === "SocialTokenVerificationError") {
+    const candidate =
+      typeof error === "object" && "diagnosticCode" in error
+        ? (error as { diagnosticCode?: unknown }).diagnosticCode
+        : undefined;
+    return {
+      stage: "id_token_verification",
+      errorClass: "SocialTokenVerificationError",
+      errorCode:
+        typeof candidate === "string" && SAFE_SOCIAL_TOKEN_CODES.has(candidate)
+          ? candidate
+          : "TOKEN_INVALID",
+      idTokenReceived,
+    };
+  }
+
+  const apiError =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown })
+      : undefined;
+  const errorCode =
+    typeof apiError?.code === "string" && SAFE_API_ERROR_CODES.has(apiError.code)
+      ? apiError.code
+      : "UNCLASSIFIED";
+  const errorClass =
+    error instanceof Error && error.name === "ApiError"
+      ? "ApiError"
+      : error instanceof Error && error.name === "TimeoutError"
+        ? "TimeoutError"
+        : error instanceof Error && error.name === "TypeError"
+          ? "TypeError"
+          : "UnknownError";
+
+  return { stage: fallbackStage, errorClass, errorCode, idTokenReceived };
 }
 
 export class GoogleOAuthClient {
@@ -81,31 +212,68 @@ export class GoogleOAuthClient {
     code: string,
     state: string,
   ): Promise<{ idToken: string; nonce: string }> {
-    this.assertConfigured();
+    try {
+      this.assertConfigured();
+    } catch {
+      throw new GoogleOAuthDiagnosticError("configuration", "OAUTH_CONFIGURATION_MISSING");
+    }
     const stateCookie = getCookie(request, GOOGLE_OAUTH_STATE_COOKIE_NAME);
-    const flow = this.verifyState(stateCookie, state);
-    const response = await this.fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        code,
-        client_id: this.options.clientId,
-        client_secret: this.options.clientSecret,
-        redirect_uri: this.options.callbackUrl,
-        grant_type: "authorization_code",
-        code_verifier: flow.codeVerifier,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
+    let flow: GoogleOAuthState;
+    try {
+      flow = this.verifyState(stateCookie, state);
+    } catch {
+      throw new GoogleOAuthDiagnosticError("state_validation", "STATE_COOKIE_INVALID");
+    }
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          code,
+          client_id: this.options.clientId,
+          client_secret: this.options.clientSecret,
+          redirect_uri: this.options.callbackUrl,
+          grant_type: "authorization_code",
+          code_verifier: flow.codeVerifier,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      throw new GoogleOAuthDiagnosticError(
+        "token_exchange",
+        error instanceof Error && error.name === "TimeoutError"
+          ? "TOKEN_ENDPOINT_TIMEOUT"
+          : "TOKEN_ENDPOINT_UNREACHABLE",
+      );
+    }
 
     let payload: GoogleTokenResponse;
     try {
       payload = (await response.json()) as GoogleTokenResponse;
     } catch {
-      throw serviceUnavailableError("Google ile giriş geçici olarak kullanılamıyor");
+      if (!response.ok) {
+        throw new GoogleOAuthDiagnosticError(
+          "token_exchange",
+          "TOKEN_ENDPOINT_REJECTED",
+          response.status,
+        );
+      }
+      throw new GoogleOAuthDiagnosticError("token_exchange", "TOKEN_RESPONSE_INVALID");
     }
-    if (!response.ok || typeof payload.id_token !== "string" || !payload.id_token) {
-      throw serviceUnavailableError("Google ile giriş geçici olarak kullanılamıyor");
+    if (!response.ok) {
+      throw new GoogleOAuthDiagnosticError(
+        "token_exchange",
+        "TOKEN_ENDPOINT_REJECTED",
+        response.status,
+        typeof payload.error === "string" && SAFE_GOOGLE_PROVIDER_ERRORS.has(payload.error)
+          ? payload.error
+          : undefined,
+      );
+    }
+    if (typeof payload.id_token !== "string" || !payload.id_token) {
+      throw new GoogleOAuthDiagnosticError("token_exchange", "ID_TOKEN_MISSING");
     }
     return { idToken: payload.id_token, nonce: flow.nonce };
   }

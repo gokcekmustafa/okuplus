@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { FastifyRequest } from "fastify";
-import { GoogleOAuthClient } from "../src/modules/auth/google-oauth.js";
+import { GoogleOAuthClient, safeGoogleOAuthDiagnostic } from "../src/modules/auth/google-oauth.js";
 import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 
@@ -89,8 +89,74 @@ describe("Google web OAuth", () => {
         "one-time-code",
         state,
       ),
-    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    ).rejects.toMatchObject({
+      name: "GoogleOAuthDiagnosticError",
+      stage: "state_validation",
+      diagnosticCode: "STATE_COOKIE_INVALID",
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("classifies token endpoint rejection without retaining provider response contents", async () => {
+    const client = new GoogleOAuthClient({
+      clientId: "google-web-client.apps.googleusercontent.com",
+      clientSecret: "google-client-secret-value",
+      callbackUrl: CALLBACK_URL,
+      stateSecret: STATE_SECRET,
+      fetchImpl: vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ error: "invalid_client", error_description: "private detail" }),
+            { status: 401, headers: { "content-type": "application/json" } },
+          ),
+      ),
+    });
+    const flow = client.begin();
+    const state = new URL(flow.authorizationUrl).searchParams.get("state")!;
+    let failure: unknown;
+    try {
+      await client.exchangeCode(
+        requestWithCookie(`__Host-oku_google_oauth=${cookieValue(flow.stateCookie)}`),
+        "one-time-code",
+        state,
+      );
+    } catch (error) {
+      failure = error;
+    }
+
+    const diagnostic = safeGoogleOAuthDiagnostic(failure, "unused", false);
+    expect(diagnostic).toEqual({
+      stage: "token_exchange",
+      errorClass: "GoogleOAuthDiagnosticError",
+      errorCode: "TOKEN_ENDPOINT_REJECTED",
+      upstreamStatus: 401,
+      providerErrorCode: "invalid_client",
+      idTokenReceived: false,
+    });
+    expect(diagnostic.providerErrorCode).toBe("invalid_client");
+    expect(JSON.stringify(diagnostic)).not.toContain("private detail");
+    expect(JSON.stringify(diagnostic)).not.toContain("one-time-code");
+    expect(JSON.stringify(diagnostic)).not.toContain("google-client-secret-value");
+  });
+
+  it("never includes exception messages or unapproved error codes in safe diagnostics", () => {
+    const diagnostic = safeGoogleOAuthDiagnostic(
+      Object.assign(new Error("nonce, code, and secret must never be logged"), {
+        code: "attacker-controlled-sensitive-value",
+      }),
+      "social_auth_service",
+      true,
+    );
+
+    expect(diagnostic).toEqual({
+      stage: "social_auth_service",
+      errorClass: "UnknownError",
+      errorCode: "UNCLASSIFIED",
+      idTokenReceived: true,
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("nonce");
+    expect(JSON.stringify(diagnostic)).not.toContain("secret");
+    expect(JSON.stringify(diagnostic)).not.toContain("attacker-controlled");
   });
 
   it("exposes the configured route without touching the database", async () => {

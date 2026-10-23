@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
 import { timingSafeEqual } from "node:crypto";
 import type { AuthIdentityProvider } from "@prisma/client";
-import { serviceUnavailableError, unauthorizedError } from "../../lib/errors.js";
+import { ApiError, serviceUnavailableError } from "../../lib/errors.js";
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 const APPLE_ISSUER = "https://appleid.apple.com";
@@ -29,6 +29,36 @@ export interface OidcSocialTokenVerifierOptions {
   appleAudiences: string[];
   googleKey?: JWTVerifyGetKey;
   appleKey?: JWTVerifyGetKey;
+}
+
+export class SocialTokenVerificationError extends ApiError {
+  constructor(readonly diagnosticCode: string) {
+    super("UNAUTHORIZED", "Provider tokenı geçersiz", 401);
+    this.name = "SocialTokenVerificationError";
+  }
+}
+
+function safeJoseDiagnosticCode(error: unknown): string {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return "TOKEN_INVALID";
+  }
+
+  const code = (error as { code?: unknown }).code;
+  if (code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED") return "TOKEN_SIGNATURE_INVALID";
+  if (code === "ERR_JWKS_NO_MATCHING_KEY") return "SIGNING_KEY_NOT_FOUND";
+  if (code === "ERR_JWKS_FETCH_FAILED" || code === "ERR_JWKS_TIMEOUT") {
+    return "SIGNING_KEYS_UNAVAILABLE";
+  }
+  if (code === "ERR_JWT_EXPIRED") return "TOKEN_EXPIRED";
+  if (code === "ERR_JWT_CLAIM_VALIDATION_FAILED" && "claim" in error) {
+    const claim = (error as { claim?: unknown }).claim;
+    if (claim === "aud") return "TOKEN_AUDIENCE_INVALID";
+    if (claim === "iss") return "TOKEN_ISSUER_INVALID";
+    if (claim === "exp") return "TOKEN_EXPIRED";
+    if (claim === "nbf" || claim === "iat") return "TOKEN_NOT_YET_VALID";
+    if (claim === "nonce") return "TOKEN_NONCE_MISSING";
+  }
+  return "TOKEN_INVALID";
 }
 
 function booleanClaim(value: unknown): boolean {
@@ -78,8 +108,9 @@ export class OidcSocialTokenVerifier implements SocialTokenVerifier {
       throw serviceUnavailableError(`${provider} giriş yapılandırması eksik`);
     }
 
+    let payload: JWTPayload;
     try {
-      const { payload } = await jwtVerify(
+      const verified = await jwtVerify(
         idToken,
         provider === "GOOGLE" ? this.googleKey : this.appleKey,
         {
@@ -89,27 +120,7 @@ export class OidcSocialTokenVerifier implements SocialTokenVerifier {
           requiredClaims: ["sub", "iat", "exp", "nonce"],
         },
       );
-
-      if (!payload.sub || !nonceMatches(payload.nonce, expectedNonce)) {
-        throw unauthorizedError("Provider tokenı geçersiz");
-      }
-
-      const email = normalizedEmail(payload);
-      const emailVerified = booleanClaim(payload.email_verified);
-      const displayName =
-        typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : null;
-
-      return {
-        provider,
-        subject: payload.sub,
-        email,
-        emailVerified,
-        isPrivateEmail:
-          provider === "APPLE" &&
-          (booleanClaim(payload.is_private_email) ||
-            Boolean(email?.endsWith("@privaterelay.appleid.com"))),
-        displayName,
-      };
+      payload = verified.payload;
     } catch (error) {
       if (
         typeof error === "object" &&
@@ -119,8 +130,32 @@ export class OidcSocialTokenVerifier implements SocialTokenVerifier {
       ) {
         throw error;
       }
-      throw unauthorizedError("Provider tokenı geçersiz");
+      throw new SocialTokenVerificationError(safeJoseDiagnosticCode(error));
     }
+
+    if (!payload.sub) {
+      throw new SocialTokenVerificationError("TOKEN_SUBJECT_INVALID");
+    }
+    if (!nonceMatches(payload.nonce, expectedNonce)) {
+      throw new SocialTokenVerificationError("TOKEN_NONCE_MISMATCH");
+    }
+
+    const email = normalizedEmail(payload);
+    const emailVerified = booleanClaim(payload.email_verified);
+    const displayName =
+      typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : null;
+
+    return {
+      provider,
+      subject: payload.sub,
+      email,
+      emailVerified,
+      isPrivateEmail:
+        provider === "APPLE" &&
+        (booleanClaim(payload.is_private_email) ||
+          Boolean(email?.endsWith("@privaterelay.appleid.com"))),
+      displayName,
+    };
   }
 
   private audiences(provider: AuthIdentityProvider): string[] {
