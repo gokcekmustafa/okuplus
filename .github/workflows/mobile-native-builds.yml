@@ -150,13 +150,26 @@ jobs:
           package_name="$(printf '%s\n' "$badging" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
           version_name="$(printf '%s\n' "$badging" | sed -n "s/^package:.*versionName='\\([^']*\\)'.*/\\1/p" | head -n 1)"
           certificate="$("$apksigner" verify --print-certs "$APK_PATH" 2>&1)"
-          sha1="$(printf '%s\n' "$certificate" | sed -nE 's/^[[:space:]]*Signer #[0-9]+ certificate SHA-1 digest:[[:space:]]*([0-9A-Fa-f:]+)[[:space:]]*$/\1/Ip' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          sha1="$(printf '%s\n' "$certificate" | awk '
+            {
+              line = tolower($0)
+              if (line ~ /sha[- ]?1/ && line ~ /digest/) {
+                sub(/^.*digest[[:space:]]*:[[:space:]]*/, "", line)
+                gsub(/[^0-9a-f]/, "", line)
+                if (length(line) == 40) {
+                  print toupper(line)
+                  exit
+                }
+              }
+            }
+          ')"
           if [ "$package_name" != "com.okupratik.app" ]; then
             echo "::error::Unexpected Android package name in debug APK."
             exit 1
           fi
           if ! [[ "$sha1" =~ ^[0-9A-F]{40}$ ]]; then
-            echo "::error::Could not verify the Android debug APK signing certificate fingerprint."
+            sha1_lines="$(printf '%s\n' "$certificate" | grep -icE 'sha[- ]?1.*digest' || true)"
+            echo "::error::Could not verify the Android debug APK signing certificate fingerprint (SHA-1 digest line count: $sha1_lines)."
             exit 1
           fi
           {
