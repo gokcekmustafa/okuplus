@@ -362,7 +362,7 @@ describe.sequential("social auth + persistent session", () => {
     const failure = await captureDirectGoogleFailure(idToken);
     expect(failure).toBeInstanceOf(SocialAuthProvisioningDiagnosticError);
     expect(safeGoogleOAuthDiagnostic(failure, "unused", true)).toMatchObject({
-      errorCode: "PERSONAL_CONTEXT_USER_UNAVAILABLE",
+      errorCode: "PERSONAL_CONTEXT_ACCOUNT_INACTIVE",
       accountResolutionPath: "existing_provider_identity",
     });
 
@@ -393,7 +393,7 @@ describe.sequential("social auth + persistent session", () => {
     });
     const failure = await captureDirectGoogleFailure(idToken);
     expect(safeGoogleOAuthDiagnostic(failure, "unused", true)).toMatchObject({
-      errorCode: "PERSONAL_CONTEXT_USER_UNAVAILABLE",
+      errorCode: "PERSONAL_CONTEXT_ACCOUNT_DELETED",
       accountResolutionPath: "verified_email_match",
     });
 

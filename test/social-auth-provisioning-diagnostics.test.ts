@@ -5,7 +5,7 @@ import { withSocialAuthResolutionDiagnostic } from "../src/modules/auth/social-s
 import { provisionPersonalContextInTransaction } from "../src/modules/tenant/personal-service.js";
 
 function transactionWithUserLookup(
-  findFirst: () => Promise<{ id: string } | null>,
+  findFirst: () => Promise<{ id?: string; status?: string; deletedAt?: Date | null } | null>,
 ): Prisma.TransactionClient {
   return {
     $queryRaw: async () => [{ acquired: 1 }],
@@ -23,7 +23,7 @@ async function captureFailure(operation: Promise<unknown>): Promise<unknown> {
 }
 
 describe("social auth personal-context diagnostics", () => {
-  it("marks an empty active-user lookup with a safe resolution path", async () => {
+  it("does not confuse an absent or RLS-hidden user with a visible account state", async () => {
     const failure = await captureFailure(
       provisionPersonalContextInTransaction(
         transactionWithUserLookup(async () => null),
@@ -41,12 +41,37 @@ describe("social auth personal-context diagnostics", () => {
     expect(safeGoogleOAuthDiagnostic(diagnosticError, "unused", true)).toEqual({
       stage: "social_auth_service",
       errorClass: "SocialAuthProvisioningDiagnosticError",
-      errorCode: "PERSONAL_CONTEXT_USER_UNAVAILABLE",
+      errorCode: "PERSONAL_CONTEXT_USER_MISSING_OR_NOT_VISIBLE",
       accountResolutionPath: "verified_email_match",
       idTokenReceived: true,
     });
     expect(JSON.stringify(diagnosticError)).not.toContain("private-user-id");
   });
+
+  it.each([
+    ["inactive", { status: "SUSPENDED", deletedAt: null }, "PERSONAL_CONTEXT_ACCOUNT_INACTIVE"],
+    ["deleted", { status: "ACTIVE", deletedAt: new Date() }, "PERSONAL_CONTEXT_ACCOUNT_DELETED"],
+  ] as const)(
+    "classifies a visible %s account without exposing its identity",
+    async (_label, accountState, expectedCode) => {
+      let callCount = 0;
+      const failure = await captureFailure(
+        provisionPersonalContextInTransaction(
+          transactionWithUserLookup(async () => {
+            callCount += 1;
+            return callCount === 1 ? null : accountState;
+          }),
+          "private-user-id",
+        ),
+      );
+      const diagnosticError = withSocialAuthResolutionDiagnostic(failure, "verified_email_match");
+
+      expect(safeGoogleOAuthDiagnostic(diagnosticError, "unused", true).errorCode).toBe(
+        expectedCode,
+      );
+      expect(JSON.stringify(diagnosticError)).not.toContain("private-user-id");
+    },
+  );
 
   it("classifies a thrown database lookup separately and never exposes its message", async () => {
     const failure = await captureFailure(

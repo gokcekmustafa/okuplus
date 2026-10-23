@@ -3,18 +3,20 @@ import { prisma } from "../../lib/prisma.js";
 import { ApiError, conflictError } from "../../lib/errors.js";
 
 export type PersonalContextLookupDiagnosticCode =
-  "PERSONAL_CONTEXT_USER_UNAVAILABLE" | "PERSONAL_CONTEXT_USER_LOOKUP_FAILED";
+  | "PERSONAL_CONTEXT_USER_MISSING_OR_NOT_VISIBLE"
+  | "PERSONAL_CONTEXT_ACCOUNT_INACTIVE"
+  | "PERSONAL_CONTEXT_ACCOUNT_DELETED"
+  | "PERSONAL_CONTEXT_ACCOUNT_STATE_CHANGED"
+  | "PERSONAL_CONTEXT_USER_LOOKUP_FAILED";
 
 /** Fixed-label failure for the initial user lookup; never retains DB error text. */
 export class PersonalContextLookupError extends ApiError {
   constructor(readonly diagnosticCode: PersonalContextLookupDiagnosticCode) {
-    const userUnavailable = diagnosticCode === "PERSONAL_CONTEXT_USER_UNAVAILABLE";
+    const lookupFailed = diagnosticCode === "PERSONAL_CONTEXT_USER_LOOKUP_FAILED";
     super(
-      userUnavailable ? "NOT_FOUND" : "SERVICE_UNAVAILABLE",
-      userUnavailable
-        ? "Aktif kullanıcı bulunamadı"
-        : "Kişisel kullanıcı alanı şu anda hazırlanamadı",
-      userUnavailable ? 404 : 503,
+      lookupFailed ? "SERVICE_UNAVAILABLE" : "NOT_FOUND",
+      lookupFailed ? "Kişisel kullanıcı alanı şu anda hazırlanamadı" : "Aktif kullanıcı bulunamadı",
+      lookupFailed ? 503 : 404,
     );
     this.name = "PersonalContextLookupError";
   }
@@ -66,7 +68,30 @@ export async function provisionPersonalContextInTransaction(
     // diagnostic class for the caller and fail closed.
     throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_LOOKUP_FAILED");
   }
-  if (!user) throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_UNAVAILABLE");
+  if (!user) {
+    let accountState: { status: string; deletedAt: Date | null } | null;
+    try {
+      // Read only state flags to distinguish a visible inactive/deleted account
+      // from a row absent or hidden by the database role's RLS policy.
+      accountState = await tx.user.findFirst({
+        where: { id: userId },
+        select: { status: true, deletedAt: true },
+      });
+    } catch {
+      throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_LOOKUP_FAILED");
+    }
+
+    if (!accountState) {
+      throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_MISSING_OR_NOT_VISIBLE");
+    }
+    if (accountState.deletedAt !== null) {
+      throw new PersonalContextLookupError("PERSONAL_CONTEXT_ACCOUNT_DELETED");
+    }
+    if (accountState.status !== "ACTIVE") {
+      throw new PersonalContextLookupError("PERSONAL_CONTEXT_ACCOUNT_INACTIVE");
+    }
+    throw new PersonalContextLookupError("PERSONAL_CONTEXT_ACCOUNT_STATE_CHANGED");
+  }
 
   // Admin akışında daha önce farklı bir id ile kurulmuş personal tenant varsa
   // onu koru; ikinci tenant oluşturma.

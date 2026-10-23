@@ -24,11 +24,11 @@ export class SocialAuthProvisioningDiagnosticError extends ApiError {
     readonly diagnosticCode: PersonalContextLookupDiagnosticCode,
     readonly accountResolutionPath: SocialAuthResolutionPath,
   ) {
-    const userUnavailable = diagnosticCode === "PERSONAL_CONTEXT_USER_UNAVAILABLE";
+    const lookupFailed = diagnosticCode === "PERSONAL_CONTEXT_USER_LOOKUP_FAILED";
     super(
-      userUnavailable ? "UNAUTHORIZED" : "SERVICE_UNAVAILABLE",
+      lookupFailed ? "SERVICE_UNAVAILABLE" : "UNAUTHORIZED",
       "Sosyal giriş tamamlanamadı",
-      userUnavailable ? 401 : 503,
+      lookupFailed ? 503 : 401,
     );
     this.name = "SocialAuthProvisioningDiagnosticError";
   }
