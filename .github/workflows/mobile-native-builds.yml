@@ -29,8 +29,8 @@ concurrency:
 jobs:
   android:
     name: Android debug, instrumentation-test, and release validation
-    # Match the emulator image to the Apple Silicon runner to avoid x86 guest emulation.
-    runs-on: macos-15
+    # Intel macOS exposes Hypervisor.Framework; the standard Apple Silicon runner reports HV_UNSUPPORTED.
+    runs-on: macos-15-intel
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -61,6 +61,7 @@ jobs:
         run: npm run sync --prefix mobile
 
       - name: Build Android debug APK, instrumentation test APK, and unsigned release bundle
+        id: android-build
         working-directory: mobile/android
         run: |
           chmod +x gradlew
@@ -77,28 +78,9 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Android emulator hardware acceleration
-        run: |
-          "$ANDROID_HOME/emulator/emulator" -accel-check
-
-      - name: Run Secure Storage instrumentation test on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 20
-        with:
-          # API 34 + arm64-v8a + google_apis hits a known upstream AVD path bug on macOS.
-          # API 33 keeps the test on Android while avoiding that broken system-image lookup.
-          api-level: 33
-          target: google_apis
-          arch: arm64-v8a
-          force-avd-creation: true
-          emulator-boot-timeout: 180
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          disable-animations: true
-          script: |
-            ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain
-
       - name: Locate generated Android debug APK
         id: debug-apk
+        if: always() && steps.android-build.outcome == 'success'
         shell: bash
         run: |
           apk="$(find mobile/android/app/build/outputs -type f -name 'app-debug.apk' -print -quit 2>/dev/null || true)"
@@ -110,11 +92,31 @@ jobs:
           printf 'path=%s\n' "$apk" >> "$GITHUB_OUTPUT"
 
       - name: Upload Android debug APK
+        if: always() && steps.debug-apk.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: okupratik-android-debug-${{ github.sha }}
           path: ${{ steps.debug-apk.outputs.path }}
           if-no-files-found: error
+
+      - name: Verify Android emulator hardware acceleration
+        run: |
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+
+      - name: Run Secure Storage instrumentation test on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 20
+        with:
+          # The secure-storage test only needs the AOSP framework; Google APIs are not required.
+          api-level: 33
+          target: default
+          arch: x86_64
+          force-avd-creation: true
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain
 
   ios:
     name: iOS simulator build

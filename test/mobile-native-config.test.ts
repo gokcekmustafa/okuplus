@@ -100,15 +100,16 @@ describe("mobile native app identity", () => {
 
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
-    expect(workflow).toContain("runs-on: macos-15");
-    expect(workflow).toContain("Match the emulator image to the Apple Silicon runner");
+    expect(workflow).toContain("runs-on: macos-15-intel");
+    expect(workflow).toContain("Intel macOS exposes Hypervisor.Framework");
     expect(workflow).toContain("Verify Android emulator hardware acceleration");
     expect(workflow).not.toContain("/dev/kvm");
     expect(workflow).not.toContain("udevadm");
     expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
     expect(workflow).toContain("timeout-minutes: 20");
     expect(workflow).toContain("api-level: 33");
-    expect(workflow).toContain("arch: arm64-v8a");
+    expect(workflow).toContain("target: default");
+    expect(workflow).toContain("arch: x86_64");
     expect(workflow).toContain("force-avd-creation: true");
     expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(
@@ -119,6 +120,9 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("-name 'app-debug.apk'");
     expect(workflow).toContain("${{ steps.debug-apk.outputs.path }}");
     expect(workflow).toContain("no non-empty app-debug.apk was found");
+    expect(workflow.indexOf("Upload Android debug APK")).toBeLessThan(
+      workflow.indexOf("Run Secure Storage instrumentation test on Android emulator"),
+    );
   });
 
   it("ships branded square icons at the required native density sizes", () => {
