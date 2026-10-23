@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateCanonicalPlacementMigrationPolicy,
+  evaluateCycle5To8MigrationGate,
   type CanonicalPlacementMigrationPolicyInput,
 } from "../src/lib/canonical-placement-migration-policy.js";
 
@@ -182,5 +183,56 @@ describe("canonical placement migration history policy", () => {
         "UNRESOLVED_CHECKSUM_MISMATCH",
       ]),
     );
+  });
+});
+
+describe("Cycle 5–8 migration gate", () => {
+  it("allows only a read-only plan when target identity matches but migration policy needs review", () => {
+    const input = {
+      ...baseInput,
+      pendingMigrations: ["20261021150000_add_account_deletion_requests"],
+      repositoryOnlyMigrations: ["20261021150000_add_account_deletion_requests"],
+    };
+
+    const result = evaluateCycle5To8MigrationGate("PLAN_ONLY", input);
+
+    expect(result.allowed).toBe(true);
+    expect(result.migrationPolicyStatus).toBe("REVIEW_REQUIRED");
+    expect(result.pendingMigrations).toEqual(input.pendingMigrations);
+    expect(result.reasons).toEqual(
+      expect.arrayContaining(["REPOSITORY_ONLY_MIGRATION", "PENDING_MIGRATIONS_REMAIN"]),
+    );
+    expect(result.productionDbWrite).toBe("NO");
+  });
+
+  it("blocks APPLY under the same review-required migration policy", () => {
+    const result = evaluateCycle5To8MigrationGate("APPLY", {
+      ...baseInput,
+      pendingMigrations: ["20261021150000_add_account_deletion_requests"],
+      repositoryOnlyMigrations: ["20261021150000_add_account_deletion_requests"],
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.migrationPolicyStatus).toBe("REVIEW_REQUIRED");
+    expect(result.productionDbWrite).toBe("NO");
+  });
+
+  it("blocks both operations when the approved production target does not match", () => {
+    for (const operation of ["PLAN_ONLY", "APPLY"] as const) {
+      const result = evaluateCycle5To8MigrationGate(operation, {
+        ...baseInput,
+        targetIdentityMatch: false,
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.reasons).toContain("TARGET_IDENTITY_MISMATCH");
+    }
+  });
+
+  it("permits APPLY preflight only when the complete migration policy passes", () => {
+    const result = evaluateCycle5To8MigrationGate("APPLY", baseInput);
+
+    expect(result.allowed).toBe(true);
+    expect(result.migrationPolicyStatus).toBe("PASS");
+    expect(result.productionDbWrite).toBe("NO");
   });
 });

@@ -214,16 +214,93 @@ jobs:
           path: ${{ steps.instrumentation-apk.outputs.path }}
           if-no-files-found: error
 
-      - name: Report Android instrumentation runner requirement
-        if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL == '' || github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}
+  android-hosted-kvm-instrumentation:
+    name: Check hosted KVM and run Android Secure Storage round-trip when available
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      kvm_available: ${{ steps.kvm.outputs.available }}
+    steps:
+      - name: Download Android debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: okupratik-android-debug-${{ github.sha }}
+          path: mobile/android-test-inputs/app
+
+      - name: Download Android instrumentation APK
+        uses: actions/download-artifact@v4
+        with:
+          name: okupratik-android-instrumentation-${{ github.sha }}
+          path: mobile/android-test-inputs/instrumentation
+
+      - name: Set up Java for Android instrumentation
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools emulator system-images;android-30;aosp_atd;x86"
+
+      - name: Check GitHub-hosted Linux KVM capability
+        id: kvm
         shell: bash
+        env:
+          ANDROID_SECURE_STORAGE_RUNNER_LABEL: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}
         run: |
-          echo "NOT RUN: Android Secure Storage instrumentation requires repository variable ANDROID_SECURE_STORAGE_RUNNER_LABEL pointing to a Linux runner with working KVM, and runs only for trusted master push or master workflow_dispatch events. The native round-trip was not executed." >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ] && "$ANDROID_HOME/emulator/emulator" -accel-check >"$RUNNER_TEMP/kvm-check.log" 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "GITHUB_HOSTED_KVM=AVAILABLE; native Secure Storage test will run here" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            if [ -n "$ANDROID_SECURE_STORAGE_RUNNER_LABEL" ]; then
+              echo "GITHUB_HOSTED_KVM=UNAVAILABLE; configured self-hosted runner fallback will be used" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "GITHUB_HOSTED_KVM=UNAVAILABLE; native Secure Storage test=NOT_RUN; configure a real KVM-enabled runner before claiming round-trip coverage" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - name: Start Android Debug Bridge on hosted runner
+        if: steps.kvm.outputs.available == 'true'
+        run: adb start-server
+
+      - name: Run Secure Storage instrumentation test on GitHub-hosted KVM
+        if: steps.kvm.outputs.available == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 12
+        with:
+          api-level: 30
+          target: aosp_atd
+          arch: x86
+          channel: canary
+          cores: 2
+          force-avd-creation: true
+          emulator-boot-timeout: 180
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            app_apk="$GITHUB_WORKSPACE/mobile/android-test-inputs/app/app-debug.apk"
+            test_apk="$GITHUB_WORKSPACE/mobile/android-test-inputs/instrumentation/app-debug-androidTest.apk"
+            test -s "$app_apk"
+            test -s "$test_apk"
+            adb install -r "$app_apk"
+            adb install -r "$test_apk"
+            adb shell am instrument -w -r com.okupratik.app.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/android-instrumentation.log"
+            grep -Eq '^OK \([1-9][0-9]* tests?\)$' "$RUNNER_TEMP/android-instrumentation.log"
+            if grep -q '^FAILURES!!!$' "$RUNNER_TEMP/android-instrumentation.log"; then
+              exit 1
+            fi
 
   android-instrumentation:
     name: Android Secure Storage native round-trip
-    if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
-    needs: android
+    if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && needs.android-hosted-kvm-instrumentation.outputs.kvm_available != 'true' }}
+    needs: [android, android-hosted-kvm-instrumentation]
     runs-on: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}
     timeout-minutes: 30
     steps:

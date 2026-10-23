@@ -132,18 +132,18 @@ describe("mobile native app identity", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
     const iosJob = workflow.slice(workflow.indexOf("\n  ios:"));
     expect(workflow).toContain("runs-on: ubuntu-24.04");
+    expect(workflow).toContain("android-hosted-kvm-instrumentation:");
+    expect(workflow).toContain("Check GitHub-hosted Linux KVM capability");
+    expect(workflow).toContain("steps.kvm.outputs.available == 'true'");
+    expect(workflow).toContain("GITHUB_HOSTED_KVM=UNAVAILABLE");
     expect(workflow).toContain("android-instrumentation:");
     expect(workflow).toContain(
-      "if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}",
+      "if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && needs.android-hosted-kvm-instrumentation.outputs.kvm_available != 'true' }}",
     );
-    expect(workflow).toContain(
-      "if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL == '' || github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}",
-    );
-    expect(workflow).toContain("NOT RUN: Android Secure Storage instrumentation requires");
     expect(workflow).toContain("github.event_name != 'pull_request'");
     expect(workflow).toContain("github.ref == 'refs/heads/master'");
-    expect(workflow).toContain("trusted master push or master workflow_dispatch");
     expect(workflow).toContain("needs: android");
+    expect(workflow).toContain("needs: [android, android-hosted-kvm-instrumentation]");
     expect(workflow).toContain("runs-on: macos-14");
     expect(workflow).toContain("runs-on: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}");
     expect(workflow).toContain("Verify KVM before starting the emulator");

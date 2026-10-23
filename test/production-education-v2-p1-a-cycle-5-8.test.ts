@@ -401,6 +401,11 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("default: PLAN_ONLY");
     expect(workflow).toContain("production-migration");
+    expect(workflow).toContain("scripts/verify-cycle5-8-production-migration-gate.ts");
+    expect(workflow).toContain("CYCLE58_OPERATION: ${{ inputs.operation }}");
+    expect(workflow.indexOf("Revalidate production target and migration policy")).toBeLessThan(
+      workflow.indexOf("Run read-only plan for Cycle 5–8"),
+    );
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
     expect(workflow).toContain("secrets.NEON_API_KEY");
     expect(workflow).toContain("production_editorial_approval");

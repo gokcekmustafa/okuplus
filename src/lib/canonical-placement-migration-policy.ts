@@ -41,6 +41,20 @@ export type CanonicalPlacementMigrationPolicyResult = {
   pendingMigrations: readonly string[];
 };
 
+export type Cycle5To8MigrationOperation = "PLAN_ONLY" | "APPLY";
+
+export type Cycle5To8MigrationGateResult = {
+  allowed: boolean;
+  operation: Cycle5To8MigrationOperation;
+  migrationPolicyStatus: "PASS" | "REVIEW_REQUIRED";
+  targetIdentityMatch: boolean;
+  pendingMigrations: readonly string[];
+  repositoryOnlyMigrations: readonly string[];
+  productionOnlyMigrations: readonly string[];
+  reasons: readonly string[];
+  productionDbWrite: "NO";
+};
+
 const EXPECTED_ACHIEVEMENT_CATEGORIES = [
   "TRAINING",
   "READING",
@@ -155,5 +169,28 @@ export function evaluateCanonicalPlacementMigrationPolicy(
     targetApplied,
     targetHistoricalRollback,
     pendingMigrations: [...input.pendingMigrations],
+  };
+}
+
+/**
+ * A matching production target may be inspected by a read-only Cycle 5–8 plan
+ * even while migration history needs review. APPLY always retains the strict
+ * migration policy; this preflight itself never writes to production.
+ */
+export function evaluateCycle5To8MigrationGate(
+  operation: Cycle5To8MigrationOperation,
+  input: CanonicalPlacementMigrationPolicyInput,
+): Cycle5To8MigrationGateResult {
+  const policy = evaluateCanonicalPlacementMigrationPolicy(input);
+  return {
+    allowed: operation === "PLAN_ONLY" ? input.targetIdentityMatch : policy.allowed,
+    operation,
+    migrationPolicyStatus: policy.allowed ? "PASS" : "REVIEW_REQUIRED",
+    targetIdentityMatch: input.targetIdentityMatch,
+    pendingMigrations: [...input.pendingMigrations],
+    repositoryOnlyMigrations: [...input.repositoryOnlyMigrations],
+    productionOnlyMigrations: [...input.productionOnlyMigrations],
+    reasons: [...policy.reasons],
+    productionDbWrite: "NO",
   };
 }

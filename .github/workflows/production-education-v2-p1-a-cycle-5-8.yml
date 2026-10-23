@@ -163,9 +163,34 @@ jobs:
           migration_report_file="$RUNNER_TEMP/cycle5-8-production-migration-forensics.json"
           npx --no-install tsx scripts/production-migration-forensics.ts >"${migration_report_file}"
           cp "${migration_report_file}" cycle5-8-production-migration-forensics.json
+          migration_gate_report_file="$RUNNER_TEMP/cycle5-8-migration-gate.json"
           MIGRATION_FORENSICS_REPORT_FILE="${migration_report_file}" \
-            npx --no-install tsx scripts/verify-canonical-placement-migration-policy.ts
-          echo "PRODUCTION_MIGRATION_POLICY=PASS" >> "${GITHUB_STEP_SUMMARY}"
+          CYCLE58_OPERATION="${CYCLE58_OPERATION}" \
+            npx --no-install tsx scripts/verify-cycle5-8-production-migration-gate.ts \
+              >"${migration_gate_report_file}"
+          cat "${migration_gate_report_file}" >> "${GITHUB_STEP_SUMMARY}"
+          MIGRATION_GATE_REPORT="${migration_gate_report_file}" node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const report = JSON.parse(fs.readFileSync(process.env.MIGRATION_GATE_REPORT, "utf8"));
+            if (report.operation === "PLAN_ONLY" && report.decision === "READ_ONLY_PLAN_ALLOWED") {
+              console.log(`PLAN_ONLY_MIGRATION_POLICY=${report.migrationPolicyStatus}`);
+              console.log(`PENDING_MIGRATIONS=${report.pendingMigrations.join(",") || "NONE"}`);
+              console.log(`MIGRATION_POLICY_REASONS=${report.reasons.join(",") || "NONE"}`);
+              if (report.migrationPolicyStatus === "REVIEW_REQUIRED") {
+                fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+                  "\n**PLAN_ONLY note:** migration review is required; read-only curriculum planning continues. No write step is authorized.\n");
+              }
+            } else if (report.operation === "APPLY" && report.decision === "APPLY_PREFLIGHT_ALLOWED") {
+              console.log("APPLY_MIGRATION_POLICY=PASS");
+            } else {
+              process.exit(1);
+            }
+          '
+          if [ "${CYCLE58_OPERATION}" = "PLAN_ONLY" ]; then
+            echo "PLAN_ONLY_MIGRATION_PREFLIGHT=READ_ONLY_CONTINUES; APPLY_REMAINS_BLOCKED_UNLESS_POLICY_AND_SAME_RUN_PITR_PASS" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "PRODUCTION_MIGRATION_POLICY=PASS" >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       - name: Run read-only plan for Cycle 5–8
         shell: bash
