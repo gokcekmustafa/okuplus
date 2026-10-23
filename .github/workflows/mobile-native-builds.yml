@@ -91,6 +91,18 @@ jobs:
           fi
           printf 'path=%s\n' "$apk" >> "$GITHUB_OUTPUT"
 
+      - name: Locate generated Android instrumentation APK
+        id: instrumentation-apk
+        if: always() && steps.android-build.outcome == 'success'
+        shell: bash
+        run: |
+          apk="$(find mobile/android/app/build/outputs -type f -name 'app-debug-androidTest.apk' -print -quit 2>/dev/null || true)"
+          if [ -z "$apk" ] || [ ! -s "$apk" ]; then
+            echo "::error::Gradle completed but no non-empty app-debug-androidTest.apk was found."
+            exit 1
+          fi
+          printf 'path=%s\n' "$apk" >> "$GITHUB_OUTPUT"
+
       - name: Upload Android debug APK
         if: always() && steps.debug-apk.outcome == 'success'
         uses: actions/upload-artifact@v4
@@ -99,33 +111,73 @@ jobs:
           path: ${{ steps.debug-apk.outputs.path }}
           if-no-files-found: error
 
-      - name: Run Secure Storage instrumentation test on Android emulator
+      - name: Upload Android instrumentation APK
+        if: always() && steps.instrumentation-apk.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: okupratik-android-instrumentation-${{ github.sha }}
+          path: ${{ steps.instrumentation-apk.outputs.path }}
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator and Android instrumentation validation
+    needs: android
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Android debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: okupratik-android-debug-${{ github.sha }}
+          path: mobile/android-test-inputs/app
+
+      - name: Download Android instrumentation APK
+        uses: actions/download-artifact@v4
+        with:
+          name: okupratik-android-instrumentation-${{ github.sha }}
+          path: mobile/android-test-inputs/instrumentation
+
+      - name: Set up Java for Android instrumentation
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android platform tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+
+      - name: Run Secure Storage instrumentation test on accelerated macOS emulator
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 12
-        env:
-          ANDROID_I_WANT_MY_TCG: yes
         with:
-          # ATD images remove unrelated apps/services and reduce resource use for instrumentation tests.
+          # macos-14 is Apple Silicon; API 30 ATD provides an ARM64 image and uses Hypervisor.Framework.
           api-level: 30
           target: aosp_atd
-          arch: x86
+          arch: arm64-v8a
           channel: canary
           cores: 2
-          disable-linux-hw-accel: true
           force-avd-creation: true
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            ./mobile/android/gradlew -p mobile/android connectedDebugAndroidTest --no-daemon --console=plain
-
-  ios:
-    name: iOS simulator build
-    runs-on: macos-14
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            set -euo pipefail
+            app_apk="$GITHUB_WORKSPACE/mobile/android-test-inputs/app/app-debug.apk"
+            test_apk="$GITHUB_WORKSPACE/mobile/android-test-inputs/instrumentation/app-debug-androidTest.apk"
+            test -s "$app_apk"
+            test -s "$test_apk"
+            adb install -r "$app_apk"
+            adb install -r "$test_apk"
+            adb shell am instrument -w -r com.okupratik.app.test/androidx.test.runner.AndroidJUnitRunner | tee "$RUNNER_TEMP/android-instrumentation.log"
+            grep -Eq '^OK \([1-9][0-9]* tests?\)$' "$RUNNER_TEMP/android-instrumentation.log"
+            if grep -q '^FAILURES!!!$' "$RUNNER_TEMP/android-instrumentation.log"; then
+              exit 1
+            fi
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

@@ -125,17 +125,20 @@ describe("mobile native app identity", () => {
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
     expect(workflow).toContain("runs-on: ubuntu-24.04");
-    expect(workflow).toContain("Try bounded software emulation on the standard Linux runner");
-    expect(workflow).toContain("ANDROID_I_WANT_MY_TCG: yes");
+    expect(workflow).toContain("iOS simulator and Android instrumentation validation");
+    expect(workflow).toContain("needs: android");
+    expect(workflow).toContain("runs-on: macos-14");
+    expect(workflow).toContain("macos-14 is Apple Silicon; API 30 ATD provides an ARM64 image");
+    expect(workflow).not.toContain("ANDROID_I_WANT_MY_TCG");
     expect(workflow).not.toContain("/dev/kvm");
     expect(workflow).not.toContain("udevadm");
+    expect(workflow).not.toContain("disable-linux-hw-accel");
     expect(workflow).toContain("timeout-minutes: 12");
     expect(workflow).toContain("api-level: 30");
     expect(workflow).toContain("target: aosp_atd");
-    expect(workflow).toContain("arch: x86");
+    expect(workflow).toContain("arch: arm64-v8a");
     expect(workflow).toContain("channel: canary");
     expect(workflow).toContain("cores: 2");
-    expect(workflow).toContain("disable-linux-hw-accel: true");
     expect(workflow).toContain("force-avd-creation: true");
     expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(
@@ -145,9 +148,17 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("id: debug-apk");
     expect(workflow).toContain("-name 'app-debug.apk'");
     expect(workflow).toContain("${{ steps.debug-apk.outputs.path }}");
+    expect(workflow).toContain("name: okupratik-android-instrumentation-${{ github.sha }}");
+    expect(workflow).toContain("app-debug-androidTest.apk");
+    expect(workflow).toContain(
+      "adb shell am instrument -w -r com.okupratik.app.test/androidx.test.runner.AndroidJUnitRunner",
+    );
+    expect(workflow).toContain("grep -Eq");
+    expect(workflow).toContain("[1-9][0-9]* tests?");
+    expect(workflow).toContain("FAILURES!!!");
     expect(workflow).toContain("no non-empty app-debug.apk was found");
     expect(workflow.indexOf("Upload Android debug APK")).toBeLessThan(
-      workflow.indexOf("Run Secure Storage instrumentation test on Android emulator"),
+      workflow.indexOf("Run Secure Storage instrumentation test on accelerated macOS emulator"),
     );
   });
 
