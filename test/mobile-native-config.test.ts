@@ -99,9 +99,8 @@ describe("mobile native app identity", () => {
   });
 
   it("keeps SecureStorage native discovery and the real device round-trip test wired", () => {
-    const pluginManifest = JSON.parse(
-      read("../mobile/android/app/src/main/assets/capacitor.plugins.json"),
-    ) as Array<{ pkg: string; classpath: string }>;
+    const capacitorBuild = read("../mobile/android/app/capacitor.build.gradle");
+    const capacitorSettings = read("../mobile/android/capacitor.settings.gradle");
     const packageLock = JSON.parse(read("../mobile/package-lock.json")) as {
       packages: Record<string, { version?: string } | undefined>;
     };
@@ -109,10 +108,10 @@ describe("mobile native app identity", () => {
       "../mobile/android/app/src/androidTest/java/com/okupratik/app/SecureStorageInstrumentedTest.java",
     );
 
-    expect(pluginManifest).toContainEqual({
-      pkg: "@aparajita/capacitor-secure-storage",
-      classpath: "com.aparajita.capacitor.securestorage.SecureStorage",
-    });
+    expect(capacitorBuild).toContain(
+      "implementation project(':aparajita-capacitor-secure-storage')",
+    );
+    expect(capacitorSettings).toContain("include ':aparajita-capacitor-secure-storage'");
     expect(packageLock.packages["node_modules/@aparajita/capacitor-secure-storage"]?.version).toBe(
       "6.0.1",
     );
