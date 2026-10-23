@@ -101,7 +101,11 @@ describe("mobile native app identity", () => {
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
     expect(workflow).toContain("runs-on: ubuntu-22.04");
-    expect(workflow).toContain("Enable KVM for Android emulator");
+    expect(workflow).toContain("Install KVM device rule");
+    expect(workflow).toContain("Reload KVM device rules");
+    expect(workflow).toContain("Verify KVM device node");
+    expect(workflow).toContain("Verify KVM read and write access");
+    expect(workflow).toContain("Verify Android emulator acceleration");
     expect(workflow).toContain("test -c /dev/kvm");
     expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
     expect(workflow).toContain("timeout-minutes: 20");
