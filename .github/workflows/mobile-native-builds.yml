@@ -29,8 +29,8 @@ concurrency:
 jobs:
   android:
     name: Android debug, instrumentation-test, and release validation
-    # Intel macOS exposes Hypervisor.Framework; the standard Apple Silicon runner reports HV_UNSUPPORTED.
-    runs-on: macos-15-intel
+    # Try bounded software emulation on the standard Linux runner; no paid larger runner is assumed.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -99,13 +99,11 @@ jobs:
           path: ${{ steps.debug-apk.outputs.path }}
           if-no-files-found: error
 
-      - name: Verify Android emulator hardware acceleration
-        run: |
-          "$ANDROID_HOME/emulator/emulator" -accel-check
-
       - name: Run Secure Storage instrumentation test on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 20
+        timeout-minutes: 12
+        env:
+          ANDROID_I_WANT_MY_TCG: yes
         with:
           # ATD images remove unrelated apps/services and reduce resource use for instrumentation tests.
           api-level: 30
@@ -113,6 +111,7 @@ jobs:
           arch: x86
           channel: canary
           cores: 2
+          disable-linux-hw-accel: true
           force-avd-creation: true
           emulator-boot-timeout: 180
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim

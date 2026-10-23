@@ -100,18 +100,18 @@ describe("mobile native app identity", () => {
 
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
-    expect(workflow).toContain("runs-on: macos-15-intel");
-    expect(workflow).toContain("Intel macOS exposes Hypervisor.Framework");
-    expect(workflow).toContain("Verify Android emulator hardware acceleration");
+    expect(workflow).toContain("runs-on: ubuntu-24.04");
+    expect(workflow).toContain("Try bounded software emulation on the standard Linux runner");
+    expect(workflow).toContain("ANDROID_I_WANT_MY_TCG: yes");
     expect(workflow).not.toContain("/dev/kvm");
     expect(workflow).not.toContain("udevadm");
-    expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
-    expect(workflow).toContain("timeout-minutes: 20");
+    expect(workflow).toContain("timeout-minutes: 12");
     expect(workflow).toContain("api-level: 30");
     expect(workflow).toContain("target: aosp_atd");
     expect(workflow).toContain("arch: x86");
     expect(workflow).toContain("channel: canary");
     expect(workflow).toContain("cores: 2");
+    expect(workflow).toContain("disable-linux-hw-accel: true");
     expect(workflow).toContain("force-avd-creation: true");
     expect(workflow).toContain("emulator-boot-timeout: 180");
     expect(workflow).toContain(
