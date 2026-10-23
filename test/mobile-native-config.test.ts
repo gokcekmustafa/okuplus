@@ -124,21 +124,34 @@ describe("mobile native app identity", () => {
 
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
+    const iosJob = workflow.slice(workflow.indexOf("\n  ios:"));
     expect(workflow).toContain("runs-on: ubuntu-24.04");
-    expect(workflow).toContain("iOS simulator and Android instrumentation validation");
+    expect(workflow).toContain("android-instrumentation:");
+    expect(workflow).toContain(
+      "if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}",
+    );
+    expect(workflow).toContain(
+      "if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL == '' || github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}",
+    );
+    expect(workflow).toContain("NOT RUN: Android Secure Storage instrumentation requires");
+    expect(workflow).toContain("github.event_name != 'pull_request'");
+    expect(workflow).toContain("github.ref == 'refs/heads/master'");
+    expect(workflow).toContain("trusted master push or master workflow_dispatch");
     expect(workflow).toContain("needs: android");
     expect(workflow).toContain("runs-on: macos-14");
-    expect(workflow).toContain("macos-14 is Apple Silicon; API 30 ATD provides an ARM64 image");
-    expect(workflow).toContain("Start Android Debug Bridge before emulator launch");
+    expect(workflow).toContain("runs-on: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}");
+    expect(workflow).toContain("Verify KVM before starting the emulator");
+    expect(workflow).toContain("test -r /dev/kvm && test -w /dev/kvm");
+    expect(workflow).toContain('"$ANDROID_HOME/emulator/emulator" -accel-check');
+    expect(workflow).toContain("Start Android Debug Bridge");
     expect(workflow).toContain("run: adb start-server");
     expect(workflow).not.toContain("ANDROID_I_WANT_MY_TCG");
-    expect(workflow).not.toContain("/dev/kvm");
     expect(workflow).not.toContain("udevadm");
     expect(workflow).not.toContain("disable-linux-hw-accel");
     expect(workflow).toContain("timeout-minutes: 12");
     expect(workflow).toContain("api-level: 30");
     expect(workflow).toContain("target: aosp_atd");
-    expect(workflow).toContain("arch: arm64-v8a");
+    expect(workflow).toContain("arch: x86");
     expect(workflow).toContain("channel: canary");
     expect(workflow).toContain("cores: 2");
     expect(workflow).toContain("force-avd-creation: true");
@@ -159,8 +172,10 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("[1-9][0-9]* tests?");
     expect(workflow).toContain("FAILURES!!!");
     expect(workflow).toContain("no non-empty app-debug.apk was found");
+    expect(iosJob).toContain("name: iOS simulator build");
+    expect(iosJob).not.toContain("needs: android");
     expect(workflow.indexOf("Upload Android debug APK")).toBeLessThan(
-      workflow.indexOf("Run Secure Storage instrumentation test on accelerated macOS emulator"),
+      workflow.indexOf("Run Secure Storage instrumentation test on KVM emulator"),
     );
   });
 

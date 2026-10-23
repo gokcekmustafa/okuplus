@@ -28,8 +28,8 @@ concurrency:
 
 jobs:
   android:
-    name: Android debug, instrumentation-test, and release validation
-    # Try bounded software emulation on the standard Linux runner; no paid larger runner is assumed.
+    name: Android APK and unsigned release validation
+    # Build APKs on the standard hosted runner; native instrumentation requires an explicitly configured KVM runner.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -119,15 +119,19 @@ jobs:
           path: ${{ steps.instrumentation-apk.outputs.path }}
           if-no-files-found: error
 
-  ios:
-    name: iOS simulator and Android instrumentation validation
-    needs: android
-    runs-on: macos-14
-    timeout-minutes: 45
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Report Android instrumentation runner requirement
+        if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL == '' || github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}
+        shell: bash
+        run: |
+          echo "NOT RUN: Android Secure Storage instrumentation requires repository variable ANDROID_SECURE_STORAGE_RUNNER_LABEL pointing to a Linux runner with working KVM, and runs only for trusted master push or master workflow_dispatch events. The native round-trip was not executed." >> "$GITHUB_STEP_SUMMARY"
 
+  android-instrumentation:
+    name: Android Secure Storage native round-trip
+    if: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL != '' && github.event_name != 'pull_request' && github.ref == 'refs/heads/master' }}
+    needs: android
+    runs-on: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}
+    timeout-minutes: 30
+    steps:
       - name: Download Android debug APK
         uses: actions/download-artifact@v4
         with:
@@ -146,22 +150,27 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android platform tools
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools"
+          packages: "platform-tools emulator system-images;android-30;aosp_atd;x86"
 
-      - name: Start Android Debug Bridge before emulator launch
+      - name: Verify KVM before starting the emulator
+        shell: bash
+        run: |
+          test -r /dev/kvm && test -w /dev/kvm || { echo "::error::The configured runner does not provide usable /dev/kvm; instrumentation was not started."; exit 1; }
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+
+      - name: Start Android Debug Bridge
         run: adb start-server
 
-      - name: Run Secure Storage instrumentation test on accelerated macOS emulator
+      - name: Run Secure Storage instrumentation test on KVM emulator
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 12
         with:
-          # macos-14 is Apple Silicon; API 30 ATD provides an ARM64 image and uses Hypervisor.Framework.
           api-level: 30
           target: aosp_atd
-          arch: arm64-v8a
+          arch: x86
           channel: canary
           cores: 2
           force-avd-creation: true
@@ -181,6 +190,14 @@ jobs:
             if grep -q '^FAILURES!!!$' "$RUNNER_TEMP/android-instrumentation.log"; then
               exit 1
             fi
+
+  ios:
+    name: iOS simulator build
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
