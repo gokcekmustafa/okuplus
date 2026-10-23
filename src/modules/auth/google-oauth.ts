@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { serviceUnavailableError, unauthorizedError } from "../../lib/errors.js";
 import { GOOGLE_OAUTH_STATE_COOKIE_NAME, googleOAuthStateCookie, getCookie } from "./cookies.js";
+import { SocialAuthProvisioningDiagnosticError } from "./social-service.js";
 import type { FastifyRequest } from "fastify";
 
 const GOOGLE_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -94,10 +95,21 @@ export function safeGoogleOAuthDiagnostic(
   stage: string;
   errorClass: string;
   errorCode: string;
+  accountResolutionPath?: string;
   upstreamStatus?: number;
   providerErrorCode?: string;
   idTokenReceived: boolean;
 } {
+  if (error instanceof SocialAuthProvisioningDiagnosticError) {
+    return {
+      stage: "social_auth_service",
+      errorClass: "SocialAuthProvisioningDiagnosticError",
+      errorCode: error.diagnosticCode,
+      accountResolutionPath: error.accountResolutionPath,
+      idTokenReceived,
+    };
+  }
+
   if (error instanceof GoogleOAuthDiagnosticError) {
     return {
       stage:

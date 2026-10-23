@@ -308,8 +308,20 @@ export async function authRoutes(
   app.post<{ Body: SocialCredentialInput & SessionMetadata }>(
     "/auth/social/google",
     { schema: { body: socialBodySchema }, preHandler: authOriginPreHandler },
-    async (request, reply) =>
-      sendSession(request, reply, await socialLogin("GOOGLE", request.body)),
+    async (request, reply) => {
+      try {
+        return sendSession(request, reply, await socialLogin("GOOGLE", request.body));
+      } catch (error) {
+        request.log.warn(
+          {
+            event: "google_social_login_failed",
+            ...safeGoogleOAuthDiagnostic(error, "social_auth_service", true),
+          },
+          "Google social login failed",
+        );
+        throw error;
+      }
+    },
   );
 
   app.post<{ Body: SocialCredentialInput & SessionMetadata }>(

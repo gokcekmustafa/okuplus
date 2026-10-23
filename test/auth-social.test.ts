@@ -12,6 +12,11 @@ import { prisma } from "../src/lib/prisma.js";
 import { buildApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 import { OidcSocialTokenVerifier } from "../src/modules/auth/index.js";
+import { safeGoogleOAuthDiagnostic } from "../src/modules/auth/google-oauth.js";
+import {
+  SocialAuthProvisioningDiagnosticError,
+  SocialAuthService,
+} from "../src/modules/auth/social-service.js";
 
 const GOOGLE_AUD = "oku-google-test-client";
 const APPLE_AUD = "com.okuplus.test";
@@ -76,6 +81,20 @@ async function social(provider: Provider, idToken: string, nonce = NONCE) {
   });
 }
 
+async function captureDirectGoogleFailure(idToken: string): Promise<unknown> {
+  const service = new SocialAuthService(socialVerifier, {
+    startSession: async () => {
+      throw new Error("A failing provisioning path must not start a session");
+    },
+  } as never);
+  try {
+    await service.login("GOOGLE", { idToken, nonce: NONCE }, { platform: "WEB" });
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected Google login to fail for an unavailable account");
+}
+
 async function cleanup(): Promise<void> {
   const users = await prisma.user.findMany({
     where: {
@@ -95,6 +114,7 @@ async function cleanup(): Promise<void> {
   await prisma.pointEvent.deleteMany({ where: { studentId: { in: userIds } } });
   await prisma.studentStreak.deleteMany({ where: { studentId: { in: userIds } } });
   await prisma.studentProgress.deleteMany({ where: { studentId: { in: userIds } } });
+  await prisma.skill.deleteMany({ where: { code: { startsWith: "stage8b-" } } });
   await prisma.assessmentResult.deleteMany({ where: { studentId: { in: userIds } } });
   await prisma.attempt.deleteMany({ where: { session: { studentId: { in: userIds } } } });
   await prisma.sessionContentVersion.deleteMany({
@@ -260,6 +280,35 @@ describe.sequential("social auth + persistent session", () => {
       },
     });
     const existingUserId = signup.json().data.user.id;
+    const personalMembership = await prisma.membership.findFirstOrThrow({
+      where: {
+        userId: existingUserId,
+        role: "STUDENT",
+        tenant: { type: "INDIVIDUAL" },
+      },
+      select: { tenantId: true },
+    });
+    const progressSkill = await prisma.skill.create({
+      data: {
+        code: "stage8b-google-existing-progress",
+        name: "Google linking progress test",
+        category: "MAIN_IDEA",
+      },
+    });
+    const periodStart = new Date("2026-01-05T00:00:00.000Z");
+    const periodEnd = new Date("2026-01-11T23:59:59.999Z");
+    const progress = await prisma.studentProgress.create({
+      data: {
+        tenantId: personalMembership.tenantId,
+        studentId: existingUserId,
+        skillId: progressSkill.id,
+        periodStart,
+        periodEnd,
+        sessionCount: 3,
+        attemptCount: 5,
+        correctCount: 4,
+      },
+    });
     const response = await social(
       "GOOGLE",
       await token("GOOGLE", {
@@ -276,6 +325,87 @@ describe.sequential("social auth + persistent session", () => {
       }),
     ).toBe(1);
     expect(await prisma.studentProfile.count({ where: { studentId: existingUserId } })).toBe(1);
+    expect(
+      await prisma.studentProgress.findUniqueOrThrow({ where: { id: progress.id } }),
+    ).toMatchObject({ sessionCount: 3, attemptCount: 5, correctCount: 4 });
+
+    const passwordLogin = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: EMAIL_GOOGLE_EXISTING, password: PASSWORD },
+    });
+    expect(passwordLogin.statusCode).toBe(200);
+    expect(passwordLogin.json().data.user.id).toBe(existingUserId);
+  });
+
+  it("mevcut Google kimliği pasif hesaba bağlıysa güvenli tanı üretir ve yeni hesap açmaz", async () => {
+    const email = "stage8b-suspended-google@example.com";
+    const subject = "stage8b-suspended-google-subject";
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { email, password: PASSWORD, displayName: "Suspended Google User" },
+    });
+    const userId = signup.json().data.user.id as string;
+    await prisma.authIdentity.create({
+      data: {
+        userId,
+        provider: "GOOGLE",
+        subject,
+        providerEmail: email,
+        emailVerified: true,
+      },
+    });
+    await prisma.user.update({ where: { id: userId }, data: { status: "SUSPENDED" } });
+
+    const idToken = await token("GOOGLE", { subject, email });
+    const failure = await captureDirectGoogleFailure(idToken);
+    expect(failure).toBeInstanceOf(SocialAuthProvisioningDiagnosticError);
+    expect(safeGoogleOAuthDiagnostic(failure, "unused", true)).toMatchObject({
+      errorCode: "PERSONAL_CONTEXT_USER_UNAVAILABLE",
+      accountResolutionPath: "existing_provider_identity",
+    });
+
+    const response = await social("GOOGLE", idToken);
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toMatchObject({
+      code: "UNAUTHORIZED",
+      message: "Sosyal giriş tamamlanamadı",
+    });
+    expect(response.json().error.message).not.toContain(email);
+    expect(await prisma.user.count({ where: { email } })).toBe(1);
+    expect(await prisma.authIdentity.count({ where: { userId, provider: "GOOGLE" } })).toBe(1);
+  });
+
+  it("doğrulanmış e-posta silinmiş hesaba denk gelirse yeni hesap oluşturmadan ayırt eder", async () => {
+    const email = "stage8b-deleted-google@example.com";
+    const signup = await app.inject({
+      method: "POST",
+      url: "/auth/signup",
+      payload: { email, password: PASSWORD, displayName: "Deleted Google User" },
+    });
+    const userId = signup.json().data.user.id as string;
+    await prisma.user.update({ where: { id: userId }, data: { deletedAt: new Date() } });
+
+    const idToken = await token("GOOGLE", {
+      subject: "stage8b-deleted-google-subject",
+      email,
+    });
+    const failure = await captureDirectGoogleFailure(idToken);
+    expect(safeGoogleOAuthDiagnostic(failure, "unused", true)).toMatchObject({
+      errorCode: "PERSONAL_CONTEXT_USER_UNAVAILABLE",
+      accountResolutionPath: "verified_email_match",
+    });
+
+    const response = await social("GOOGLE", idToken);
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).not.toContain(email);
+    expect(await prisma.user.count({ where: { email } })).toBe(1);
+    expect(
+      await prisma.authIdentity.count({
+        where: { provider: "GOOGLE", subject: "stage8b-deleted-google-subject" },
+      }),
+    ).toBe(0);
   });
 
   it("9. son login methodu unlink edilemez", async () => {

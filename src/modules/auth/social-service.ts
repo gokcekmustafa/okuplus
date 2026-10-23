@@ -1,7 +1,11 @@
 import { Prisma, type AuthIdentityProvider } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { conflictError, notFoundError } from "../../lib/errors.js";
-import { provisionPersonalContextInTransaction } from "../tenant/personal-service.js";
+import { ApiError, conflictError, notFoundError } from "../../lib/errors.js";
+import {
+  PersonalContextLookupError,
+  provisionPersonalContextInTransaction,
+  type PersonalContextLookupDiagnosticCode,
+} from "../tenant/personal-service.js";
 import type { AuthProvider, AuthSession, SessionMetadata } from "./types.js";
 import type { SocialTokenVerifier, VerifiedSocialIdentity } from "./social-verifier.js";
 
@@ -9,6 +13,46 @@ export interface SocialCredentialInput {
   idToken: string;
   nonce: string;
   displayName?: string | null;
+}
+
+export type SocialAuthResolutionPath =
+  "existing_provider_identity" | "verified_email_match" | "new_user";
+
+/** Generic client error plus fixed internal diagnostics; contains no account identifiers. */
+export class SocialAuthProvisioningDiagnosticError extends ApiError {
+  constructor(
+    readonly diagnosticCode: PersonalContextLookupDiagnosticCode,
+    readonly accountResolutionPath: SocialAuthResolutionPath,
+  ) {
+    const userUnavailable = diagnosticCode === "PERSONAL_CONTEXT_USER_UNAVAILABLE";
+    super(
+      userUnavailable ? "UNAUTHORIZED" : "SERVICE_UNAVAILABLE",
+      "Sosyal giriş tamamlanamadı",
+      userUnavailable ? 401 : 503,
+    );
+    this.name = "SocialAuthProvisioningDiagnosticError";
+  }
+}
+
+export function withSocialAuthResolutionDiagnostic(
+  error: unknown,
+  accountResolutionPath: SocialAuthResolutionPath,
+): unknown {
+  return error instanceof PersonalContextLookupError
+    ? new SocialAuthProvisioningDiagnosticError(error.diagnosticCode, accountResolutionPath)
+    : error;
+}
+
+async function provisionSocialLoginContext(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  accountResolutionPath: SocialAuthResolutionPath,
+) {
+  try {
+    return await provisionPersonalContextInTransaction(tx, userId);
+  } catch (error) {
+    throw withSocialAuthResolutionDiagnostic(error, accountResolutionPath);
+  }
 }
 
 function safeDisplayName(input: SocialCredentialInput, identity: VerifiedSocialIdentity): string {
@@ -51,7 +95,7 @@ export class SocialAuthService {
             lastUsedAt: new Date(),
           },
         });
-        await provisionPersonalContextInTransaction(tx, existing.userId);
+        await provisionSocialLoginContext(tx, existing.userId, "existing_provider_identity");
       });
       return this.authProvider.startSession(existing.userId, null, metadata);
     }
@@ -62,7 +106,7 @@ export class SocialAuthService {
         if (provider === "GOOGLE" && verified.emailVerified) {
           try {
             await prisma.$transaction(async (tx) => {
-              await provisionPersonalContextInTransaction(tx, collision.id);
+              await provisionSocialLoginContext(tx, collision.id, "verified_email_match");
               await tx.authIdentity.create({
                 data: {
                   userId: collision.id,
@@ -100,7 +144,7 @@ export class SocialAuthService {
           },
           select: { id: true },
         });
-        await provisionPersonalContextInTransaction(tx, user.id);
+        await provisionSocialLoginContext(tx, user.id, "new_user");
         await tx.authIdentity.create({
           data: {
             userId: user.id,

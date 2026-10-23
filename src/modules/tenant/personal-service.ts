@@ -1,6 +1,24 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { conflictError, notFoundError } from "../../lib/errors.js";
+import { ApiError, conflictError } from "../../lib/errors.js";
+
+export type PersonalContextLookupDiagnosticCode =
+  "PERSONAL_CONTEXT_USER_UNAVAILABLE" | "PERSONAL_CONTEXT_USER_LOOKUP_FAILED";
+
+/** Fixed-label failure for the initial user lookup; never retains DB error text. */
+export class PersonalContextLookupError extends ApiError {
+  constructor(readonly diagnosticCode: PersonalContextLookupDiagnosticCode) {
+    const userUnavailable = diagnosticCode === "PERSONAL_CONTEXT_USER_UNAVAILABLE";
+    super(
+      userUnavailable ? "NOT_FOUND" : "SERVICE_UNAVAILABLE",
+      userUnavailable
+        ? "Aktif kullanıcı bulunamadı"
+        : "Kişisel kullanıcı alanı şu anda hazırlanamadı",
+      userUnavailable ? 404 : 503,
+    );
+    this.name = "PersonalContextLookupError";
+  }
+}
 
 export interface PersonalContext {
   userId: string;
@@ -37,11 +55,18 @@ export async function provisionPersonalContextInTransaction(
     FROM pg_advisory_xact_lock(hashtextextended(${`personal-context:${userId}`}, 0))
   `;
 
-  const user = await tx.user.findFirst({
-    where: { id: userId, deletedAt: null, status: "ACTIVE" },
-    select: { id: true },
-  });
-  if (!user) throw notFoundError("Aktif kullanıcı bulunamadı");
+  let user: { id: string } | null;
+  try {
+    user = await tx.user.findFirst({
+      where: { id: userId, deletedAt: null, status: "ACTIVE" },
+      select: { id: true },
+    });
+  } catch {
+    // DB error text may contain SQL or connection details; keep only a fixed
+    // diagnostic class for the caller and fail closed.
+    throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_LOOKUP_FAILED");
+  }
+  if (!user) throw new PersonalContextLookupError("PERSONAL_CONTEXT_USER_UNAVAILABLE");
 
   // Admin akışında daha önce farklı bir id ile kurulmuş personal tenant varsa
   // onu koru; ikinci tenant oluşturma.
