@@ -242,6 +242,19 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     }
   });
 
+  it("keeps the Cycle 5 route question within the passage's stated evidence", () => {
+    const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8.find((cycle) => cycle.sequence === 5)!;
+    const station = cycle5.sourceCycle.sourceStations.find(
+      (item) => item.category === "COMMON_STRATEGIES",
+    )!;
+    const question = station.questions.find((item) => item.key === "a5-strategy-3")!;
+
+    expect(question.prompt).toBe("Ziyaretçiler metne göre nereden güvenle geçebildi?");
+    expect(question.correct).toBe("Güzergâhın açık bölümünden");
+    expect(station.text).toContain("ziyaretçiler açık bölümden güvenle geçebildi");
+    expect(question.explanation).not.toContain("onarım alanının dışı");
+  });
+
   it("rejects missing/incomplete source and makes plan, repeat, create, and conflict actions explicit", () => {
     const cycle5 = EDUCATION_V2_P1_A_CYCLE_5_8[0]!;
     expect(isCompleteEducationV2P1ACycle5To8Source(undefined, 5)).toBe(false);
