@@ -1,52 +1,56 @@
-const SECURE_STORAGE_PREFIX = "capacitor-storage_";
-
 function secureStorageUnavailable() {
   return Object.assign(new Error("Native secure storage is unavailable"), {
     code: "SECURE_STORAGE_UNAVAILABLE",
   });
 }
 
+export function detectNativeMobileRuntime(runtimeConfig = {}, environment = globalThis) {
+  return (
+    runtimeConfig.nativeMobile === true ||
+    environment?.Capacitor?.isNativePlatform?.() === true ||
+    Boolean(environment?.androidBridge) ||
+    Boolean(environment?.webkit?.messageHandlers?.bridge)
+  );
+}
+
+export function detectNativeMobilePlatform(runtimeConfig = {}, environment = globalThis) {
+  const platform = runtimeConfig.platform ?? environment?.Capacitor?.getPlatform?.();
+  if (platform === "android" || platform === "ios") return platform;
+  if (environment?.androidBridge) return "android";
+  if (environment?.webkit?.messageHandlers?.bridge) return "ios";
+  return runtimeConfig.nativeMobile === true ? "unknown" : "web";
+}
+
 /**
- * The upstream SecureStorage package maps its public methods to these native
- * methods. Capacitor's bare registerPlugin proxy does not include that mapper.
+ * Accept the upstream package's public adapter. It owns the native method
+ * mapping, key prefix, synchronization, and platform-specific storage options.
  */
-export function createSecureStorageBridge(nativePlugin) {
+export function createSecureStorageBridge(secureStorageAdapter) {
   if (
-    !nativePlugin ||
-    typeof nativePlugin.internalGetItem !== "function" ||
-    typeof nativePlugin.internalSetItem !== "function" ||
-    typeof nativePlugin.internalRemoveItem !== "function"
+    !secureStorageAdapter ||
+    typeof secureStorageAdapter.getItem !== "function" ||
+    typeof secureStorageAdapter.setItem !== "function" ||
+    typeof secureStorageAdapter.removeItem !== "function"
   ) {
     return null;
   }
 
-  const prefixedKey = (key) => {
+  const validKey = (key) => {
     if (typeof key !== "string" || !key) throw secureStorageUnavailable();
-    return SECURE_STORAGE_PREFIX + key;
+    return key;
   };
 
   return Object.freeze({
     async getItem(key) {
-      const result = await nativePlugin.internalGetItem({
-        prefixedKey: prefixedKey(key),
-        sync: false,
-      });
-      return typeof result?.data === "string" ? result.data : null;
+      const result = await secureStorageAdapter.getItem(validKey(key));
+      return typeof result === "string" ? result : null;
     },
     async setItem(key, value) {
       if (typeof value !== "string") throw secureStorageUnavailable();
-      await nativePlugin.internalSetItem({
-        prefixedKey: prefixedKey(key),
-        data: value,
-        sync: false,
-        access: 0,
-      });
+      await secureStorageAdapter.setItem(validKey(key), value);
     },
     async remove(key) {
-      await nativePlugin.internalRemoveItem({
-        prefixedKey: prefixedKey(key),
-        sync: false,
-      });
+      await secureStorageAdapter.removeItem(validKey(key));
     },
   });
 }

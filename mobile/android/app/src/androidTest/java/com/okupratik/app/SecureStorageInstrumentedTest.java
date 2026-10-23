@@ -50,30 +50,29 @@ public class SecureStorageInstrumentedTest {
             }
             assertTrue("App WebView did not finish loading", progress >= 100);
 
-            deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15);
-            String readiness = "";
-            while (System.currentTimeMillis() < deadline) {
-                readiness = evaluate(scenario,
-                        "(() => { const plugin = window.__OKUPRATIK_RUNTIME__?.secureStorageNativePlugin; "
-                                + "return typeof plugin?.internalSetItem === 'function' "
-                                + "&& typeof plugin?.internalGetItem === 'function' "
-                                + "&& typeof plugin?.internalRemoveItem === 'function' ? 'READY' : 'NOT_READY'; })()");
-                if ("READY".equals(readiness)) break;
-                Thread.sleep(250);
-            }
+            String readiness = evaluate(scenario,
+                    "(() => { const capacitor = window.Capacitor; "
+                            + "const plugin = window.__OKUPRATIK_RUNTIME__?.secureStorageNativePlugin; "
+                            + "const header = capacitor?.PluginHeaders?.find(item => item.name === 'SecureStorage'); "
+                            + "const methods = new Set((header?.methods || []).map(item => item.name)); "
+                            + "if (!capacitor?.isNativePlatform?.() || capacitor.getPlatform?.() !== 'android') return 'NOT_READY:CAPACITOR_CORE'; "
+                            + "if (!['internalSetItem','internalGetItem','internalRemoveItem'].every(name => methods.has(name))) return 'NOT_READY:NATIVE_PLUGIN_HEADER'; "
+                            + "return plugin && ['setItem','getItem','removeItem'].every(name => typeof plugin[name] === 'function') ? 'READY' : 'NOT_READY:PACKAGE_ADAPTER'; })()");
             assertEquals("Secure Storage plugin was not registered in the app runtime", "READY", readiness);
 
-            String key = "capacitor-storage_okupratik.instrumentation." + UUID.randomUUID();
+            String key = "okupratik.instrumentation." + UUID.randomUUID();
             String value = "round-trip-" + UUID.randomUUID();
             String script = "window.__OKUPRATIK_SECURE_STORAGE_RESULT__ = 'PENDING'; "
                     + "(async () => { const plugin = window.__OKUPRATIK_RUNTIME__.secureStorageNativePlugin; "
-                    + "const prefixedKey = '" + key + "'; const data = '" + value + "'; "
-                    + "try { await plugin.internalSetItem({ prefixedKey, data, sync: false, access: 0 }); "
-                    + "const stored = await plugin.internalGetItem({ prefixedKey, sync: false }); "
-                    + "if (stored?.data !== data) return 'READ_MISMATCH'; "
-                    + "await plugin.internalRemoveItem({ prefixedKey, sync: false }); return 'PASS'; "
-                    + "} catch (error) { try { await plugin.internalRemoveItem({ prefixedKey, sync: false }); } catch (_) {} "
-                    + "const code = typeof error?.code === 'string' && /^[A-Z_]{1,40}$/.test(error.code) "
+                    + "const key = " + org.json.JSONObject.quote(key) + "; const value = " + org.json.JSONObject.quote(value) + "; "
+                    + "try { await plugin.setItem(key, value); "
+                    + "const stored = await plugin.getItem(key); "
+                    + "if (stored !== value) return 'READ_MISMATCH'; "
+                    + "await plugin.removeItem(key); "
+                    + "const afterRemoval = await plugin.getItem(key); "
+                    + "return afterRemoval === null ? 'PASS' : 'DELETE_MISMATCH'; "
+                    + "} catch (error) { try { await plugin.removeItem(key); } catch (_) {} "
+                    + "const code = typeof error?.code === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(error.code) "
                     + "? error.code : 'UNKNOWN'; return 'NATIVE_ERROR:' + code; } })() "
                     + ".then(result => { window.__OKUPRATIK_SECURE_STORAGE_RESULT__ = result; }); 'STARTED';";
 

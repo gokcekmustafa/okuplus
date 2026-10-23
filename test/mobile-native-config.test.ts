@@ -98,6 +98,31 @@ describe("mobile native app identity", () => {
     expect(androidRootGradle).toContain("details.useVersion '1.8.22'");
   });
 
+  it("keeps SecureStorage native discovery and the real device round-trip test wired", () => {
+    const pluginManifest = JSON.parse(
+      read("../mobile/android/app/src/main/assets/capacitor.plugins.json"),
+    ) as Array<{ pkg: string; classpath: string }>;
+    const packageLock = JSON.parse(read("../mobile/package-lock.json")) as {
+      packages: Record<string, { version?: string } | undefined>;
+    };
+    const instrumentedTest = read(
+      "../mobile/android/app/src/androidTest/java/com/okupratik/app/SecureStorageInstrumentedTest.java",
+    );
+
+    expect(pluginManifest).toContainEqual({
+      pkg: "@aparajita/capacitor-secure-storage",
+      classpath: "com.aparajita.capacitor.securestorage.SecureStorage",
+    });
+    expect(packageLock.packages["node_modules/@aparajita/capacitor-secure-storage"]?.version).toBe(
+      "6.0.1",
+    );
+    expect(instrumentedTest).toContain("plugin.setItem(key, value)");
+    expect(instrumentedTest).toContain("plugin.getItem(key)");
+    expect(instrumentedTest).toContain("plugin.removeItem(key)");
+    expect(instrumentedTest).toContain("afterRemoval === null ? 'PASS' : 'DELETE_MISMATCH'");
+    expect(instrumentedTest).not.toContain("plugin.internalSetItem(");
+  });
+
   it("uploads the verified debug APK path discovered after the Android build", () => {
     const workflow = read("../.github/workflows/mobile-native-builds.yml");
     expect(workflow).toContain("runs-on: ubuntu-24.04");

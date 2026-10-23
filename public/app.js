@@ -8,6 +8,8 @@ import {
 import {
   createOidcNonce,
   createSecureStorageBridge,
+  detectNativeMobilePlatform,
+  detectNativeMobileRuntime,
   requestNativeGoogleCredential,
 } from "./mobile-auth.js";
 
@@ -19,12 +21,12 @@ const uiMotion = createUiMotion();
 const runtimeConfig = globalThis.__OKUPRATIK_RUNTIME__ ?? {};
 const configuredApiBaseUrl =
   typeof runtimeConfig.apiBaseUrl === "string" ? runtimeConfig.apiBaseUrl.replace(/\/$/u, "") : "";
-const nativeMobileRuntime = runtimeConfig.nativeMobile === true;
+const nativeMobileRuntime = detectNativeMobileRuntime(runtimeConfig);
 const secureStoragePlugin = nativeMobileRuntime
   ? createSecureStorageBridge(runtimeConfig.secureStorageNativePlugin)
   : null;
 const googleSignInPlugin = runtimeConfig.googleSignInPlugin ?? null;
-const nativePlatform = runtimeConfig.platform ?? "web";
+const nativePlatform = detectNativeMobilePlatform(runtimeConfig);
 let googleSocialConfig = null;
 const SECURE_SESSION_KEY = "oku.session.v1";
 const nativeSession = { accessToken: null, refreshToken: null, tenantId: null };

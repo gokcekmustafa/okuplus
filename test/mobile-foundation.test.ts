@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const execFile = promisify(execFileCallback);
@@ -25,13 +26,33 @@ describe("OkuPratik mobile foundation", () => {
 
       const index = await readFile(join(outputDir, "index.html"), "utf8");
       const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
+      const capacitorRuntime = await readFile(join(outputDir, "capacitor.js"), "utf8");
+      const secureStorageAdapter = await readFile(
+        join(outputDir, "secure-storage-plugin.js"),
+        "utf8",
+      );
       const app = await readFile(join(outputDir, "app.js"), "utf8");
       const mobileAuth = await readFile(join(outputDir, "mobile-auth.js"), "utf8");
 
+      expect(index).toContain('src="/capacitor.js"');
+      expect(index).toContain('src="/secure-storage-plugin.js"');
       expect(index).toContain('src="/mobile-runtime.js"');
       expect(index).toContain("viewport-fit=cover");
+      expect(index.indexOf('src="/capacitor.js"')).toBeLessThan(
+        index.indexOf('src="/secure-storage-plugin.js"'),
+      );
+      expect(index.indexOf('src="/secure-storage-plugin.js"')).toBeLessThan(
+        index.indexOf('src="/mobile-runtime.js"'),
+      );
+      expect(index.indexOf('src="/mobile-runtime.js"')).toBeLessThan(
+        index.indexOf('src="/app.js"'),
+      );
+      expect(capacitorRuntime).toContain("var capacitorExports");
+      expect(secureStorageAdapter).toContain("exports.SecureStorage = proxy");
       expect(runtime).toContain('apiBaseUrl: "https://api.example.test"');
-      expect(runtime).toContain('registerPlugin("SecureStorage")');
+      expect(runtime).toContain("globalThis.capacitorSecureStorage?.SecureStorage");
+      expect(runtime).toContain('plugin.name === "SecureStorage"');
+      expect(runtime).not.toContain('registerPlugin("SecureStorage")');
       expect(runtime).toContain('registerPlugin("GoogleSignIn")');
       expect(runtime).toContain("secureStorageNativePlugin");
       expect(runtime).toContain('addListener("backButton"');
@@ -45,9 +66,131 @@ describe("OkuPratik mobile foundation", () => {
       expect(app).toContain(
         'await setStoredSession({ tokens, tenantContext: { tenantId: tenantId ?? "" } })',
       );
-      expect(mobileAuth).toContain("nativePlugin.internalSetItem");
-      expect(mobileAuth).toContain("nativePlugin.internalGetItem");
-      expect(mobileAuth).toContain("capacitor-storage_");
+      expect(mobileAuth).toContain("secureStorageAdapter.setItem");
+      expect(mobileAuth).toContain("secureStorageAdapter.getItem");
+      expect(mobileAuth).toContain("secureStorageAdapter.removeItem");
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs Capacitor core and the official secure-storage adapter before exposing native auth", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "okupratik-mobile-native-runtime-"));
+    try {
+      await execFile(process.execPath, [prepareScript], {
+        cwd: repoRoot,
+        env: { ...process.env, OKUPRATIK_MOBILE_OUTPUT_DIR: outputDir },
+      });
+
+      const capacitorRuntime = await readFile(join(outputDir, "capacitor.js"), "utf8");
+      const secureStorageAdapter = await readFile(
+        join(outputDir, "secure-storage-plugin.js"),
+        "utf8",
+      );
+      const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
+      const stored = new Map<string, string>();
+      const nativeCalls: string[] = [];
+      const context = createContext({
+        Capacitor: {
+          Plugins: {},
+          PluginHeaders: [
+            {
+              name: "SecureStorage",
+              methods: [
+                { name: "internalGetItem", rtype: "promise" },
+                { name: "internalSetItem", rtype: "promise" },
+                { name: "internalRemoveItem", rtype: "promise" },
+              ],
+            },
+            { name: "GoogleSignIn", methods: [{ name: "signIn", rtype: "promise" }] },
+            { name: "App", methods: [{ name: "addListener", rtype: "callback" }] },
+          ],
+          nativePromise: async (
+            plugin: string,
+            method: string,
+            options: Record<string, string>,
+          ) => {
+            nativeCalls.push(`${plugin}.${method}`);
+            if (method === "internalSetItem") stored.set(options.prefixedKey!, options.data!);
+            if (method === "internalGetItem")
+              return { data: stored.get(options.prefixedKey!) ?? null };
+            if (method === "internalRemoveItem") {
+              stored.delete(options.prefixedKey!);
+              return { success: true };
+            }
+            return {};
+          },
+          nativeCallback: async () => "callback",
+        },
+        androidBridge: { postMessage: () => undefined },
+        console: { warn: () => undefined, error: () => undefined },
+      });
+      runInContext(capacitorRuntime, context);
+      runInContext(secureStorageAdapter, context);
+      runInContext(runtime, context);
+
+      const runtimeConfig = context.__OKUPRATIK_RUNTIME__ as {
+        nativeMobile: boolean;
+        platform: string;
+        secureStorageNativePlugin: {
+          setItem(key: string, value: string): Promise<void>;
+          getItem(key: string): Promise<string | null>;
+          removeItem(key: string): Promise<void>;
+        } | null;
+      };
+      expect(runtimeConfig.nativeMobile).toBe(true);
+      expect(runtimeConfig.platform).toBe("android");
+      expect(runtimeConfig.secureStorageNativePlugin).not.toBeNull();
+
+      const storage = runtimeConfig.secureStorageNativePlugin!;
+      await storage.setItem("test.session", "opaque-test-value");
+      await expect(storage.getItem("test.session")).resolves.toBe("opaque-test-value");
+      await storage.removeItem("test.session");
+      await expect(storage.getItem("test.session")).resolves.toBeNull();
+      expect(stored.size).toBe(0);
+      expect(nativeCalls).toEqual([
+        "SecureStorage.internalSetItem",
+        "SecureStorage.internalGetItem",
+        "SecureStorage.internalRemoveItem",
+        "SecureStorage.internalGetItem",
+      ]);
+    } finally {
+      await rm(outputDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed instead of treating a native bridge without Capacitor core as web storage", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "okupratik-mobile-core-missing-"));
+    try {
+      await execFile(process.execPath, [prepareScript], {
+        cwd: repoRoot,
+        env: { ...process.env, OKUPRATIK_MOBILE_OUTPUT_DIR: outputDir },
+      });
+      const runtime = await readFile(join(outputDir, "mobile-runtime.js"), "utf8");
+      const context = createContext({
+        Capacitor: {
+          PluginHeaders: [
+            {
+              name: "SecureStorage",
+              methods: [
+                { name: "internalGetItem", rtype: "promise" },
+                { name: "internalSetItem", rtype: "promise" },
+                { name: "internalRemoveItem", rtype: "promise" },
+              ],
+            },
+          ],
+        },
+        androidBridge: { postMessage: () => undefined },
+        console: { warn: () => undefined, error: () => undefined },
+      });
+
+      runInContext(runtime, context);
+
+      expect(context.__OKUPRATIK_RUNTIME__).toMatchObject({
+        nativeMobile: true,
+        platform: "android",
+        secureStorageNativePlugin: null,
+      });
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }

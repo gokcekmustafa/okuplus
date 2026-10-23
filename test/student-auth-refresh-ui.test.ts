@@ -17,6 +17,7 @@ function response(status: number) {
 function harness(
   fetchImpl: (url: string, options: Record<string, unknown>) => Promise<unknown>,
   nativeMobileRuntime = false,
+  secureWriteFails = false,
 ) {
   const values = new Map<string, string>([
     ["oku.accessToken", "expired-access"],
@@ -58,6 +59,10 @@ function harness(
       tokens: { accessToken: string; refreshToken: string };
       tenantContext: { tenantId: string };
     }) => {
+      if (secureWriteFails)
+        throw Object.assign(new Error("secure storage unavailable"), {
+          code: "SECURE_STORAGE_UNAVAILABLE",
+        });
       nativeSession = {
         accessToken: data.tokens.accessToken,
         refreshToken: data.tokens.refreshToken,
@@ -77,6 +82,7 @@ function harness(
     clearStoredSession: () => {
       values.delete("oku.accessToken");
       values.delete("oku.refreshToken");
+      nativeSession = { accessToken: null, refreshToken: null, tenantId: null };
     },
     showLogin: () => {
       loginCalls += 1;
@@ -167,6 +173,28 @@ describe("student authenticated API session recovery", () => {
       refreshToken: "fresh-refresh",
       tenantId: "tenant-1",
     });
+    expect(h.localStorageWrites()).toHaveLength(0);
+  });
+
+  it("does not retry an authenticated request or retain a session when secure refresh persistence fails", async () => {
+    let firstRequest = true;
+    const h = harness(
+      async () => {
+        if (firstRequest) {
+          firstRequest = false;
+          return response(401);
+        }
+        return response(200);
+      },
+      true,
+      true,
+    );
+
+    const result = await runInContext("authenticatedFetch('/student/today')", h.context);
+
+    expect(result.status).toBe(401);
+    expect(h.secureSession()).toEqual({ accessToken: null, refreshToken: null, tenantId: null });
+    expect(h.loginCalls).toBe(1);
     expect(h.localStorageWrites()).toHaveLength(0);
   });
 });
