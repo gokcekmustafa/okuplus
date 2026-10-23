@@ -320,7 +320,7 @@ describe("student dashboard release 0.4", () => {
   it("keeps invalid login feedback visible after the request finishes", () => {
     expect(index).toContain('id="login-error"');
     expect(app).toMatch(
-      /import \{\s*formatGoogleLoginError,\s*formatLoginError,\s*setupPasswordVisibilityToggle,\s*\} from "\.\/auth-ui\.js";/u,
+      /import \{\s*createGoogleLoginDiagnostic,\s*formatGoogleLoginError,\s*formatLoginError,\s*setupPasswordVisibilityToggle,\s*\} from "\.\/auth-ui\.js";/u,
     );
     expect(app).toContain('if (isLoading) $("login-error").classList.add("hidden");');
     expect(app).toContain('$("login-error").textContent = formatLoginError(err);');

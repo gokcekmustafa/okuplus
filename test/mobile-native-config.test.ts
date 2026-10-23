@@ -169,8 +169,8 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("id: debug-apk");
     expect(workflow).toContain("-name 'app-debug.apk'");
     expect(workflow).toContain("id: debug-apk-identity");
-    expect(workflow).toContain('verify --print-certs "$APK_PATH"');
-    expect(workflow).toContain("Signer #1 certificate SHA-1 digest:");
+    expect(workflow).toContain('"$apksigner" verify --print-certs "$APK_PATH" 2>&1');
+    expect(workflow).toContain("certificate SHA-1 digest:");
     expect(workflow).toContain("com.okupratik.app");
     expect(workflow).toContain("ANDROID_TEST_KEYSTORE_BASE64");
     expect(workflow).toContain("ANDROID_TEST_STORE_PASSWORD");

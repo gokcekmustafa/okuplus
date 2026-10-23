@@ -149,8 +149,8 @@ jobs:
           badging="$("$aapt" dump badging "$APK_PATH")"
           package_name="$(printf '%s\n' "$badging" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p" | head -n 1)"
           version_name="$(printf '%s\n' "$badging" | sed -n "s/^package:.*versionName='\\([^']*\\)'.*/\\1/p" | head -n 1)"
-          certificate="$("$apksigner" verify --print-certs "$APK_PATH")"
-          sha1="$(printf '%s\n' "$certificate" | sed -n 's/^Signer #1 certificate SHA-1 digest: //p' | head -n 1 | tr -d ':[:space:]' | tr '[:lower:]' '[:upper:]')"
+          certificate="$("$apksigner" verify --print-certs "$APK_PATH" 2>&1)"
+          sha1="$(printf '%s\n' "$certificate" | sed -nE 's/^[[:space:]]*Signer #[0-9]+ certificate SHA-1 digest:[[:space:]]*([0-9A-Fa-f:]+)[[:space:]]*$/\1/Ip' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           if [ "$package_name" != "com.okupratik.app" ]; then
             echo "::error::Unexpected Android package name in debug APK."
             exit 1
