@@ -83,27 +83,27 @@ const evidenceByQuestion: Record<
   },
   "a17-super-1": {
     answer: "Sürekli dönen yükselici hava akımıyla",
-    evidence: "Geniş ve sürekli dönen yükselici hava akımı",
+    evidence: "güçlü biçimde dönen yukarı yönlü sıcak hava akımı",
   },
   "a17-super-2": {
     answer: "Bunların süper hücreyle ilişkili olabileceğini",
-    evidence: "ilişkili olabilir; ancak her süper hücre mutlaka hortum oluşturmaz",
+    evidence: "tehlikeli olaylarla ilişkili olabilir",
   },
   "a17-super-3": {
-    answer: "Tek görüntü yerdeki sonucu kesinleştirmez",
-    evidence: "Tek bir bulut görüntüsü, yerde yaşanacak sonucu kesin olarak belirlemeye yetmez",
+    answer: "Hayır; metin bunun her mezosiklon için geçerli olmadığını söylüyor.",
+    evidence: "her mezosiklon hortum oluşturmaz",
   },
   "a17-thermo-1": {
     answer: "Sistemlerin sıcaklık bakımından denge ilişkisini",
-    evidence: "sıcaklık bakımından denge ilişkisini tanımlar",
+    evidence: "sıcaklık bakımından denge ilişkisini açıklar",
   },
   "a17-thermo-2": {
-    answer: "Doğal süreçlerin yönü ve toplam entropiyle",
-    evidence: "doğal süreçlerin yönü ve toplam entropiyle ilgili sınırlamaları açıklar",
+    answer: "Süreçler entropinin arttığı yönde ilerler.",
+    evidence: "kendiliğinden gerçekleşen doğal süreçler entropinin arttığı yönde ilerler",
   },
   "a17-thermo-3": {
-    answer: "Sistemin koşulları ve ölçümleri de gerektiği için",
-    evidence: "sistemin koşulları ve ölçümleri gerekir",
+    answer: "Buhar makinesi",
+    evidence: "Buhar makinesi",
   },
   "a18-tree-1": {
     answer: "Bahar ve yaz başında",
@@ -134,7 +134,7 @@ const evidenceByQuestion: Record<
     evidence: "koyu alanların çoğunlukla daha alçak ve düz",
   },
   "a18-moon-2": {
-    answer: "Bölgelerin bugün suyla kaplı olduğunu",
+    answer: "Hayır; ad tarihsel, bugünkü su varlığını göstermez.",
     evidence: "bu bölgelerin bugün suyla kaplı olduğu anlamına gelmez",
   },
   "a18-moon-3": {
@@ -147,12 +147,13 @@ const evidenceByQuestion: Record<
     evidence: "kendi başına hareket etmeyen maddelerin taşınma süresini tahmin etti",
   },
   "a18-ocean-2": {
-    answer: "Pasifik'ten ABD kıyılarına ulaşma süresiyle",
-    evidence: "ABD'nin batı kıyılarına ulaşması yaklaşık üç buçuk yıl sürdü",
+    answer: "Gözlem 3,6 yıl; model tahmini 3,5 yıl.",
+    evidence: "ABD'nin batı kıyılarına ulaşması 3,6 yıl sürdü",
+    additionalEvidence: "Model aynı yolculuk için 3,5 yıl tahmin etti",
   },
   "a18-ocean-3": {
     answer: "Modelin bu örnekte işe yaradığını",
-    evidence: "Modelin belirli bir örnekte işe yaradığını destekler",
+    evidence: "modelin bu örnekte işe yaradığını destekler",
   },
   "a18-climate-1": {
     answer: "Ağaç halkası ve buz katmanı gibi doğal kayıtlar",
@@ -234,7 +235,7 @@ const evidenceByQuestion: Record<
     evidence: "Mavi ışık daha yüksek enerji taşıdığından",
   },
   "a20-led-3": {
-    answer: "Verimli beyaz aydınlatma ve ekranları desteklediği için",
+    answer: "Beyaz ışık ve ekranlarda mavi ışığa ihtiyaç duyulması",
     evidence: "verimli beyaz aydınlatma ve modern ekranlar için mavi ışık da gerekliydi",
   },
   "a20-supercool-1": {
@@ -242,7 +243,7 @@ const evidenceByQuestion: Record<
     evidence: "bu sıcaklığın altına indiği hâlde bir süre sıvı kalabilir",
   },
   "a20-supercool-2": {
-    answer: "Kristal başlangıcı gecikebildiği için",
+    answer: "Kristal oluşumunun başlaması gecikebildiği için",
     evidence: "kristal başlangıcının gecikmesi",
   },
   "a20-supercool-3": {
@@ -258,7 +259,7 @@ const evidenceByQuestion: Record<
     evidence: "gereken enerji, görünür ışığın taşıdığından daha yüksektir",
   },
   "a20-glass-3": {
-    answer: "Her ışığın camdan değişmeden geçtiği düşüncesini",
+    answer: "Camın tüm ışık türlerini aynı biçimde geçirdiği genellemesini",
     evidence: "Daha yüksek enerjili bazı ışınlar ise soğurulabilir",
   },
   "a20-beaks-1": {
@@ -466,6 +467,79 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
     for (const url of sourceUrls) {
       expect(allSourceUrls.filter((candidate) => candidate === url)).toHaveLength(1);
     }
+  });
+
+  it("keeps the corrected source claims, skills, numbers, and question versions precise", () => {
+    const cycle17 = getEducationV2P1ACycle(17)!.sourceCycle.sourceStations;
+    const supercell = cycle17.find((station) => station.key.endsWith("A17_INTEGRATED_SUPERCELL"))!;
+    const supercellQuestion = supercell.questions.find(({ key }) => key === "a17-super-3")!;
+    expect(supercell.text).not.toMatch(/radar|tek bir bulut görüntüsü|yerde yaşanacak sonuç/iu);
+    expect(supercellQuestion.prompt).toBe("Metne göre her mezosiklon hortum oluşturur mu?");
+    expect(supercellQuestion.versionId).toMatch(/_V2$/u);
+
+    const thermodynamics = cycle17.find((station) =>
+      station.key.endsWith("A17_ASSESSMENT_THERMODYNAMICS"),
+    )!;
+    expect(thermodynamics.skillCodes).toEqual(["RC_DETAIL", "RC_CAUSE_EFFECT"]);
+    expect(thermodynamics.text).toContain("Entropi, en genel anlamıyla düzensizliğin ölçüsüdür");
+    expect(thermodynamics.text).not.toMatch(
+      /makinenin verimi|ölçümleri gerekir|ideal bir kristal/iu,
+    );
+    expect(
+      thermodynamics.questions
+        .filter(({ key }) => key.startsWith("a17-thermo-"))
+        .map(({ versionId }) => versionId.endsWith("_V2")),
+    ).toEqual([true, true, true]);
+
+    const cycle18 = getEducationV2P1ACycle(18)!.sourceCycle.sourceStations;
+    const moon = cycle18.find((station) => station.key.endsWith("A18_COMMON_MOON_DARK_REGIONS"))!;
+    const moonQuestion = moon.questions.find(({ key }) => key === "a18-moon-2")!;
+    expect(moonQuestion.prompt).toBe(
+      "Maria adı bu bölgelerin bugün suyla kaplı olduğunu kanıtlar mı?",
+    );
+    expect(moonQuestion.options.filter(({ text }) => text.startsWith("Evet;")).length).toBe(3);
+    expect(moonQuestion.versionId).toMatch(/_V2$/u);
+
+    const ocean = cycle18.find((station) =>
+      station.key.endsWith("A18_INTEGRATED_OCEAN_TRANSPORT"),
+    )!;
+    const oceanQuestion = ocean.questions.find(({ key }) => key === "a18-ocean-2")!;
+    expect(ocean.text).toContain("ulaşması 3,6 yıl sürdü");
+    expect(ocean.text).toContain("Model aynı yolculuk için 3,5 yıl tahmin etti");
+    expect(oceanQuestion.versionId).toMatch(/_V2$/u);
+
+    const cycle20 = getEducationV2P1ACycle(20)!.sourceCycle.sourceStations;
+    const revisedQuestionKeys = [
+      "a20-led-1",
+      "a20-led-2",
+      "a20-led-3",
+      "a20-supercool-1",
+      "a20-supercool-2",
+      "a20-supercool-3",
+      "a20-glass-1",
+      "a20-glass-2",
+      "a20-glass-3",
+    ];
+    const revisedQuestions = cycle20
+      .flatMap((station) => station.questions)
+      .filter((question) => revisedQuestionKeys.includes(question.key));
+    expect(revisedQuestions).toHaveLength(9);
+    for (const question of revisedQuestions) {
+      expect(question.versionId, question.key).toMatch(/_V2$/u);
+      expect(new Set(question.options.map(({ text }) => text)).size, question.key).toBe(4);
+      expect(question.options.map(({ text }) => text).join(" "), question.key).not.toMatch(
+        /her zaman|hiçbir zaman|bütünüyle|tamamen/iu,
+      );
+    }
+
+    const cycle19 = getEducationV2P1ACycle(19)!.sourceCycle.sourceStations;
+    const surface = cycle19.find((station) =>
+      station.key.endsWith("A19_ASSESSMENT_SURFACE_WALKING_EVIDENCE"),
+    )!;
+    const surfaceQuestion = surface.questions.find(({ key }) => key === "a19-surface-1")!;
+    expect(surfaceQuestion.explanation).toBe(
+      "İkinci ve üçüncü cümle yüzey gerilimi ile suyu iten bacak yapılarını birlikte açıklar.",
+    );
   });
 
   it("connects Cycle 16 through 20 while keeping unpublished cycles locked", () => {

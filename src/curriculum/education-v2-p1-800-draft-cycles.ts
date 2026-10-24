@@ -77,11 +77,155 @@ const draftQuestionRevisionsV2: Readonly<
     string,
     {
       correct: string;
+      prompt?: string;
       distractors?: [string, string, string];
       explanation?: string;
+      hint?: string;
     }
   >
 > = {
+  "a17-super-3": {
+    correct: "Hayır; metin bunun her mezosiklon için geçerli olmadığını söylüyor.",
+    prompt: "Metne göre her mezosiklon hortum oluşturur mu?",
+    distractors: [
+      "Evet; mezosiklon hortumla aynı hava olayı olarak tanımlanıyor.",
+      "Evet; metin her süper hücrede aynı sonucun oluştuğunu söylüyor.",
+      "Hayır; metin hortumla mezosiklon arasında ilişki kurmuyor.",
+    ],
+    explanation:
+      "Kaynak, hortumların genellikle mezosiklonların içinde oluştuğunu; ancak her mezosiklonun hortum oluşturmadığını belirtir.",
+    hint: "Hortumların oluşmasıyla ilgili iki cümleyi birlikte değerlendir.",
+  },
+  "a17-thermo-1": {
+    correct: "Sistemlerin sıcaklık bakımından denge ilişkisini",
+    distractors: [
+      "Enerjinin bir biçimden başka biçime dönüşmesini",
+      "Doğal süreçlerin ilerleme yönünü",
+      "Mutlak sıfıra yaklaşırken entropinin değişimini",
+    ],
+  },
+  "a17-thermo-2": {
+    correct: "Süreçler entropinin arttığı yönde ilerler.",
+    prompt: "İkinci yasa, kendiliğinden gerçekleşen doğal süreçlerle ilgili ne söyler?",
+    distractors: [
+      "Sistemlerin sıcaklık bakımından dengeye gelmesini",
+      "Enerjinin yalnızca ısı biçiminde bulunmasını",
+      "Sıcaklık mutlak sıfıra yaklaşırken entropinin sıfıra yaklaşmasını",
+    ],
+    explanation:
+      "Kaynak, ikinci yasayı kendiliğinden gerçekleşen süreçlerin entropiyi artıran yönde ilerlemesiyle açıklar.",
+    hint: "İkinci yasa için verilen yön ve entropi bilgisini birlikte bul.",
+  },
+  "a17-thermo-3": {
+    correct: "Buhar makinesi",
+    prompt: "Sanayi Devrimi'ne yol açan teknolojilerden hangisi metinde örnek gösteriliyor?",
+    distractors: ["Elektrik motoru", "Benzinli motor", "Soğutma makinesi"],
+    explanation:
+      "Kaynak, buhar makinesini termodinamik bilgisi sayesinde geliştirilen teknolojilere örnek verir.",
+    hint: "İlk paragrafta sanayi devrimiyle birlikte verilen teknoloji örneğini bul.",
+  },
+  "a18-moon-2": {
+    correct: "Hayır; ad tarihsel, bugünkü su varlığını göstermez.",
+    prompt: "Maria adı bu bölgelerin bugün suyla kaplı olduğunu kanıtlar mı?",
+    distractors: [
+      "Evet; sözcüğün anlamı bölgelerin bugün de deniz olduğunu gösterir.",
+      "Evet; koyu görünüş yüzeyde sıvı su bulunduğunu doğrular.",
+      "Evet; eski deniz yorumunun kayaç örnekleriyle doğrulandığını gösterir.",
+    ],
+    explanation:
+      "Metin, maria adının tarihsel olduğunu ve bugünkü su varlığını kanıtlamadığını açıkça ayırır.",
+    hint: "Adın tarihsel anlamıyla bugünkü yüzey kanıtını birbirinden ayır.",
+  },
+  "a18-ocean-2": {
+    correct: "Gözlem 3,6 yıl; model tahmini 3,5 yıl.",
+    prompt: "Metindeki 3,6 ve 3,5 yıl hangi rollere karşılık geliyor?",
+    distractors: [
+      "Gözlem 3,5 yıl; model tahmini 3,6 yıl.",
+      "Gözlem 3,6 yıl; model aynı süreyi 3,6 yıl tahmin etti.",
+      "İki sayı da modelin farklı koşullardaki tahminleridir.",
+    ],
+    explanation:
+      "Kaynakta gözlenen ulaşım süresi 3,6 yıl, modelin bu süre için yaptığı tahmin ise 3,5 yıldır.",
+    hint: "Gözlem sonucuyla modelin tahminini verilen sayılarla eşleştir.",
+  },
+  "a20-led-1": {
+    correct: "Elektron daha düşük enerjili duruma geçerken",
+    distractors: [
+      "Elektron daha yüksek enerjili duruma çıkarken",
+      "Elektron enerji düzeyi değişmeden iletkende ilerlerken",
+      "Elektron bir atomdan kopup serbest kalırken",
+    ],
+  },
+  "a20-led-2": {
+    correct: "Yüksek enerjili ışık için kaliteli kristal gerekmesi",
+    distractors: [
+      "Düşük enerjili mavi ışık için dar bant aralığı gerekmesi",
+      "Kristal kusurlarının ışık üretimini daha düzenli kılması",
+      "Işığın renginin yarı iletken yapısından bağımsız olması",
+    ],
+  },
+  "a20-led-3": {
+    correct: "Beyaz ışık ve ekranlarda mavi ışığa ihtiyaç duyulması",
+    distractors: [
+      "Yalnız mavi ışığın beyaz ışığı oluşturması için",
+      "Kırmızı ve yeşil LED'lerin mavi ışığa dönüşmesi için",
+      "Mavi ışığın yalnızca renkli ekranlarda kullanıldığı için",
+    ],
+    explanation:
+      "Kaynak, mavi LED'in verimli beyaz aydınlatmayı ve modern ekranları mümkün kıldığını açıklar.",
+  },
+  "a20-supercool-1": {
+    correct: "Donma noktasının altında bir süre sıvı kalması",
+    distractors: [
+      "Donma noktasına gelince kristallerin hemen oluşması",
+      "Basınç değişince suyun donma sıcaklığının değişmesi",
+      "Sıcaklık düşerken suyun yoğunluğunun artması",
+    ],
+  },
+  "a20-supercool-2": {
+    correct: "Kristal oluşumunun başlaması gecikebildiği için",
+    distractors: [
+      "Suyun donma sıcaklığının basınca göre değişmesi",
+      "Kristalleşmenin kabın yüzeyinde başlaması",
+      "Sıvı suyun donma noktasında katılaşmaya geçmesi",
+    ],
+  },
+  "a20-supercool-3": {
+    correct: "Kristalleşme başlar ve su hızla katılaşabilir",
+    distractors: [
+      "Buz parçası erir ve su sıvı kalmayı sürdürür",
+      "Buz çevresindeki suyu soğutur ama kristalleşme başlamaz",
+      "Kristalleşme başlar ama su yavaşça katılaşır",
+    ],
+  },
+  "a20-glass-1": {
+    correct: "Görünür ışık camdan çoğunlukla geçer",
+    distractors: [
+      "Cam görünür ışığın büyük bölümünü yüzeyinden yansıtır",
+      "Cam görünür ışığın büyük bölümünü soğurur",
+      "Camın şeffaflığı katı olmamasından kaynaklanır",
+    ],
+  },
+  "a20-glass-2": {
+    correct: "Görünür ışık cam elektronlarını uyarmaya yetmez",
+    distractors: [
+      "Görünür ışığın enerjisi elektron geçişi eşiğini aşar",
+      "Camın enerji bantları arasındaki fark görünür ışığa eşittir",
+      "Foton enerjisi elektronların enerji düzeylerinden bağımsızdır",
+    ],
+  },
+  "a20-glass-3": {
+    correct: "Camın tüm ışık türlerini aynı biçimde geçirdiği genellemesini",
+    prompt: "Son cümledeki bilgi hangi genellemeyi sınırlar?",
+    distractors: [
+      "Görünür ışığın camdan çoğunlukla geçebildiği bilgisini",
+      "Camın katı bir madde olduğu bilgisini",
+      "Foton enerjisinin maddeyle etkileşimi etkilediği bilgisini",
+    ],
+    explanation:
+      "Son cümle, daha yüksek enerjili bazı ışınların soğurulabildiğini söyleyerek tüm ışık türlerinin camla aynı biçimde etkileşmediğini gösterir.",
+    hint: "Son cümlede görünür ışıktan farklı enerjili ışınlara ilişkin sınırı bul.",
+  },
   "a41-urban-3": { correct: "Gelişim biçimlerini karşılaştırmayı" },
   "a41-manhattan-3": { correct: "Gölge ve ısı etkisini birlikte değerlendirmek" },
   "a41-rain-2": { correct: "Rüzgârı yönlendirip havayı yakınsatabilir" },
@@ -14816,7 +14960,7 @@ const routeDrafts: RouteDraft[] = [
         ["RC_EVIDENCE", "RC_CAUSE_EFFECT", "RC_LIMITS"],
         "Süper hücreyi ayırt eden özelliği ve metnin genelleme sınırını birlikte değerlendirir.",
         "Dönen hava sütunu",
-        "Bir fırtına bulutunun içinde yükselen hava akımı dönmeye başladığında, bulutun yapısı sıradan kısa süreli sağanaklardan farklılaşabilir. Geniş ve sürekli dönen yükselici hava akımı, süper hücre olarak adlandırılan fırtına türünün ayırt edici özelliklerindendir. Bu yapı dolu, kuvvetli rüzgâr veya hortum gibi tehlikeli hava olaylarıyla ilişkili olabilir; ancak her süper hücre mutlaka hortum oluşturmaz. Gözlemciler radar ve bulut hareketlerini birlikte izleyerek gelişimi değerlendirir. Tek bir bulut görüntüsü, yerde yaşanacak sonucu kesin olarak belirlemeye yetmez.",
+        "Süper hücrelerde rüzgârın hızı ve yönü yüksekliğe bağlı olarak değişebilir. Bunun sonucunda güçlü biçimde dönen yukarı yönlü sıcak hava akımı oluşur; bu yapıya mezosiklon denir. Soğuk hava aşağı yönlü bir akım oluşturur. Hortumlar genellikle mezosiklonların içinde oluşur; ancak her mezosiklon hortum oluşturmaz. Bu fırtınalar dolu, aşağı yönlü hava patlaması veya şiddetli yağmur gibi tehlikeli olaylarla ilişkili olabilir.",
         "Özgün anlatım; doğrulanmış meteoroloji bilgileri kaynak kaydına bağlandı.",
         [
           q(
@@ -14860,20 +15004,22 @@ const routeDrafts: RouteDraft[] = [
           "Süper Hücreli Fırtına Bulutları",
           "https://bilimgenc.tubitak.gov.tr/makale/super-hucreli-firtina-bulutlari",
           [
-            "Süper hücreli fırtınaların ayırt edici özelliği dönen yükselici hava akımıdır.",
-            "Süper hücreler bazı tehlikeli hava olaylarıyla ilişkili olabilir; her örnek aynı sonucu doğurmaz.",
+            "Rüzgârın hız ve yönünün yüksekliğe göre değişmesi dönen yukarı yönlü sıcak hava akımı oluşturur; bu yapıya mezosiklon denir.",
+            "Hortumlar genellikle mezosiklon içinde oluşur, ancak her mezosiklon hortum oluşturmaz.",
+            "Süper hücreler dolu, aşağı yönlü hava patlaması veya şiddetli yağmur gibi sonuçlara yol açabilir.",
           ],
-          "Özgün metin tanımlayıcı özelliği, olası etkileri ve tek gözlemin kanıt sınırını birlikte işler.",
+          "Özgün metin kaynakta açıklanan hava akımı, mezosiklon ve hortum ilişkisinin sınırını ölçer.",
+          "2026-10-24",
         ),
       ),
       station(
         "a17-assessment-thermodynamics",
-        "Termodinamik yasalarının kanıt sınırını değerlendir",
+        "Termodinamik yasalarını ve teknoloji örneğini eşleştir",
         "MULTI_SKILL_ASSESSMENT",
-        ["RC_MAIN_IDEA", "RC_SEQUENCE", "RC_LIMITS"],
-        "Termodinamikte enerji aktarımı, düzensizlik ve mutlak sıfır ifadelerini ayırt eder.",
+        ["RC_DETAIL", "RC_CAUSE_EFFECT"],
+        "Termodinamik yasalarının temel açıklamalarını bulur ve termodinamik bilgisinin teknolojiye katkı örneğini belirler.",
         "Isı ve enerji üzerine yasalar",
-        "Termodinamik, ısı, iş ve enerji arasındaki ilişkileri inceler. Sıfırıncı yasa, sistemlerin sıcaklık bakımından denge ilişkisini tanımlar; birinci yasa enerjinin korunmasını, ikinci yasa ise doğal süreçlerin yönü ve toplam entropiyle ilgili sınırlamaları açıklar. Üçüncü yasa, mutlak sıfıra yaklaşırken ideal bir kristalin entropisinin nasıl davrandığını ele alır. Bu yasalar enerji dönüşümlerini anlamaya yardım eder, ancak belirli bir makinenin verimini yalnızca adını bilerek hesaplatmaz; sistemin koşulları ve ölçümleri gerekir.",
+        "Termodinamik ısıyı, sıcaklığı ve enerjiyi inceler. Sanayi Devrimi'ne yol açan teknolojilerden buhar makinesi, termodinamik bilgisi sayesinde geliştirildi. Sıfırıncı yasa, sistemlerin sıcaklık bakımından denge ilişkisini açıklar: Aynı üçüncü sistemle sıcaklık dengesi kuran iki sistem kendi aralarında da dengededir. Birinci yasaya göre enerji yaratılamaz ya da yok edilemez; bir biçimden başka bir biçime dönüşebilir. İkinci yasaya göre kendiliğinden gerçekleşen doğal süreçler entropinin arttığı yönde ilerler. Entropi, en genel anlamıyla düzensizliğin ölçüsüdür; sıcak cisimlerden soğuk cisimlere ısı akışı buna örnektir. Üçüncü yasa, sıcaklık mutlak sıfıra yaklaşırken entropinin sıfıra yaklaştığını söyler.",
         "Özgün anlatım; doğrulanmış termodinamik tanımları kaynak kaydına bağlandı.",
         [
           q(
@@ -14917,10 +15063,11 @@ const routeDrafts: RouteDraft[] = [
           "Termodinamik Nedir?",
           "https://bilimgenc.tubitak.gov.tr/makale/termodinamik-nedir",
           [
-            "Termodinamik yasaları sıcaklık dengesi, enerji korunumu, süreçlerin yönü ve mutlak sıfır çevresindeki davranışları ele alır.",
-            "Belirli bir sistemin performansını değerlendirmek için sistem koşulları gerekir.",
+            "Dört yasa sıcaklık dengesi, enerjinin dönüşümü, entropinin artış yönü ve mutlak sıfıra yaklaşırken entropinin davranışını açıklar.",
+            "Buhar makinesi, termodinamik bilgisi sayesinde geliştirilen teknolojilere örnek verilir; entropi genel olarak düzensizliğin ölçüsüdür.",
           ],
-          "Özgün metin temel yasaların işlevlerini ve bir makine hakkındaki çıkarımın sınırını sınar.",
+          "Özgün metin dört yasanın temel açıklamalarını ve termodinamiğin teknolojiye katkı örneğini ölçer.",
+          "2026-10-24",
         ),
       ),
     ],
@@ -15951,6 +16098,7 @@ const routeDrafts: RouteDraft[] = [
             "Maria adı tarihsel bir adlandırmadır; kayaç bileşimi örneklerle incelenebilir.",
           ],
           "Özgün metin, ilk görünüşe dayalı yorumu sonraki jeolojik gözlemle karşılaştırır.",
+          "2026-10-24",
         ),
       ),
       station(
@@ -15960,7 +16108,7 @@ const routeDrafts: RouteDraft[] = [
         ["RC_SEQUENCE", "RC_EVIDENCE", "RC_LIMITS"],
         "Model tahminiyle gözlenen örneği ayırır ve akıntıların taşıma etkisini yorumlar.",
         "Suda taşınan izler",
-        "Araştırmacılar okyanus akıntılarının nesneleri nasıl sürükleyebileceğini hesaplayan bir model kurdu ve farklı verilerle sınadı. Model, kendi başına hareket etmeyen maddelerin taşınma süresini tahmin etti. 2011'de Japonya'daki santralden Pasifik'e karışan maddelerin ABD'nin batı kıyılarına ulaşması yaklaşık üç buçuk yıl sürdü; model bu süreyi yakın bir değerle hesapladı. Bu karşılaştırma modelin belirli bir örnekte işe yaradığını destekler. Her maddenin her akıntıda aynı sürede taşınacağını kanıtlamaz.",
+        "Araştırmacılar okyanus akıntılarının nesneleri nasıl sürükleyebileceğini hesaplayan bir model kurdu ve farklı verilerle sınadı. Model, kendi başına hareket etmeyen maddelerin taşınma süresini tahmin etti. 2011'de Japonya'daki Fukuşima Nükleer Enerji Santrali'nden Pasifik'e karışan radyoaktif maddelerin ABD'nin batı kıyılarına ulaşması 3,6 yıl sürdü. Model aynı yolculuk için 3,5 yıl tahmin etti. Bu yakın sonuç, modelin bu örnekte işe yaradığını destekler; her maddenin her akıntıda aynı sürede taşınacağını kanıtlamaz.",
         "Özgün anlatım; okyanus akıntısı model araştırmasına bağlandı.",
         [
           q(
@@ -16008,6 +16156,7 @@ const routeDrafts: RouteDraft[] = [
             "Fukushima kaynaklı maddelerin Pasifik'te gözlenen taşıma süresi model tahminine yakındı.",
           ],
           "Özgün metin model, gözlem ve genelleme sınırını birlikte okumayı gerektirir.",
+          "2026-10-24",
         ),
       ),
       station(
@@ -17811,6 +17960,7 @@ const routeDrafts: RouteDraft[] = [
             "Mavi ışığın yüksek enerjisi, kaliteli ve az kusurlu yarı iletken kristal gerektirir; mavi LED verimli beyaz aydınlatma ve ekranları destekler.",
           ],
           "Özgün metin, ışığın oluşumunu ve mavi LED'in tarihsel-teknolojik önemini ayırır.",
+          "2026-10-24",
         ),
       ),
       station(
@@ -17868,6 +18018,7 @@ const routeDrafts: RouteDraft[] = [
             "Aşırı soğumuş suya buz eklenmesi kristalleşmeyi başlatabilir.",
           ],
           "Özgün metin, faz değişiminde sıcaklığın yanı sıra kristal başlangıcının da rolünü açıklar.",
+          "2026-10-24",
         ),
       ),
       station(
@@ -17887,7 +18038,7 @@ const routeDrafts: RouteDraft[] = [
             [
               "Bütün ışık türleri her katıdan geçer",
               "Cam ışığı her koşulda bütünüyle soğurur",
-              "Şeffaflık yalnızca malzemenin sıvı olmasına bağlıdır",
+              "Camın şeffaflığı yüzeyinden ışık yansıtmasına bağlıdır",
             ],
             "İlk ve son cümleler görünür ışığın camdan çoğunlukla geçtiğini söyler.",
             "İlk cümlede camın görünür ışıkla ilişkisini bul.",
@@ -17925,6 +18076,7 @@ const routeDrafts: RouteDraft[] = [
             "Görünür ışık camdan geçebilir; daha yüksek enerjili bazı ışınlar soğurulabilir.",
           ],
           "Özgün metin, iddia, fiziksel gerekçe ve kapsam sınırlamasını ayırt ettirir.",
+          "2026-10-24",
         ),
       ),
       station(
@@ -26327,6 +26479,8 @@ function buildDraftCycle(route: RouteDraft): EducationV2P1ExpansionDraftCycle {
         const correctAnswer = revision?.correct ?? question.correct;
         const distractors = revision?.distractors ?? question.distractors;
         const explanation = revision?.explanation ?? question.explanation;
+        const prompt = revision?.prompt ?? question.prompt;
+        const hint = revision?.hint ?? question.hint;
         const correctIndex = (route.positionOffset + orderedQuestionIndex++) % 4;
         let distractorIndex = 0;
         const rawOptions = [correctAnswer, ...distractors];
@@ -26336,9 +26490,11 @@ function buildDraftCycle(route: RouteDraft): EducationV2P1ExpansionDraftCycle {
         });
         return {
           ...question,
+          prompt,
           correct: correctAnswer,
           distractors,
           explanation,
+          hint,
           versionId: `${prefix}_QUESTION_${draft.key.toUpperCase()}_${question.key.toUpperCase()}_V${revision ? 2 : 1}`,
           options,
           correctOptionId: String.fromCharCode(97 + correctIndex),
