@@ -126,6 +126,11 @@ let todayLoading = false;
 let learningPathLoading = false;
 let learningPathContinuation = null;
 let learningPathReturnPosition = null;
+let learningPathTransitionRetryAction = null;
+let learningPathTimingActive = false;
+let learningPathCompletionTimingMarked = false;
+let learningPathTimingSequence = 0;
+let learningPathTransitionSequence = 0;
 let learningPathNavigationRevision = 0;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
@@ -2930,6 +2935,111 @@ function restoreLearningPathVisualPosition(position) {
   return false;
 }
 
+const LEARNING_PATH_TIMING_PREFIX = "okupratik:learning-path-transition";
+const LEARNING_PATH_TIMING_MARKS = [
+  "completion-action-start",
+  "completion-request-start",
+  "completion-request-end",
+  "completion",
+  "request-start",
+  "request-end",
+  "cycle-recovery-start",
+  "cycle-reconcile-start",
+  "cycle-reconcile-end",
+  "cycle-refresh-start",
+  "cycle-refresh-end",
+  "cycle-recovery-end",
+  "path-processing-start",
+  "path-processing-end",
+  "map-render-start",
+  "map-render-end",
+  "motion-start",
+  "home-render-start",
+  "home-render-end",
+  "next-start-request-start",
+  "next-start-request-end",
+];
+const LEARNING_PATH_TIMING_MEASURES = [
+  "completion-request",
+  "completion-action-to-motion",
+  "request",
+  "cycle-recovery",
+  "cycle-reconcile",
+  "cycle-refresh",
+  "path-processing",
+  "map-render",
+  "completion-to-motion",
+  "secondary-home-render",
+  "next-start-request",
+];
+
+function markLearningPathTiming(name, timingSequence = learningPathTimingSequence) {
+  if (
+    !learningPathTimingActive ||
+    timingSequence !== learningPathTimingSequence ||
+    typeof performance === "undefined" ||
+    typeof performance.mark !== "function"
+  )
+    return;
+  try {
+    performance.mark(`${LEARNING_PATH_TIMING_PREFIX}:${name}`);
+  } catch {
+    // Performance instrumentation is optional and must not affect navigation.
+  }
+}
+
+function measureLearningPathTiming(name, start, end, timingSequence = learningPathTimingSequence) {
+  if (
+    !learningPathTimingActive ||
+    timingSequence !== learningPathTimingSequence ||
+    typeof performance === "undefined" ||
+    typeof performance.measure !== "function"
+  )
+    return;
+  try {
+    performance.measure(
+      `${LEARNING_PATH_TIMING_PREFIX}:${name}`,
+      `${LEARNING_PATH_TIMING_PREFIX}:${start}`,
+      `${LEARNING_PATH_TIMING_PREFIX}:${end}`,
+    );
+  } catch {
+    // Missing browser timing APIs must not affect navigation.
+  }
+}
+
+function beginLearningPathTiming() {
+  const perf = typeof performance === "undefined" ? null : performance;
+  learningPathTimingSequence += 1;
+  learningPathTimingActive = Boolean(perf?.mark);
+  learningPathCompletionTimingMarked = false;
+  if (!learningPathTimingActive) return;
+  for (const name of LEARNING_PATH_TIMING_MARKS) {
+    perf.clearMarks?.(`${LEARNING_PATH_TIMING_PREFIX}:${name}`);
+  }
+  for (const name of LEARNING_PATH_TIMING_MEASURES)
+    perf.clearMeasures?.(`${LEARNING_PATH_TIMING_PREFIX}:${name}`);
+  markLearningPathTiming("completion-action-start");
+}
+
+function markLearningPathCompletionConfirmed() {
+  if (!learningPathTimingActive || learningPathCompletionTimingMarked) return;
+  learningPathCompletionTimingMarked = true;
+  markLearningPathTiming("completion");
+  markLearningPathTiming("completion-request-end");
+  measureLearningPathTiming(
+    "completion-request",
+    "completion-request-start",
+    "completion-request-end",
+  );
+}
+
+function newLearningPathTransitionSessionId() {
+  learningPathTransitionSequence += 1;
+  const randomId = window.crypto?.randomUUID?.();
+  const suffix = randomId || `${Date.now()}-${learningPathTransitionSequence}`;
+  return `path-${suffix}`.slice(0, 100);
+}
+
 function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
   const visualPosition =
     captureLearningPathVisualPosition(node?.id) ||
@@ -2945,12 +3055,25 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
   // Evict in-flight reads, not the identity-scoped presentation snapshot. The
   // refreshed map, never the completion response alone, authorizes continuation.
   insightRequestCache().clear();
+  const continuation =
+    node?.id && !replay && node.status !== "completed"
+      ? {
+          fromId: node.id,
+          nextId: nextStep?.id || null,
+          scope: insightScope(),
+          clientSessionId: newLearningPathTransitionSessionId(),
+          starting: false,
+        }
+      : null;
+  if (continuation) {
+    if (!learningPathTimingActive) beginLearningPathTiming();
+    continuation.timingSequence = learningPathTimingSequence;
+    markLearningPathCompletionConfirmed();
+    setLearningPathTransitionStatus("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+  } else learningPathTimingActive = false;
   navigate("dashboard", {
     ...(visualPosition ? { learningPathReturnPosition: visualPosition } : {}),
-    continuation:
-      node?.id && !replay && node.status !== "completed"
-        ? { fromId: node.id, nextId: nextStep?.id || null, scope: insightScope() }
-        : null,
+    continuation,
   });
 }
 
@@ -2965,7 +3088,6 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
     document.visibilityState === "hidden"
   )
     return;
-  learningPathContinuation = null;
   const fromIndex = nodes.findIndex((node) => node.id === continuation.fromId);
   const toIndex = nodes.findIndex((node) => node.status === "active");
   const target = nodes[toIndex];
@@ -2976,14 +3098,45 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
     nodes.slice(fromIndex + 1, toIndex).some((node) => node.status !== "completed") ||
     (continuation.nextId && target?.id !== continuation.nextId) ||
     !(isUsableLearningPathNode(target) || target?.type === "NEXT_LEARNING")
-  )
+  ) {
+    learningPathContinuation = null;
+    const status = $("learning-path-transition-status");
+    const waitingMessage = status?.textContent?.trim();
+    if (
+      !learningPathTransitionRetryAction &&
+      [
+        "İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…",
+        "Sıradaki istasyona ilerliyorsun…",
+        "Sıradaki istasyon açılıyor…",
+      ].includes(waitingMessage)
+    ) {
+      setLearningPathTransitionStatus(
+        "İlerlemen kaydedildi. Sıradaki istasyon şu anda erişilebilir değil; ilerlemen korunuyor.",
+      );
+    }
     return;
-  await startLearningPathNode(target, null, continuation.fromId);
+  }
+  if (continuation.starting) return;
+  continuation.targetNode = target;
+  continuation.starting = true;
+  setLearningPathTransitionStatus("Sıradaki istasyon açılıyor…");
+  // Starting earlier could create an in-progress exercise session if the motion
+  // is cancelled or the student navigates away. Start once after motion settles.
+  await startLearningPathNode(target, null, continuation.fromId, { continuation });
 }
 
-async function startLearningPathNode(node, button, navigationFromStepId = null) {
-  learningPathContinuation = null;
-  learningPathReturnPosition = null;
+async function startLearningPathNode(
+  node,
+  button,
+  navigationFromStepId = null,
+  { continuation = null } = {},
+) {
+  if (continuation) {
+    if (continuation !== learningPathContinuation || continuation.scope !== insightScope()) return;
+  } else {
+    learningPathContinuation = null;
+    learningPathReturnPosition = null;
+  }
   const revision = ++learningPathNavigationRevision;
   const scope = insightScope();
   var tv = node?.templateVersionId;
@@ -3019,7 +3172,18 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
     return;
   }
   if (type === "ASSESSMENT" && node?.assessmentId) {
-    await window.startTodayAssessment(node.assessmentId, navigationFromStepId, node.id);
+    try {
+      await window.startTodayAssessment(
+        node.assessmentId,
+        navigationFromStepId,
+        node.id,
+        continuation,
+      );
+    } catch (error) {
+      if (!continuation) {
+        alert(formatStudentError(error, "Değerlendirme şu anda açılamadı."));
+      } else handleLearningPathStationStartFailure(continuation, error);
+    }
     return;
   }
   if (type === "NEXT_LEARNING") {
@@ -3035,23 +3199,66 @@ async function startLearningPathNode(node, button, navigationFromStepId = null) 
   }
   setAsyncButtonState(button, true, "Başlatılıyor…");
   try {
-    var response = await authenticatedFetch("/student/exercises/start", {
-      method: "POST",
-      body: JSON.stringify({
-        templateVersionId: tv,
-        clientSessionId: "path-" + node.id + "-" + Date.now(),
-        replay: node.status === "completed",
-        ...(navigationFromStepId ? { navigationFromStepId, navigationTargetStepId: node.id } : {}),
-      }),
-    });
-    var data = await parseResponse(response);
+    if (continuation)
+      markLearningPathTiming("next-start-request-start", continuation.timingSequence);
+    let data;
+    try {
+      const response = await authenticatedFetch("/student/exercises/start", {
+        method: "POST",
+        body: JSON.stringify({
+          templateVersionId: tv,
+          clientSessionId: continuation?.clientSessionId || "path-" + node.id + "-" + Date.now(),
+          replay: node.status === "completed",
+          ...(navigationFromStepId
+            ? { navigationFromStepId, navigationTargetStepId: node.id }
+            : {}),
+        }),
+      });
+      data = await parseResponse(response);
+    } finally {
+      if (continuation) {
+        markLearningPathTiming("next-start-request-end", continuation.timingSequence);
+        measureLearningPathTiming(
+          "next-start-request",
+          "next-start-request-start",
+          "next-start-request-end",
+          continuation.timingSequence,
+        );
+      }
+    }
     if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (error) {
     setAsyncButtonState(button, false, "Başlatılıyor…");
-    if (!isPremiumLimitError(error)) alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
+    if (continuation) handleLearningPathStationStartFailure(continuation, error);
+    else if (!isPremiumLimitError(error)) {
+      alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
+    }
   }
+}
+
+function handleLearningPathStationStartFailure(continuation, error) {
+  if (
+    !continuation ||
+    continuation !== learningPathContinuation ||
+    continuation.scope !== insightScope() ||
+    currentPage !== "dashboard"
+  )
+    return false;
+  continuation.starting = false;
+  if (isPremiumLimitError(error)) {
+    learningPathContinuation = null;
+    setLearningPathTransitionStatus(formatStudentError(error, "Bu istasyon şu anda açılamadı."), {
+      error: true,
+    });
+  } else {
+    setLearningPathTransitionStatus(
+      "İlerlemen kaydedildi; istasyon açılamadı. Aynı oturum güvenle yeniden denenebilir.",
+      { retry: true, error: true, retryAction: "start", retryLabel: "İstasyonu yeniden dene" },
+    );
+  }
+  return true;
 }
 
 window.startTodayLearningStep = function () {
@@ -3605,6 +3812,7 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
     },
     continuation?.fromId,
     returnPosition,
+    transition?.onMotionStart,
   );
   void continueAfterLearningPathMotion(nodes, continuation, settled);
   if (!continuation && returnPosition === learningPathReturnPosition)
@@ -3620,7 +3828,11 @@ async function loadLearningPath() {
   learningPathLoading = true;
   const continuation = learningPathContinuation;
   const returnPosition = learningPathReturnPosition;
-  clearLearningPathTransitionStatus();
+  const isCompletionTransition = Boolean(continuation && continuation.scope === insightScope());
+  const timingSequence = learningPathTimingSequence;
+  if (isCompletionTransition)
+    setLearningPathTransitionStatus("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+  else clearLearningPathTransitionStatus();
   const scope = insightScope();
   var learningPathPhase = "request";
   container.setAttribute("aria-busy", "true");
@@ -3635,8 +3847,26 @@ async function loadLearningPath() {
       : '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
   }
   try {
-    var data = await insightApi("learning-path");
-    data = await recoverCompletedP1CycleOnLearningPathLoad(data);
+    markLearningPathTiming("request-start", timingSequence);
+    let data;
+    try {
+      data = await insightApi("learning-path");
+    } finally {
+      markLearningPathTiming("request-end", timingSequence);
+      measureLearningPathTiming("request", "request-start", "request-end", timingSequence);
+    }
+    markLearningPathTiming("cycle-recovery-start", timingSequence);
+    try {
+      data = await recoverCompletedP1CycleOnLearningPathLoad(data, timingSequence);
+    } finally {
+      markLearningPathTiming("cycle-recovery-end", timingSequence);
+      measureLearningPathTiming(
+        "cycle-recovery",
+        "cycle-recovery-start",
+        "cycle-recovery-end",
+        timingSequence,
+      );
+    }
     if (
       scope !== insightScope() ||
       currentPage !== "dashboard" ||
@@ -3644,30 +3874,48 @@ async function loadLearningPath() {
       returnPosition !== learningPathReturnPosition
     )
       return;
-    if (data.today) renderTodayData(data.today, scope);
-    else void loadToday();
     container.setAttribute("aria-busy", "false");
-    learningPathPhase = "home-insights";
-    try {
-      renderHomeInsights(data);
-    } catch (error) {
-      reportLearningPathClientError(error, learningPathPhase);
-      console.error("learning-path-render-failed", {
-        phase: learningPathPhase,
-        name: error?.name ?? "UnknownError",
-      });
-    }
-    learningPathPhase = "academic-model";
-    try {
-      renderAcademicLearningModel(data.academicProgram);
-    } catch (error) {
-      reportLearningPathClientError(error, learningPathPhase);
-      console.error("learning-path-render-failed", {
-        phase: learningPathPhase,
-        name: error?.name ?? "UnknownError",
-      });
-      $("learning-path-model")?.replaceChildren();
-    }
+    const renderSecondaryHomeSections = () => {
+      if (
+        scope !== insightScope() ||
+        currentPage !== "dashboard" ||
+        continuation !== learningPathContinuation ||
+        returnPosition !== learningPathReturnPosition
+      )
+        return;
+      markLearningPathTiming("home-render-start", timingSequence);
+      if (data.today) renderTodayData(data.today, scope);
+      else void loadToday();
+      learningPathPhase = "home-insights";
+      try {
+        renderHomeInsights(data);
+      } catch (error) {
+        reportLearningPathClientError(error, learningPathPhase);
+        console.error("learning-path-render-failed", {
+          phase: learningPathPhase,
+          name: error?.name ?? "UnknownError",
+        });
+      }
+      learningPathPhase = "academic-model";
+      try {
+        renderAcademicLearningModel(data.academicProgram);
+      } catch (error) {
+        reportLearningPathClientError(error, learningPathPhase);
+        console.error("learning-path-render-failed", {
+          phase: learningPathPhase,
+          name: error?.name ?? "UnknownError",
+        });
+        $("learning-path-model")?.replaceChildren();
+      }
+      markLearningPathTiming("home-render-end", timingSequence);
+      measureLearningPathTiming(
+        "secondary-home-render",
+        "home-render-start",
+        "home-render-end",
+        timingSequence,
+      );
+    };
+    markLearningPathTiming("path-processing-start", timingSequence);
     var pathGroups =
       Array.isArray(data.paths) && data.paths.length
         ? data.paths
@@ -3681,19 +3929,72 @@ async function loadLearningPath() {
     var nodes = pathGroups.flatMap(function (group) {
       return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });
+    markLearningPathTiming("path-processing-end", timingSequence);
+    measureLearningPathTiming(
+      "path-processing",
+      "path-processing-start",
+      "path-processing-end",
+      timingSequence,
+    );
     if (!nodes.length) {
       if (returnPosition?.scope === scope) {
         setLearningPathTransitionStatus(
           "Tamamlanan istasyonun bilgisi korunuyor. Öğrenme yolu henüz yenilenemedi.",
-          { retry: true, error: true },
+          {
+            retry: true,
+            error: true,
+            retryAction: "refresh",
+            retryLabel: "Öğrenme yolunu yeniden yükle",
+          },
         );
+        renderSecondaryHomeSections();
         return;
       }
       renderLearningPathEmptyState(data.currentLevel);
+      renderSecondaryHomeSections();
       return;
     }
     learningPathPhase = "learning-path-map";
-    renderLearningPathMap(pathGroups, data.currentLevel, { continuation, returnPosition });
+    markLearningPathTiming("map-render-start", timingSequence);
+    renderLearningPathMap(pathGroups, data.currentLevel, {
+      continuation,
+      returnPosition,
+      onMotionStart: ({ animated = false, started = true } = {}) => {
+        if (!started) return;
+        markLearningPathTiming("motion-start", timingSequence);
+        measureLearningPathTiming(
+          "completion-to-motion",
+          "completion",
+          "motion-start",
+          timingSequence,
+        );
+        measureLearningPathTiming(
+          "completion-action-to-motion",
+          "completion-action-start",
+          "motion-start",
+          timingSequence,
+        );
+        if (
+          isCompletionTransition &&
+          continuation === learningPathContinuation &&
+          !$("learning-path-transition-status")?.classList?.contains?.("error")
+        )
+          setLearningPathTransitionStatus(
+            animated ? "Sıradaki istasyona ilerliyorsun…" : "Sıradaki istasyon açılıyor…",
+          );
+      },
+    });
+    markLearningPathTiming("map-render-end", timingSequence);
+    measureLearningPathTiming("map-render", "map-render-start", "map-render-end", timingSequence);
+    if (isCompletionTransition) {
+      if (typeof window.requestAnimationFrame === "function")
+        window.requestAnimationFrame(() =>
+          window.requestAnimationFrame(renderSecondaryHomeSections),
+        );
+      else setTimeout(renderSecondaryHomeSections, 0);
+    } else {
+      renderSecondaryHomeSections();
+    }
     const pendingCycle = data.routeContinuation?.futureCycles?.find(
       (cycle) => !cycle.graphAvailable,
     );
@@ -3723,7 +4024,12 @@ async function loadLearningPath() {
     if (returnPosition?.scope === scope) {
       setLearningPathTransitionStatus(
         "İlerlemen kaydedildi; öğrenme yolu yenilenemedi. Tekrar deneyebilirsin.",
-        { retry: true, error: true },
+        {
+          retry: true,
+          error: true,
+          retryAction: "refresh",
+          retryLabel: "Öğrenme yolunu yeniden yükle",
+        },
       );
     } else {
       container.innerHTML =
@@ -3841,6 +4147,7 @@ window.startTodayAssessment = async function (
   id,
   navigationFromStepId = null,
   navigationTargetStepId = null,
+  continuation = null,
 ) {
   const revision = learningPathNavigationRevision;
   const scope = insightScope();
@@ -3857,7 +4164,9 @@ window.startTodayAssessment = async function (
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (e) {
-    if (!isPremiumLimitError(e)) alert(e.message);
+    if (continuation) handleLearningPathStationStartFailure(continuation, e);
+    else if (!isPremiumLimitError(e))
+      alert(formatStudentError(e, "Değerlendirme şu anda açılamadı."));
   }
 };
 window.startTodayExercise = async function (encodedTemplateVersionId) {
@@ -4709,7 +5018,10 @@ async function loadFocusedLearningPathStep() {
   }
 }
 
-function setLearningPathTransitionStatus(message, { retry = false, error = false } = {}) {
+function setLearningPathTransitionStatus(
+  message,
+  { retry = false, error = false, retryAction = null, retryLabel = null } = {},
+) {
   const status = $("learning-path-transition-status");
   const retryButton = $("learning-path-transition-retry");
   if (status) {
@@ -4718,10 +5030,42 @@ function setLearningPathTransitionStatus(message, { retry = false, error = false
     status.classList.toggle("error", error);
   }
   retryButton?.classList.toggle("hidden", !retry);
+  if (retry) {
+    learningPathTransitionRetryAction = retryAction || "reconcile";
+    if (retryButton && retryLabel) retryButton.textContent = retryLabel;
+  } else {
+    learningPathTransitionRetryAction = null;
+    if (retryButton) retryButton.textContent = "Yeni öğrenme yolunu tekrar kontrol et";
+  }
 }
 
 function clearLearningPathTransitionStatus() {
   setLearningPathTransitionStatus("");
+}
+
+function retryLearningPathTransition() {
+  if (learningPathContinuation?.starting) return;
+  if (learningPathTransitionRetryAction === "start") {
+    const continuation = learningPathContinuation;
+    if (
+      !continuation?.targetNode ||
+      continuation.starting ||
+      continuation.scope !== insightScope() ||
+      currentPage !== "dashboard"
+    )
+      return;
+    continuation.starting = true;
+    setLearningPathTransitionStatus("Sıradaki istasyon açılıyor…");
+    void startLearningPathNode(continuation.targetNode, null, continuation.fromId, {
+      continuation,
+    });
+    return;
+  }
+  if (learningPathTransitionRetryAction === "refresh") {
+    void loadLearningPath();
+    return;
+  }
+  void retryPendingLearningPathReconcile();
 }
 
 async function reconcileP0ToP1(p0LearningPathId) {
@@ -4940,7 +5284,10 @@ async function completeLearningPathTerminalStep() {
   }
 }
 
-async function recoverCompletedP1CycleOnLearningPathLoad(data) {
+async function recoverCompletedP1CycleOnLearningPathLoad(
+  data,
+  timingSequence = learningPathTimingSequence,
+) {
   const plannedNext = data?.routeContinuation?.futureCycles?.[0];
   if (plannedNext && (!plannedNext.publicationApproved || !plannedNext.graphAvailable)) return data;
   const groups =
@@ -4966,19 +5313,64 @@ async function recoverCompletedP1CycleOnLearningPathLoad(data) {
   });
   if (!completedCycle) return data;
 
+  let result;
+  markLearningPathTiming("cycle-reconcile-start", timingSequence);
   try {
-    const result = await reconcileP1ToNextCycle(completedCycle.path.id);
-    if (result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED") {
-      return await insightApi("learning-path");
-    }
-    if (result?.outcome === "REVIEW_REQUIRED") {
-      setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(result), { error: true });
-    }
+    result = await reconcileP1ToNextCycle(completedCycle.path.id);
   } catch {
+    markLearningPathTiming("cycle-reconcile-end", timingSequence);
+    measureLearningPathTiming(
+      "cycle-reconcile",
+      "cycle-reconcile-start",
+      "cycle-reconcile-end",
+      timingSequence,
+    );
+    pendingP1CycleReconcile = { p1LearningPathId: completedCycle.path.id };
     setLearningPathTransitionStatus(
       "Öğrenme döngüsünün sonraki adımı şu anda kontrol edilemedi. İlerlemen korunuyor; tekrar deneyebilirsin.",
-      { retry: true, error: true },
+      {
+        retry: true,
+        error: true,
+        retryAction: "reconcile",
+        retryLabel: "Sonraki adımı yeniden kontrol et",
+      },
     );
+    return data;
+  }
+  markLearningPathTiming("cycle-reconcile-end", timingSequence);
+  measureLearningPathTiming(
+    "cycle-reconcile",
+    "cycle-reconcile-start",
+    "cycle-reconcile-end",
+    timingSequence,
+  );
+  if (result?.outcome === "ASSIGNED" || result?.outcome === "ALREADY_ASSIGNED") {
+    markLearningPathTiming("cycle-refresh-start", timingSequence);
+    try {
+      return await insightApi("learning-path");
+    } catch {
+      setLearningPathTransitionStatus(
+        "Sonraki öğrenme adımı hazır; yol güncellenemedi. İlerlemen korundu, yeniden deneyebilirsin.",
+        {
+          retry: true,
+          error: true,
+          retryAction: "refresh",
+          retryLabel: "Öğrenme yolunu yeniden yükle",
+        },
+      );
+      return data;
+    } finally {
+      markLearningPathTiming("cycle-refresh-end", timingSequence);
+      measureLearningPathTiming(
+        "cycle-refresh",
+        "cycle-refresh-start",
+        "cycle-refresh-end",
+        timingSequence,
+      );
+    }
+  }
+  if (result?.outcome === "REVIEW_REQUIRED") {
+    setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(result), { error: true });
   }
   return data;
 }
@@ -5022,6 +5414,8 @@ async function completeFocusedLearningStep() {
   if (!node || !button || button.disabled) return;
   const revision = learningPathNavigationRevision;
   const scope = insightScope();
+  beginLearningPathTiming();
+  markLearningPathTiming("completion-request-start");
   setAsyncButtonState(button, true, "Yükleniyor…");
   if (status) status.textContent = "Adım tamamlanıyor…";
   try {
@@ -5029,6 +5423,7 @@ async function completeFocusedLearningStep() {
       await learningPathStepApi(node.id, "/complete", { method: "POST", body: "{}" }),
     );
     if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
+    markLearningPathCompletionConfirmed();
     returnToLearningPathAfterStep(node, data?.nextStep || null);
   } catch (err) {
     setAsyncButtonState(button, false, "Yükleniyor…");
@@ -5230,6 +5625,8 @@ function navigate(
   learningPathContinuation = continuation;
   learningPathReturnPosition =
     page === "dashboard" && returnPosition?.scope === insightScope() ? returnPosition : null;
+  if (page !== "dashboard") clearLearningPathTransitionStatus();
+  else if (!continuation) clearLearningPathTransitionStatus();
 
   currentPage = page;
 
@@ -13611,18 +14008,13 @@ async function finishGuidedExerciseCompletion(originalSession, node, isCurrent, 
   const nextStep = exerciseSession.nextLearningStep || null;
   const replay =
     originalSession.deviceInfo?.source === "LEARNING_PATH_REPLAY" || node?.status === "completed";
-  let nextCycleTransition = exerciseSession.nextLearningCycle || null;
-  if (!nextStep && !replay && String(node?.learningPathCode || "").startsWith("EDUCATION_V2_P1_")) {
-    try {
-      nextCycleTransition ||= await reconcileP1ToNextCycle(node.learningPathId);
-    } catch {
-      if (isCurrent()) pendingP1CycleReconcile = { p1LearningPathId: node.learningPathId };
-    }
-  }
+  const nextCycleTransition = exerciseSession.nextLearningCycle || null;
   if (!isCurrent()) return true;
   exerciseBusy = false;
   // The original server session link survives a lost completion response.
-  // Optional result/points rendering is not part of the guided return path.
+  // Return to the route before cycle recovery. loadLearningPath owns the single
+  // authoritative reconciliation and fresh-route read; waiting here used to
+  // serialize a reconciliation before a second reconciliation on map loading.
   returnToLearningPathAfterGuidedExercise({ ...node, id: stepId }, nextStep, replay);
   if (nextCycleTransition?.outcome === "REVIEW_REQUIRED") {
     setLearningPathTransitionStatus(p1CycleTransitionReviewMessage(nextCycleTransition), {
@@ -14547,6 +14939,13 @@ async function handleExerciseComplete() {
   const scope = insightScope();
   const revision = learningPathNavigationRevision;
   const daily = student && isDailyTrainingExercise();
+  const timesGuidedCompletion = Boolean(
+    student &&
+    !daily &&
+    (exerciseSession?.learningStepId || originalSession.learningStepId || originalNode?.id) &&
+    !originalSession.assignmentId &&
+    originalSession.deviceInfo?.source !== "INDEPENDENT_TRAINING",
+  );
   const isCurrent = () =>
     scope === insightScope() &&
     revision === learningPathNavigationRevision &&
@@ -14561,6 +14960,10 @@ async function handleExerciseComplete() {
     btn.textContent = "Tamamlanıyor…";
   }
   try {
+    if (timesGuidedCompletion) {
+      beginLearningPathTiming();
+      markLearningPathTiming("completion-request-start");
+    }
     // The completion POST is authoritative. Avoid a redundant preflight GET
     // on the normal path; if its response is lost, the recovery read below
     // still reconciles the server's final session state.
@@ -14574,6 +14977,7 @@ async function handleExerciseComplete() {
     exerciseSession = completed;
     completionConfirmed = exerciseSession?.status === "COMPLETED";
     if (!completionConfirmed) throw new Error("Tamamlanma durumu doğrulanamadı");
+    if (timesGuidedCompletion) markLearningPathCompletionConfirmed();
 
     if (student && typeof recordPilotTelemetry === "function") {
       try {
@@ -14677,6 +15081,7 @@ async function handleExerciseComplete() {
         if (reconciled?.status === "COMPLETED") {
           exerciseSession = reconciled;
           completionConfirmed = true;
+          if (timesGuidedCompletion) markLearningPathCompletionConfirmed();
         }
       } catch {
         // Keep the original failure when the authoritative status cannot be
@@ -14717,10 +15122,7 @@ function setupExerciseEvents() {
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());
-  $("learning-path-transition-retry")?.addEventListener(
-    "click",
-    () => void retryPendingLearningPathReconcile(),
-  );
+  $("learning-path-transition-retry")?.addEventListener("click", retryLearningPathTransition);
   $("training-activities-grid")?.addEventListener("click", (event) => {
     const target =
       event.target instanceof Element

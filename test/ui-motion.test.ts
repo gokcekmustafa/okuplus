@@ -94,6 +94,32 @@ function harness(reduced = false, innerHeight = 800) {
 }
 
 describe("server-confirmed, optional UI motion", () => {
+  it("signals the actual first motion frame without changing the character animation", async () => {
+    const h = harness();
+    const onMotionStart = vi.fn(() => expect(h.animate).toHaveBeenCalled());
+    const pending = h.motion.enhanceRoadmap(
+      h.container,
+      after(),
+      "student",
+      null,
+      "31",
+      null,
+      onMotionStart,
+    );
+    expect(onMotionStart).not.toHaveBeenCalled();
+    h.flush();
+    expect(onMotionStart).toHaveBeenCalledExactlyOnceWith({ animated: true, started: true });
+    const movementCall = h.animate.mock.calls.find(([frames]) => frames.length === 9);
+    expect(movementCall?.[1]).toMatchObject({ duration: 1400, easing: "ease-in-out" });
+    expect(movementCall?.[0]).toHaveLength(9);
+    const finalTransform = movementCall?.[0].at(-1).transform;
+    const finalOffset = finalTransform?.match(/translate\(([-\d.e]+)px, ([-\d.e]+)px\)/);
+    expect(Number(finalOffset?.[1])).toBeCloseTo(0, 10);
+    expect(Number(finalOffset?.[2])).toBeCloseTo(0, 10);
+    h.animations[0]!.finish();
+    await pending;
+  });
+
   it("settles only after the slower character movement has finished", async () => {
     const h = harness();
     const done = vi.fn();
@@ -141,10 +167,20 @@ describe("server-confirmed, optional UI motion", () => {
 
   it("continues without an artificial delay when reduced motion is enabled", async () => {
     const h = harness(true);
-    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
+    const onMotionStart = vi.fn();
+    const pending = h.motion.enhanceRoadmap(
+      h.container,
+      after(),
+      "student",
+      null,
+      "31",
+      null,
+      onMotionStart,
+    );
     h.flush();
     await expect(pending).resolves.toMatchObject({ cancelled: false, plan: { toId: "32" } });
     expect(h.animate).not.toHaveBeenCalled();
+    expect(onMotionStart).toHaveBeenCalledExactlyOnceWith({ animated: false, started: true });
   });
 
   it("keeps the next station visible on a short mobile viewport", async () => {

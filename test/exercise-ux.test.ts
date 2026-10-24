@@ -49,14 +49,27 @@ function harness() {
     exerciseQuestions: [{ questionVersionId: "q1" }],
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
+    learningPathEntryMode: false,
     activeLearningStepNode: null,
     activeLearningStepVisualPosition: null,
     learningPathContinuation: null,
     learningPathNavigationRevision: 0,
+    learningPathTransitionSequence: 0,
+    learningPathTimingActive: false,
+    learningPathTimingSequence: 0,
+    learningPathCompletionTimingMarked: false,
+    window: { crypto: { randomUUID: () => "test-transition-id" } },
+    performance: {
+      mark: vi.fn(),
+      measure: vi.fn(),
+      clearMarks: vi.fn(),
+      clearMeasures: vi.fn(),
+    },
     currentPage: "exercise",
     insightScope: () => "student:tenant",
     insightRequestCache: () => new Map(),
     pendingP1CycleReconcile: null,
+    setLearningPathTransitionStatus: vi.fn(),
   });
   runInContext(
     source.slice(
@@ -444,13 +457,51 @@ describe("exercise UX state from production frontend", () => {
         h.context.lastNavigation = { page, options };
       };
       await h.run("handleExerciseComplete()");
-      expect(h.context.lastNavigation).toEqual({
+      expect(h.context.lastNavigation).toMatchObject({
         page: "dashboard",
-        options: { continuation: { fromId: "step-35", nextId: null, scope: "student:tenant" } },
+        options: {
+          continuation: {
+            fromId: "step-35",
+            nextId: null,
+            scope: "student:tenant",
+            clientSessionId: "path-test-transition-id",
+            starting: false,
+          },
+        },
       });
       expect(original.status).toBe("IN_PROGRESS");
     },
   );
+
+  it("returns to the route immediately and leaves cycle reconciliation to the fresh route load", async () => {
+    const h = harness();
+    const original = { id: "session", status: "IN_PROGRESS", learningStepId: "step-52" };
+    const node = {
+      id: "step-52",
+      status: "active",
+      learningPathId: "cycle-8",
+      learningPathCode: "EDUCATION_V2_P1_A_CYCLE_8",
+    };
+    h.context.originalSession = original;
+    h.context.node = node;
+    h.context.exerciseSession = {
+      id: "session",
+      status: "COMPLETED",
+      learningStepId: "step-52",
+      nextLearningStep: null,
+    };
+    h.context.reconcileP1ToNextCycle = vi.fn(async () => ({ outcome: "ASSIGNED" }));
+    h.context.returnToLearningPathAfterGuidedExercise = vi.fn();
+
+    await h.run("finishGuidedExerciseCompletion(originalSession, node, () => true, false)");
+
+    expect(h.context.reconcileP1ToNextCycle).not.toHaveBeenCalled();
+    expect(h.context.returnToLearningPathAfterGuidedExercise).toHaveBeenCalledExactlyOnceWith(
+      { ...node, id: "step-52" },
+      null,
+      false,
+    );
+  });
 
   it.each(["assignment", "independent", "daily"])(
     "does not continue a %s session on the roadmap",

@@ -166,6 +166,7 @@ export function createUiMotion(env = globalThis) {
     onMilestone,
     completedStepId = null,
     originPosition = null,
+    onMotionStart = null,
   ) {
     if (identity !== scope) {
       reset();
@@ -203,6 +204,13 @@ export function createUiMotion(env = globalThis) {
       },
     };
     roadmapRun = run;
+    const notifyMotionStart = (detail) => {
+      try {
+        onMotionStart?.(detail);
+      } catch {
+        /* Timing and status updates are optional. */
+      }
+    };
 
     const buttons = Array.from(container.querySelectorAll(".learning-map-v6-node"));
     const current = buttons.find((button) => button.getAttribute("aria-current") === "step");
@@ -272,6 +280,10 @@ export function createUiMotion(env = globalThis) {
           // server-confirmed active node rather than leaving a stale viewport.
           alignStep(current);
         }
+        // Signal after the existing character animation has actually been
+        // created; in reduced-motion/fallback mode this still marks the
+        // immediate server-confirmed destination handling.
+        notifyMotionStart({ animated: Boolean(movement), started: true });
         play(from?.querySelector(".learning-map-v6-marker-check"), [
           { opacity: 0, transform: "scale(.7)" },
           { opacity: 1, transform: "scale(1)" },

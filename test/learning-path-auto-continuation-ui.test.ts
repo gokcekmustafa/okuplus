@@ -9,6 +9,18 @@ const shared = section(
   "function learningPathStepElement(",
   "async function startLearningPathNode(",
 );
+const startNode = section(
+  "async function startLearningPathNode(",
+  "window.startTodayLearningStep =",
+);
+const startAssessment = section(
+  "window.startTodayAssessment = async function (",
+  "window.startTodayExercise =",
+);
+const transitionStatus = section(
+  "function setLearningPathTransitionStatus(",
+  "async function reconcileP0ToP1(",
+);
 const navigation = section("function navigate(", "globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__");
 const usable = section(
   "function isUsableLearningPathNode(",
@@ -22,6 +34,14 @@ const nodes = () => [
 function harness(stepId = "35") {
   const cache = new Map([["old-read", Promise.resolve({})]]);
   const button = { disabled: false };
+  const status = { textContent: "", classList: { toggle: vi.fn() } };
+  const retryButton = {
+    textContent: "Yeni öğrenme yolunu tekrar kontrol et",
+    classList: { toggle: vi.fn() },
+    disabled: false,
+    setAttribute() {},
+    removeAttribute() {},
+  };
   let rectReads = 0;
   const stepElement = {
     getBoundingClientRect: () => ({ top: rectReads++ === 0 ? 240 : 18, bottom: 160, height: 142 }),
@@ -43,6 +63,10 @@ function harness(stepId = "35") {
   const context = createContext({
     learningPathContinuation: null,
     learningPathReturnPosition: null,
+    learningPathTransitionRetryAction: null,
+    learningPathTimingActive: false,
+    learningPathTimingSequence: 0,
+    learningPathTransitionSequence: 0,
     learningPathNavigationRevision: 0,
     activeLearningStepNode: { id: stepId, status: "active" },
     activeLearningStepVisualPosition: null,
@@ -50,24 +74,40 @@ function harness(stepId = "35") {
     activeLearningStepNavigationFromStepId: null,
     learningPathEntryMode: true,
     currentPage: "exercise",
-    window,
+    window: { ...window, crypto: { randomUUID: () => "test-transition-id" } },
+    performance: {
+      mark: vi.fn(),
+      measure: vi.fn(),
+      clearMarks: vi.fn(),
+      clearMeasures: vi.fn(),
+    },
     scope: "student:tenant-a",
     insightScope: () => context.scope,
     insightRequestCache: () => cache,
     uiMotion: { cancel: vi.fn(), hasRoadmap: () => true },
     document,
     $: (id: string) =>
-      id === "lesson-detail"
-        ? { querySelector: () => button }
-        : id === "learning-path"
-          ? container
-          : null,
+      id === "learning-path-transition-status"
+        ? status
+        : id === "learning-path-transition-retry"
+          ? retryButton
+          : id === "lesson-detail"
+            ? { querySelector: () => button }
+            : id === "learning-path"
+              ? container
+              : null,
     PAGES: ["dashboard", "exercise", "lessons", "badges"],
     canAccessPage: () => true,
     isPlatformUser: false,
     setUserMenuOpen() {},
     closeSidebar() {},
     recordPilotTelemetry() {},
+    beginLearningPathTiming: vi.fn(),
+    newLearningPathTransitionSessionId: () => "path-test-transition-id",
+    markLearningPathTiming: vi.fn(),
+    measureLearningPathTiming: vi.fn(),
+    exerciseMode: null,
+    activeTrainingActivityId: null,
     loadLearningPath: vi.fn(),
     loadEntitlements() {},
     loadExercisePage() {},
@@ -75,13 +115,22 @@ function harness(stepId = "35") {
     loadFocusedLearningPathStep() {},
     loadLessons() {},
     startLearningPathNode: vi.fn(async () => {}),
+    isPremiumLimitError: () => false,
+    formatStudentError: (_error: unknown, fallback: string) => fallback,
+    authenticatedFetch: vi.fn(async () => ({ sessionId: "session-next" })),
     parseResponse: async (response: unknown) => response,
+    alert: vi.fn(),
     learningPathStepApi: vi.fn(async () => ({ nextStep: nodes()[1] })),
-    setAsyncButtonState: (target: typeof button, busy: boolean) => {
-      target.disabled = busy;
+    setAsyncButtonState: (target: typeof button | null, busy: boolean) => {
+      if (target) target.disabled = busy;
     },
   });
-  runInContext(shared + usable + navigation, context);
+  runInContext(shared + startNode + usable + transitionStatus + navigation, context);
+  const actualStartLearningPathNode = runInContext("startLearningPathNode", context) as (
+    ...args: unknown[]
+  ) => Promise<void>;
+  runInContext(startAssessment, context);
+  context.startLearningPathNode = vi.fn(async () => {});
   const run = (script: string) => runInContext(script, context);
   const complete = (fromId = stepId, nextId = "36") =>
     run(
@@ -91,7 +140,20 @@ function harness(stepId = "35") {
         JSON.stringify(nextId) +
         "})",
     );
-  return { context, cache, button, container, document, window, stepElement, run, complete };
+  return {
+    context,
+    cache,
+    button,
+    status,
+    retryButton,
+    container,
+    document,
+    window,
+    stepElement,
+    actualStartLearningPathNode,
+    run,
+    complete,
+  };
 }
 
 describe("guided station completion → map → motion → next server-unlocked station", () => {
@@ -102,6 +164,10 @@ describe("guided station completion → map → motion → next server-unlocked 
       reconcileP1ToNextCycle: reconcile,
       insightApi: vi.fn(async () => fresh),
       setLearningPathTransitionStatus: vi.fn(),
+      learningPathTimingSequence: 0,
+      learningPathTimingActive: false,
+      markLearningPathTiming: vi.fn(),
+      measureLearningPathTiming: vi.fn(),
     });
     runInContext(
       section(
@@ -163,7 +229,14 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(h.context.startLearningPathNode).not.toHaveBeenCalled();
     finish({ cancelled: false });
     await pending;
-    expect(h.context.startLearningPathNode).toHaveBeenCalledExactlyOnceWith(nodes()[1], null, "35");
+    expect(h.context.startLearningPathNode).toHaveBeenCalledExactlyOnceWith(
+      nodes()[1],
+      null,
+      "35",
+      {
+        continuation: h.context.learningPathContinuation,
+      },
+    );
     await h.run("continueAfterLearningPathMotion(nodes, learningPathContinuation, settled)");
     expect(h.context.startLearningPathNode).toHaveBeenCalledOnce();
   });
@@ -182,6 +255,15 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(h.document.documentElement.style.scrollBehavior).toBe("smooth");
     expect(h.window.scrollBy).not.toHaveBeenCalled();
     expect(h.container.innerHTML).toBe("existing-learning-map");
+  });
+
+  it("shows the saved-progress message immediately while the route request is pending", () => {
+    const h = harness("66");
+    h.complete("66", "67");
+
+    expect(h.status.textContent).toBe("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+    expect(h.context.learningPathReturnPosition).toMatchObject({ stepId: "66" });
+    expect(h.document.scrollingElement.scrollTop).toBe(78);
   });
 
   it.each([
@@ -362,6 +444,8 @@ describe("guided station completion → map → motion → next server-unlocked 
     h.context.loadToday = () => {};
     h.context.renderHomeInsights = () => {};
     h.context.renderAcademicLearningModel = () => {};
+    h.context.reportLearningPathClientError = () => {};
+    h.context.renderAcademicLearningModel = () => {};
     h.context.renderLearningPathMap = vi.fn();
     runInContext(
       section("async function loadLearningPath()", "function academicStatusLabel("),
@@ -379,11 +463,176 @@ describe("guided station completion → map → motion → next server-unlocked 
       expect(h.context.renderLearningPathMap).toHaveBeenCalledExactlyOnceWith(
         [{ nodes: nodes() }],
         undefined,
-        {
+        expect.objectContaining({
           continuation: h.context.learningPathContinuation,
           returnPosition: h.context.learningPathReturnPosition,
-        },
+          onMotionStart: expect.any(Function),
+        }),
       ),
     );
+  });
+
+  it("measures stages and starts motion before delayed secondary dashboard rendering", async () => {
+    const h = harness("66");
+    let now = 0;
+    const marks = new Map<string, number>();
+    const measures = new Map<string, number>();
+    const performance = {
+      mark: (name: string) => marks.set(name, now),
+      clearMarks: (name: string) => marks.delete(name),
+      clearMeasures: (name: string) => measures.delete(name),
+      measure: (name: string, start: string, end: string) => {
+        const startAt = marks.get(start);
+        const endAt = marks.get(end);
+        if (startAt !== undefined && endAt !== undefined) measures.set(name, endAt - startAt);
+      },
+    };
+    const rafQueue: Array<() => void> = [];
+    h.context.performance = performance;
+    h.context.window.requestAnimationFrame = (callback: () => void) => {
+      rafQueue.push(callback);
+      return rafQueue.length;
+    };
+    h.context.insightsIdentity = "student:tenant-a";
+    h.context.currentPage = "dashboard";
+    h.context.learningPathLoading = false;
+    h.context.insightApi = vi.fn(async () => {
+      now += 240;
+      return { paths: [{ nodes: nodes() }], today: {}, academicProgram: { areas: [] } };
+    });
+    h.context.recoverCompletedP1CycleOnLearningPathLoad = vi.fn(async (data: unknown) => {
+      now += 120;
+      return data;
+    });
+    h.context.renderTodayData = vi.fn(() => {
+      now += 80;
+    });
+    h.context.renderHomeInsights = vi.fn(() => {
+      now += 180;
+    });
+    h.context.renderAcademicLearningModel = vi.fn(() => {
+      now += 120;
+    });
+    h.context.renderLearningPathMap = vi.fn((_groups, _level, transition) => {
+      now += 30;
+      rafQueue.push(() => transition.onMotionStart({ animated: true, started: true }));
+    });
+    h.context.reportLearningPathClientError = vi.fn();
+    h.context.loadToday = vi.fn();
+    runInContext(
+      section("async function loadLearningPath()", "function academicStatusLabel("),
+      h.context,
+    );
+    h.run('beginLearningPathTiming(); markLearningPathTiming("completion-request-start")');
+    now += 220;
+    h.run("markLearningPathCompletionConfirmed()");
+    h.complete("66", "67");
+    const loading = h.run("loadLearningPath()");
+    expect(h.status.textContent).toBe("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+    expect(h.document.scrollingElement.scrollTop).toBe(78);
+    await loading;
+
+    const prefix = "okupratik:learning-path-transition:";
+    await vi.waitFor(() => {
+      h.run("void 0");
+      expect(marks.has(prefix + "cycle-recovery-end")).toBe(true);
+    });
+    expect(measures.get(prefix + "request")).toBe(240);
+    expect(measures.get(prefix + "completion-request")).toBe(220);
+    expect(measures.get(prefix + "cycle-recovery")).toBe(120);
+    expect(measures.get(prefix + "map-render")).toBe(30);
+    expect(h.context.renderHomeInsights).not.toHaveBeenCalled();
+    expect(rafQueue).toHaveLength(2);
+
+    const firstFrame = rafQueue.splice(0);
+    now += 16;
+    firstFrame.forEach((callback) => callback());
+    expect(marks.get(prefix + "motion-start")).toBe(626);
+    expect(measures.get(prefix + "completion-to-motion")).toBe(406);
+    expect(measures.get(prefix + "completion-action-to-motion")).toBe(626);
+    expect(h.status.textContent).toBe("Sıradaki istasyona ilerliyorsun…");
+    expect(h.context.renderHomeInsights).not.toHaveBeenCalled();
+
+    const secondFrame = rafQueue.splice(0);
+    now += 16;
+    secondFrame.forEach((callback) => callback());
+    expect(h.context.renderTodayData).toHaveBeenCalledOnce();
+    expect(h.context.renderHomeInsights).toHaveBeenCalledOnce();
+    expect(h.context.renderAcademicLearningModel).toHaveBeenCalledOnce();
+    expect(measures.get(prefix + "secondary-home-render")).toBe(380);
+
+    const previousSerializedOrderMs = 220 + 240 + 120 + 80 + 180 + 120 + 30 + 16;
+    const measuredMotionStartMs = measures.get(prefix + "completion-action-to-motion")!;
+    expect(measuredMotionStartMs).toBe(626);
+    expect(previousSerializedOrderMs).toBe(1006);
+    expect(previousSerializedOrderMs - measuredMotionStartMs).toBe(380);
+  });
+
+  it("retries a failed next-station start with the same idempotency key and ignores duplicate clicks", async () => {
+    const h = harness("66");
+    h.complete("66", "67");
+    const continuation = h.context.learningPathContinuation;
+    continuation.targetNode = {
+      ...nodes()[1],
+      type: "REINFORCEMENT",
+      templateVersionId: "template-67",
+    };
+    h.context.currentPage = "dashboard";
+    h.context.startLearningPathNode = h.actualStartLearningPathNode;
+    let finishRetry!: (value: unknown) => void;
+    h.context.authenticatedFetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network unavailable"))
+      .mockImplementationOnce(() => new Promise((resolve) => (finishRetry = resolve)));
+    h.context.setAsyncButtonState = vi.fn();
+
+    await h.run(
+      "startLearningPathNode(learningPathContinuation.targetNode, null, learningPathContinuation.fromId, { continuation: learningPathContinuation })",
+    );
+    expect(h.status.textContent).toContain("İlerlemen kaydedildi");
+    expect(h.retryButton.textContent).toBe("İstasyonu yeniden dene");
+    expect(h.context.learningPathContinuation.starting).toBe(false);
+    const firstBody = JSON.parse(h.context.authenticatedFetch.mock.calls[0]![1].body);
+
+    const firstRetry = h.run("retryLearningPathTransition()");
+    h.run("retryLearningPathTransition()");
+    expect(h.context.authenticatedFetch).toHaveBeenCalledTimes(2);
+    finishRetry({ sessionId: "session-67" });
+    await firstRetry;
+    await vi.waitFor(() => {
+      h.run("void 0");
+      expect(h.context.currentPage).toBe("exercise");
+    });
+    const retryBody = JSON.parse(h.context.authenticatedFetch.mock.calls[1]![1].body);
+    expect(retryBody.clientSessionId).toBe(firstBody.clientSessionId);
+    expect(h.context.currentPage).toBe("exercise");
+  });
+
+  it("keeps a failed assessment start retryable when its helper catches the request error", async () => {
+    const h = harness("66");
+    const continuation = {
+      fromId: "66",
+      scope: "student:tenant-a",
+      clientSessionId: "path-assessment-retry",
+      starting: true,
+    };
+    h.context.learningPathContinuation = continuation;
+    h.context.currentPage = "dashboard";
+    h.context.authenticatedFetch = vi.fn(async () => {
+      throw new Error("temporary network error");
+    });
+
+    await h.actualStartLearningPathNode(
+      { id: "67", type: "ASSESSMENT", assessmentId: "assessment-67", status: "active" },
+      null,
+      "66",
+      { continuation },
+    );
+
+    expect(h.context.authenticatedFetch).toHaveBeenCalledOnce();
+    expect(continuation.starting).toBe(false);
+    expect(h.status.textContent).toContain("İlerlemen kaydedildi");
+    expect(h.retryButton.textContent).toBe("İstasyonu yeniden dene");
+    expect(h.context.currentPage).toBe("dashboard");
   });
 });

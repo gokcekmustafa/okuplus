@@ -8892,6 +8892,36 @@ textarea:focus-visible {
   }
 }
 
+.student-shell #learning-path-transition-status:not(.hidden) {
+  position: fixed;
+  top: calc(76px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 30;
+  width: min(calc(100vw - 24px), 640px);
+  margin: 0;
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgba(21, 35, 61, 0.16);
+  color: var(--text);
+}
+
+.student-shell #learning-path-transition-status.error:not(.hidden) {
+  border-color: var(--danger);
+}
+
+.student-shell #learning-path-transition-retry:not(.hidden) {
+  position: fixed;
+  top: calc(136px + env(safe-area-inset-top));
+  left: 50%;
+  z-index: 30;
+  max-width: calc(100vw - 24px);
+  transform: translateX(-50%);
+  box-shadow: 0 8px 28px rgba(21, 35, 61, 0.16);
+}
+
 @media (max-width: 560px) {
   .guest-shell:not(.guest-diagnostic-mode) {
     padding: 8px;
