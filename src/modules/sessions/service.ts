@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Prisma, type PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { loadEnv } from "../../config/env.js";
 import { conflictError, forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { recordExerciseCompleted } from "../gamification/service.js";
 import { processGamificationEvent } from "../gamification/foundation.js";
@@ -29,7 +30,8 @@ import {
   isLearningPathReplaySession,
 } from "../training/session-origin.js";
 import {
-  reorderJsonOptionsForSession,
+  multipleChoiceCorrectOptionIds,
+  reorderQuestionOptionSetsForSession,
   shouldReorderStudentOptions,
 } from "../questions/session-option-order.js";
 import { capturePlacementBaseline } from "../baseline/service.js";
@@ -535,6 +537,31 @@ export async function listQuestionsForSession(
       throw validationError("Bu günlük egzersiz henüz sıraya gelmedi");
     }
     const graph = await loadTrainingRuntimeGraph(session.templateVersionId, actor);
+    const questionVersionById = new Map(
+      session.templateVersion.questions.map((question) => [
+        question.questionVersion.id,
+        question.questionVersion,
+      ]),
+    );
+    const reorderOptions = shouldReorderStudentOptions(
+      actor.platformRole,
+      session.context,
+      "MULTIPLE_CHOICE",
+    );
+    const orderedOptions = reorderOptions
+      ? reorderQuestionOptionSetsForSession(
+          graph.questions.map((question) => ({
+            questionVersionId: question.questionVersionId,
+            questionType: question.type,
+            options: question.options,
+            correctOptionIds: multipleChoiceCorrectOptionIds(
+              questionVersionById.get(question.questionVersionId)?.correctAnswer,
+            ),
+          })),
+          session.id,
+          loadEnv().JWT_SECRET,
+        )
+      : null;
     return {
       questions: graph.questions.map((question) => ({
         questionVersionId: question.questionVersionId,
@@ -543,12 +570,7 @@ export async function listQuestionsForSession(
         contentVersionId: question.contentVersionId,
         prompt: question.prompt,
         type: question.type,
-        options: shouldReorderStudentOptions(actor.platformRole, session.context, question.type)
-          ? reorderJsonOptionsForSession(
-              question.options,
-              `${session.id}:${question.questionVersionId}`,
-            )
-          : question.options,
+        options: orderedOptions?.get(question.questionVersionId) ?? question.options,
         allowMultiple: question.allowMultiple,
         explanation: question.explanation,
         hint: question.hint,
@@ -563,6 +585,23 @@ export async function listQuestionsForSession(
       content.contentVersionId,
     ]),
   );
+  const reorderOptions = shouldReorderStudentOptions(
+    actor.platformRole,
+    session.context,
+    "MULTIPLE_CHOICE",
+  );
+  const orderedOptions = reorderOptions
+    ? reorderQuestionOptionSetsForSession(
+        session.templateVersion.questions.map((question) => ({
+          questionVersionId: question.questionVersion.id,
+          questionType: question.questionVersion.question.type,
+          options: question.questionVersion.options,
+          correctOptionIds: multipleChoiceCorrectOptionIds(question.questionVersion.correctAnswer),
+        })),
+        session.id,
+        loadEnv().JWT_SECRET,
+      )
+    : null;
   const questions = session.templateVersion.questions.map((q) => {
     const correctAnswer = q.questionVersion.correctAnswer as {
       allowMultiple?: unknown;
@@ -575,16 +614,7 @@ export async function listQuestionsForSession(
       contentVersionId: contentVersionByContentId.get(q.questionVersion.question.contentId) ?? null,
       prompt: q.questionVersion.prompt,
       type: q.questionVersion.question.type,
-      options: shouldReorderStudentOptions(
-        actor.platformRole,
-        session.context,
-        q.questionVersion.question.type,
-      )
-        ? reorderJsonOptionsForSession(
-            q.questionVersion.options,
-            `${session.id}:${q.questionVersion.id}`,
-          )
-        : q.questionVersion.options,
+      options: orderedOptions?.get(q.questionVersion.id) ?? q.questionVersion.options,
       allowMultiple:
         q.questionVersion.question.type === "MULTIPLE_CHOICE" &&
         correctAnswer?.allowMultiple === true,

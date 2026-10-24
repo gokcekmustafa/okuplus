@@ -251,6 +251,8 @@ describe("exercise session", () => {
         options: [
           { id: "a", text: "Ankara", position: 0 },
           { id: "b", text: "İstanbul", position: 1 },
+          { id: "c", text: "İzmir", position: 2 },
+          { id: "d", text: "Bursa", position: 3 },
         ],
         correctAnswer: {
           type: "MULTIPLE_CHOICE",
@@ -503,6 +505,68 @@ describe("exercise session", () => {
     expect(qs.map((q: any) => q.questionVersionId).sort()).toEqual([QV_A, QV_OE].sort());
   });
 
+  it("öğrenci oturum uçları aynı karıştırılmış seçenekleri verir ve cevap anahtarını gizler", async () => {
+    const session = await prisma.exerciseSession.create({
+      data: {
+        id: "99999981-0000-7000-8000-000000000301",
+        tenantId: TENANT_A,
+        studentId: STUDENT_A,
+        templateVersionId: TEMPLATE_VERSION_A,
+        context: "INDIVIDUAL",
+        sessionType: "PRACTICE",
+      },
+      select: { id: true },
+    });
+    const headers = await auth("session-student-a@example.com");
+    const [questionsResponse, detailResponse, repeatedQuestionsResponse] = await Promise.all([
+      app.inject({
+        method: "GET",
+        url: `/student/sessions/${session.id}/questions`,
+        headers,
+      }),
+      app.inject({ method: "GET", url: `/student/sessions/${session.id}`, headers }),
+      app.inject({
+        method: "GET",
+        url: `/student/sessions/${session.id}/questions`,
+        headers,
+      }),
+    ]);
+    expect(questionsResponse.statusCode).toBe(200);
+    expect(detailResponse.statusCode).toBe(200);
+    expect(repeatedQuestionsResponse.statusCode).toBe(200);
+
+    const questions = questionsResponse.json().data.questions;
+    const repeated = repeatedQuestionsResponse.json().data.questions;
+    const detail = detailResponse.json().data;
+    const listed = questions.find((question: any) => question.questionVersionId === QV_A);
+    const repeatedQuestion = repeated.find((question: any) => question.questionVersionId === QV_A);
+    const detailQuestion = detail.questions.find(
+      (question: any) => question.questionVersionId === QV_A,
+    );
+    expect(listed.options.map((option: any) => option.id)).toEqual(
+      repeatedQuestion.options.map((option: any) => option.id),
+    );
+    expect(detailQuestion.options.map((option: any) => option.id)).toEqual(
+      listed.options.map((option: any) => option.id),
+    );
+    expect(JSON.stringify(detail)).not.toMatch(/correctAnswer|correctOptionIds/u);
+    expect(JSON.stringify(questions)).not.toMatch(/correctAnswer|correctOptionIds/u);
+    expect(detail.templateVersion.questions).toBeUndefined();
+
+    const correct = await app.inject({
+      method: "POST",
+      url: `/student/questions/${QV_A}/attempts`,
+      headers,
+      payload: {
+        sessionId: session.id,
+        answer: ["a"],
+        clientAttemptId: "att-99999981-option-order-correct",
+      },
+    });
+    expect(correct.statusCode).toBe(200);
+    expect(correct.json().data.rawScore).toBe(1);
+  });
+
   it("öğrenci session API'si MC seçeneklerini üç öğrenci bağlamında sabit ve session-bazlı sıralar", async () => {
     const contexts = ["INDIVIDUAL", "ASSIGNMENT", "ASSESSMENT"] as const;
     for (const [contextIndex, context] of contexts.entries()) {
@@ -528,12 +592,12 @@ describe("exercise session", () => {
       for (const sessionId of sessionIds) {
         const first = await app.inject({
           method: "GET",
-          url: `/admin/exercise-sessions/${sessionId}/questions`,
+          url: `/student/sessions/${sessionId}/questions`,
           headers: await auth("session-student-a@example.com"),
         });
         const second = await app.inject({
           method: "GET",
-          url: `/admin/exercise-sessions/${sessionId}/questions`,
+          url: `/student/sessions/${sessionId}/questions`,
           headers: await auth("session-student-a@example.com"),
         });
         expect(first.statusCode).toBe(200);
@@ -553,7 +617,7 @@ describe("exercise session", () => {
       expect(new Set(displayedOrders.map((order) => order.join("|"))).size).toBeGreaterThan(1);
       const nonMultipleChoice = await app.inject({
         method: "GET",
-        url: `/admin/exercise-sessions/${sessionIds[0]}/questions`,
+        url: `/student/sessions/${sessionIds[0]}/questions`,
         headers: await auth("session-student-a@example.com"),
       });
       const openEnded = nonMultipleChoice

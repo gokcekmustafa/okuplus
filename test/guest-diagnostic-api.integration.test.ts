@@ -235,6 +235,46 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
     expect(data(duplicate).idempotent).toBe(true);
   });
 
+  it("randomizes the complete diagnostic session, remains stable on reload and keeps keys private", async () => {
+    const requestQuestions = (sessionId: string, jar: CookieJar) =>
+      app.inject({
+        method: "GET",
+        url: `/guest/diagnostics/${sessionId}/questions`,
+        headers: { cookie: cookieHeader(jar) },
+      });
+    const [first, repeated, otherSession] = await Promise.all([
+      requestQuestions(sessionA, cookiesA),
+      requestQuestions(sessionA, cookiesA),
+      requestQuestions(sessionB, cookiesB),
+    ]);
+    expect(first.statusCode).toBe(200);
+    expect(repeated.statusCode).toBe(200);
+    expect(otherSession.statusCode).toBe(200);
+    const firstQuestions = data(first).questions as Array<{
+      id: string;
+      options: Array<{ id: string }>;
+    }>;
+    const repeatedQuestions = data(repeated).questions as Array<{
+      id: string;
+      options: Array<{ id: string }>;
+    }>;
+    const otherQuestions = data(otherSession).questions as Array<{
+      id: string;
+      options: Array<{ id: string }>;
+    }>;
+    expect(JSON.stringify(data(first))).not.toMatch(/correctAnswer|correctOptionIds/u);
+    expect(firstQuestions.map((question) => question.options.map((option) => option.id))).toEqual(
+      repeatedQuestions.map((question) => question.options.map((option) => option.id)),
+    );
+    expect(
+      firstQuestions.some(
+        (question, index) =>
+          question.options.map((option) => option.id).join("|") !==
+          otherQuestions[index]?.options.map((option) => option.id).join("|"),
+      ),
+    ).toBe(true);
+  });
+
   it("does not complete before all eight answers are present", async () => {
     const incomplete = await app.inject({
       method: "POST",

@@ -1,5 +1,6 @@
 import type { PlatformRole } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { loadEnv } from "../../config/env.js";
 import { forbiddenError, notFoundError, validationError } from "../../lib/errors.js";
 import { calendarDateKey, calendarDateStorage, calendarDayBounds } from "../../lib/calendar.js";
 import {
@@ -33,6 +34,10 @@ import {
   learningPathReplayDeviceInfo,
 } from "../training/session-origin.js";
 import { resolveP1CycleTransitionStep } from "./p1-transition.js";
+import {
+  multipleChoiceCorrectOptionIds,
+  reorderQuestionOptionSetsForSession,
+} from "../questions/session-option-order.js";
 
 export type DailyGoalStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
@@ -1091,6 +1096,7 @@ export async function getStudentSession(
                 },
               },
             },
+            orderBy: { position: "asc" },
           },
         },
       },
@@ -1158,9 +1164,10 @@ export async function getStudentSession(
   if (resolvedTrainingConfig && resolvedTrainingConfig.status !== "READY") {
     throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
   }
-  if (resolvedTrainingConfig?.status === "READY") {
-    await loadTrainingRuntimeGraph(session.templateVersionId, actor);
-  }
+  const trainingGraph =
+    resolvedTrainingConfig?.status === "READY"
+      ? await loadTrainingRuntimeGraph(session.templateVersionId, actor)
+      : null;
   const resolvedP1Step = session.assessmentId
     ? await resolveP1CycleTransitionStep(actor, {
         learningStepId: session.learningStepId,
@@ -1171,6 +1178,32 @@ export async function getStudentSession(
   const learningPathNavigation = effectiveLearningStepId
     ? await getLearningStepNavigation(actor, effectiveLearningStepId)
     : null;
+  const questionVersionById = new Map(
+    session.templateVersion.questions.map((entry) => [
+      entry.questionVersion.id,
+      entry.questionVersion,
+    ]),
+  );
+  const questionsForOrdering = trainingGraph
+    ? trainingGraph.questions.map((question) => ({
+        questionVersionId: question.questionVersionId,
+        questionType: question.type,
+        options: question.options,
+        correctOptionIds: multipleChoiceCorrectOptionIds(
+          questionVersionById.get(question.questionVersionId)?.correctAnswer,
+        ),
+      }))
+    : session.templateVersion.questions.map((entry) => ({
+        questionVersionId: entry.questionVersion.id,
+        questionType: entry.questionVersion.question.type,
+        options: entry.questionVersion.options,
+        correctOptionIds: multipleChoiceCorrectOptionIds(entry.questionVersion.correctAnswer),
+      }));
+  const orderedOptions = reorderQuestionOptionSetsForSession(
+    questionsForOrdering,
+    session.id,
+    loadEnv().JWT_SECRET,
+  );
   const questions = session.templateVersion.questions.map((entry) => {
     const questionVersion = entry.questionVersion;
     const correctAnswer = questionVersion.correctAnswer as {
@@ -1183,7 +1216,7 @@ export async function getStudentSession(
       contentVersionId: questionVersion.contentVersionId,
       prompt: questionVersion.prompt,
       type: questionVersion.question.type,
-      options: questionVersion.options,
+      options: orderedOptions.get(questionVersion.id) ?? questionVersion.options,
       explanation: questionVersion.explanation,
       hint: questionVersion.hint,
       blankIds: Array.isArray(correctAnswer?.blanks)
@@ -1197,7 +1230,11 @@ export async function getStudentSession(
     resolvedTrainingConfig?.status === "READY"
       ? toTrainingRuntimeConfig(resolvedTrainingConfig.config)
       : null;
-  const { config: _versionConfig, ...templateVersion } = session.templateVersion;
+  const {
+    config: _versionConfig,
+    questions: _versionQuestions,
+    ...templateVersion
+  } = session.templateVersion;
   return {
     ...session,
     learningStepId: effectiveLearningStepId,

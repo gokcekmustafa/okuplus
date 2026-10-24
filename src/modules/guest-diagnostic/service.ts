@@ -40,6 +40,11 @@ import {
   type GuestEvaluation,
 } from "./scoring.js";
 import { createGuestRateLimiter, type GuestRateLimitPolicy } from "./rate-limit.js";
+import { loadEnv } from "../../config/env.js";
+import {
+  multipleChoiceCorrectOptionIds,
+  reorderQuestionOptionSetsForSession,
+} from "../questions/session-option-order.js";
 
 type GuestDbClient = PrismaClient;
 type GuestTransaction = Prisma.TransactionClient;
@@ -572,6 +577,16 @@ export async function getGuestDiagnosticQuestions(
       });
       if (!row) throw notFoundError("Tanı oturumu bulunamadı");
       const answeredCount = row.items.filter((item) => item.answers.length > 0).length;
+      const orderedOptions = reorderQuestionOptionSetsForSession(
+        row.items.map((item) => ({
+          questionVersionId: item.questionVersion.id,
+          questionType: item.questionType,
+          options: item.questionVersion.options,
+          correctOptionIds: multipleChoiceCorrectOptionIds(item.questionVersion.correctAnswer),
+        })),
+        row.id,
+        loadEnv().JWT_SECRET,
+      );
       return {
         ...sessionSummary(row, answeredCount),
         questions: row.items.map((item) => ({
@@ -582,7 +597,9 @@ export async function getGuestDiagnosticQuestions(
           skill: item.skillCode,
           difficulty: item.difficulty,
           prompt: item.questionVersion.prompt,
-          options: publicOptions(item.questionVersion.options),
+          options: publicOptions(
+            orderedOptions.get(item.questionVersion.id) ?? item.questionVersion.options,
+          ),
           content:
             (item.questionVersion.contentVersion ??
             item.questionVersion.question.content.currentVersion)
