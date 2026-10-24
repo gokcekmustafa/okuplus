@@ -23,8 +23,10 @@ import {
 } from "./education-v2-p1-a-cycle-4-release.js";
 import { EDUCATION_V2_P1_A_CYCLE_5_8 } from "./education-v2-p1-a-cycle-5-8-program.js";
 import { EDUCATION_V2_P1_A_CYCLE_9_12 } from "./education-v2-p1-a-cycle-5-8-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_13_16 } from "./education-v2-p1-a-cycle-5-8-program.js";
 import { isEducationV2P1ACycle5To8ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-5-8-release.js";
 import { isEducationV2P1ACycle9To12ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-9-12-release.js";
+import { isEducationV2P1ACycle13To16ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-13-16-release.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -190,6 +192,29 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
       title: preparedA9To12.program.path.title,
       units: preparedA9To12.program.path.units,
       manifest: preparedA9To12.manifest,
+      authoringStatus: publicationApproved()
+        ? ("OWNER_RELEASE_APPROVED" as const)
+        : ("DRAFT_NOT_RELEASED" as const),
+      publicationApproved,
+    };
+  }
+  const preparedA13To16 = EDUCATION_V2_P1_A_CYCLE_13_16.find(
+    (candidate) => candidate.sequence === cycle.sequence,
+  );
+  if (cycle.routeFamily === "A" && preparedA13To16) {
+    const publicationApproved = () =>
+      isEducationV2P1ACycle13To16ProductionAssignmentEnabled(preparedA13To16.sequence);
+    return {
+      ...cycle,
+      pathCode: preparedA13To16.program.path.code,
+      programId: preparedA13To16.program.programId,
+      version: preparedA13To16.manifest.cycleVersion,
+      sequence: preparedA13To16.manifest.sequence,
+      routeFamily: "A" as const,
+      scopeCode: "G8_12",
+      title: preparedA13To16.program.path.title,
+      units: preparedA13To16.program.path.units,
+      manifest: preparedA13To16.manifest,
       authoringStatus: publicationApproved()
         ? ("OWNER_RELEASE_APPROVED" as const)
         : ("DRAFT_NOT_RELEASED" as const),

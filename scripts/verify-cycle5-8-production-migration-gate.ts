@@ -18,11 +18,15 @@ function requiredEnvironment(name: string): string {
 async function main(): Promise<void> {
   const cycle58Operation = process.env.CYCLE58_OPERATION?.trim();
   const cycle912Operation = process.env.CYCLE912_OPERATION?.trim();
-  if (cycle58Operation && cycle912Operation) {
+  const cycle1316Operation = process.env.CYCLE1316_OPERATION?.trim();
+  if ([cycle58Operation, cycle912Operation, cycle1316Operation].filter(Boolean).length > 1) {
     throw new Error("only one protected curriculum operation may be selected");
   }
   const operation =
-    cycle912Operation || cycle58Operation || requiredEnvironment("CYCLE58_OPERATION");
+    cycle1316Operation ||
+    cycle912Operation ||
+    cycle58Operation ||
+    requiredEnvironment("CYCLE58_OPERATION");
   if (operation !== "PLAN_ONLY" && operation !== "APPLY") {
     throw new Error("CYCLE58_OPERATION must be PLAN_ONLY or APPLY");
   }

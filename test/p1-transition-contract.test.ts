@@ -135,6 +135,17 @@ describe("P1 transition foundation contracts", () => {
     expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_2_G8_12")).toBe(
       "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_3_G8_12",
     );
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_8_G8_12")).toBe(
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_9_G8_12",
+    );
+    expect(nextP1CyclePathCode("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_12_G8_12")).toBe(
+      "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_13_G8_12",
+    );
+    expect(
+      learningRouteCycle(
+        "EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_13_G8_12",
+      )?.publicationApproved(),
+    ).toBe(true);
     const nextDraftCycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,
     );

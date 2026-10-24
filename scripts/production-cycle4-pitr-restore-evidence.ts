@@ -42,6 +42,10 @@ export type Cycle9To12PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & 
   scope: "cycle9-12";
   graphScope: "CYCLES_9_TO_12";
 };
+export type Cycle13To16PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & {
+  scope: "cycle13-16";
+  graphScope: "CYCLES_13_TO_16";
+};
 export type Cycle4PitrFailureRecord = {
   stage: string;
   endpoint: string | null;
@@ -180,11 +184,22 @@ export function isCycle9To12PitrEvidenceValid(
   );
 }
 
+export function isCycle13To16PitrEvidenceValid(
+  value: unknown,
+  expected: Cycle13To16PitrEvidenceExpectation,
+): boolean {
+  return (
+    isPitrEvidenceValidForScope(value, expected, "cycle13-16", 6) &&
+    isRecord(value) &&
+    value.graphScope === expected.graphScope
+  );
+}
+
 function isPitrEvidenceValidForScope(
   value: unknown,
   expected: Cycle4PitrEvidenceExpectation,
-  scope: "cycle4" | "cycle5-8" | "cycle9-12",
-  schemaVersion: 2 | 4 | 5,
+  scope: "cycle4" | "cycle5-8" | "cycle9-12" | "cycle13-16",
+  schemaVersion: 2 | 4 | 5 | 6,
 ): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
@@ -668,16 +683,26 @@ async function runPitrEvidence(): Promise<JsonRecord> {
   const now = Date.now();
   const run = runIdentity();
   const pitrScope = process.env.CYCLE_PITR_SCOPE?.trim() || "cycle4";
-  if (pitrScope !== "cycle4" && pitrScope !== "cycle5-8" && pitrScope !== "cycle9-12") {
+  if (
+    pitrScope !== "cycle4" &&
+    pitrScope !== "cycle5-8" &&
+    pitrScope !== "cycle9-12" &&
+    pitrScope !== "cycle13-16"
+  ) {
     throw safeError("preflight", "unsupported PITR scope");
   }
   const graphScope =
-    process.env.CYCLE912_GRAPH_SCOPE?.trim() ?? process.env.CYCLE58_GRAPH_SCOPE?.trim();
+    process.env.CYCLE1316_GRAPH_SCOPE?.trim() ??
+    process.env.CYCLE912_GRAPH_SCOPE?.trim() ??
+    process.env.CYCLE58_GRAPH_SCOPE?.trim();
   if (pitrScope === "cycle5-8" && graphScope !== "CYCLE_5_ONLY" && graphScope !== "CYCLES_5_TO_8") {
     throw safeError("preflight", "unsupported Cycle 5–8 graph scope");
   }
   if (pitrScope === "cycle9-12" && graphScope !== "CYCLES_9_TO_12") {
     throw safeError("preflight", "unsupported Cycle 9–12 graph scope");
+  }
+  if (pitrScope === "cycle13-16" && graphScope !== "CYCLES_13_TO_16") {
+    throw safeError("preflight", "unsupported Cycle 13–16 graph scope");
   }
   const evidencePath =
     process.env.CYCLE_PITR_EVIDENCE_PATH?.trim() ||
@@ -685,10 +710,13 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       ? process.env.CYCLE4_PITR_EVIDENCE_PATH?.trim()
       : pitrScope === "cycle5-8"
         ? process.env.CYCLE58_PITR_EVIDENCE_PATH?.trim()
-        : process.env.CYCLE912_PITR_EVIDENCE_PATH?.trim());
+        : pitrScope === "cycle9-12"
+          ? process.env.CYCLE912_PITR_EVIDENCE_PATH?.trim()
+          : process.env.CYCLE1316_PITR_EVIDENCE_PATH?.trim());
   if (!evidencePath) throw safeError("evidence output", "PITR evidence path is required");
   const evidence: JsonRecord = {
-    schemaVersion: pitrScope === "cycle4" ? 2 : pitrScope === "cycle5-8" ? 4 : 5,
+    schemaVersion:
+      pitrScope === "cycle4" ? 2 : pitrScope === "cycle5-8" ? 4 : pitrScope === "cycle9-12" ? 5 : 6,
     pitrScope,
     ...(pitrScope !== "cycle4" ? { graphScope } : {}),
     status: "FAIL",
@@ -713,7 +741,8 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       process.env.DB_FINGERPRINT_ENVIRONMENT !== "PRODUCTION" ||
       (process.env.CYCLE4_OPERATION ??
         process.env.CYCLE58_OPERATION ??
-        process.env.CYCLE912_OPERATION) !== "APPLY"
+        process.env.CYCLE912_OPERATION ??
+        process.env.CYCLE1316_OPERATION) !== "APPLY"
     ) {
       throw safeError(stage, "protected manual master APPLY workflow gate did not match");
     }
@@ -730,7 +759,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
           ? "EDUCATION_V2_P1_A_CYCLE_4_PRODUCTION_DATABASE_URL"
           : pitrScope === "cycle5-8"
             ? "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_DATABASE_URL"
-            : "EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_URL"
+            : pitrScope === "cycle9-12"
+              ? "EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_URL"
+              : "EDUCATION_V2_P1_A_CYCLE_13_16_PRODUCTION_DATABASE_URL"
       ]?.trim();
     const approvedFingerprint =
       process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT?.trim().toLowerCase();

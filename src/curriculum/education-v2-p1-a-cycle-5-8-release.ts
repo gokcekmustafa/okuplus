@@ -7,22 +7,24 @@ export type EducationV2P1ACycle5To8ReleaseDecision = {
   explicitPublicationApproved: boolean;
 };
 
-export type EducationV2P1ACycle5To8GraphScope = "CYCLE_5_ONLY" | "CYCLES_5_TO_8" | "CYCLES_9_TO_12";
+export type EducationV2P1ACycle5To8GraphScope =
+  "CYCLE_5_ONLY" | "CYCLES_5_TO_8" | "CYCLES_9_TO_12" | "CYCLES_13_TO_16";
 
 export function educationV2P1ACycle5To8ScopeSequences(
   scope: EducationV2P1ACycle5To8GraphScope,
-): readonly (5 | 6 | 7 | 8 | 9 | 10 | 11 | 12)[] {
+): readonly (5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16)[] {
   if (scope === "CYCLE_5_ONLY") return [5];
   if (scope === "CYCLES_5_TO_8") return [5, 6, 7, 8];
-  return [9, 10, 11, 12];
+  if (scope === "CYCLES_9_TO_12") return [9, 10, 11, 12];
+  return [13, 14, 15, 16];
 }
 
 export function educationV2P1ACycle5To8ProductionApproval(
   scope: EducationV2P1ACycle5To8GraphScope,
   commit: string,
 ): string {
-  if (scope === "CYCLES_9_TO_12") {
-    throw new Error("Cycle 9–12 onayı ayrı sürümlü release kimliği kullanmalıdır.");
+  if (scope === "CYCLES_9_TO_12" || scope === "CYCLES_13_TO_16") {
+    throw new Error("Ayrı döngü aralıklarının onayı ayrı sürümlü release kimliği kullanmalıdır.");
   }
   const approvalScope = scope === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8";
   return `I_HAVE_REVIEWED_EDUCATION_V2_P1_A_${approvalScope}_PRODUCTION_RELEASE_${EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT.toUpperCase()}_AT_${commit.toUpperCase()}`;
