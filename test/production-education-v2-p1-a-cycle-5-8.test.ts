@@ -19,7 +19,10 @@ import {
   educationV2P1ACycle5To8ScopeSequences,
   isEducationV2P1ACycle5To8ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
-import { educationV2P1ACycle5To8SeedAction } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
+import {
+  educationV2P1ACycle5To8SeedAction,
+  isEducationV2P1ACycle5To8SeedRequestAuthorized,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
 import { parseTrainingExerciseVersionConfig } from "../src/modules/training/exercise-contract.js";
 import { isCycle5To8PitrEvidenceValid } from "../scripts/production-cycle4-pitr-restore-evidence.js";
 import {
@@ -413,6 +416,54 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(educationV2P1ACycle5To8SeedAction("EXISTING", false)).toBe("REUSE_EXISTING");
     expect(educationV2P1ACycle5To8SeedAction("EXISTING", true)).toBe("PLAN_ONLY");
     expect(educationV2P1ACycle5To8SeedAction("CONFLICT", false)).toBe("STOP_CONFLICT");
+  });
+
+  it("allows an APPLY request's read-only preflight only with the exact protected release approval", () => {
+    const expectedProductionApproval = "owner-approval-for-this-release";
+    const applyPreview = {
+      dryRun: true,
+      operation: "APPLY",
+      confirmation: "APPLY_EDUCATION_V2_P1_A_CYCLE_5",
+      graphScope: "CYCLE_5_ONLY" as const,
+      productionApproval: expectedProductionApproval,
+      expectedProductionApproval,
+      protectedProductionWorkflow: true,
+    };
+
+    expect(isEducationV2P1ACycle5To8SeedRequestAuthorized(applyPreview)).toBe(true);
+    expect(
+      isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        ...applyPreview,
+        productionApproval: undefined,
+      }),
+    ).toBe(false);
+    expect(
+      isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        ...applyPreview,
+        protectedProductionWorkflow: false,
+      }),
+    ).toBe(false);
+    expect(
+      isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        ...applyPreview,
+        confirmation: "PLAN_EDUCATION_V2_P1_A_CYCLE_5",
+      }),
+    ).toBe(false);
+    expect(
+      isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        ...applyPreview,
+        dryRun: false,
+      }),
+    ).toBe(true);
+    expect(
+      isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        ...applyPreview,
+        operation: "PLAN_ONLY",
+        confirmation: "PLAN_EDUCATION_V2_P1_A_CYCLE_5",
+        productionApproval: undefined,
+        protectedProductionWorkflow: false,
+      }),
+    ).toBe(true);
   });
 
   it("requires protected dispatch, live target/PITR evidence, explicit APPLY approval and only seeds cycle graphs", () => {

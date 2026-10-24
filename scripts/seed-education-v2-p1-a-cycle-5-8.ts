@@ -33,7 +33,10 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
 import type { P1AProgram } from "../src/curriculum/education-v2-p1-a-program.js";
 import type { EducationV2P1ExpansionDraftCycle } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
-import { educationV2P1ACycle5To8SeedAction } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
+import {
+  educationV2P1ACycle5To8SeedAction,
+  isEducationV2P1ACycle5To8SeedRequestAuthorized,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
 import {
   isCycle5To8PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
@@ -239,32 +242,26 @@ function readTarget(): Target | null {
     ) {
       fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
     }
-    if (!dryRun && process.env[PRODUCTION_APPROVAL_ENV] !== PRODUCTION_CONFIRMATION) {
-      fail(`production editorial approval=${PRODUCTION_CONFIRMATION} gerekli`);
-    }
+    const protectedProductionWorkflow =
+      process.env.GITHUB_ACTIONS === "true" &&
+      process.env.GITHUB_REF === "refs/heads/master" &&
+      process.env.GITHUB_WORKFLOW === "Manual Education V2 P1-A Cycles 5–8 production provision";
     if (
-      dryRun &&
-      (process.env.CYCLE58_OPERATION !== "PLAN_ONLY" ||
-        process.env.CYCLE58_CONFIRMATION !==
-          `PLAN_EDUCATION_V2_P1_A_${ACTIVE_GRAPH_SCOPE === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8"}`)
+      !isEducationV2P1ACycle5To8SeedRequestAuthorized({
+        dryRun,
+        operation: process.env.CYCLE58_OPERATION,
+        confirmation: process.env.CYCLE58_CONFIRMATION,
+        graphScope: ACTIVE_GRAPH_SCOPE,
+        productionApproval: process.env[PRODUCTION_APPROVAL_ENV],
+        expectedProductionApproval: PRODUCTION_CONFIRMATION,
+        protectedProductionWorkflow: protectedProductionWorkflow,
+      })
     ) {
-      fail("read-only PLAN_ONLY doğrulama girdileri gerekli");
-    }
-    if (
-      !dryRun &&
-      (process.env.CYCLE58_OPERATION !== "APPLY" ||
-        process.env.CYCLE58_CONFIRMATION !==
-          `APPLY_EDUCATION_V2_P1_A_${ACTIVE_GRAPH_SCOPE === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8"}`)
-    ) {
-      fail("Cycle 5–8 APPLY için açık işlem onayı gerekli");
-    }
-    if (
-      !dryRun &&
-      (process.env.GITHUB_ACTIONS !== "true" ||
-        process.env.GITHUB_REF !== "refs/heads/master" ||
-        process.env.GITHUB_WORKFLOW !== "Manual Education V2 P1-A Cycles 5–8 production provision")
-    ) {
-      fail("production APPLY yalnızca korumalı master workflow üzerinden çalıştırılabilir");
+      fail(
+        dryRun
+          ? "read-only plan için PLAN_ONLY onayı veya korumalı APPLY ön onayı gerekli"
+          : "Cycle 5–8 APPLY için korumalı workflow ve açık yayın onayı gerekli",
+      );
     }
     if (!dryRun) assertPitrRestoreEvidence();
   }
