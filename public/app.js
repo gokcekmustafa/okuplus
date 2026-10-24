@@ -127,6 +127,7 @@ let learningPathLoading = false;
 let learningPathContinuation = null;
 let learningPathReturnPosition = null;
 let learningPathTransitionRetryAction = null;
+const learningPathNodeStartRequests = new Set();
 let learningPathTimingActive = false;
 let learningPathCompletionTimingMarked = false;
 let learningPathTimingSequence = 0;
@@ -3107,7 +3108,7 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
       [
         "İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…",
         "Sıradaki istasyona ilerliyorsun…",
-        "Sıradaki istasyon açılıyor…",
+        "Sıradaki istasyon hazırlanıyor…",
       ].includes(waitingMessage)
     ) {
       setLearningPathTransitionStatus(
@@ -3116,13 +3117,53 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
     }
     return;
   }
-  if (continuation.starting) return;
+  if (continuation.ready || continuation.starting) return;
   continuation.targetNode = target;
-  continuation.starting = true;
-  setLearningPathTransitionStatus("Sıradaki istasyon açılıyor…");
-  // Starting earlier could create an in-progress exercise session if the motion
-  // is cancelled or the student navigates away. Start once after motion settles.
-  await startLearningPathNode(target, null, continuation.fromId, { continuation });
+  continuation.ready = true;
+  setLearningPathTransitionStatus(
+    "Sıradaki istasyon hazır. Açmak için istasyona dokun veya tıkla.",
+  );
+}
+
+function startLearningPathNodeFromMap(node, button) {
+  if (!node || currentPage !== "dashboard") return;
+  const scope = insightScope();
+  const continuation = learningPathContinuation?.scope === scope ? learningPathContinuation : null;
+  const isContinuationTarget =
+    continuation &&
+    continuation.targetNode &&
+    String(continuation.targetNode.id) === String(node.id);
+
+  // The active node can be tapped while its completion animation is still
+  // running. Wait until the fresh server map and motion have both settled.
+  if (continuation && node.status === "active" && !continuation.ready) return;
+  if (isContinuationTarget) {
+    if (
+      !continuation.ready ||
+      continuation.starting ||
+      node.status !== "active" ||
+      !(isUsableLearningPathNode(node) || node.type === "NEXT_LEARNING")
+    )
+      return;
+  }
+
+  const requestKey = `${scope}:${node.id}`;
+  if (learningPathNodeStartRequests.has(requestKey)) return;
+  learningPathNodeStartRequests.add(requestKey);
+  if (isContinuationTarget) {
+    continuation.starting = true;
+    setLearningPathTransitionStatus("İstasyon açılıyor…");
+  }
+  const start = startLearningPathNode(
+    node,
+    button,
+    isContinuationTarget ? continuation.fromId : null,
+    isContinuationTarget ? { continuation } : {},
+  );
+  void Promise.resolve(start).then(
+    () => learningPathNodeStartRequests.delete(requestKey),
+    () => learningPathNodeStartRequests.delete(requestKey),
+  );
 }
 
 async function startLearningPathNode(
@@ -3621,6 +3662,18 @@ function learningPathRouteGeometry(count) {
   return { height: height, path: path };
 }
 
+function bindLearningPathMapNodeClicks(container, nodes) {
+  for (var btn of container.querySelectorAll(".learning-map-v6-node:not(:disabled)")) {
+    btn.addEventListener("click", function (e) {
+      var el = e.currentTarget;
+      var node = nodes.find(function (item) {
+        return item.id === el.getAttribute("data-node-id");
+      });
+      if (node) startLearningPathNodeFromMap(node, el);
+    });
+  }
+}
+
 function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
   var container = $("learning-path");
   if (!container) return;
@@ -3783,15 +3836,7 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
     nodeMarkup +
     "</div></div>";
 
-  for (var btn of container.querySelectorAll(".learning-map-v6-node:not(:disabled)")) {
-    btn.addEventListener("click", function (e) {
-      var el = e.currentTarget;
-      var node = nodes.find(function (item) {
-        return item.id === el.getAttribute("data-node-id");
-      });
-      if (node) void startLearningPathNode(node, el);
-    });
-  }
+  bindLearningPathMapNodeClicks(container, nodes);
   const continuation = transition?.continuation || learningPathContinuation;
   const returnPosition = transition?.returnPosition || learningPathReturnPosition;
   const settled = uiMotion.enhanceRoadmap(
@@ -3980,7 +4025,7 @@ async function loadLearningPath() {
           !$("learning-path-transition-status")?.classList?.contains?.("error")
         )
           setLearningPathTransitionStatus(
-            animated ? "Sıradaki istasyona ilerliyorsun…" : "Sıradaki istasyon açılıyor…",
+            animated ? "Sıradaki istasyona ilerliyorsun…" : "Sıradaki istasyon hazırlanıyor…",
           );
       },
     });

@@ -26,6 +26,10 @@ const usable = section(
   "function isUsableLearningPathNode(",
   "async function openAssignedP1FirstStep(",
 );
+const mapClickBinding = section(
+  "function bindLearningPathMapNodeClicks(",
+  "function renderLearningPathMap(",
+);
 const nodes = () => [
   { id: "35", status: "completed", type: "REINFORCEMENT", templateVersionId: "exercise-35" },
   { id: "36", status: "active", type: "TEACHING", contentVersionId: "content-36" },
@@ -68,6 +72,7 @@ function harness(stepId = "35") {
     learningPathTimingSequence: 0,
     learningPathTransitionSequence: 0,
     learningPathNavigationRevision: 0,
+    learningPathNodeStartRequests: new Set<string>(),
     activeLearningStepNode: { id: stepId, status: "active" },
     activeLearningStepVisualPosition: null,
     activeLearningStepNavigation: null,
@@ -157,6 +162,30 @@ function harness(stepId = "35") {
 }
 
 describe("guided station completion → map → motion → next server-unlocked station", () => {
+  it("binds station opening to an explicit click on its map button", () => {
+    const node = nodes()[1]!;
+    let clickHandler: ((event: unknown) => void) | undefined;
+    const button = {
+      addEventListener: vi.fn((_type: string, handler: (event: unknown) => void) => {
+        clickHandler = handler;
+      }),
+      getAttribute: (name: string) => (name === "data-node-id" ? node.id : null),
+    };
+    const startFromMap = vi.fn();
+    const context = createContext({
+      container: { querySelectorAll: () => [button] },
+      nodes: [node],
+      startLearningPathNodeFromMap: startFromMap,
+    });
+    runInContext(mapClickBinding, context);
+    runInContext("bindLearningPathMapNodeClicks(container, nodes)", context);
+
+    expect(button.addEventListener).toHaveBeenCalledOnce();
+    expect(startFromMap).not.toHaveBeenCalled();
+    clickHandler?.({ currentTarget: button });
+    expect(startFromMap).toHaveBeenCalledExactlyOnceWith(node, button);
+  });
+
   it("recovers the latest completed cycle using the server route link, beyond station 40", async () => {
     const reconcile = vi.fn(async () => ({ outcome: "ASSIGNED" }));
     const fresh = { paths: [{ path: { id: "cycle-3" }, nodes: [{ id: "41", status: "active" }] }] };
@@ -211,7 +240,7 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(reconcile).not.toHaveBeenCalled();
   });
 
-  it("returns first, waits for movement, then starts exactly once with the exact source link", async () => {
+  it("keeps the next station ready after motion and starts only after an explicit tap", async () => {
     const h = harness();
     h.complete();
     expect(h.context.currentPage).toBe("dashboard");
@@ -222,21 +251,52 @@ describe("guided station completion → map → motion → next server-unlocked 
     h.context.settled = new Promise((done) => {
       finish = done;
     });
-    h.context.nodes = nodes();
+    const routeNodes = nodes();
+    routeNodes[1] = {
+      ...routeNodes[1]!,
+      type: "REINFORCEMENT",
+      templateVersionId: "template-36",
+    };
+    h.context.nodes = routeNodes;
     const pending = h.run(
       "continueAfterLearningPathMotion(nodes, learningPathContinuation, settled)",
     );
+    h.run("startLearningPathNodeFromMap(nodes[1], {disabled:false})");
     expect(h.context.startLearningPathNode).not.toHaveBeenCalled();
+    expect(h.context.authenticatedFetch).not.toHaveBeenCalled();
     finish({ cancelled: false });
     await pending;
-    expect(h.context.startLearningPathNode).toHaveBeenCalledExactlyOnceWith(
-      nodes()[1],
-      null,
-      "35",
-      {
-        continuation: h.context.learningPathContinuation,
-      },
+    expect(h.context.learningPathContinuation).toMatchObject({
+      ready: true,
+      starting: false,
+      targetNode: routeNodes[1],
+    });
+    expect(h.status.textContent).toBe(
+      "Sıradaki istasyon hazır. Açmak için istasyona dokun veya tıkla.",
     );
+    expect(h.context.startLearningPathNode).not.toHaveBeenCalled();
+    expect(h.context.authenticatedFetch).not.toHaveBeenCalled();
+
+    h.context.startLearningPathNode = vi.fn(h.actualStartLearningPathNode);
+    h.run("startLearningPathNodeFromMap(nodes[1], {disabled:false})");
+    h.run("startLearningPathNodeFromMap(nodes[1], {disabled:false})");
+    expect(h.context.startLearningPathNode).toHaveBeenCalledExactlyOnceWith(
+      routeNodes[1],
+      expect.objectContaining({ disabled: true }),
+      "35",
+      { continuation: h.context.learningPathContinuation },
+    );
+    expect(h.context.authenticatedFetch).toHaveBeenCalledOnce();
+    const body = JSON.parse(h.context.authenticatedFetch.mock.calls[0]![1].body);
+    expect(body).toMatchObject({
+      templateVersionId: "template-36",
+      clientSessionId: "path-test-transition-id",
+      navigationFromStepId: "35",
+      navigationTargetStepId: "36",
+    });
+    await h.context.startLearningPathNode.mock.results[0]!.value;
+    expect(h.context.currentPage).toBe("exercise");
+
     await h.run("continueAfterLearningPathMotion(nodes, learningPathContinuation, settled)");
     expect(h.context.startLearningPathNode).toHaveBeenCalledOnce();
   });
@@ -574,9 +634,11 @@ describe("guided station completion → map → motion → next server-unlocked 
     const continuation = h.context.learningPathContinuation;
     continuation.targetNode = {
       ...nodes()[1],
+      id: "67",
       type: "REINFORCEMENT",
       templateVersionId: "template-67",
     };
+    continuation.ready = true;
     h.context.currentPage = "dashboard";
     h.context.startLearningPathNode = h.actualStartLearningPathNode;
     let finishRetry!: (value: unknown) => void;
@@ -586,9 +648,8 @@ describe("guided station completion → map → motion → next server-unlocked 
       .mockImplementationOnce(() => new Promise((resolve) => (finishRetry = resolve)));
     h.context.setAsyncButtonState = vi.fn();
 
-    await h.run(
-      "startLearningPathNode(learningPathContinuation.targetNode, null, learningPathContinuation.fromId, { continuation: learningPathContinuation })",
-    );
+    h.run("startLearningPathNodeFromMap(learningPathContinuation.targetNode, {disabled:false})");
+    await vi.waitFor(() => expect(h.status.textContent).toContain("İlerlemen kaydedildi"));
     expect(h.status.textContent).toContain("İlerlemen kaydedildi");
     expect(h.retryButton.textContent).toBe("İstasyonu yeniden dene");
     expect(h.context.learningPathContinuation.starting).toBe(false);
@@ -605,6 +666,8 @@ describe("guided station completion → map → motion → next server-unlocked 
     });
     const retryBody = JSON.parse(h.context.authenticatedFetch.mock.calls[1]![1].body);
     expect(retryBody.clientSessionId).toBe(firstBody.clientSessionId);
+    expect(retryBody.navigationFromStepId).toBe("66");
+    expect(retryBody.navigationTargetStepId).toBe("67");
     expect(h.context.currentPage).toBe("exercise");
   });
 
