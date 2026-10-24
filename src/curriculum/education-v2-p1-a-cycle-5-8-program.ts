@@ -487,11 +487,18 @@ export const EDUCATION_V2_P1_A_CYCLE_13_16: EducationV2P1ACycleProgram<
   (typeof EDUCATION_V2_P1_A_CYCLE_13_16_SEQUENCES)[number]
 >[] = EDUCATION_V2_P1_A_CYCLE_13_16_SEQUENCES.map((sequence) => buildCycle(sequence, 16));
 
+/** Source-verified, versioned A-route package following the already released 112 steps. */
+export const EDUCATION_V2_P1_A_CYCLE_17_20_SEQUENCES = [17, 18, 19, 20] as const;
+export const EDUCATION_V2_P1_A_CYCLE_17_20: EducationV2P1ACycleProgram<
+  (typeof EDUCATION_V2_P1_A_CYCLE_17_20_SEQUENCES)[number]
+>[] = EDUCATION_V2_P1_A_CYCLE_17_20_SEQUENCES.map((sequence) => buildCycle(sequence, 20));
+
 export function getEducationV2P1ACycle(sequence: number): EducationV2P1ACycleProgram | undefined {
   return [
     ...EDUCATION_V2_P1_A_CYCLE_5_8,
     ...EDUCATION_V2_P1_A_CYCLE_9_12,
     ...EDUCATION_V2_P1_A_CYCLE_13_16,
+    ...EDUCATION_V2_P1_A_CYCLE_17_20,
   ].find((cycle) => cycle.sequence === sequence);
 }
 

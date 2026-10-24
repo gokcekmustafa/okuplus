@@ -21,12 +21,16 @@ import {
   EDUCATION_V2_P1_A_CYCLE_4_PATH_CODE,
   isEducationV2P1ACycle4ProductionAssignmentEnabled,
 } from "./education-v2-p1-a-cycle-4-release.js";
-import { EDUCATION_V2_P1_A_CYCLE_5_8 } from "./education-v2-p1-a-cycle-5-8-program.js";
-import { EDUCATION_V2_P1_A_CYCLE_9_12 } from "./education-v2-p1-a-cycle-5-8-program.js";
-import { EDUCATION_V2_P1_A_CYCLE_13_16 } from "./education-v2-p1-a-cycle-5-8-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_5_8,
+  EDUCATION_V2_P1_A_CYCLE_9_12,
+  EDUCATION_V2_P1_A_CYCLE_13_16,
+  EDUCATION_V2_P1_A_CYCLE_17_20,
+} from "./education-v2-p1-a-cycle-5-8-program.js";
 import { isEducationV2P1ACycle5To8ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-5-8-release.js";
 import { isEducationV2P1ACycle9To12ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-9-12-release.js";
 import { isEducationV2P1ACycle13To16ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-13-16-release.js";
+import { isEducationV2P1ACycle17To20ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-17-20-release.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -215,6 +219,29 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
       title: preparedA13To16.program.path.title,
       units: preparedA13To16.program.path.units,
       manifest: preparedA13To16.manifest,
+      authoringStatus: publicationApproved()
+        ? ("OWNER_RELEASE_APPROVED" as const)
+        : ("DRAFT_NOT_RELEASED" as const),
+      publicationApproved,
+    };
+  }
+  const preparedA17To20 = EDUCATION_V2_P1_A_CYCLE_17_20.find(
+    (candidate) => candidate.sequence === cycle.sequence,
+  );
+  if (cycle.routeFamily === "A" && preparedA17To20) {
+    const publicationApproved = () =>
+      isEducationV2P1ACycle17To20ProductionAssignmentEnabled(preparedA17To20.sequence);
+    return {
+      ...cycle,
+      pathCode: preparedA17To20.program.path.code,
+      programId: preparedA17To20.program.programId,
+      version: preparedA17To20.manifest.cycleVersion,
+      sequence: preparedA17To20.manifest.sequence,
+      routeFamily: "A" as const,
+      scopeCode: "G8_12",
+      title: preparedA17To20.program.path.title,
+      units: preparedA17To20.program.path.units,
+      manifest: preparedA17To20.manifest,
       authoringStatus: publicationApproved()
         ? ("OWNER_RELEASE_APPROVED" as const)
         : ("DRAFT_NOT_RELEASED" as const),

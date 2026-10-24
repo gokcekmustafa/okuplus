@@ -496,7 +496,8 @@ describe("versioned learning routes", () => {
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
-          (a[index]!.sequence >= 13 && a[index]!.sequence < 16)
+          (a[index]!.sequence >= 13 && a[index]!.sequence < 16) ||
+          (a[index]!.sequence >= 17 && a[index]!.sequence < 20)
           ? "ASSIGN_NEXT"
           : "REVIEW_REQUIRED",
       );

@@ -19,10 +19,15 @@ async function main(): Promise<void> {
   const cycle58Operation = process.env.CYCLE58_OPERATION?.trim();
   const cycle912Operation = process.env.CYCLE912_OPERATION?.trim();
   const cycle1316Operation = process.env.CYCLE1316_OPERATION?.trim();
-  if ([cycle58Operation, cycle912Operation, cycle1316Operation].filter(Boolean).length > 1) {
+  const cycle1720Operation = process.env.CYCLE1720_OPERATION?.trim();
+  if (
+    [cycle58Operation, cycle912Operation, cycle1316Operation, cycle1720Operation].filter(Boolean)
+      .length > 1
+  ) {
     throw new Error("only one protected curriculum operation may be selected");
   }
   const operation =
+    cycle1720Operation ||
     cycle1316Operation ||
     cycle912Operation ||
     cycle58Operation ||
