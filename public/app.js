@@ -3070,8 +3070,8 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
     if (!learningPathTimingActive) beginLearningPathTiming();
     continuation.timingSequence = learningPathTimingSequence;
     markLearningPathCompletionConfirmed();
-    setLearningPathTransitionStatus("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
   } else learningPathTimingActive = false;
+  clearLearningPathTransitionStatus();
   navigate("dashboard", {
     ...(visualPosition ? { learningPathReturnPosition: visualPosition } : {}),
     continuation,
@@ -3101,16 +3101,7 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
     !(isUsableLearningPathNode(target) || target?.type === "NEXT_LEARNING")
   ) {
     learningPathContinuation = null;
-    const status = $("learning-path-transition-status");
-    const waitingMessage = status?.textContent?.trim();
-    if (
-      !learningPathTransitionRetryAction &&
-      [
-        "İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…",
-        "Sıradaki istasyona ilerliyorsun…",
-        "Sıradaki istasyon hazırlanıyor…",
-      ].includes(waitingMessage)
-    ) {
+    if (!learningPathTransitionRetryAction) {
       setLearningPathTransitionStatus(
         "İlerlemen kaydedildi. Sıradaki istasyon şu anda erişilebilir değil; ilerlemen korunuyor.",
       );
@@ -3120,9 +3111,7 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
   if (continuation.ready || continuation.starting) return;
   continuation.targetNode = target;
   continuation.ready = true;
-  setLearningPathTransitionStatus(
-    "Sıradaki istasyon hazır. Açmak için istasyona dokun veya tıkla.",
-  );
+  clearLearningPathTransitionStatus();
 }
 
 function startLearningPathNodeFromMap(node, button) {
@@ -3875,9 +3864,7 @@ async function loadLearningPath() {
   const returnPosition = learningPathReturnPosition;
   const isCompletionTransition = Boolean(continuation && continuation.scope === insightScope());
   const timingSequence = learningPathTimingSequence;
-  if (isCompletionTransition)
-    setLearningPathTransitionStatus("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
-  else clearLearningPathTransitionStatus();
+  clearLearningPathTransitionStatus();
   const scope = insightScope();
   var learningPathPhase = "request";
   container.setAttribute("aria-busy", "true");
@@ -4004,7 +3991,7 @@ async function loadLearningPath() {
     renderLearningPathMap(pathGroups, data.currentLevel, {
       continuation,
       returnPosition,
-      onMotionStart: ({ animated = false, started = true } = {}) => {
+      onMotionStart: ({ started = true } = {}) => {
         if (!started) return;
         markLearningPathTiming("motion-start", timingSequence);
         measureLearningPathTiming(
@@ -4019,14 +4006,6 @@ async function loadLearningPath() {
           "motion-start",
           timingSequence,
         );
-        if (
-          isCompletionTransition &&
-          continuation === learningPathContinuation &&
-          !$("learning-path-transition-status")?.classList?.contains?.("error")
-        )
-          setLearningPathTransitionStatus(
-            animated ? "Sıradaki istasyona ilerliyorsun…" : "Sıradaki istasyon hazırlanıyor…",
-          );
       },
     });
     markLearningPathTiming("map-render-end", timingSequence);
@@ -14100,6 +14079,29 @@ function renderDailyTrainingResult() {
   resultCard.style.display = "block";
   $("exercise-return-path").addEventListener("click", returnToExercisePath);
 }
+function studentFacingTrainingInstructions(exerciseSession) {
+  const instructions = exerciseSession?.templateVersion?.training?.instructions;
+  if (typeof instructions !== "string" || !instructions.trim()) return "";
+
+  // P1-A expansion cycles 4–20 currently map learning outcomes into the
+  // generic training.instructions field. Their template IDs identify that
+  // source context, so do not present those outcome notes as task directions.
+  const templateVersionId = exerciseSession?.templateVersion?.id || "";
+  const expansionCycle = /^edu-v2-p1-a-cycle-(\d+)-templateVersion-/iu.exec(templateVersionId);
+  if (expansionCycle) {
+    const sequence = Number(expansionCycle[1]);
+    if (sequence >= 4 && sequence <= 20) return "";
+  }
+  return instructions;
+}
+
+function renderStudentTrainingInstructions(element, exerciseSession) {
+  if (!element) return;
+  const instructions = studentFacingTrainingInstructions(exerciseSession);
+  element.textContent = instructions;
+  element.style.display = instructions ? "block" : "none";
+}
+
 function renderExerciseSession() {
   // student header visibility
   var sh = $("student-exercise-header");
@@ -14152,11 +14154,7 @@ function renderExerciseSession() {
   if (activities) activities.style.display = "none";
   renderStudentReading(exerciseSession);
   const instructionsEl = $("exercise-training-instructions");
-  const trainingInstructions = exerciseSession.templateVersion?.training?.instructions;
-  if (instructionsEl) {
-    instructionsEl.textContent = trainingInstructions || "";
-    instructionsEl.style.display = trainingInstructions ? "block" : "none";
-  }
+  renderStudentTrainingInstructions(instructionsEl, exerciseSession);
   if (info) info.style.display = "block";
   if (detail) {
     const s = exerciseSession;

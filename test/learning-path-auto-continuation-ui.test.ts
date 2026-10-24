@@ -38,7 +38,17 @@ const nodes = () => [
 function harness(stepId = "35") {
   const cache = new Map([["old-read", Promise.resolve({})]]);
   const button = { disabled: false };
-  const status = { textContent: "", classList: { toggle: vi.fn() } };
+  const statusClasses = new Set(["hidden"]);
+  const status = {
+    textContent: "",
+    classList: {
+      toggle: vi.fn((name: string, force: boolean) => {
+        if (force) statusClasses.add(name);
+        else statusClasses.delete(name);
+      }),
+      contains: (name: string) => statusClasses.has(name),
+    },
+  };
   const retryButton = {
     textContent: "Yeni öğrenme yolunu tekrar kontrol et",
     classList: { toggle: vi.fn() },
@@ -271,9 +281,8 @@ describe("guided station completion → map → motion → next server-unlocked 
       starting: false,
       targetNode: routeNodes[1],
     });
-    expect(h.status.textContent).toBe(
-      "Sıradaki istasyon hazır. Açmak için istasyona dokun veya tıkla.",
-    );
+    expect(h.status.textContent).toBe("");
+    expect(h.status.classList.contains("hidden")).toBe(true);
     expect(h.context.startLearningPathNode).not.toHaveBeenCalled();
     expect(h.context.authenticatedFetch).not.toHaveBeenCalled();
 
@@ -317,11 +326,12 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(h.container.innerHTML).toBe("existing-learning-map");
   });
 
-  it("shows the saved-progress message immediately while the route request is pending", () => {
+  it("keeps the captured map position without showing a success notification", () => {
     const h = harness("66");
     h.complete("66", "67");
 
-    expect(h.status.textContent).toBe("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+    expect(h.status.textContent).toBe("");
+    expect(h.status.classList.contains("hidden")).toBe(true);
     expect(h.context.learningPathReturnPosition).toMatchObject({ stepId: "66" });
     expect(h.document.scrollingElement.scrollTop).toBe(78);
   });
@@ -588,7 +598,8 @@ describe("guided station completion → map → motion → next server-unlocked 
     h.run("markLearningPathCompletionConfirmed()");
     h.complete("66", "67");
     const loading = h.run("loadLearningPath()");
-    expect(h.status.textContent).toBe("İlerlemen kaydedildi, sıradaki istasyon hazırlanıyor…");
+    expect(h.status.textContent).toBe("");
+    expect(h.status.classList.contains("hidden")).toBe(true);
     expect(h.document.scrollingElement.scrollTop).toBe(78);
     await loading;
 
@@ -610,7 +621,8 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(marks.get(prefix + "motion-start")).toBe(626);
     expect(measures.get(prefix + "completion-to-motion")).toBe(406);
     expect(measures.get(prefix + "completion-action-to-motion")).toBe(626);
-    expect(h.status.textContent).toBe("Sıradaki istasyona ilerliyorsun…");
+    expect(h.status.textContent).toBe("");
+    expect(h.status.classList.contains("hidden")).toBe(true);
     expect(h.context.renderHomeInsights).not.toHaveBeenCalled();
 
     const secondFrame = rafQueue.splice(0);
