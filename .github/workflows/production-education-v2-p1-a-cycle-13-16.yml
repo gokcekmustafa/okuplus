@@ -177,16 +177,11 @@ jobs:
           set -euo pipefail
           for sequence in 13 14 15 16; do
             export CYCLE1316_SEQUENCE="${sequence}"
-            npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --dry-run >"cycle${sequence}-plan-before.json"
-            node --input-type=commonjs -e '
-              const fs=require("node:fs"),s=Number(process.env.CYCLE1316_SEQUENCE),r=JSON.parse(fs.readFileSync(`cycle${s}-plan-before.json`,`utf8`));
-              const fail=m=>{console.error(`FAIL: Cycle ${s} ${m}`);process.exit(1)};
-              if(r.status!=="PASS"||r.dbChanged!==false)fail("read-only plan failed or reports a write");
-              if(r.immutableReleaseId!==process.env.CYCLE1316_RELEASE_ID||r.expectedSourceCommit!==process.env.CYCLE1316_RELEASE_COMMIT)fail("release identity mismatch");
-              if(r.state==="CONFLICT"||!['MISSING','EXISTING'].includes(r.state))fail("graph conflict or unknown state");
-              if(r.stepCount!==5||r.contentCount!==5||r.exerciseCount!==5||r.questionCount!==15||r.assessmentCount!==1)fail("graph resources do not match the 5/5/5/15/1 contract");
-              console.log(`CYCLE_${s}_GRAPH_STATE=${r.state}`);fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\nCYCLE_${s}_GRAPH_STATE=${r.state}\n`);'
-            cat "cycle${sequence}-plan-before.json" >> "${GITHUB_STEP_SUMMARY}"
+            export CYCLE1316_PLAN_REPORT_FILE="cycle${sequence}-plan-before.json"
+            export CYCLE1316_EXPECTED_RELEASE_ID="${CYCLE1316_RELEASE_ID}"
+            export CYCLE1316_EXPECTED_RELEASE_COMMIT="${CYCLE1316_RELEASE_COMMIT}"
+            npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --dry-run >"${CYCLE1316_PLAN_REPORT_FILE}"
+            npx --no-install tsx scripts/verify-cycle13-16-plan-report.ts
           done
 
       - name: Create and verify isolated Neon PITR restore evidence for Cycles 13–16
