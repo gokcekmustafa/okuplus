@@ -67,6 +67,7 @@ describe("student dashboard release 0.4", () => {
       $: (id: string) => (id === "learning-path" ? container : { textContent: "0" }),
       escapeHtml: (value: unknown) => String(value).replaceAll("<", "&lt;"),
       learningPathContinuation: null,
+      learningPathReturnPosition: null,
       insightsIdentity: "student:tenant",
       uiMotion: {
         enhanceRoadmap: () => Promise.resolve({ cancelled: false }),
@@ -248,6 +249,7 @@ describe("student dashboard release 0.4", () => {
       $: (id: string) => (id === "learning-path" ? container : { textContent: "0" }),
       escapeHtml: (value: unknown) => String(value).replaceAll("<", "&lt;"),
       learningPathContinuation: null,
+      learningPathReturnPosition: null,
       insightsIdentity: "student:tenant",
       uiMotion: {
         enhanceRoadmap: () => Promise.resolve({ cancelled: false }),

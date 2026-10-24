@@ -107,7 +107,9 @@ describe("training home and development UI", () => {
   it("shows one guided data-driven learning map without changing the path contract", () => {
     expect(index).not.toContain('id="learning-map-current"');
     expect(index).not.toContain('id="learning-model-details"');
-    expect(app).toContain("function renderLearningPathMap(pathGroups, currentLevel)");
+    expect(app).toContain(
+      "function renderLearningPathMap(pathGroups, currentLevel, transition = null)",
+    );
     expect(app).toContain("GUIDED_LEARNING_SKILL_ORDER");
     expect(app).toContain("function learningPathMapKind(node)");
     expect(app).not.toContain("studentLearningPathSelectedArea");

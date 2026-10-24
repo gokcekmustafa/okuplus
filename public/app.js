@@ -125,6 +125,7 @@ let historyRequest = 0;
 let todayLoading = false;
 let learningPathLoading = false;
 let learningPathContinuation = null;
+let learningPathReturnPosition = null;
 let learningPathNavigationRevision = 0;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
@@ -2881,15 +2882,71 @@ function activeLearningPathNodeFromData(data) {
   );
 }
 
+function learningPathStepElement(stepId, button = null) {
+  const selected = button?.closest?.(".learning-map-v6-step");
+  if (selected) return selected;
+  const container = $("learning-path");
+  const stepButton = Array.from(container?.querySelectorAll?.(".learning-map-v6-node") || []).find(
+    (item) => item.dataset.nodeId === String(stepId),
+  );
+  return stepButton?.closest?.(".learning-map-v6-step") || null;
+}
+
+function captureLearningPathVisualPosition(stepId, button = null) {
+  if (!stepId) return null;
+  const step = learningPathStepElement(stepId, button);
+  const rect = step?.getBoundingClientRect?.();
+  if (!rect || !Number.isFinite(rect.top) || rect.height <= 0) return null;
+  const viewport = typeof window === "undefined" ? null : window;
+  return {
+    stepId: String(stepId),
+    scope: insightScope(),
+    viewportTop: rect.top,
+    scrollX: Number(viewport?.scrollX) || 0,
+    scrollY: Number(viewport?.scrollY) || 0,
+  };
+}
+
+function restoreLearningPathVisualPosition(position) {
+  if (!position || position.scope !== insightScope()) return false;
+  const step = learningPathStepElement(position.stepId);
+  const rect = step?.getBoundingClientRect?.();
+  if (!rect || !Number.isFinite(rect.top) || rect.height <= 0) return false;
+  const delta = rect.top - position.viewportTop;
+  if (Math.abs(delta) <= 1) return true;
+  const scrollingElement = document.scrollingElement || document.documentElement;
+  if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
+    scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
+    return true;
+  }
+  if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+    const root = document.documentElement;
+    const previousBehavior = root?.style?.scrollBehavior;
+    if (root?.style) root.style.scrollBehavior = "auto";
+    window.scrollTo(position.scrollX, (Number(window.scrollY) || position.scrollY) + delta);
+    if (root?.style) root.style.scrollBehavior = previousBehavior || "";
+    return true;
+  }
+  return false;
+}
+
 function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
+  const visualPosition =
+    captureLearningPathVisualPosition(node?.id) ||
+    (activeLearningStepVisualPosition?.stepId === String(node?.id) &&
+    activeLearningStepVisualPosition.scope === insightScope()
+      ? activeLearningStepVisualPosition
+      : null);
   learningPathEntryMode = false;
   activeLearningStepNode = null;
+  activeLearningStepVisualPosition = null;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = null;
   // Evict in-flight reads, not the identity-scoped presentation snapshot. The
   // refreshed map, never the completion response alone, authorizes continuation.
   insightRequestCache().clear();
   navigate("dashboard", {
+    learningPathReturnPosition: visualPosition,
     continuation:
       node?.id && !replay && node.status !== "completed"
         ? { fromId: node.id, nextId: nextStep?.id || null, scope: insightScope() }
@@ -2926,10 +2983,17 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
 
 async function startLearningPathNode(node, button, navigationFromStepId = null) {
   learningPathContinuation = null;
+  learningPathReturnPosition = null;
   const revision = ++learningPathNavigationRevision;
   const scope = insightScope();
   var tv = node?.templateVersionId;
   var type = node?.type;
+  activeLearningStepVisualPosition =
+    captureLearningPathVisualPosition(node?.id, button) ||
+    (activeLearningStepVisualPosition?.stepId === String(node?.id) &&
+    activeLearningStepVisualPosition.scope === scope
+      ? activeLearningStepVisualPosition
+      : null);
   activeLearningStepNode = node;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
@@ -3350,7 +3414,7 @@ function learningPathRouteGeometry(count) {
   return { height: height, path: path };
 }
 
-function renderLearningPathMap(pathGroups, currentLevel) {
+function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
   var container = $("learning-path");
   if (!container) return;
   var groups = Array.isArray(pathGroups) ? pathGroups : [];
@@ -3521,7 +3585,8 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       if (node) void startLearningPathNode(node, el);
     });
   }
-  const continuation = learningPathContinuation;
+  const continuation = transition?.continuation || learningPathContinuation;
+  const returnPosition = transition?.returnPosition || learningPathReturnPosition;
   const settled = uiMotion.enhanceRoadmap(
     container,
     nodes,
@@ -3539,8 +3604,11 @@ function renderLearningPathMap(pathGroups, currentLevel) {
       });
     },
     continuation?.fromId,
+    returnPosition,
   );
   void continueAfterLearningPathMotion(nodes, continuation, settled);
+  if (!continuation && returnPosition === learningPathReturnPosition)
+    learningPathReturnPosition = null;
   uiMotion.enhanceProgress(container, "roadmap");
 }
 
@@ -3551,6 +3619,7 @@ async function loadLearningPath() {
   if (!container) return;
   learningPathLoading = true;
   const continuation = learningPathContinuation;
+  const returnPosition = learningPathReturnPosition;
   clearLearningPathTransitionStatus();
   const scope = insightScope();
   var learningPathPhase = "request";
@@ -3559,14 +3628,22 @@ async function loadLearningPath() {
   if (
     !container.querySelector(".learning-map-v6") ||
     !uiMotion.hasRoadmap(container, insightsIdentity)
-  )
-    container.innerHTML =
-      '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
+  ) {
+    const preserveCompletionPosition = returnPosition?.scope === scope;
+    container.innerHTML = preserveCompletionPosition
+      ? '<p class="muted" role="status">Tamamlanan istasyonun konumu korunuyor; sıradaki adım yenileniyor…</p>'
+      : '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
+  }
   try {
     var data = await insightApi("learning-path");
     data = await recoverCompletedP1CycleOnLearningPathLoad(data);
-    if (scope !== insightScope() || currentPage !== "dashboard") return;
-    if (continuation !== learningPathContinuation) return;
+    if (
+      scope !== insightScope() ||
+      currentPage !== "dashboard" ||
+      continuation !== learningPathContinuation ||
+      returnPosition !== learningPathReturnPosition
+    )
+      return;
     if (data.today) renderTodayData(data.today, scope);
     else void loadToday();
     container.setAttribute("aria-busy", "false");
@@ -3605,11 +3682,18 @@ async function loadLearningPath() {
       return (Array.isArray(group.nodes) ? group.nodes : []).filter(Boolean);
     });
     if (!nodes.length) {
+      if (returnPosition?.scope === scope) {
+        setLearningPathTransitionStatus(
+          "Tamamlanan istasyonun bilgisi korunuyor. Öğrenme yolu henüz yenilenemedi.",
+          { retry: true, error: true },
+        );
+        return;
+      }
       renderLearningPathEmptyState(data.currentLevel);
       return;
     }
     learningPathPhase = "learning-path-map";
-    renderLearningPathMap(pathGroups, data.currentLevel);
+    renderLearningPathMap(pathGroups, data.currentLevel, { continuation, returnPosition });
     const pendingCycle = data.routeContinuation?.futureCycles?.find(
       (cycle) => !cycle.graphAvailable,
     );
@@ -3623,7 +3707,8 @@ async function loadLearningPath() {
     if (
       scope !== insightScope() ||
       currentPage !== "dashboard" ||
-      continuation !== learningPathContinuation
+      continuation !== learningPathContinuation ||
+      returnPosition !== learningPathReturnPosition
     )
       return;
     reportLearningPathClientError(error, learningPathPhase);
@@ -3635,8 +3720,15 @@ async function loadLearningPath() {
       phase: learningPathPhase,
     });
     container.setAttribute("aria-busy", "false");
-    container.innerHTML =
-      '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
+    if (returnPosition?.scope === scope) {
+      setLearningPathTransitionStatus(
+        "İlerlemen kaydedildi; öğrenme yolu yenilenemedi. Tekrar deneyebilirsin.",
+        { retry: true, error: true },
+      );
+    } else {
+      container.innerHTML =
+        '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
+    }
     retryEl?.classList.remove("hidden");
     void loadToday();
   } finally {
@@ -3645,8 +3737,8 @@ async function loadLearningPath() {
     // Do not animate or open a station from that pre-completion response.
     if (
       currentPage === "dashboard" &&
-      learningPathContinuation &&
-      continuation !== learningPathContinuation
+      ((learningPathContinuation && continuation !== learningPathContinuation) ||
+        (learningPathReturnPosition && returnPosition !== learningPathReturnPosition))
     )
       void loadLearningPath();
   }
@@ -5120,7 +5212,10 @@ function canAccessPage(page) {
   return false;
 }
 
-function navigate(page, { continuation = null } = {}) {
+function navigate(
+  page,
+  { continuation = null, learningPathReturnPosition: returnPosition = null } = {},
+) {
   if (!PAGES.includes(page)) return;
   if (!canAccessPage(page)) {
     const fallback = roleHomePage();
@@ -5133,6 +5228,8 @@ function navigate(page, { continuation = null } = {}) {
   uiMotion.cancel();
   learningPathNavigationRevision++;
   learningPathContinuation = continuation;
+  learningPathReturnPosition =
+    page === "dashboard" && returnPosition?.scope === insightScope() ? returnPosition : null;
 
   currentPage = page;
 
@@ -5153,6 +5250,7 @@ function navigate(page, { continuation = null } = {}) {
     if (active) item.setAttribute("aria-current", "page");
   }
   if (page === "dashboard") {
+    if (learningPathReturnPosition) restoreLearningPathVisualPosition(learningPathReturnPosition);
     if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
     if (!isPlatformUser) {
       void loadLearningPath();
@@ -10658,6 +10756,7 @@ let trainingActivitiesStateMessage = "";
 let activeTrainingActivityId = null;
 let exerciseMode = null;
 let activeLearningStepNode = null;
+let activeLearningStepVisualPosition = null;
 let activeLearningStepNavigation = null;
 let activeLearningStepNavigationFromStepId = null;
 let learningPathEntryMode = false;

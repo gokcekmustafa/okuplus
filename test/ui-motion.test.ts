@@ -10,13 +10,15 @@ const after = () => [
   { id: "32", status: "active", unitId: "unit-1" },
 ];
 
-function harness(reduced = false) {
+function harness(reduced = false, innerHeight = 800) {
   const callbacks = new Map<number, () => void>();
   const media = { matches: reduced, addEventListener: vi.fn() };
   const document = {
     visibilityState: "visible",
     addEventListener: vi.fn(),
     querySelector: () => null,
+    scrollingElement: { scrollTop: 300 },
+    documentElement: { style: { scrollBehavior: "smooth" } },
   };
   const animations: {
     cancel: ReturnType<typeof vi.fn>;
@@ -37,7 +39,11 @@ function harness(reduced = false) {
   const env = {
     matchMedia: () => media,
     document,
-    innerHeight: 800,
+    innerHeight,
+    scrollX: 0,
+    scrollY: 0,
+    scrollBy: vi.fn(),
+    scrollTo: vi.fn(),
     requestAnimationFrame: (callback: () => void) => {
       const id = callbacks.size + 1;
       callbacks.set(id, callback);
@@ -45,17 +51,26 @@ function harness(reduced = false) {
     },
     cancelAnimationFrame: (id: number) => callbacks.delete(id),
   };
-  const element = () => ({ animate, isConnected: true });
-  const button = (id: string, current: boolean, top: number) => ({
-    dataset: { nodeId: id },
-    getAttribute: (name: string) => (name === "aria-current" && current ? "step" : null),
-    getBoundingClientRect: () => ({ top, bottom: top + 136 }),
-    scrollIntoView: vi.fn(),
-    querySelector: (selector: string) =>
-      selector.endsWith("marker-wrap")
-        ? { getBoundingClientRect: () => ({ left: 100, top, width: 66 }) }
-        : element(),
-  });
+  const element = () => ({ animate, isConnected: true, style: { transform: "" } });
+  const button = (id: string, current: boolean, top: number) => {
+    const character = element();
+    const step = {
+      getBoundingClientRect: () => ({ left: 0, top, bottom: top + 142, width: 400, height: 142 }),
+    };
+    return {
+      dataset: { nodeId: id },
+      getAttribute: (name: string) => (name === "aria-current" && current ? "step" : null),
+      getBoundingClientRect: () => ({ top, bottom: top + 136, height: 136 }),
+      scrollIntoView: vi.fn(),
+      closest: () => step,
+      querySelector: (selector: string) =>
+        selector.endsWith("marker-wrap")
+          ? { getBoundingClientRect: () => ({ left: 100, top, width: 66 }) }
+          : selector.endsWith("character img")
+            ? character
+            : element(),
+    };
+  };
   const buttons = [button("31", false, 200), button("32", true, 336)];
   const container = { isConnected: true, querySelectorAll: () => buttons };
   const flush = () => {
@@ -82,14 +97,26 @@ describe("server-confirmed, optional UI motion", () => {
   it("settles only after the slower character movement has finished", async () => {
     const h = harness();
     const done = vi.fn();
-    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
+    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31", {
+      stepId: "31",
+      viewportTop: 260,
+    });
     void pending.then(done);
+    expect(h.document.scrollingElement.scrollTop).toBe(240);
+    expect(h.document.documentElement.style.scrollBehavior).toBe("smooth");
+    expect(h.buttons[1]!.scrollIntoView).not.toHaveBeenCalled();
+    expect(h.buttons[1]!.querySelector(".learning-map-v6-character img").style.transform).toBe(
+      "translate(0px, -136px)",
+    );
     h.flush();
     await Promise.resolve();
     expect(done).not.toHaveBeenCalled();
     expect(h.animate.mock.calls.find(([frames]) => frames.length === 9)?.[1]).toMatchObject({
       duration: 1400,
       easing: "ease-in-out",
+    });
+    expect(h.animate.mock.calls.find(([frames]) => frames.length === 9)?.[0][0]).toMatchObject({
+      transform: "translate(0px, -136px)",
     });
     h.animations[0]!.finish();
     await expect(pending).resolves.toMatchObject({
@@ -104,9 +131,11 @@ describe("server-confirmed, optional UI motion", () => {
       const h = harness();
       const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31");
       if (phase === "moving") h.flush();
+      const character = h.buttons[1]!.querySelector(".learning-map-v6-character img");
       h.motion.cancel();
       h.flush();
       await expect(pending).resolves.toMatchObject({ cancelled: true });
+      expect(character.style.transform).toBe("");
     },
   );
 
@@ -116,6 +145,45 @@ describe("server-confirmed, optional UI motion", () => {
     h.flush();
     await expect(pending).resolves.toMatchObject({ cancelled: false, plan: { toId: "32" } });
     expect(h.animate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the next station visible on a short mobile viewport", async () => {
+    const h = harness(false, 640);
+    h.buttons[1]!.getBoundingClientRect = () => ({ top: 422, bottom: 558 });
+    const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31", {
+      stepId: "31",
+      viewportTop: 200,
+    });
+    h.flush();
+    expect(h.buttons[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(72);
+    expect(h.buttons[1]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(568);
+    h.animations[0]!.finish();
+    await expect(pending).resolves.toMatchObject({ cancelled: false });
+  });
+
+  it("keeps the completed station anchored when the server has no active next step", async () => {
+    const h = harness();
+    const first = h.motion.enhanceRoadmap(h.container, before(), "student");
+    h.flush();
+    await first;
+    const pending = h.motion.enhanceRoadmap(
+      h.container,
+      [
+        { id: "31", status: "completed", unitId: "unit-1" },
+        { id: "32", status: "locked", unitId: "unit-1" },
+      ],
+      "student",
+      null,
+      null,
+      { stepId: "31", viewportTop: 260 },
+    );
+    h.flush();
+    await expect(pending).resolves.toMatchObject({
+      cancelled: false,
+      plan: { fromId: "31", toId: null },
+    });
+    expect(h.document.scrollingElement.scrollTop).toBe(240);
+    expect(h.animate.mock.calls.some(([frames]) => frames.length === 9)).toBe(false);
   });
 
   it("never invents movement on first load, an unchanged path or an incomplete source", () => {
@@ -234,14 +302,24 @@ describe("server-confirmed, optional UI motion", () => {
     const h = harness(true);
     h.motion.enhanceRoadmap(h.container, before(), "student");
     h.flush();
-    h.buttons[1]!.getBoundingClientRect = () => ({ top: 900, bottom: 1036 });
+    h.buttons[1]!.getBoundingClientRect = () => ({ top: 900, bottom: 1036, height: 136 });
     h.motion.enhanceRoadmap(h.container, after(), "student");
     h.flush();
     expect(h.animate).not.toHaveBeenCalled();
-    expect(h.buttons[1]!.scrollIntoView).toHaveBeenLastCalledWith({
-      block: "center",
-      behavior: "auto",
-    });
+    expect(h.buttons[1]!.scrollIntoView).not.toHaveBeenCalled();
+    expect(h.document.scrollingElement.scrollTop).toBe(868);
+    expect(h.env.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it("positions the active station immediately on a fresh map without a transition anchor", () => {
+    const h = harness();
+    h.buttons[1]!.getBoundingClientRect = () => ({ top: 900, bottom: 1036, height: 136 });
+    const pending = h.motion.enhanceRoadmap(h.container, before(), "new-session");
+    h.flush();
+    expect(h.document.scrollingElement.scrollTop).toBe(868);
+    expect(h.env.scrollBy).not.toHaveBeenCalled();
+    expect(h.buttons[1]!.scrollIntoView).not.toHaveBeenCalled();
+    return expect(pending).resolves.toMatchObject({ cancelled: false, plan: null });
   });
 
   it("cancels active animations when motion preference changes or the tab hides", () => {

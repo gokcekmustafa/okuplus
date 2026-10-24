@@ -106,7 +106,67 @@ export function createUiMotion(env = globalThis) {
     ]);
   }
 
-  function enhanceRoadmap(container, nodes, identity, onMilestone, completedStepId = null) {
+  function stepIsOutsideViewport(element) {
+    const rect = element?.getBoundingClientRect?.();
+    if (!rect) return false;
+    const bottomInset =
+      env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect().height || 72;
+    return rect.top < 72 || rect.bottom > env.innerHeight - bottomInset;
+  }
+
+  function scrollByInstantly(delta) {
+    const scrollingElement = env.document?.scrollingElement || env.document?.documentElement;
+    if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
+      scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
+      return;
+    }
+    if (typeof env.scrollTo !== "function") return;
+    const root = env.document?.documentElement;
+    const previousBehavior = root?.style?.scrollBehavior;
+    if (root?.style) root.style.scrollBehavior = "auto";
+    env.scrollTo(env.scrollX || 0, (env.scrollY || 0) + delta);
+    if (root?.style) root.style.scrollBehavior = previousBehavior || "";
+  }
+
+  function alignStep(element, viewportTop = null) {
+    if (!element) return;
+    const rect = element.getBoundingClientRect?.();
+    if (!rect) return;
+    if (Number.isFinite(viewportTop)) {
+      const delta = rect.top - viewportTop;
+      if (Math.abs(delta) > 1) scrollByInstantly(delta);
+    } else if (stepIsOutsideViewport(element)) {
+      const bottomInset =
+        env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect().height || 72;
+      const topInset = 72;
+      const visibleCenter = (topInset + env.innerHeight - bottomInset) / 2;
+      const targetTop = Math.max(topInset, visibleCenter - rect.height / 2);
+      scrollByInstantly(rect.top - targetTop);
+    }
+  }
+
+  function transitionFrames(dx, dy) {
+    return Array.from({ length: 9 }, (_, i) => {
+      const p = i / 8;
+      const bend = Math.sin(Math.PI * p);
+      const x = dx * (1 - p) + bend * 12;
+      const y = dy * (1 - p) - bend * 6;
+      return {
+        // The character wrapper is already centered by CSS; animate only this
+        // image's offset so the source and destination markers remain aligned.
+        transform: `translate(${x}px, ${y}px)`,
+      };
+    });
+  }
+
+  function enhanceRoadmap(
+    container,
+    nodes,
+    identity,
+    onMilestone,
+    completedStepId = null,
+    originPosition = null,
+  ) {
     if (identity !== scope) {
       reset();
       scope = identity;
@@ -134,13 +194,50 @@ export function createUiMotion(env = globalThis) {
       resolve = done;
     });
     const run = {
+      character: null,
       finish(cancelled = false) {
         if (roadmapRun !== run) return;
         roadmapRun = null;
+        if (run.character?.style) run.character.style.transform = "";
         resolve({ cancelled, plan });
       },
     };
     roadmapRun = run;
+
+    const buttons = Array.from(container.querySelectorAll(".learning-map-v6-node"));
+    const current = buttons.find((button) => button.getAttribute("aria-current") === "step");
+    const from = plan && buttons.find((button) => button.dataset.nodeId === plan.fromId);
+    const to = plan && buttons.find((button) => button.dataset.nodeId === plan.toId);
+    const originViewportTop =
+      originPosition &&
+      originPosition.stepId === plan?.fromId &&
+      Number.isFinite(originPosition.viewportTop)
+        ? originPosition.viewportTop
+        : null;
+    let preparedMovement = null;
+
+    // A completed station is the visual anchor while the refreshed map settles.
+    // Reduced motion goes straight to the server-selected destination.
+    if (plan && allowed()) alignStep(from, originViewportTop);
+    else if (current) alignStep(current);
+
+    if (plan && allowed() && from && to) {
+      const fromStep = from.closest?.(".learning-map-v6-step");
+      const toStep = to.closest?.(".learning-map-v6-step");
+      const character = to.querySelector(".learning-map-v6-character img");
+      if (fromStep && toStep && character?.style) {
+        const a = fromStep.getBoundingClientRect();
+        const b = toStep.getBoundingClientRect();
+        const dx = a.left - b.left;
+        const dy = a.top - b.top;
+        if (Math.abs(dy) <= env.innerHeight * 1.5) {
+          preparedMovement = { character, dx, dy };
+          run.character = character;
+          character.style.transform = `translate(${dx}px, ${dy}px)`;
+        }
+      }
+    }
+
     frame =
       env.requestAnimationFrame?.(() => {
         frame = null;
@@ -148,46 +245,19 @@ export function createUiMotion(env = globalThis) {
           run.finish(true);
           return;
         }
-        const buttons = Array.from(container.querySelectorAll(".learning-map-v6-node"));
-        const current = buttons.find((button) => button.getAttribute("aria-current") === "step");
-        if (current) {
-          const rect = current.getBoundingClientRect();
-          const bottomInset =
-            env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect().height ||
-            72;
-          if (rect.top < 72 || rect.bottom > env.innerHeight - bottomInset) {
-            const nearby = Math.abs(rect.top - env.innerHeight / 2) < env.innerHeight * 1.5;
-            current.scrollIntoView({
-              block: "center",
-              behavior: plan && !completedStepId && nearby && allowed() ? "smooth" : "auto",
-            });
-          }
-        }
         if (!plan) {
           run.finish();
           return;
         }
         let movement = null;
-        const from = buttons.find((button) => button.dataset.nodeId === plan.fromId);
-        const to = buttons.find((button) => button.dataset.nodeId === plan.toId);
-        const fromMarker = from?.querySelector(".learning-map-v6-marker-wrap");
-        const toMarker = to?.querySelector(".learning-map-v6-marker-wrap");
-        if (fromMarker && toMarker) {
-          const a = fromMarker.getBoundingClientRect();
-          const b = toMarker.getBoundingClientRect();
-          const dx = a.left + a.width / 2 - b.left - b.width / 2;
-          const dy = a.top - b.top;
-          const frames = Array.from({ length: 9 }, (_, i) => {
-            const p = i / 8;
-            const bend = Math.sin(Math.PI * p);
-            return {
-              transform: `translate(${dx * (1 - p) + bend * 12}px, ${dy * (1 - p) - bend * 6}px)`,
-            };
-          });
-          const character = to.querySelector(".learning-map-v6-character img");
-          if (Math.abs(dy) <= env.innerHeight * 1.5)
-            movement = play(character, frames, 1400, "ease-in-out");
-          else movement = play(character, [{ opacity: 0.5 }, { opacity: 1 }], 400);
+        if (preparedMovement) {
+          movement = play(
+            preparedMovement.character,
+            transitionFrames(preparedMovement.dx, preparedMovement.dy),
+            1400,
+            "ease-in-out",
+          );
+          if (!movement) run.finish();
           play(
             to.querySelector(".learning-map-v6-marker"),
             [
@@ -197,6 +267,10 @@ export function createUiMotion(env = globalThis) {
             ],
             340,
           );
+        } else if (current && plan.toId && allowed()) {
+          // If the optional animation cannot be prepared, still settle at the
+          // server-confirmed active node rather than leaving a stale viewport.
+          alignStep(current);
         }
         play(from?.querySelector(".learning-map-v6-marker-check"), [
           { opacity: 0, transform: "scale(.7)" },

@@ -19,7 +19,7 @@ describe("learning path station ordering and legacy lesson compatibility", () =>
     const activeStart = app.indexOf("function activeLearningPathNodeFromData(data)");
     const activeEnd = app.indexOf("async function startLearningPathNode", activeStart);
     const activeFunction = app.slice(activeStart, activeEnd);
-    const mapStart = app.indexOf("function renderLearningPathMap(pathGroups, currentLevel)");
+    const mapStart = app.indexOf("function renderLearningPathMap(");
     const mapEnd = app.indexOf("async function loadLearningPath()", mapStart);
     const mapFunction = app.slice(mapStart, mapEnd);
 

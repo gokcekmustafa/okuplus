@@ -6,13 +6,10 @@ const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8"
 const section = (start: string, end: string) =>
   source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 const shared = section(
-  "function returnToLearningPathAfterStep(",
+  "function learningPathStepElement(",
   "async function startLearningPathNode(",
 );
-const navigation = section(
-  "function navigate(page",
-  "globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__",
-);
+const navigation = section("function navigate(", "globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__");
 const usable = section(
   "function isUsableLearningPathNode(",
   "async function openAssignedP1FirstStep(",
@@ -22,23 +19,43 @@ const nodes = () => [
   { id: "36", status: "active", type: "TEACHING", contentVersionId: "content-36" },
 ];
 
-function harness() {
+function harness(stepId = "35") {
   const cache = new Map([["old-read", Promise.resolve({})]]);
   const button = { disabled: false };
-  const container = { setAttribute() {}, querySelector: () => ({}), innerHTML: "" };
+  let rectReads = 0;
+  const stepElement = {
+    getBoundingClientRect: () => ({ top: rectReads++ === 0 ? 240 : 18, bottom: 160, height: 142 }),
+  };
+  const stepButton = { dataset: { nodeId: stepId }, closest: () => stepElement };
+  const container = {
+    setAttribute() {},
+    querySelector: () => ({}),
+    querySelectorAll: () => [stepButton],
+    innerHTML: "existing-learning-map",
+  };
+  const window = { scrollX: 0, scrollY: 300, scrollBy: vi.fn(), scrollTo: vi.fn() };
+  const document = {
+    visibilityState: "visible",
+    querySelectorAll: () => [],
+    scrollingElement: { scrollTop: 300 },
+    documentElement: { style: { scrollBehavior: "smooth" } },
+  };
   const context = createContext({
     learningPathContinuation: null,
+    learningPathReturnPosition: null,
     learningPathNavigationRevision: 0,
-    activeLearningStepNode: { id: "35", status: "active" },
+    activeLearningStepNode: { id: stepId, status: "active" },
+    activeLearningStepVisualPosition: null,
     activeLearningStepNavigation: null,
     activeLearningStepNavigationFromStepId: null,
     learningPathEntryMode: true,
     currentPage: "exercise",
+    window,
     scope: "student:tenant-a",
     insightScope: () => context.scope,
     insightRequestCache: () => cache,
     uiMotion: { cancel: vi.fn(), hasRoadmap: () => true },
-    document: { visibilityState: "visible", querySelectorAll: () => [] },
+    document,
     $: (id: string) =>
       id === "lesson-detail"
         ? { querySelector: () => button }
@@ -66,8 +83,15 @@ function harness() {
   });
   runInContext(shared + usable + navigation, context);
   const run = (script: string) => runInContext(script, context);
-  const complete = () => run('returnToLearningPathAfterStep({id:"35",status:"active"}, {id:"36"})');
-  return { context, cache, button, container, run, complete };
+  const complete = (fromId = stepId, nextId = "36") =>
+    run(
+      "returnToLearningPathAfterStep({id:" +
+        JSON.stringify(fromId) +
+        ',status:"active"}, {id:' +
+        JSON.stringify(nextId) +
+        "})",
+    );
+  return { context, cache, button, container, document, window, stepElement, run, complete };
 }
 
 describe("guided station completion → map → motion → next server-unlocked station", () => {
@@ -144,6 +168,22 @@ describe("guided station completion → map → motion → next server-unlocked 
     expect(h.context.startLearningPathNode).toHaveBeenCalledOnce();
   });
 
+  it("keeps a middle station at its captured viewport position while returning to the map", () => {
+    const h = harness("66");
+    h.complete("66", "67");
+
+    expect(h.context.currentPage).toBe("dashboard");
+    expect(h.context.learningPathReturnPosition).toMatchObject({
+      stepId: "66",
+      scope: "student:tenant-a",
+      viewportTop: 240,
+    });
+    expect(h.document.scrollingElement.scrollTop).toBe(78);
+    expect(h.document.documentElement.style.scrollBehavior).toBe("smooth");
+    expect(h.window.scrollBy).not.toHaveBeenCalled();
+    expect(h.container.innerHTML).toBe("existing-learning-map");
+  });
+
   it.each([
     "incomplete",
     "locked",
@@ -210,7 +250,31 @@ describe("guided station completion → map → motion → next server-unlocked 
     h.run('returnToLearningPathAfterStep({id:"35",status:"completed"}, {id:"36"}, true)');
     expect(h.context.currentPage).toBe("dashboard");
     expect(h.context.learningPathContinuation).toBeNull();
+    expect(h.context.learningPathReturnPosition).toMatchObject({ stepId: "35" });
     expect(h.context.startLearningPathNode).not.toHaveBeenCalled();
+  });
+
+  it("does not carry a completion anchor into a fresh page entry", () => {
+    const h = harness();
+    h.context.learningPathReturnPosition = {
+      stepId: "35",
+      scope: "student:tenant-a",
+      viewportTop: 240,
+    };
+    h.run('navigate("dashboard")');
+    expect(h.context.learningPathReturnPosition).toBeNull();
+    expect(h.window.scrollBy).not.toHaveBeenCalled();
+
+    const otherStudent = harness();
+    otherStudent.context.scope = "student:tenant-b";
+    otherStudent.context.learningPathReturnPosition = {
+      stepId: "35",
+      scope: "student:tenant-a",
+      viewportTop: 240,
+    };
+    otherStudent.run('navigate("dashboard")');
+    expect(otherStudent.context.learningPathReturnPosition).toBeNull();
+    expect(otherStudent.document.scrollingElement.scrollTop).toBe(300);
   });
 
   it("routes a teaching completion through the same map rather than starting the next lesson directly", async () => {
@@ -305,13 +369,20 @@ describe("guided station completion → map → motion → next server-unlocked 
     );
     const pending = h.run("loadLearningPath()");
     h.complete();
+    expect(h.container.innerHTML).toBe("existing-learning-map");
+    expect(h.document.scrollingElement.scrollTop).toBe(78);
     finish({ paths: [{ nodes: [{ id: "35", status: "active" }] }] });
     await pending;
+    expect(h.container.innerHTML).toBe("existing-learning-map");
     expect(h.context.insightApi).toHaveBeenCalledTimes(2);
     await vi.waitFor(() =>
       expect(h.context.renderLearningPathMap).toHaveBeenCalledExactlyOnceWith(
         [{ nodes: nodes() }],
         undefined,
+        {
+          continuation: h.context.learningPathContinuation,
+          returnPosition: h.context.learningPathReturnPosition,
+        },
       ),
     );
   });
