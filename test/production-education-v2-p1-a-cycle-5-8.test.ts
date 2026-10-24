@@ -170,7 +170,7 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     });
   });
 
-  it("approves only Cycle 5 and keeps later cycles locked pending separate owner release", () => {
+  it("approves the prepared Cycle 5–8 package without changing source provenance", () => {
     for (let sequence = 4; sequence < 8; sequence += 1) {
       const from =
         [...EDUCATION_V2_P1_A_CYCLE_5_8].find((cycle) => cycle.sequence === sequence)?.program.path
@@ -180,17 +180,20 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
       expect(to).toBeTruthy();
       expect(next?.sequence).toBe(sequence + 1);
       expect(next?.manifest.steps).toHaveLength(5);
-      expect(next?.publicationApproved()).toBe(sequence === 4);
+      expect(next?.publicationApproved()).toBe(sequence >= 4);
+      if (sequence >= 4 && sequence <= 6) {
+        expect(next?.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
+      }
     }
     expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS).toEqual(
       [5, 6, 7, 8].map((sequence) => ({
         sequence,
-        status: sequence === 5 ? "OWNER_RELEASE_APPROVED" : "OWNER_RELEASE_REQUIRED",
-        explicitPublicationApproved: sequence === 5,
+        status: "OWNER_RELEASE_APPROVED",
+        explicitPublicationApproved: true,
       })),
     );
     for (const sequence of [5, 6, 7, 8])
-      expect(isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence)).toBe(sequence === 5);
+      expect(isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence)).toBe(true);
     expect(educationV2P1ACycle5To8ScopeSequences("CYCLE_5_ONLY")).toEqual([5]);
     expect(educationV2P1ACycle5To8ScopeSequences("CYCLES_5_TO_8")).toEqual([5, 6, 7, 8]);
     expect(educationV2P1ACycle5To8ProductionApproval("CYCLE_5_ONLY", "a".repeat(40))).toContain(
@@ -230,11 +233,9 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
         .filter((node) => node.cycleSequence === 5)
         .every((node) => node.planningStatus === "GRAPH_NOT_AVAILABLE"),
     ).toBe(true);
-    expect(
-      plannedCycle5To8
-        .filter((node) => node.cycleSequence !== 5)
-        .every((node) => node.planningStatus === "AUTHORED_UNRELEASED"),
-    ).toBe(true);
+    expect(plannedCycle5To8.every((node) => node.planningStatus === "GRAPH_NOT_AVAILABLE")).toBe(
+      true,
+    );
     expect(
       plannedCycle5To8.every(
         (node) =>

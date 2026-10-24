@@ -51,7 +51,16 @@ import {
 const ID_PREFIX = "c2510000-0000-7000-8000-";
 const id = (suffix: number) => `${ID_PREFIX}${String(suffix).padStart(12, "0")}`;
 
-const PATH_IDS = { initial: id(1), next: id(2), third: id(3), fourth: id(4), fifth: id(5) };
+const PATH_IDS = {
+  initial: id(1),
+  next: id(2),
+  third: id(3),
+  fourth: id(4),
+  fifth: id(5),
+  sixth: id(6),
+  seventh: id(7),
+  eighth: id(8),
+};
 const ACTOR_EMAILS = [
   "p1-transition-1@example.test",
   "p1-transition-2@example.test",
@@ -1264,6 +1273,14 @@ describe.sequential("P1 learning cycle transition integration", () => {
       });
       const cycle5 = getEducationV2P1ACycle5To8(5)!;
       await createPath(PATH_IDS.fifth, cycle5.program.programId, cycle5.program);
+      for (const [sequence, pathId] of [
+        [6, PATH_IDS.sixth],
+        [7, PATH_IDS.seventh],
+        [8, PATH_IDS.eighth],
+      ] as const) {
+        const cycle = getEducationV2P1ACycle5To8(sequence)!;
+        await createPath(pathId, cycle.program.programId, cycle.program);
+      }
 
       const assignment = await reconcileP1ToNextCycle(cycle3Fixture.actor, {
         p1LearningPathId: PATH_IDS.fourth,
@@ -1315,6 +1332,88 @@ describe.sequential("P1 learning cycle transition integration", () => {
       expect(
         afterProgress.filter((row) => beforeProgress.some((before) => before.id === row.id)),
       ).toEqual(beforeProgress);
+
+      const pathIdBySequence = new Map<number, string>([
+        [5, PATH_IDS.fifth],
+        [6, PATH_IDS.sixth],
+        [7, PATH_IDS.seventh],
+        [8, PATH_IDS.eighth],
+      ]);
+      for (const sequence of [5, 6, 7, 8]) {
+        const pathId = pathIdBySequence.get(sequence)!;
+        for (let stepIndex = sequence === 5 ? 1 : 0; stepIndex < 5; stepIndex += 1) {
+          const snapshot = await getStudentLearningPath(cycle3Fixture.actor);
+          const cyclePath = snapshot?.paths.find((path) => path.path.cycleSequence === sequence);
+          const node = cyclePath?.nodes[stepIndex];
+          expect(node?.status).toBe("active");
+          if (node?.type === "ASSESSMENT") {
+            await prisma.assessmentResult.create({
+              data: {
+                id: id(2000 + sequence * 10 + stepIndex),
+                tenantId: cycle3Fixture.actor.tenantId,
+                studentId: cycle3Fixture.actor.userId,
+                assessmentId: node.assessmentId!,
+                score: 1,
+                metrics: { source: "synthetic-integration-test" },
+              },
+            });
+          }
+          await completeLearningStepForSession(cycle3Fixture.actor, {
+            templateVersionId: node?.templateVersionId ?? `cycle-${sequence}-assessment`,
+            assessmentId: node?.type === "ASSESSMENT" ? node.assessmentId : null,
+            learningStepId: node?.id,
+          });
+          const afterStep = await getStudentLearningPath(cycle3Fixture.actor);
+          const updatedCycle = afterStep?.paths.find(
+            (path) => path.path.cycleSequence === sequence,
+          );
+          expect(updatedCycle?.nodes[stepIndex]?.status).toBe("completed");
+          if (stepIndex < 4) expect(updatedCycle?.nodes[stepIndex + 1]?.status).toBe("active");
+        }
+
+        if (sequence < 8) {
+          const progressBeforeTransition = await prisma.studentLearningStepProgress.findMany({
+            where: {
+              tenantId: cycle3Fixture.actor.tenantId,
+              studentId: cycle3Fixture.actor.userId,
+            },
+            orderBy: { id: "asc" },
+          });
+          const transition = await reconcileP1ToNextCycle(cycle3Fixture.actor, {
+            p1LearningPathId: pathId,
+          });
+          expect(transition).toMatchObject({
+            outcome: "ASSIGNED",
+            nextLearningPathId: pathIdBySequence.get(sequence + 1),
+            readiness: { currentCycleCompleted: true, nextCycleAvailable: true },
+          });
+          const afterTransition = await getStudentLearningPath(cycle3Fixture.actor);
+          const nextPath = afterTransition?.paths.find(
+            (path) => path.path.cycleSequence === sequence + 1,
+          );
+          expect(nextPath?.nodes[0]).toMatchObject({ status: "active", availability: "READY" });
+          const progressAfterTransition = await prisma.studentLearningStepProgress.findMany({
+            where: {
+              tenantId: cycle3Fixture.actor.tenantId,
+              studentId: cycle3Fixture.actor.userId,
+            },
+            orderBy: { id: "asc" },
+          });
+          expect(
+            progressAfterTransition.filter((row) =>
+              progressBeforeTransition.some((before) => before.id === row.id),
+            ),
+          ).toEqual(progressBeforeTransition);
+        }
+      }
+
+      const finalTransition = await reconcileP1ToNextCycle(cycle3Fixture.actor, {
+        p1LearningPathId: PATH_IDS.eighth,
+      });
+      expect(finalTransition).toMatchObject({
+        outcome: "REVIEW_REQUIRED",
+        readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
+      });
     });
   });
 

@@ -24,16 +24,15 @@ export function educationV2P1ACycle5To8ProductionApproval(
 }
 
 /**
- * The product owner explicitly authorized the first post-52-station release.
- * Cycles 6–8 remain gated. Source provenance is independent: Cycle 5 remains
- * ORIGINAL_AUTHORING / REVIEW_REQUIRED and is not represented as externally
- * source-verified.
+ * Product-owner release approval for the prepared Cycle 5–8 package. Source
+ * provenance remains independent: Cycle 5 is ORIGINAL_AUTHORING / REVIEW_REQUIRED,
+ * while Cycles 6–8 retain their separately verified source evidence.
  */
 export const EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS: readonly EducationV2P1ACycle5To8ReleaseDecision[] =
   EDUCATION_V2_P1_A_CYCLE_5_8.map(({ sequence }) => ({
     sequence,
-    status: sequence === 5 ? "OWNER_RELEASE_APPROVED" : "OWNER_RELEASE_REQUIRED",
-    explicitPublicationApproved: sequence === 5,
+    status: "OWNER_RELEASE_APPROVED",
+    explicitPublicationApproved: true,
   }));
 
 export function isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence: number): boolean {

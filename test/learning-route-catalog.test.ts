@@ -220,8 +220,8 @@ describe("versioned learning routes", () => {
       {
         route: "A",
         authored: 220,
-        releaseApprovedSource: 25,
-        sourceVerifiedDraft: 185,
+        releaseApprovedSource: 40,
+        sourceVerifiedDraft: 170,
         sourceQualified: 210,
         reviewRequired: 10,
         sourceRemaining: 0,
@@ -346,11 +346,13 @@ describe("versioned learning routes", () => {
     expect(a[4]!.publicationApproved()).toBe(true);
     expect(a[4]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(nextLearningRouteCycle(a[4]!.pathCode)).toBe(a[5]);
-    expect(a[5]!.publicationApproved()).toBe(false);
+    expect(a[5]!.publicationApproved()).toBe(true);
+    expect(a[5]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[5]!.pathCode)).toBe(a[6]);
-    expect(a[6]!.publicationApproved()).toBe(false);
+    expect(a[6]!.publicationApproved()).toBe(true);
+    expect(a[6]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[6]!.pathCode)).toBe(a[7]);
-    expect(a[7]!.publicationApproved()).toBe(false);
+    expect(a[7]!.publicationApproved()).toBe(true);
     expect(a[7]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(nextLearningRouteCycle(a[7]!.pathCode)).toBe(a[8]);
     expect(a[8]!.publicationApproved()).toBe(false);

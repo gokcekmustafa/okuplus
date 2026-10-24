@@ -383,7 +383,8 @@ export function summarizeLearningRouteCoverage(
       0,
     );
     const sourceVerifiedDraftStationCount = routeCycles.reduce(
-      (count, cycle) => count + (cycle.sourceVerifiedStationCount ?? 0),
+      (count, cycle) =>
+        count + (cycle.publicationApproved() ? 0 : (cycle.sourceVerifiedStationCount ?? 0)),
       0,
     );
     const sourceQualifiedStationCount =

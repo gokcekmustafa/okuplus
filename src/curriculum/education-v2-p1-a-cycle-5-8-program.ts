@@ -448,7 +448,7 @@ function buildCycle(sequence: EducationV2P1ACycle5To8Sequence): EducationV2P1ACy
       requiredStepKeys: steps.map((step) => step.key),
       checkpointStepKeys: [lastStation.key],
       requiresFinalMeasurement: false,
-      nextCycle: "REVIEW_REQUIRED",
+      nextCycle: sequence < 8 ? "ASSIGN_NEXT" : "REVIEW_REQUIRED",
     },
   };
 
