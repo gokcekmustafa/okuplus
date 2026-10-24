@@ -50,6 +50,7 @@ function harness() {
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
     activeLearningStepNode: null,
+    activeLearningStepVisualPosition: null,
     learningPathContinuation: null,
     learningPathNavigationRevision: 0,
     currentPage: "exercise",
@@ -59,7 +60,7 @@ function harness() {
   });
   runInContext(
     source.slice(
-      source.indexOf("function returnToLearningPathAfterStep("),
+      source.indexOf("function learningPathStepElement("),
       source.indexOf("async function startLearningPathNode("),
     ),
     context,
