@@ -36,15 +36,19 @@ incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
 180 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 125'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 6–34 ve B/C/D Cycle 3–33 zincirleri
+sayısı değildir. A Cycle 6–8, Cycle 13–34 ve B/C/D Cycle 3–33 zincirleri
 `DRAFT_NOT_RELEASED` ve yayına kapalıdır. Cycle 5 kaynakta yayın onaylıdır,
 ancak son doğrulanmış planında grafiği üretimde `MISSING` ve öğrenci ataması
 yoktur. Cycle 4'ün 48–52 grafiği mevcut üretim rotasında yer alır; bu çalışma
 onu veya geçmiş öğrenci ilerlemesini değiştirmez.
 
-18 Ekim tablosu tarihli QA anlık görüntüsüdür. 24 Ekim'de yalnızca Cycle 5 için
-kaynakta ürün sahibi yayın izni kaydedilmiştir. Bu karar kaynak/provenance
-durumunu değiştirmez ve Cycle 5 grafiğinin üretimde bulunduğunu kanıtlamaz.
+18 Ekim tablosu tarihli QA anlık görüntüsüdür. 24 Ekim 2026'da Cycle 5 ve
+Cycle 9–12 için kaynakta ürün sahibi yayın izni kaydedilmiştir. Bu kararlar
+kaynak/provenance durumunu değiştirmez ve ilgili grafiklerin üretimde bulunduğunu
+kanıtlamaz. Cycle 9–12 (73–92. istasyonlar) kararı yalnızca kaynak yayın kapısını açar;
+üretim grafiğinin varlığını kanıtlamaz. Grafikler doğrulanana kadar bu adımlar
+rota önizlemesinde `GRAPH_NOT_AVAILABLE`, `locked` ve `UNAVAILABLE` kalır;
+öğrenci geçişi mevcut tam grafik doğrulamasını geçmeden atama yapamaz.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
 olgusal iddia içermez. Öğrenme hedefleri MEB program çerçevesiyle, Türkçe yazım

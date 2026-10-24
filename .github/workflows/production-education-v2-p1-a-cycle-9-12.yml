@@ -92,38 +92,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
-          test "${GITHUB_REF}" = "refs/heads/master"
-          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
-          test "${APP_ENV}" = "production"
-          test "${NODE_ENV}" = "production"
-          test "${DB_FINGERPRINT_ENVIRONMENT}" = "PRODUCTION"
-          test "${EDUCATION_V2_P1_A_CYCLE_9_12_ENVIRONMENT}" = "PRODUCTION"
-          test -n "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_URL}"
-          test -n "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_NAME}"
-          test -n "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_HOST}"
-          test -n "${PRODUCTION_DB_APPROVED_PROVIDER}"
-          test -n "${PRODUCTION_DB_APPROVED_PORT}"
-          test -n "${PRODUCTION_DB_APPROVED_DATABASE}"
-          test -n "${PRODUCTION_DB_APPROVED_USER}"
-          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
-          [[ "${CYCLE912_RELEASE_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]
-          test "${CYCLE912_RELEASE_COMMIT,,}" = "${GITHUB_SHA,,}"
-          release_meta="$(npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID, EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_FINGERPRINT } from "./src/curriculum/education-v2-p1-a-cycle-9-12-release.ts"; process.stdout.write(`${EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID} ${EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_FINGERPRINT}`)')"
+          fail() { echo "FAIL: $1" >&2; exit 1; }
+          require_equal() { [[ "$2" == "$3" ]] || fail "$1"; }
+          require_present() { [[ -n "$2" ]] || fail "$1"; }
+          require_equal "workflow must be manually dispatched" "${GITHUB_EVENT_NAME}" "workflow_dispatch"
+          require_equal "workflow ref must be master" "${GITHUB_REF}" "refs/heads/master"
+          checked_out_commit="$(git rev-parse HEAD)"
+          require_equal "checked-out commit must match the dispatched commit" "${checked_out_commit}" "${GITHUB_SHA}"
+          require_equal "application environment must be production" "${APP_ENV}" "production"
+          require_equal "node environment must be production" "${NODE_ENV}" "production"
+          require_equal "database fingerprint environment must be production" "${DB_FINGERPRINT_ENVIRONMENT}" "PRODUCTION"
+          require_equal "provisioner environment must be production" "${EDUCATION_V2_P1_A_CYCLE_9_12_ENVIRONMENT}" "PRODUCTION"
+          require_present "production database secret is missing" "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_URL}"
+          require_present "approved production database name is missing" "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_NAME}"
+          require_present "approved production database host is missing" "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_DATABASE_HOST}"
+          require_present "approved production provider is missing" "${PRODUCTION_DB_APPROVED_PROVIDER}"
+          require_present "approved production port is missing" "${PRODUCTION_DB_APPROVED_PORT}"
+          require_present "approved production database variable is missing" "${PRODUCTION_DB_APPROVED_DATABASE}"
+          require_present "approved production database user variable is missing" "${PRODUCTION_DB_APPROVED_USER}"
+          [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]] || fail "approved production target fingerprint is missing or malformed"
+          [[ "${CYCLE912_RELEASE_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]] || fail "selected release commit is not a full Git SHA"
+          require_equal "selected release commit must match the dispatched commit" "${CYCLE912_RELEASE_COMMIT,,}" "${GITHUB_SHA,,}"
+          if ! release_meta="$(npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID, EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_FINGERPRINT } from "./src/curriculum/education-v2-p1-a-cycle-9-12-release.ts"; process.stdout.write(`${EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID} ${EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_FINGERPRINT}`)')"; then
+            fail "could not calculate the immutable Cycle 9–12 release identity"
+          fi
           read -r expected_release_id release_fingerprint <<< "${release_meta}"
-          test "${CYCLE912_RELEASE_ID}" = "${expected_release_id}"
-          test "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_RELEASE_ID}" = "${expected_release_id}"
-          test "${CYCLE912_GRAPH_SCOPE}" = "CYCLES_9_TO_12"
+          require_equal "submitted release ID does not match the current source fingerprint" "${CYCLE912_RELEASE_ID}" "${expected_release_id}"
+          require_equal "provisioner release ID differs from the submitted release ID" "${EDUCATION_V2_P1_A_CYCLE_9_12_PRODUCTION_RELEASE_ID}" "${expected_release_id}"
+          require_equal "graph scope must be exactly CYCLES_9_TO_12" "${CYCLE912_GRAPH_SCOPE}" "CYCLES_9_TO_12"
           case "${CYCLE912_OPERATION}" in
             PLAN_ONLY)
-              test "${CYCLE912_CONFIRMATION}" = "PLAN_EDUCATION_V2_P1_A_CYCLES_9_TO_12"
+              require_equal "PLAN_ONLY confirmation text is invalid" "${CYCLE912_CONFIRMATION}" "PLAN_EDUCATION_V2_P1_A_CYCLES_9_TO_12"
               echo "BACKUP_RESTORE_EVIDENCE=NOT_REQUIRED_FOR_READ_ONLY_PLAN" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             APPLY)
-              test "${CYCLE912_CONFIRMATION}" = "APPLY_EDUCATION_V2_P1_A_CYCLES_9_TO_12"
+              require_equal "APPLY confirmation text is invalid" "${CYCLE912_CONFIRMATION}" "APPLY_EDUCATION_V2_P1_A_CYCLES_9_TO_12"
               expected_approval="I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLES_9_TO_12_PRODUCTION_RELEASE_${release_fingerprint^^}_AT_${GITHUB_SHA^^}"
-              test "${CYCLE912_PRODUCTION_APPROVAL}" = "${expected_approval}"
-              npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS } from "./src/curriculum/education-v2-p1-a-cycle-9-12-release.ts"; if (EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS.length !== 4 || EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS.some((item) => item.status !== "OWNER_RELEASE_APPROVED" || item.explicitPublicationApproved !== true)) process.exit(1)'
+              require_equal "product-owner approval does not match the current release and commit" "${CYCLE912_PRODUCTION_APPROVAL}" "${expected_approval}"
+              if ! npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS } from "./src/curriculum/education-v2-p1-a-cycle-9-12-release.ts"; if (EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS.length !== 4 || EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS.some((item) => item.status !== "OWNER_RELEASE_APPROVED" || item.explicitPublicationApproved !== true)) process.exit(1)'; then
+                fail "all four Cycle 9–12 owner release decisions must be explicitly approved"
+              fi
               echo "BACKUP_RESTORE_EVIDENCE=REQUIRED_FROM_SAME_RUN_PITR" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             *) echo "FAIL: invalid operation"; exit 1 ;;
@@ -210,13 +218,20 @@ jobs:
               const fs = require("node:fs");
               const sequence = Number(process.env.CYCLE912_SEQUENCE);
               const report = JSON.parse(fs.readFileSync(`cycle${sequence}-plan-before.json`, "utf8"));
-              if (report.status !== "PASS" || report.dbChanged !== false ||
-                  report.immutableReleaseId !== process.env.CYCLE912_RELEASE_ID ||
-                  report.expectedSourceCommit !== process.env.CYCLE912_RELEASE_COMMIT ||
-                  !["MISSING", "EXISTING"].includes(report.state)) process.exit(1);
-              if (report.stepCount !== 5 || report.contentCount !== 5 ||
-                  report.exerciseCount !== 5 || report.questionCount !== 15 ||
-                  report.assessmentCount !== 1) process.exit(1);
+            const fail = (reason) => { console.error(`FAIL: Cycle ${sequence} ${reason}`); process.exit(1); };
+            if (report.status !== "PASS") fail("read-only plan did not pass");
+            if (report.dbChanged !== false) fail("plan reports a database change");
+            if (report.immutableReleaseId !== process.env.CYCLE912_RELEASE_ID) fail("immutable release ID mismatch");
+            if (report.expectedSourceCommit !== process.env.CYCLE912_RELEASE_COMMIT) fail("source commit mismatch");
+            if (report.state === "CONFLICT") fail("graph state is CONFLICT; refusing to overwrite it");
+            if (!["MISSING", "EXISTING"].includes(report.state)) fail("graph state is unrecognized; refusing to write");
+            if (report.stepCount !== 5) fail("expected five learning steps");
+            if (report.contentCount !== 5) fail("expected five content versions");
+            if (report.exerciseCount !== 5) fail("expected five exercises");
+            if (report.questionCount !== 15) fail("expected fifteen questions");
+            if (report.assessmentCount !== 1) fail("expected one assessment");
+            console.log(`CYCLE_${sequence}_GRAPH_STATE=${report.state}`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\nCYCLE_${sequence}_GRAPH_STATE=${report.state}\n`);
             '
             cat "cycle${sequence}-plan-before.json" >> "${GITHUB_STEP_SUMMARY}"
           done
@@ -248,8 +263,9 @@ jobs:
               const fs = require("node:fs");
               const sequence = Number(process.env.CYCLE912_SEQUENCE);
               const report = JSON.parse(fs.readFileSync(`cycle${sequence}-apply.json`, "utf8"));
-              if (report.status !== "PASS" ||
-                  (report.dbChanged !== true && report.state !== "EXISTING")) process.exit(1);
+              const fail = (reason) => { console.error(`FAIL: Cycle ${sequence} ${reason}`); process.exit(1); };
+              if (report.status !== "PASS") fail("apply did not pass");
+              if (report.dbChanged !== true && report.state !== "EXISTING") fail("graph neither created nor already present");
             '
             cat "cycle${sequence}-apply.json" >> "${GITHUB_STEP_SUMMARY}"
           done
@@ -266,7 +282,10 @@ jobs:
               const fs = require("node:fs");
               const sequence = Number(process.env.CYCLE912_SEQUENCE);
               const report = JSON.parse(fs.readFileSync(`cycle${sequence}-plan-after.json`, "utf8"));
-              if (report.status !== "PASS" || report.dbChanged !== false || report.state !== "EXISTING") process.exit(1);
+              const fail = (reason) => { console.error(`FAIL: Cycle ${sequence} ${reason}`); process.exit(1); };
+              if (report.status !== "PASS") fail("post-apply read-only verification did not pass");
+              if (report.dbChanged !== false) fail("post-apply verification reports a database change");
+              if (report.state !== "EXISTING") fail("expected graph is not present after apply");
             '
             cat "cycle${sequence}-plan-after.json" >> "${GITHUB_STEP_SUMMARY}"
           done

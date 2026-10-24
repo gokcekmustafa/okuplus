@@ -1407,13 +1407,34 @@ describe.sequential("P1 learning cycle transition integration", () => {
         }
       }
 
+      const progressBeforeFinalTransition = await prisma.studentLearningStepProgress.findMany({
+        where: { tenantId: cycle3Fixture.actor.tenantId, studentId: cycle3Fixture.actor.userId },
+        orderBy: { id: "asc" },
+      });
       const finalTransition = await reconcileP1ToNextCycle(cycle3Fixture.actor, {
         p1LearningPathId: PATH_IDS.eighth,
       });
+      const cycle9 = learningRouteCycle("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_9_G8_12");
+      expect(cycle9?.publicationApproved()).toBe(true);
       expect(finalTransition).toMatchObject({
         outcome: "REVIEW_REQUIRED",
         readiness: { status: "NEXT_CYCLE_UNAVAILABLE", currentCycleCompleted: true },
       });
+      expect(
+        await prisma.studentLearningPath.count({
+          where: {
+            tenantId: cycle3Fixture.actor.tenantId,
+            studentId: cycle3Fixture.actor.userId,
+            learningPath: { code: cycle9!.pathCode },
+          },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.studentLearningStepProgress.findMany({
+          where: { tenantId: cycle3Fixture.actor.tenantId, studentId: cycle3Fixture.actor.userId },
+          orderBy: { id: "asc" },
+        }),
+      ).toEqual(progressBeforeFinalTransition);
     });
   });
 

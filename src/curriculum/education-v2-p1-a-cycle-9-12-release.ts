@@ -35,8 +35,8 @@ export const EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID = `OKU-EDUCATION-V2-P1-A-CY
 export const EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS: readonly EducationV2P1ACycle9To12ReleaseDecision[] =
   EDUCATION_V2_P1_A_CYCLE_9_12_SEQUENCES.map((sequence) => ({
     sequence,
-    status: "OWNER_RELEASE_REQUIRED",
-    explicitPublicationApproved: false,
+    status: "OWNER_RELEASE_APPROVED",
+    explicitPublicationApproved: true,
   }));
 
 export function isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence: number): boolean {

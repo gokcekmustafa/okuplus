@@ -438,22 +438,22 @@ describe("P1-A source-verified Cycles 9–12 package", () => {
     expect(positionCounts.every((count) => count >= 12 && count <= 18)).toBe(true);
   });
 
-  it("keeps Cycle 9–12 unapproved and locked while making the 72→73 successor explicit", () => {
+  it("records owner approval but keeps Cycle 9–12 locked until their production graphs exist", () => {
     expect(EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_DECISIONS).toEqual(
       [9, 10, 11, 12].map((sequence) => ({
         sequence,
-        status: "OWNER_RELEASE_REQUIRED",
-        explicitPublicationApproved: false,
+        status: "OWNER_RELEASE_APPROVED",
+        explicitPublicationApproved: true,
       })),
     );
     for (const sequence of [9, 10, 11, 12]) {
-      expect(isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence)).toBe(false);
+      expect(isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence)).toBe(true);
       const cycle = EDUCATION_V2_P1_A_CYCLE_9_12.find((item) => item.sequence === sequence)!;
       const catalog = LEARNING_ROUTE_CYCLES.find(
         (item) => item.pathCode === cycle.program.path.code,
       );
-      expect(catalog?.publicationApproved()).toBe(false);
-      expect(catalog?.authoringStatus).toBe("DRAFT_NOT_RELEASED");
+      expect(catalog?.publicationApproved()).toBe(true);
+      expect(catalog?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     }
     expect(EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_FINGERPRINT).toMatch(/^[a-f0-9]{64}$/u);
     expect(EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID).toContain(
@@ -469,7 +469,7 @@ describe("P1-A source-verified Cycles 9–12 package", () => {
     const next = nextLearningRouteCycle(cycle8.pathCode);
     expect(next?.sequence).toBe(9);
     expect(next?.pathCode).toBe("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_9_G8_12");
-    expect(next?.publicationApproved()).toBe(false);
+    expect(next?.publicationApproved()).toBe(true);
 
     const planned = buildPlannedLearningRouteNodes({
       currentPathCode: cycle8.pathCode,
@@ -486,10 +486,11 @@ describe("P1-A source-verified Cycles 9–12 package", () => {
         (node) =>
           node.status === "locked" &&
           node.availability === "UNAVAILABLE" &&
-          node.planningStatus === "AUTHORED_UNRELEASED" &&
+          node.planningStatus === "GRAPH_NOT_AVAILABLE" &&
           node.templateVersionId === null &&
           node.contentVersionId === null &&
-          node.assessmentId === null,
+          node.assessmentId === null &&
+          node.learningPathId === null,
       ),
     ).toBe(true);
   });
@@ -541,6 +542,10 @@ describe("P1-A source-verified Cycles 9–12 package", () => {
     expect(workflow).toContain("name: production-migration");
     expect(workflow).toContain("CYCLE912_GRAPH_SCOPE: CYCLES_9_TO_12");
     expect(workflow).toContain("scripts/verify-cycle9-12-pitr-evidence.ts");
+    expect(workflow).toContain("source fingerprint");
+    expect(workflow).toContain("graph state is CONFLICT");
+    expect(workflow).toContain("expected five learning steps");
+    expect(workflow).toContain("expected fifteen questions");
     expect(workflow.indexOf("Enforce same-run Cycle 9–12 PITR evidence")).toBeLessThan(
       workflow.indexOf("Apply only missing Cycle 9–12 graphs"),
     );
