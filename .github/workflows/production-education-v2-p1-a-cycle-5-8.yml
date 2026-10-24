@@ -4,15 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: "PLAN_ONLY is read-only; APPLY creates only the Cycle 5–8 graphs after same-run PITR verification"
+        description: "PLAN_ONLY is read-only; APPLY creates only the selected prepared cycle graphs after same-run PITR verification"
         required: true
         type: choice
         options:
           - PLAN_ONLY
           - APPLY
         default: PLAN_ONLY
+      graph_scope:
+        description: "Limit this run to the first new station cycle unless a wider release is explicitly selected"
+        required: true
+        type: choice
+        options:
+          - CYCLE_5_ONLY
+          - CYCLES_5_TO_8
+        default: CYCLE_5_ONLY
       confirm_cycle5_8:
-        description: "Type PLAN_EDUCATION_V2_P1_A_CYCLE_5_8 or APPLY_EDUCATION_V2_P1_A_CYCLE_5_8"
+        description: "Type the operation confirmation for the selected graph scope"
         required: true
         type: string
       production_release_id:
@@ -63,6 +71,7 @@ jobs:
       EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_APPROVAL: ${{ inputs.production_editorial_approval }}
       EDUCATION_V2_P1_A_CYCLE_5_8_APPROVED_TARGET_FINGERPRINT: ${{ vars.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT }}
       CYCLE58_OPERATION: ${{ inputs.operation }}
+      CYCLE58_GRAPH_SCOPE: ${{ inputs.graph_scope }}
       CYCLE58_CONFIRMATION: ${{ inputs.confirm_cycle5_8 }}
       CYCLE58_RELEASE_ID: ${{ inputs.production_release_id }}
       CYCLE58_RELEASE_COMMIT: ${{ inputs.production_release_commit }}
@@ -108,17 +117,28 @@ jobs:
           [[ "${PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT}" =~ ^[0-9a-fA-F]{64}$ ]]
           [[ "${CYCLE58_RELEASE_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]
           test "${CYCLE58_RELEASE_COMMIT,,}" = "${GITHUB_SHA,,}"
+          case "${CYCLE58_GRAPH_SCOPE}" in
+            CYCLE_5_ONLY)
+              approval_scope="CYCLE_5"
+              echo "CYCLE58_SEQUENCES=5" >> "${GITHUB_ENV}"
+              ;;
+            CYCLES_5_TO_8)
+              approval_scope="CYCLE_5_8"
+              echo "CYCLE58_SEQUENCES=5 6 7 8" >> "${GITHUB_ENV}"
+              ;;
+            *) echo "FAIL: invalid graph scope"; exit 1 ;;
+          esac
           release_meta="$(npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID, EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT } from "./src/curriculum/education-v2-p1-a-cycle-5-8-release.ts"; process.stdout.write(`${EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID} ${EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT}`)')"
           read -r expected_release_id release_fingerprint <<< "${release_meta}"
           test "${CYCLE58_RELEASE_ID}" = "${expected_release_id}"
           case "${CYCLE58_OPERATION}" in
             PLAN_ONLY)
-              test "${CYCLE58_CONFIRMATION}" = "PLAN_EDUCATION_V2_P1_A_CYCLE_5_8"
+              test "${CYCLE58_CONFIRMATION}" = "PLAN_EDUCATION_V2_P1_A_${approval_scope}"
               echo "BACKUP_RESTORE_EVIDENCE=NOT_REQUIRED_FOR_READ_ONLY_PLAN" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             APPLY)
-              test "${CYCLE58_CONFIRMATION}" = "APPLY_EDUCATION_V2_P1_A_CYCLE_5_8"
-              expected_approval="I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_RELEASE_${release_fingerprint^^}_AT_${GITHUB_SHA^^}"
+              test "${CYCLE58_CONFIRMATION}" = "APPLY_EDUCATION_V2_P1_A_${approval_scope}"
+              expected_approval="I_HAVE_REVIEWED_EDUCATION_V2_P1_A_${approval_scope}_PRODUCTION_RELEASE_${release_fingerprint^^}_AT_${GITHUB_SHA^^}"
               test "${CYCLE58_PRODUCTION_APPROVAL}" = "${expected_approval}"
               echo "BACKUP_RESTORE_EVIDENCE=REQUIRED_FROM_SAME_RUN_PITR" >> "${GITHUB_STEP_SUMMARY}"
               ;;
@@ -126,7 +146,8 @@ jobs:
           esac
           echo "CYCLE58_RELEASE_ID=${expected_release_id}" >> "${GITHUB_STEP_SUMMARY}"
           echo "CYCLE58_RELEASE_COMMIT=${GITHUB_SHA}" >> "${GITHUB_STEP_SUMMARY}"
-          echo "CYCLE58_SCOPE=FOUR_CANONICAL_CYCLE_GRAPHS_ONLY" >> "${GITHUB_STEP_SUMMARY}"
+          echo "CYCLE58_GRAPH_SCOPE=${CYCLE58_GRAPH_SCOPE}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "CYCLE58_SELECTED_SEQUENCES=${CYCLE58_SEQUENCES}" >> "${GITHUB_STEP_SUMMARY}"
           echo "PREVIOUS_52_STATIONS=NOT_TOUCHED" >> "${GITHUB_STEP_SUMMARY}"
           echo "STUDENT_ASSIGNMENTS_AND_PROGRESS=NOT_TOUCHED" >> "${GITHUB_STEP_SUMMARY}"
           echo "MIGRATIONS=NOT_RUN" >> "${GITHUB_STEP_SUMMARY}"
@@ -181,22 +202,29 @@ jobs:
                   "\n**PLAN_ONLY note:** migration review is required; read-only curriculum planning continues. No write step is authorized.\n");
               }
             } else if (report.operation === "APPLY" && report.decision === "APPLY_PREFLIGHT_ALLOWED") {
-              console.log("APPLY_MIGRATION_POLICY=PASS");
+              if (report.migrationPolicyStatus === "PASS" && report.graphOnlyExceptionApplied === false) {
+                console.log("APPLY_PREFLIGHT=PASS");
+                console.log("MIGRATIONS=NOT_RUN");
+              } else if (report.migrationPolicyStatus === "REVIEW_REQUIRED" && report.graphOnlyExceptionApplied === true) {
+                console.log("APPLY_PREFLIGHT=GRAPH_ONLY_WITH_HASH_PINNED_UNRELATED_MIGRATIONS");
+                console.log(`PENDING_MIGRATIONS_NOT_RUN=${report.pendingMigrations.join(",")}`);
+              } else {
+                process.exit(1);
+              }
             } else {
               process.exit(1);
             }
           '
           if [ "${CYCLE58_OPERATION}" = "PLAN_ONLY" ]; then
             echo "PLAN_ONLY_MIGRATION_PREFLIGHT=READ_ONLY_CONTINUES; APPLY_REMAINS_BLOCKED_UNLESS_POLICY_AND_SAME_RUN_PITR_PASS" >> "${GITHUB_STEP_SUMMARY}"
-          else
-            echo "PRODUCTION_MIGRATION_POLICY=PASS" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-      - name: Run read-only plan for Cycle 5–8
+      - name: Run read-only plan for selected Cycle 5–8 graph scope
         shell: bash
         run: |
           set -euo pipefail
-          for sequence in 5 6 7 8; do
+          read -r -a sequences <<< "${CYCLE58_SEQUENCES}"
+          for sequence in "${sequences[@]}"; do
             export CYCLE58_SEQUENCE="${sequence}"
             npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --dry-run \
               > "cycle${sequence}-plan-before.json"
@@ -232,12 +260,13 @@ jobs:
           npx --no-install tsx scripts/verify-cycle5-8-pitr-evidence.ts
           echo "PITR_RESTORE_EVIDENCE=PASS" >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Apply Cycle 5–8 graphs only
+      - name: Apply only selected Cycle 5–8 graph scope
         if: ${{ inputs.operation == 'APPLY' }}
         shell: bash
         run: |
           set -euo pipefail
-          for sequence in 5 6 7 8; do
+          read -r -a sequences <<< "${CYCLE58_SEQUENCES}"
+          for sequence in "${sequences[@]}"; do
             export CYCLE58_SEQUENCE="${sequence}"
             npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --apply \
               > "cycle${sequence}-apply.json"
@@ -251,12 +280,13 @@ jobs:
             cat "cycle${sequence}-apply.json" >> "${GITHUB_STEP_SUMMARY}"
           done
 
-      - name: Verify Cycle 5–8 graph postconditions
+      - name: Verify selected Cycle 5–8 graph postconditions
         if: ${{ inputs.operation == 'APPLY' }}
         shell: bash
         run: |
           set -euo pipefail
-          for sequence in 5 6 7 8; do
+          read -r -a sequences <<< "${CYCLE58_SEQUENCES}"
+          for sequence in "${sequences[@]}"; do
             export CYCLE58_SEQUENCE="${sequence}"
             npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --dry-run \
               > "cycle${sequence}-plan-after.json"
@@ -268,7 +298,7 @@ jobs:
             '
             cat "cycle${sequence}-plan-after.json" >> "${GITHUB_STEP_SUMMARY}"
           done
-          echo "CYCLE_5_8_GRAPH_POSTCONDITION=EXISTING" >> "${GITHUB_STEP_SUMMARY}"
+          echo "CYCLE58_GRAPH_POSTCONDITION=EXISTING_FOR_SCOPE=${CYCLE58_GRAPH_SCOPE}" >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload sanitized Cycle 5–8 report
         if: always()

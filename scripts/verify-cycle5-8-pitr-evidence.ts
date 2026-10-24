@@ -27,6 +27,10 @@ function main(): void {
   } catch {
     throw new Error("same-run PITR evidence is unreadable");
   }
+  const graphScope = required("CYCLE58_GRAPH_SCOPE");
+  if (graphScope !== "CYCLE_5_ONLY" && graphScope !== "CYCLES_5_TO_8") {
+    throw new Error("CYCLE58_GRAPH_SCOPE is invalid");
+  }
   const expected: Cycle5To8PitrEvidenceExpectation = {
     runId: required("GITHUB_RUN_ID"),
     runAttempt: process.env.GITHUB_RUN_ATTEMPT?.trim() || "1",
@@ -35,6 +39,7 @@ function main(): void {
     role: required("PRODUCTION_DB_APPROVED_USER"),
     port: required("PRODUCTION_DB_APPROVED_PORT"),
     scope: "cycle5-8",
+    graphScope,
   };
   if (!isCycle5To8PitrEvidenceValid(evidence, expected)) {
     throw new Error("same-run Cycle 5–8 PITR evidence is missing, failed, or incomplete");

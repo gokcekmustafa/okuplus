@@ -130,7 +130,10 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       if (draft.routeFamily === "A" && draft.sequence === 4) {
         expect(routeCycle.publicationApproved()).toBe(true);
         expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
-      } else if (draft.routeFamily === "A" && draft.sequence >= 5 && draft.sequence <= 8) {
+      } else if (draft.routeFamily === "A" && draft.sequence === 5) {
+        expect(routeCycle.publicationApproved()).toBe(true);
+        expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+      } else if (draft.routeFamily === "A" && draft.sequence >= 6 && draft.sequence <= 8) {
         expect(routeCycle.publicationApproved()).toBe(false);
         expect(routeCycle.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       } else {

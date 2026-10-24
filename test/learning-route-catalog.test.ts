@@ -343,7 +343,8 @@ describe("versioned learning routes", () => {
     expect(a[3]!.publicationApproved()).toBe(true);
     expect(a[3]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[3]!.pathCode)).toBe(a[4]);
-    expect(a[4]!.publicationApproved()).toBe(false);
+    expect(a[4]!.publicationApproved()).toBe(true);
+    expect(a[4]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(nextLearningRouteCycle(a[4]!.pathCode)).toBe(a[5]);
     expect(a[5]!.publicationApproved()).toBe(false);
     expect(nextLearningRouteCycle(a[5]!.pathCode)).toBe(a[6]);

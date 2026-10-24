@@ -36,6 +36,7 @@ export type Cycle4PitrEvidenceExpectation = {
 };
 export type Cycle5To8PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & {
   scope: "cycle5-8";
+  graphScope: "CYCLE_5_ONLY" | "CYCLES_5_TO_8";
 };
 export type Cycle4PitrFailureRecord = {
   stage: string;
@@ -157,14 +158,18 @@ export function isCycle5To8PitrEvidenceValid(
   value: unknown,
   expected: Cycle5To8PitrEvidenceExpectation,
 ): boolean {
-  return isPitrEvidenceValidForScope(value, expected, "cycle5-8", 3);
+  return (
+    isPitrEvidenceValidForScope(value, expected, "cycle5-8", 4) &&
+    isRecord(value) &&
+    value.graphScope === expected.graphScope
+  );
 }
 
 function isPitrEvidenceValidForScope(
   value: unknown,
   expected: Cycle4PitrEvidenceExpectation,
   scope: "cycle4" | "cycle5-8",
-  schemaVersion: 2 | 3,
+  schemaVersion: 2 | 4,
 ): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
@@ -651,6 +656,10 @@ async function runPitrEvidence(): Promise<JsonRecord> {
   if (pitrScope !== "cycle4" && pitrScope !== "cycle5-8") {
     throw safeError("preflight", "unsupported PITR scope");
   }
+  const graphScope = process.env.CYCLE58_GRAPH_SCOPE?.trim();
+  if (pitrScope === "cycle5-8" && graphScope !== "CYCLE_5_ONLY" && graphScope !== "CYCLES_5_TO_8") {
+    throw safeError("preflight", "unsupported Cycle 5–8 graph scope");
+  }
   const evidencePath =
     process.env.CYCLE_PITR_EVIDENCE_PATH?.trim() ||
     (pitrScope === "cycle4"
@@ -658,8 +667,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       : process.env.CYCLE58_PITR_EVIDENCE_PATH?.trim());
   if (!evidencePath) throw safeError("evidence output", "PITR evidence path is required");
   const evidence: JsonRecord = {
-    schemaVersion: pitrScope === "cycle4" ? 2 : 3,
+    schemaVersion: pitrScope === "cycle4" ? 2 : 4,
     pitrScope,
+    ...(pitrScope === "cycle5-8" ? { graphScope } : {}),
     status: "FAIL",
     createdAt: new Date(now).toISOString(),
     projectId: CYCLE4_PITR_PROJECT_ID,

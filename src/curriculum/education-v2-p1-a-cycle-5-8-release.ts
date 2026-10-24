@@ -7,16 +7,33 @@ export type EducationV2P1ACycle5To8ReleaseDecision = {
   explicitPublicationApproved: boolean;
 };
 
+export type EducationV2P1ACycle5To8GraphScope = "CYCLE_5_ONLY" | "CYCLES_5_TO_8";
+
+export function educationV2P1ACycle5To8ScopeSequences(
+  scope: EducationV2P1ACycle5To8GraphScope,
+): readonly (5 | 6 | 7 | 8)[] {
+  return scope === "CYCLE_5_ONLY" ? [5] : [5, 6, 7, 8];
+}
+
+export function educationV2P1ACycle5To8ProductionApproval(
+  scope: EducationV2P1ACycle5To8GraphScope,
+  commit: string,
+): string {
+  const approvalScope = scope === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8";
+  return `I_HAVE_REVIEWED_EDUCATION_V2_P1_A_${approvalScope}_PRODUCTION_RELEASE_${EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT.toUpperCase()}_AT_${commit.toUpperCase()}`;
+}
+
 /**
- * These cycles are prepared, not released. A protected workflow's APPLY input
- * is a separate one-run write approval and must not silently mutate this
- * source-controlled student-assignment gate.
+ * The product owner explicitly authorized the first post-52-station release.
+ * Cycles 6–8 remain gated. Source provenance is independent: Cycle 5 remains
+ * ORIGINAL_AUTHORING / REVIEW_REQUIRED and is not represented as externally
+ * source-verified.
  */
 export const EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS: readonly EducationV2P1ACycle5To8ReleaseDecision[] =
   EDUCATION_V2_P1_A_CYCLE_5_8.map(({ sequence }) => ({
     sequence,
-    status: "OWNER_RELEASE_REQUIRED",
-    explicitPublicationApproved: false,
+    status: sequence === 5 ? "OWNER_RELEASE_APPROVED" : "OWNER_RELEASE_REQUIRED",
+    explicitPublicationApproved: sequence === 5,
   }));
 
 export function isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence: number): boolean {

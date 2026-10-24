@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256,
   evaluateCanonicalPlacementMigrationPolicy,
   evaluateCycle5To8MigrationGate,
+  verifyCycle5To8GraphOnlyMigrationSources,
   type CanonicalPlacementMigrationPolicyInput,
 } from "../src/lib/canonical-placement-migration-policy.js";
 
@@ -205,7 +208,7 @@ describe("Cycle 5–8 migration gate", () => {
     expect(result.productionDbWrite).toBe("NO");
   });
 
-  it("blocks APPLY under the same review-required migration policy", () => {
+  it("blocks graph APPLY when the unrelated pending migration sources are not verified", () => {
     const result = evaluateCycle5To8MigrationGate("APPLY", {
       ...baseInput,
       pendingMigrations: ["20261021150000_add_account_deletion_requests"],
@@ -214,7 +217,69 @@ describe("Cycle 5–8 migration gate", () => {
 
     expect(result.allowed).toBe(false);
     expect(result.migrationPolicyStatus).toBe("REVIEW_REQUIRED");
+    expect(result.graphOnlyExceptionApplied).toBe(false);
     expect(result.productionDbWrite).toBe("NO");
+  });
+
+  it("allows only the graph write when the exact unrelated pending migrations are source-pinned", () => {
+    const pending = Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256);
+    const result = evaluateCycle5To8MigrationGate("APPLY", {
+      ...baseInput,
+      pendingMigrations: pending,
+      repositoryOnlyMigrations: pending,
+      cycle5To8GraphOnlyMigrationSourcesVerified: true,
+    });
+
+    expect(result.allowed).toBe(true);
+    expect(result.migrationPolicyStatus).toBe("REVIEW_REQUIRED");
+    expect(result.graphOnlyExceptionApplied).toBe(true);
+    expect(result.pendingMigrations).toEqual(pending);
+    expect(result.productionDbWrite).toBe("NO");
+  });
+
+  it("fails closed on any additional pending migration, production-only migration, or schema issue", () => {
+    const known = Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256);
+    for (const overrides of [
+      {
+        pendingMigrations: [...known, "unexpected_migration"],
+        repositoryOnlyMigrations: [...known, "unexpected_migration"],
+      },
+      {
+        pendingMigrations: known,
+        repositoryOnlyMigrations: known,
+        productionOnlyMigrations: ["production_only_migration"],
+      },
+      {
+        pendingMigrations: known,
+        repositoryOnlyMigrations: known,
+        schemaDrift: true,
+      },
+    ]) {
+      const result = evaluateCycle5To8MigrationGate("APPLY", {
+        ...baseInput,
+        ...overrides,
+        cycle5To8GraphOnlyMigrationSourcesVerified: true,
+      });
+      expect(result.allowed).toBe(false);
+      expect(result.graphOnlyExceptionApplied).toBe(false);
+      expect(result.productionDbWrite).toBe("NO");
+    }
+  });
+
+  it("verifies pinned pending migration sources from the repository itself", () => {
+    const sources = Object.fromEntries(
+      Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256).map((name) => [
+        name,
+        readFileSync(`prisma/migrations/${name}/migration.sql`, "utf8"),
+      ]),
+    );
+    expect(verifyCycle5To8GraphOnlyMigrationSources(sources)).toBe(true);
+    expect(
+      verifyCycle5To8GraphOnlyMigrationSources({
+        ...sources,
+        "20261021150000_add_account_deletion_requests": `${sources["20261021150000_add_account_deletion_requests"]}-- changed`,
+      }),
+    ).toBe(false);
   });
 
   it("blocks both operations when the approved production target does not match", () => {

@@ -14,8 +14,10 @@ import {
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
 import {
-  EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT,
+  educationV2P1ACycle5To8ProductionApproval,
+  educationV2P1ACycle5To8ScopeSequences,
   EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID,
+  type EducationV2P1ACycle5To8GraphScope,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
 import {
   educationV2P1ACycle5To8AnswerKey,
@@ -64,7 +66,15 @@ const activeQuestionVersionId = (exerciseKey: string, questionKey: string) =>
 const activeAssessmentId = (key: string) => p1ACycle5To8AssessmentId(ACTIVE_SEQUENCE_TYPED, key);
 
 const ACTIVE_SOURCE_RELEASE_COMMIT = process.env.GITHUB_SHA?.trim().toLowerCase() ?? "";
-const ACTIVE_PRODUCTION_CONFIRMATION = `I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_RELEASE_${EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT.toUpperCase()}_AT_${ACTIVE_SOURCE_RELEASE_COMMIT.toUpperCase()}`;
+const rawGraphScope = process.env.CYCLE58_GRAPH_SCOPE?.trim() || "CYCLES_5_TO_8";
+if (rawGraphScope !== "CYCLE_5_ONLY" && rawGraphScope !== "CYCLES_5_TO_8") {
+  throw new Error("CYCLE58_GRAPH_SCOPE geçersiz");
+}
+const ACTIVE_GRAPH_SCOPE = rawGraphScope as EducationV2P1ACycle5To8GraphScope;
+const ACTIVE_PRODUCTION_CONFIRMATION = educationV2P1ACycle5To8ProductionApproval(
+  ACTIVE_GRAPH_SCOPE,
+  ACTIVE_SOURCE_RELEASE_COMMIT,
+);
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -133,6 +143,7 @@ function assertPitrRestoreEvidence(): void {
     role: required("PRODUCTION_DB_APPROVED_USER"),
     port: required("PRODUCTION_DB_APPROVED_PORT"),
     scope: "cycle5-8",
+    graphScope: ACTIVE_GRAPH_SCOPE,
   };
   if (!isCycle5To8PitrEvidenceValid(evidence, expected)) {
     fail("geçerli, başarılı ve aynı çalışmaya bağlı PITR geri yükleme kanıtı gerekli");
@@ -223,20 +234,27 @@ function readTarget(): Target | null {
     if (target.database !== expectedDatabase || target.host !== expectedHost) {
       fail("production database kimliği beklenen Cycle 5–8 hedefiyle eşleşmiyor");
     }
+    if (
+      !educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).includes(ACTIVE_SEQUENCE_TYPED)
+    ) {
+      fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
+    }
     if (!dryRun && process.env[PRODUCTION_APPROVAL_ENV] !== PRODUCTION_CONFIRMATION) {
       fail(`production editorial approval=${PRODUCTION_CONFIRMATION} gerekli`);
     }
     if (
       dryRun &&
       (process.env.CYCLE58_OPERATION !== "PLAN_ONLY" ||
-        process.env.CYCLE58_CONFIRMATION !== "PLAN_EDUCATION_V2_P1_A_CYCLE_5_8")
+        process.env.CYCLE58_CONFIRMATION !==
+          `PLAN_EDUCATION_V2_P1_A_${ACTIVE_GRAPH_SCOPE === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8"}`)
     ) {
       fail("read-only PLAN_ONLY doğrulama girdileri gerekli");
     }
     if (
       !dryRun &&
       (process.env.CYCLE58_OPERATION !== "APPLY" ||
-        process.env.CYCLE58_CONFIRMATION !== "APPLY_EDUCATION_V2_P1_A_CYCLE_5_8")
+        process.env.CYCLE58_CONFIRMATION !==
+          `APPLY_EDUCATION_V2_P1_A_${ACTIVE_GRAPH_SCOPE === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8"}`)
     ) {
       fail("Cycle 5–8 APPLY için açık işlem onayı gerekli");
     }

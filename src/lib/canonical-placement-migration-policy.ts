@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const CANONICAL_PLACEMENT_MIGRATION = "20260907170000_add_gp_achievement_metadata" as const;
 export const INIT_MIGRATION = "20260817000000_init" as const;
 
@@ -31,6 +33,8 @@ export type CanonicalPlacementMigrationPolicyInput = {
   partialDataState: "YES" | "NO";
   initSchemaCompatibility: string;
   schemaSummary: CanonicalPlacementSchemaSummary;
+  /** Verified against pinned source hashes by the protected graph-only workflow. */
+  cycle5To8GraphOnlyMigrationSourcesVerified?: boolean;
 };
 
 export type CanonicalPlacementMigrationPolicyResult = {
@@ -52,8 +56,75 @@ export type Cycle5To8MigrationGateResult = {
   repositoryOnlyMigrations: readonly string[];
   productionOnlyMigrations: readonly string[];
   reasons: readonly string[];
+  graphOnlyExceptionApplied: boolean;
   productionDbWrite: "NO";
 };
+
+/**
+ * Cycle graph-only provisioning does not depend on these two migrations: one
+ * creates account-deletion request storage and the other adds readiness status
+ * inspection. Pinning source hashes keeps a changed migration from inheriting
+ * this narrow exception; neither migration is executed by the cycle workflow.
+ */
+export const CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256 = {
+  "20261021150000_add_account_deletion_requests":
+    "2753bbc95a9d2afb4bb18582b088d6517207eff549cdf1360bbcc412be84efd9",
+  "20261021170000_add_readiness_migration_status_function":
+    "55ee1df852291e6221eed9894733159c73b52034b0451b016642ce0e8e88cbf3",
+} as const;
+
+export function verifyCycle5To8GraphOnlyMigrationSources(
+  sources: Readonly<Record<string, string>>,
+): boolean {
+  const expectedNames = Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256);
+  if (Object.keys(sources).length !== expectedNames.length) return false;
+  return expectedNames.every((name) => {
+    const source = sources[name];
+    if (typeof source !== "string") return false;
+    const normalizedSource = source.replace(/\r\n/gu, "\n");
+    return (
+      createHash("sha256").update(normalizedSource).digest("hex") ===
+      CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256[
+        name as keyof typeof CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256
+      ]
+    );
+  });
+}
+
+const CYCLE5_TO_8_GRAPH_ONLY_ALLOWED_REASONS = [
+  "PENDING_MIGRATIONS_REMAIN",
+  "REPOSITORY_ONLY_MIGRATION",
+] as const;
+
+function canApplyCurriculumGraphsWithoutRunningMigrations(
+  input: CanonicalPlacementMigrationPolicyInput,
+  policy: CanonicalPlacementMigrationPolicyResult,
+): boolean {
+  if (
+    !input.targetIdentityMatch ||
+    input.cycle5To8GraphOnlyMigrationSourcesVerified !== true ||
+    input.pendingMigrations.length === 0 ||
+    input.productionOnlyMigrations.length !== 0
+  ) {
+    return false;
+  }
+  const pending = [...input.pendingMigrations].sort();
+  const repositoryOnly = [...input.repositoryOnlyMigrations].sort();
+  const allowedPending = Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256).sort();
+  if (
+    new Set(pending).size !== pending.length ||
+    pending.some((name) => !allowedPending.includes(name)) ||
+    pending.length !== repositoryOnly.length ||
+    pending.some((name, index) => name !== repositoryOnly[index])
+  ) {
+    return false;
+  }
+  const reasons = [...policy.reasons].sort();
+  return (
+    reasons.length === CYCLE5_TO_8_GRAPH_ONLY_ALLOWED_REASONS.length &&
+    reasons.every((reason, index) => reason === CYCLE5_TO_8_GRAPH_ONLY_ALLOWED_REASONS[index])
+  );
+}
 
 const EXPECTED_ACHIEVEMENT_CATEGORIES = [
   "TRAINING",
@@ -174,16 +245,22 @@ export function evaluateCanonicalPlacementMigrationPolicy(
 
 /**
  * A matching production target may be inspected by a read-only Cycle 5–8 plan
- * even while migration history needs review. APPLY always retains the strict
- * migration policy; this preflight itself never writes to production.
+ * while migration history needs review. Graph-only APPLY has a narrow exception
+ * for two source-hash-pinned, unrelated migrations; those migrations remain
+ * unapplied. Any other migration/history/schema issue keeps APPLY blocked.
  */
 export function evaluateCycle5To8MigrationGate(
   operation: Cycle5To8MigrationOperation,
   input: CanonicalPlacementMigrationPolicyInput,
 ): Cycle5To8MigrationGateResult {
   const policy = evaluateCanonicalPlacementMigrationPolicy(input);
+  const graphOnlyExceptionApplied =
+    !policy.allowed && canApplyCurriculumGraphsWithoutRunningMigrations(input, policy);
   return {
-    allowed: operation === "PLAN_ONLY" ? input.targetIdentityMatch : policy.allowed,
+    allowed:
+      operation === "PLAN_ONLY"
+        ? input.targetIdentityMatch
+        : policy.allowed || graphOnlyExceptionApplied,
     operation,
     migrationPolicyStatus: policy.allowed ? "PASS" : "REVIEW_REQUIRED",
     targetIdentityMatch: input.targetIdentityMatch,
@@ -191,6 +268,7 @@ export function evaluateCycle5To8MigrationGate(
     repositoryOnlyMigrations: [...input.repositoryOnlyMigrations],
     productionOnlyMigrations: [...input.productionOnlyMigrations],
     reasons: [...policy.reasons],
+    graphOnlyExceptionApplied,
     productionDbWrite: "NO",
   };
 }

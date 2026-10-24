@@ -152,6 +152,8 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
     (candidate) => candidate.sequence === cycle.sequence,
   );
   if (cycle.routeFamily === "A" && authoredCycle) {
+    const publicationApproved = () =>
+      isEducationV2P1ACycle5To8ProductionAssignmentEnabled(authoredCycle.sequence);
     return {
       ...cycle,
       pathCode: authoredCycle.program.path.code,
@@ -163,9 +165,10 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
       title: authoredCycle.program.path.title,
       units: authoredCycle.program.path.units,
       manifest: authoredCycle.manifest,
-      authoringStatus: "DRAFT_NOT_RELEASED" as const,
-      publicationApproved: () =>
-        isEducationV2P1ACycle5To8ProductionAssignmentEnabled(authoredCycle.sequence),
+      authoringStatus: publicationApproved()
+        ? ("OWNER_RELEASE_APPROVED" as const)
+        : ("DRAFT_NOT_RELEASED" as const),
+      publicationApproved,
     };
   }
   return cycle;

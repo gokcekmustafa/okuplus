@@ -1,5 +1,9 @@
 import { readFile } from "node:fs/promises";
 import {
+  CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256,
+  verifyCycle5To8GraphOnlyMigrationSources,
+} from "../src/lib/canonical-placement-migration-policy.js";
+import {
   evaluateCycle5To8MigrationGate,
   type CanonicalPlacementMigrationPolicyInput,
   type Cycle5To8MigrationOperation,
@@ -25,6 +29,16 @@ async function main(): Promise<void> {
     ...rawReport,
     targetIdentityMatch:
       rawReport.targetIdentityMatch === true || rawReport.targetIdentityMatch === "MATCH",
+    cycle5To8GraphOnlyMigrationSourcesVerified: verifyCycle5To8GraphOnlyMigrationSources(
+      Object.fromEntries(
+        await Promise.all(
+          Object.keys(CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256).map(async (name) => [
+            name,
+            await readFile(`prisma/migrations/${name}/migration.sql`, "utf8"),
+          ]),
+        ),
+      ),
+    ),
   };
   const result = evaluateCycle5To8MigrationGate(operation as Cycle5To8MigrationOperation, input);
   console.log(

@@ -15,6 +15,8 @@ import {
   EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS,
   EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT,
   EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID,
+  educationV2P1ACycle5To8ProductionApproval,
+  educationV2P1ACycle5To8ScopeSequences,
   isEducationV2P1ACycle5To8ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
 import { educationV2P1ACycle5To8SeedAction } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
@@ -165,7 +167,7 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     });
   });
 
-  it("links Cycle 4 through Cycle 8 while keeping every new cycle locked pending owner release", () => {
+  it("approves only Cycle 5 and keeps later cycles locked pending separate owner release", () => {
     for (let sequence = 4; sequence < 8; sequence += 1) {
       const from =
         [...EDUCATION_V2_P1_A_CYCLE_5_8].find((cycle) => cycle.sequence === sequence)?.program.path
@@ -175,17 +177,25 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
       expect(to).toBeTruthy();
       expect(next?.sequence).toBe(sequence + 1);
       expect(next?.manifest.steps).toHaveLength(5);
-      expect(next?.publicationApproved()).toBe(false);
+      expect(next?.publicationApproved()).toBe(sequence === 4);
     }
     expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_DECISIONS).toEqual(
       [5, 6, 7, 8].map((sequence) => ({
         sequence,
-        status: "OWNER_RELEASE_REQUIRED",
-        explicitPublicationApproved: false,
+        status: sequence === 5 ? "OWNER_RELEASE_APPROVED" : "OWNER_RELEASE_REQUIRED",
+        explicitPublicationApproved: sequence === 5,
       })),
     );
     for (const sequence of [5, 6, 7, 8])
-      expect(isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence)).toBe(false);
+      expect(isEducationV2P1ACycle5To8ProductionAssignmentEnabled(sequence)).toBe(sequence === 5);
+    expect(educationV2P1ACycle5To8ScopeSequences("CYCLE_5_ONLY")).toEqual([5]);
+    expect(educationV2P1ACycle5To8ScopeSequences("CYCLES_5_TO_8")).toEqual([5, 6, 7, 8]);
+    expect(educationV2P1ACycle5To8ProductionApproval("CYCLE_5_ONLY", "a".repeat(40))).toContain(
+      "CYCLE_5_PRODUCTION_RELEASE_",
+    );
+    expect(educationV2P1ACycle5To8ProductionApproval("CYCLES_5_TO_8", "a".repeat(40))).toContain(
+      "CYCLE_5_8_PRODUCTION_RELEASE_",
+    );
     expect(typeof EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT).toBe("string");
     expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_FINGERPRINT).toMatch(/^[0-9a-f]{64}$/u);
     expect(EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID).toContain(
@@ -211,9 +221,17 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
         (node) => node.status === "locked" && node.availability === "UNAVAILABLE",
       ),
     ).toBe(true);
-    expect(plannedCycle5To8.every((node) => node.planningStatus === "AUTHORED_UNRELEASED")).toBe(
-      true,
-    );
+    expect(plannedCycle5To8.filter((node) => node.cycleSequence === 5)).toHaveLength(5);
+    expect(
+      plannedCycle5To8
+        .filter((node) => node.cycleSequence === 5)
+        .every((node) => node.planningStatus === "GRAPH_NOT_AVAILABLE"),
+    ).toBe(true);
+    expect(
+      plannedCycle5To8
+        .filter((node) => node.cycleSequence !== 5)
+        .every((node) => node.planningStatus === "AUTHORED_UNRELEASED"),
+    ).toBe(true);
     expect(
       plannedCycle5To8.every(
         (node) =>
@@ -404,19 +422,23 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(workflow).toContain("scripts/verify-cycle5-8-production-migration-gate.ts");
     expect(workflow).toContain("CYCLE58_OPERATION: ${{ inputs.operation }}");
     expect(workflow.indexOf("Revalidate production target and migration policy")).toBeLessThan(
-      workflow.indexOf("Run read-only plan for Cycle 5–8"),
+      workflow.indexOf("Run read-only plan for selected Cycle 5–8 graph scope"),
     );
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
     expect(workflow).toContain("secrets.NEON_API_KEY");
     expect(workflow).toContain("production_editorial_approval");
+    expect(workflow).toContain("graph_scope:");
+    expect(workflow).toContain("default: CYCLE_5_ONLY");
     expect(workflow).toContain("production-cycle4-pitr-restore-evidence.ts");
     expect(workflow).toContain("CYCLE_PITR_SCOPE: cycle5-8");
     expect(workflow.indexOf("Enforce Cycle 5–8 PITR evidence")).toBeLessThan(
-      workflow.indexOf("Apply Cycle 5–8 graphs only"),
+      workflow.indexOf("Apply only selected Cycle 5–8 graph scope"),
     );
     expect(workflow).toContain("refs/heads/master");
     expect(workflow).toContain("CYCLE58_SEQUENCE");
     expect(workflow).toContain("MIGRATIONS=NOT_RUN");
+    expect(workflow).toContain("CYCLE58_GRAPH_SCOPE");
+    expect(workflow).not.toContain("prisma migrate deploy");
     expect(seeder).toContain("isCycle5To8PitrEvidenceValid");
     expect(seeder).toContain('action === "STOP_CONFLICT"');
     expect(seeder.indexOf("if (!dryRun) assertPitrRestoreEvidence();")).toBeLessThan(
@@ -431,6 +453,7 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
         role: "oku_app",
         port: "5432",
         scope: "cycle5-8",
+        graphScope: "CYCLE_5_ONLY",
       }),
     ).toBe(false);
     expect(seeder).not.toMatch(

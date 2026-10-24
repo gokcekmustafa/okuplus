@@ -369,11 +369,17 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(isCycle4PitrEvidenceValid(legacyCycle4Evidence, expected)).toBe(true);
     expect(
       isCycle5To8PitrEvidenceValid(
-        { ...evidence, schemaVersion: 3, pitrScope: "cycle5-8" },
-        { ...expected, scope: "cycle5-8" },
+        { ...evidence, schemaVersion: 4, pitrScope: "cycle5-8", graphScope: "CYCLE_5_ONLY" },
+        { ...expected, scope: "cycle5-8", graphScope: "CYCLE_5_ONLY" },
       ),
     ).toBe(true);
-    expect(isCycle5To8PitrEvidenceValid(evidence, { ...expected, scope: "cycle5-8" })).toBe(false);
+    expect(
+      isCycle5To8PitrEvidenceValid(evidence, {
+        ...expected,
+        scope: "cycle5-8",
+        graphScope: "CYCLE_5_ONLY",
+      }),
+    ).toBe(false);
     const normalizedParentTimestamp = "2026-10-19T11:57:59.500Z";
     expect(
       isCycle4PitrEvidenceValid(

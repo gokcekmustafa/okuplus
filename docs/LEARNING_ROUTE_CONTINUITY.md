@@ -10,13 +10,14 @@ Her kaynak kaydı sürümü, üniteleri, değişken uzunluktaki istasyon dizisin
 yayın izni ve gerçek PUBLISHED veritabanı grafiği birlikte gereklidir. Veritabanı
 kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
-P1-A Cycle 4 için ürün sahibi yayın izni verilmiştir. Beş istasyon özgün
-OkuPratik içeriğidir; dış kaynakla doğrulanmış gibi sayılmaz. İzin yalnızca
-katalog yayın kapısını açar: Cycle 4'ün eksiksiz ve manifestle aynı
-`PUBLISHED` veritabanı grafiği doğrulanana kadar 48. istasyon açılamaz ve
-geçiş servisi atama yapmamalıdır. Bu sırada yol haritası durumu
-`GRAPH_NOT_AVAILABLE` olarak kalır. Cycle 4 dışındaki genişleme döngülerinin
-yayın kapıları kapalıdır.
+P1-A Cycle 4 ve Cycle 5 için ürün sahibi yayın izni verilmiştir. Cycle 4'ün
+beş istasyonu ve Cycle 5'in 53–57. istasyonları özgün OkuPratik içeriğidir;
+dış kaynakla doğrulanmış gibi sayılmaz. Cycle 5'in kaynak/provenance durumu
+`ORIGINAL_AUTHORING` ve `REVIEW_REQUIRED` olarak korunur. Kaynak onayı yalnızca
+katalog kapısını açar: ilgili döngünün eksiksiz ve manifestle aynı
+`PUBLISHED` veritabanı grafiği doğrulanana kadar istasyon açılamaz ve geçiş
+servisi atama yapmamalıdır. Cycle 4 dışındaki sonraki genişleme döngüleri
+(Cycle 6–8 dâhil) ayrıca yayın onayı bekler.
 
 ## Gerçek içerik kapsamı
 
@@ -35,10 +36,15 @@ incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
 180 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 125'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
 Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 5–34 ve B/C/D Cycle 3–33 zincirleri
-`DRAFT_NOT_RELEASED` ve yayına kapalıdır; production grafiği ya da öğrenci
-ataması oluşturulmamıştır. Cycle 4 izinli ancak grafiği üretimde
-doğrulanmamıştır.
+sayısı değildir. A Cycle 6–34 ve B/C/D Cycle 3–33 zincirleri
+`DRAFT_NOT_RELEASED` ve yayına kapalıdır. Cycle 5 kaynakta yayın onaylıdır,
+ancak son doğrulanmış planında grafiği üretimde `MISSING` ve öğrenci ataması
+yoktur. Cycle 4'ün 48–52 grafiği mevcut üretim rotasında yer alır; bu çalışma
+onu veya geçmiş öğrenci ilerlemesini değiştirmez.
+
+18 Ekim tablosu tarihli QA anlık görüntüsüdür. 24 Ekim'de yalnızca Cycle 5 için
+kaynakta ürün sahibi yayın izni kaydedilmiştir. Bu karar kaynak/provenance
+durumunu değiştirmez ve Cycle 5 grafiğinin üretimde bulunduğunu kanıtlamaz.
 B/C/D Cycle 2
 paketlerindeki metinler özgün kurmacadır ve dış
 olgusal iddia içermez. Öğrenme hedefleri MEB program çerçevesiyle, Türkçe yazım
