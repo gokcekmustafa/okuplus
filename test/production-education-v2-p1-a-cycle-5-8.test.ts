@@ -421,6 +421,8 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(workflow).toContain("production-migration");
     expect(workflow).toContain("scripts/verify-cycle5-8-production-migration-gate.ts");
     expect(workflow).toContain("CYCLE58_OPERATION: ${{ inputs.operation }}");
+    expect(workflow).toContain('CYCLE58_SEQUENCES="5"');
+    expect(workflow).toContain('CYCLE58_SEQUENCES="5 6 7 8"');
     expect(workflow.indexOf("Revalidate production target and migration policy")).toBeLessThan(
       workflow.indexOf("Run read-only plan for selected Cycle 5–8 graph scope"),
     );
