@@ -81,6 +81,31 @@ describe("P1-B/C/D curriculum manifests", () => {
     }
   });
 
+  it("keeps both target-word senses in the P1-D cycle 2 assessment passage", () => {
+    const candidate = EDUCATION_V2_P1_BCD_PROGRAMS.find(
+      (program) => program.routeFamily === "D" && program.sequence === 2,
+    )!;
+    const passage = candidate.content.find((item) => item.key === "p1d2-assessment")!.body;
+    const questions = candidate.exercises.find(
+      (exercise) => exercise.contentKey === "p1d2-assessment",
+    )?.questions;
+
+    expect(passage).toContain("Parçanın ölçüsü bu düzeneğe uygun.");
+    expect(passage).toContain("Bu parça deneme amacına uygun.");
+    expect(passage.match(/uygun/gu)).toHaveLength(2);
+    expect(questions).toHaveLength(3);
+    const correctAnswer = (index: number) => {
+      const question = questions![index]!;
+      return question.options.find((option) => option.id === question.correctOptionId)?.text;
+    };
+    expect(questions![0]!.prompt).toContain("İlk ‘uygun’ kullanımı");
+    expect(questions![1]!.prompt).toContain("İkinci ‘uygun’ kullanımı");
+    expect(correctAnswer(0)).toBe("Parçanın ölçüsünün denenecek düzeneğe uygun olmasını");
+    expect(correctAnswer(1)).toBe("Parçanın deneme amacına uymasını");
+    expect(candidate.publicationApproved).toBe(false);
+    expect(candidate.editorialReviewStatus).toBe("REVIEW_REQUIRED");
+  });
+
   it("rejects drift between assessment question keys and its template exercise", () => {
     const program = structuredClone(EDUCATION_V2_P1_BCD_PROGRAMS[0]!);
     program.assessments[0]!.questionKeys[0] = "question-from-another-exercise";

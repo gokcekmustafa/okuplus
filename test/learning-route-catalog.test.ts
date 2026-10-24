@@ -8,6 +8,7 @@ import {
   nextLearningRouteCycle,
   upcomingLearningRouteCycles,
   matchesLearningRouteGraph,
+  learningRouteStationCategory,
   validateLearningRouteCatalog,
   summarizeLearningRouteCoverage,
   type LearningRouteCycle,
@@ -15,6 +16,7 @@ import {
 import { resolveLearningPathNodeStatuses } from "../src/modules/learning-path/service.js";
 import { selectPublishedPathCandidates } from "../src/modules/learning-path/service.js";
 import { buildEducationV2P0LearningCycleManifest } from "../src/curriculum/learning-cycle-manifest.js";
+import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
 
 function graph(cycle: LearningRouteCycle) {
   return {
@@ -109,6 +111,57 @@ describe("versioned learning routes", () => {
         );
       }),
     ).toBe(true);
+  });
+
+  it("projects only the source-backed station category for real and planned route nodes", () => {
+    const cycle6 = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 6,
+    )!;
+    const sourceCycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+      (cycle) => cycle.routeFamily === cycle6.routeFamily && cycle.sequence === cycle6.sequence,
+    )!;
+    const sourceByKey = new Map(
+      sourceCycle.sourceStations.map((station) => [station.key, station]),
+    );
+
+    expect(cycle6.manifest.steps).toHaveLength(5);
+    for (const step of cycle6.manifest.steps) {
+      expect(learningRouteStationCategory(cycle6.pathCode, step.stableKey)).toBe(
+        sourceByKey.get(step.stableKey)?.category,
+      );
+    }
+
+    for (const cycle of LEARNING_ROUTE_CYCLES) {
+      const source = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+        (candidate) =>
+          candidate.routeFamily === cycle.routeFamily && candidate.sequence === cycle.sequence,
+      );
+      if (!source) continue;
+      for (const step of cycle.manifest.steps) {
+        const station = source.sourceStations.find((candidate) => candidate.key === step.stableKey);
+        if (station) {
+          expect(learningRouteStationCategory(cycle.pathCode, step.stableKey)).toBe(
+            station.category,
+          );
+        }
+      }
+    }
+
+    const previousCycle = LEARNING_ROUTE_CYCLES.find(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence === 5,
+    )!;
+    const planned = buildPlannedLearningRouteNodes({
+      currentPathCode: previousCycle.pathCode,
+      visibleStationCount: 52,
+    });
+    const plannedCycle6 = planned.filter((node) => node.cycleSequence === cycle6.sequence);
+    expect(plannedCycle6.map((node) => node.stationCategory)).toEqual(
+      cycle6.manifest.steps.map((step) => sourceByKey.get(step.stableKey)?.category),
+    );
+    expect(JSON.stringify(plannedCycle6)).not.toMatch(
+      /questions|correctOptionId|explanation|sourceUrl|passage/iu,
+    );
+    expect(learningRouteStationCategory(cycle6.pathCode, "not-a-source-step")).toBeNull();
   });
 
   it("counts P0 history with real P1 cycles before reserving the remainder", () => {

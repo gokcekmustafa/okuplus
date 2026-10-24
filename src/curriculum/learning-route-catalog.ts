@@ -184,6 +184,32 @@ export function learningRouteCycle(pathCode: string): LearningRouteCycle | null 
   return cyclesByCode.get(pathCode) ?? null;
 }
 
+const stationCategoriesByRouteKey = new Map<string, EducationV2P1ExpansionCategory>();
+for (const cycle of LEARNING_ROUTE_CYCLES) {
+  const sourceCycle = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+    (candidate) =>
+      candidate.routeFamily === cycle.routeFamily && candidate.sequence === cycle.sequence,
+  );
+  if (!sourceCycle) continue;
+  const sourceStationsByKey = new Map(
+    sourceCycle.sourceStations.map((station) => [station.key, station]),
+  );
+  for (const step of cycle.manifest.steps) {
+    const station = sourceStationsByKey.get(step.stableKey);
+    if (station) {
+      stationCategoriesByRouteKey.set(`${cycle.pathCode}\u0000${step.stableKey}`, station.category);
+    }
+  }
+}
+
+/** Returns only the curriculum category; passage and assessment data stay private. */
+export function learningRouteStationCategory(
+  pathCode: string,
+  stableKey: string,
+): EducationV2P1ExpansionCategory | null {
+  return stationCategoriesByRouteKey.get(`${pathCode}\u0000${stableKey}`) ?? null;
+}
+
 export function nextLearningRouteCycle(pathCode: string): LearningRouteCycle | null {
   const current = learningRouteCycle(pathCode);
   if (!current?.nextPathCode) return null;
@@ -218,6 +244,7 @@ export type PlannedLearningRouteNode = {
   code: string;
   type: string;
   label: string;
+  stationCategory?: EducationV2P1ExpansionCategory;
   status: "locked";
   availability: "UNAVAILABLE";
   planningStatus: "AUTHORED_UNRELEASED" | "GRAPH_NOT_AVAILABLE" | "CONTENT_NOT_AUTHORED";
@@ -292,6 +319,7 @@ export function buildPlannedLearningRouteNodes(options: {
           : hasContentDefinition
             ? `${cycle.title} · Adım ${step.order}`
             : "Henüz içerik tanımlanmadı",
+        ...(station ? { stationCategory: station.category } : {}),
         status: "locked",
         availability: "UNAVAILABLE",
         planningStatus: !hasContentDefinition

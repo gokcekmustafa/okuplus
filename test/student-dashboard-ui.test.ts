@@ -4,11 +4,19 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlannedLearningRouteNodes,
   LEARNING_ROUTE_CYCLES,
+  learningRouteStationCategory,
 } from "../src/curriculum/learning-route-catalog.js";
 
 const app = readFileSync("public/app.js", "utf8").replace(/\r\n/gu, "\n");
 const index = readFileSync("public/index.html", "utf8");
 const styles = readFileSync("public/styles.css", "utf8");
+
+function articleForNode(container: { innerHTML: string }, id: string): string {
+  const buttonIndex = container.innerHTML.indexOf(`data-node-id="${id}"`);
+  const articleStart = container.innerHTML.lastIndexOf("<article", buttonIndex);
+  const articleEnd = container.innerHTML.indexOf("</article>", buttonIndex) + "</article>".length;
+  return container.innerHTML.slice(articleStart, articleEnd);
+}
 
 describe("student dashboard release 0.4", () => {
   it("keeps the current learning-map row visible without disabling lazy rendering for other rows", () => {
@@ -82,9 +90,21 @@ describe("student dashboard release 0.4", () => {
         path: { area: "READING_COMPREHENSION" },
         nodes: [
           { id: "completed", status: "completed", type: "TEACHING", availability: "READY" },
-          { id: "current", status: "active", type: "TEACHING", availability: "READY" },
-          { id: "future", status: "locked", type: "TEACHING", availability: "READY" },
-          { id: "unavailable", status: "completed", type: "TEACHING", availability: "UNAVAILABLE" },
+          { id: "current", status: "active", type: "ASSESSMENT", availability: "READY" },
+          {
+            id: "future",
+            status: "locked",
+            type: "PRACTICE",
+            stationCategory: "FAST_READING",
+            availability: "READY",
+          },
+          {
+            id: "unavailable",
+            status: "completed",
+            type: "REINFORCEMENT",
+            stationCategory: "MULTI_SKILL_ASSESSMENT",
+            availability: "UNAVAILABLE",
+          },
         ],
       },
     ];
@@ -98,6 +118,7 @@ describe("student dashboard release 0.4", () => {
             type: "PRACTICE",
             availability: "UNAVAILABLE",
             planningStatus: "AUTHORED_UNRELEASED",
+            stationCategory: "COMMON_STRATEGIES",
             label: "Duyuruda gereken bilgiyi hızlı bul",
           },
           {
@@ -114,6 +135,7 @@ describe("student dashboard release 0.4", () => {
             type: "PRACTICE",
             availability: "UNAVAILABLE",
             planningStatus: "GRAPH_NOT_AVAILABLE",
+            stationCategory: "INTEGRATED_PRACTICE",
             label: "Kanıt ve aktarım · Adım 1",
           },
         ],
@@ -139,8 +161,34 @@ describe("student dashboard release 0.4", () => {
     expect(container.innerHTML).toContain("İçerik planlanıyor");
     expect(container.innerHTML).toContain("Yayın grafiği hazırlanıyor");
     expect(container.innerHTML).toContain("Duyuruda gereken bilgiyi hızlı bul");
+    const futureMarkup = articleForNode(container, "future");
+    expect(futureMarkup).toContain("area-fast");
+    expect(futureMarkup).toContain('class="learning-map-v6-area">Hızlı Okuma</span>');
+    expect(futureMarkup).toContain('class="learning-map-v6-lock" aria-label="Kilitli"');
+    expect(futureMarkup).not.toContain('class="learning-map-v6-state">Kilitli</span>');
+    expect(articleForNode(container, "current")).toContain("kind-checkpoint");
+    expect(futureMarkup).toContain("kind-practice");
+    expect(articleForNode(container, "unavailable")).toContain("kind-reinforcement");
+    expect(articleForNode(container, "planned-authored")).toContain("Ortak Stratejiler");
+    expect(articleForNode(container, "planned-graph")).toContain("Bütünleşik Uygulama");
+    expect(container.innerHTML).toContain("Beceri Değerlendirmesi");
     expect(styles).toContain("content-visibility: auto");
     expect(styles).toContain("contain-intrinsic-size: auto 142px");
+    expect(styles).toContain(".learning-map-v6-step.kind-practice .learning-map-v6-kind");
+    expect(styles).toContain(".learning-map-v6-step.kind-reinforcement .learning-map-v6-kind");
+    expect(styles).toContain(".learning-map-v6-step.kind-checkpoint .learning-map-v6-kind");
+    expect(styles).toContain(".learning-path-step-type.kind-practice");
+    expect(styles).toContain(".learning-path-step-type.kind-reinforcement");
+    expect(styles).toContain(".learning-path-step-type.kind-checkpoint");
+    expect(runInContext("learningPathCourseStepTypeClass({type:'PRACTICE'})", context)).toBe(
+      "kind-practice",
+    );
+    expect(runInContext("learningPathCourseStepTypeClass({type:'REINFORCEMENT'})", context)).toBe(
+      "kind-reinforcement",
+    );
+    expect(runInContext("learningPathCourseStepTypeClass({type:'ASSESSMENT'})", context)).toBe(
+      "kind-checkpoint",
+    );
     expect(
       runInContext("learningPathCourseStatusLabel('locked', plannedPaths[0].nodes[0])", context),
     ).toBe("İçerik hazırlanıyor");
@@ -254,6 +302,7 @@ describe("student dashboard release 0.4", () => {
         learningPathCode: cycle4!.pathCode,
         code: step.stableKey,
         type: step.type,
+        stationCategory: learningRouteStationCategory(cycle4!.pathCode, step.stableKey),
         status: index === 0 ? "active" : "locked",
         availability: "READY",
       })),
@@ -264,6 +313,22 @@ describe("student dashboard release 0.4", () => {
     });
     runInContext("renderLearningPathMap(realGroups.concat([plannedGroup]), null)", context);
     expect(nodeAtStation(48)).toContain('data-node-id="cycle-4-step-1"');
+    const station48Markup = articleForNode(container, "cycle-4-step-1");
+    const station48Category = learningRouteStationCategory(
+      cycle4!.pathCode,
+      cycle4!.manifest.steps[0]!.stableKey,
+    );
+    expect(station48Category).toBeTruthy();
+    const categoryLabels: Record<string, string> = {
+      FAST_READING: "Hızlı Okuma",
+      READING_COMPREHENSION: "Okuduğunu Anlama",
+      COMMON_STRATEGIES: "Ortak Stratejiler",
+      INTEGRATED_PRACTICE: "Bütünleşik Uygulama",
+      MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirmesi",
+    };
+    expect(station48Markup).toContain(
+      `<span class="learning-map-v6-area">${categoryLabels[station48Category!]}</span>`,
+    );
     expect(nodeAtStation(48)).toContain('aria-current="step"');
     expect(nodeAtStation(48)).not.toContain(" disabled");
     expect(nodeAtStation(52)).toContain('data-node-id="cycle-4-step-5"');

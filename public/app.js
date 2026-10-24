@@ -3018,6 +3018,37 @@ function learningPathAreaLabel(area, fallback) {
         : fallback || "Öğrenme alanı";
 }
 
+function learningPathStationCategoryLabel(category, area, fallback) {
+  var labels = {
+    FAST_READING: "Hızlı Okuma",
+    READING_COMPREHENSION: "Okuduğunu Anlama",
+    COMMON_STRATEGIES: "Ortak Stratejiler",
+    INTEGRATED_PRACTICE: "Bütünleşik Uygulama",
+    MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirmesi",
+  };
+  return Object.prototype.hasOwnProperty.call(labels, category)
+    ? labels[category]
+    : learningPathAreaLabel(area, fallback);
+}
+
+function learningPathStationCategoryClass(category, area) {
+  var classes = {
+    FAST_READING: "area-fast",
+    READING_COMPREHENSION: "area-comprehension",
+    COMMON_STRATEGIES: "area-common",
+    INTEGRATED_PRACTICE: "area-integrated",
+    MULTI_SKILL_ASSESSMENT: "area-assessment",
+  };
+  return (
+    (Object.prototype.hasOwnProperty.call(classes, category) ? classes[category] : null) ||
+    (area === "FAST_READING"
+      ? "area-fast"
+      : area === "READING_COMPREHENSION"
+        ? "area-comprehension"
+        : "area-common")
+  );
+}
+
 var GUIDED_LEARNING_SKILL_ORDER = [
   "FAST_ATTENTION",
   "FAST_RECOGNITION",
@@ -3144,6 +3175,10 @@ function learningPathCourseStepType(node) {
   return learningPathMapKind(node).label;
 }
 
+function learningPathCourseStepTypeClass(node) {
+  return "kind-" + learningPathMapKind(node).className;
+}
+
 function learningPathCourseSkillLabel(node, module) {
   const labels = {
     FAST_ATTENTION: "Dikkat ve odak",
@@ -3188,6 +3223,7 @@ function renderLearningPathCourseModule(module) {
     .map((node) => {
       const visualStatus = learningPathVisualStatus(node.status);
       const kind = learningPathCourseStepType(node);
+      const kindClass = learningPathCourseStepTypeClass(node);
       const skill = learningPathCourseSkillLabel(node, module);
       const position = String(node.learningPathPosition || 0).padStart(2, "0");
       const locked = visualStatus === "locked";
@@ -3207,7 +3243,7 @@ function renderLearningPathCourseModule(module) {
       return `<button type="button" class="learning-path-step-card ${escapeHtml(visualStatus)}" data-learning-path-course-step data-node-id="${escapeHtml(node.id)}" aria-label="${escapeHtml(`${position}. adım: ${node.label || "Öğrenme adımı"}. ${statusLabel}. ${openHint}.`)}"${locked ? " disabled" : ""}>
         <span class="learning-path-step-index" aria-hidden="true">${escapeHtml(position)}</span>
         <span class="learning-path-step-card-body">
-          <span class="learning-path-step-card-meta"><span class="learning-path-step-type">${escapeHtml(kind)}</span><span class="learning-path-step-status">${visualStatus === "completed" ? "✓ " : ""}${escapeHtml(statusLabel)}</span></span>
+          <span class="learning-path-step-card-meta"><span class="learning-path-step-type ${escapeHtml(kindClass)}">${escapeHtml(kind)}</span><span class="learning-path-step-status">${visualStatus === "completed" ? "✓ " : ""}${escapeHtml(statusLabel)}</span></span>
           <strong>${escapeHtml(node.label || "Öğrenme adımı")}</strong>
           <small>${escapeHtml(module.title)} · ${escapeHtml(skill)}</small>
         </span>
@@ -3363,7 +3399,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
     escapeHtml(String(progress.total || 0)) +
     ' durak</small></span><span class="learning-map-v6-progress" aria-hidden="true"><i style="width:' +
     escapeHtml(String(percent)) +
-    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="Harita açıklaması"><span class="fast"><i aria-hidden="true"></i>Hızlı okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu anlama</span><span class="locked"><i aria-hidden="true"></i>Kilitli</span><span class="preparing"><i aria-hidden="true"></i>İçerik hazırlanıyor</span><span class="graph"><i aria-hidden="true"></i>Yayın grafiği hazırlanıyor</span></div>';
+    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="İstasyon kategorileri ve durumlar"><span class="fast"><i aria-hidden="true"></i>Hızlı Okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu Anlama</span><span class="strategies"><i aria-hidden="true"></i>Ortak Stratejiler</span><span class="integrated"><i aria-hidden="true"></i>Bütünleşik Uygulama</span><span class="assessment"><i aria-hidden="true"></i>Beceri Değerlendirmesi</span><span class="locked"><i aria-hidden="true"></i>Kilitli</span><span class="preparing"><i aria-hidden="true"></i>İçerik hazırlanıyor</span><span class="graph"><i aria-hidden="true"></i>Yayın grafiği hazırlanıyor</span></div>';
   var nodeMarkup = entries
     .map(function (entry, index) {
       var node = nodes[index];
@@ -3381,7 +3417,8 @@ function renderLearningPathMap(pathGroups, currentLevel) {
             : node.availability === "UNAVAILABLE"
               ? "İçerik hazırlanıyor"
               : learningPathStatusLabel(visualStatus);
-      var areaLabel = learningPathAreaLabel(entry.area);
+      var areaLabel = learningPathStationCategoryLabel(node.stationCategory, entry.area);
+      var areaClass = learningPathStationCategoryClass(node.stationCategory, entry.area);
       var stepNumber = index + 1;
       var disabled =
         visualStatus === "locked" || node.availability === "UNAVAILABLE" ? " disabled" : "";
@@ -3415,11 +3452,8 @@ function renderLearningPathMap(pathGroups, currentLevel) {
         escapeHtml(visualStatus) +
         " kind-" +
         escapeHtml(kind.className) +
-        (entry.area === "FAST_READING"
-          ? " area-fast"
-          : entry.area === "READING_COMPREHENSION"
-            ? " area-comprehension"
-            : " area-common") +
+        " " +
+        areaClass +
         (index % 2 === 0 ? " learning-map-v6-left" : " learning-map-v6-right") +
         (isCurrent ? " is-current" : "") +
         '" role="listitem" data-map-index="' +
@@ -3456,7 +3490,7 @@ function renderLearningPathMap(pathGroups, currentLevel) {
           ? '<span class="learning-map-v6-action">' + escapeHtml(actionLabel) + " →</span>"
           : visualStatus === "completed"
             ? '<span class="learning-map-v6-completed-state">✓ Tamamlandı</span>'
-            : visualStatus === "locked" || node.availability === "UNAVAILABLE"
+            : node.availability === "UNAVAILABLE"
               ? '<span class="learning-map-v6-state">' + escapeHtml(statusLabel) + "</span>"
               : "") +
         lockMarkup +

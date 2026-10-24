@@ -11,6 +11,7 @@ import {
   buildPlannedLearningRouteNodes,
   countVisibleLearningRoutePositions,
   learningRouteCycle,
+  learningRouteStationCategory,
   LEARNING_ROUTE_VISIBLE_STATION_TARGET,
   matchesLearningRouteGraph,
   upcomingLearningRouteCycles,
@@ -873,6 +874,7 @@ function toNodes(
   const nodes = steps.map((step) => {
     const saved = progress.get(step.id);
     const status = statuses.get(step.id) ?? "locked";
+    const stationCategory = learningRouteStationCategory(path.code, step.stableKey);
 
     return {
       id: step.id,
@@ -882,6 +884,7 @@ function toNodes(
       source: step.source,
       code: step.stableKey,
       label: step.title,
+      ...(stationCategory ? { stationCategory } : {}),
       status,
       availability:
         graphReady && stepArtifactsReady(step) ? ("READY" as const) : ("UNAVAILABLE" as const),

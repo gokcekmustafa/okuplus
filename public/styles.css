@@ -6255,6 +6255,18 @@ textarea:focus-visible {
   background: #f2671d;
 }
 
+.student-shell #learning-path-card .learning-map-v6-legend .strategies i {
+  background: #4b399b;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .integrated i {
+  background: #066c58;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .assessment i {
+  background: #81335f;
+}
+
 .student-shell #learning-path-card .learning-map-v6-legend .locked i {
   background: #aab5c3;
 }
@@ -6417,6 +6429,24 @@ textarea:focus-visible {
   color: #ed641b;
 }
 
+.student-shell #learning-path-card .learning-map-v6-step.area-common .learning-map-v6-marker {
+  border-color: #d1c8f3;
+  background: #f7f5ff;
+  color: #4b399b;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-integrated .learning-map-v6-marker {
+  border-color: #b7dfd3;
+  background: #f1fbf7;
+  color: #066c58;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-assessment .learning-map-v6-marker {
+  border-color: #e7c3d6;
+  background: #fff6fa;
+  color: #81335f;
+}
+
 .student-shell #learning-path-card .learning-map-v6-step.kind-reinforcement .learning-map-v6-marker,
 .student-shell #learning-path-card .learning-map-v6-step.kind-checkpoint .learning-map-v6-marker,
 .student-shell #learning-path-card .learning-map-v6-step.kind-measurement .learning-map-v6-marker {
@@ -6485,11 +6515,19 @@ textarea:focus-visible {
 }
 
 .student-shell #learning-path-card .learning-map-v6-step.area-comprehension .learning-map-v6-area {
-  color: #d45b20;
+  color: #a63f12;
 }
 
 .student-shell #learning-path-card .learning-map-v6-step.area-common .learning-map-v6-area {
-  color: #6250ca;
+  color: #4b399b;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-integrated .learning-map-v6-area {
+  color: #066c58;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.area-assessment .learning-map-v6-area {
+  color: #81335f;
 }
 
 .student-shell #learning-path-card .learning-map-v6-kind {
@@ -6501,6 +6539,21 @@ textarea:focus-visible {
   line-height: 1.16;
 }
 
+.student-shell #learning-path-card .learning-map-v6-step.kind-practice .learning-map-v6-kind,
+.student-shell .learning-path-step-type.kind-practice {
+  color: #075e63;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.kind-reinforcement .learning-map-v6-kind,
+.student-shell .learning-path-step-type.kind-reinforcement {
+  color: #54369f;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.kind-checkpoint .learning-map-v6-kind,
+.student-shell .learning-path-step-type.kind-checkpoint {
+  color: #8f3a0b;
+}
+
 .student-shell #learning-path-card .learning-map-v6-state {
   max-width: 100%;
   color: #7d899c;
@@ -6509,12 +6562,15 @@ textarea:focus-visible {
   line-height: 1.2;
 }
 
-.student-shell #learning-path-card .learning-map-v6-step.completed .learning-map-v6-kind {
+.student-shell
+  #learning-path-card
+  .learning-map-v6-step.completed:not(.kind-practice):not(.kind-reinforcement):not(.kind-checkpoint)
+  .learning-map-v6-kind {
   color: #287458;
 }
 
 .student-shell #learning-path-card .learning-map-v6-step.locked .learning-map-v6-copy {
-  opacity: 0.76;
+  opacity: 1;
 }
 
 .student-shell #learning-path-card .learning-map-v6-action {
@@ -6815,6 +6871,93 @@ textarea:focus-visible {
 
 :root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-summary {
   background: #22314a;
+}
+
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-area {
+  color: #91bcff;
+}
+
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-kind {
+  color: #e7eef9;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.completed
+  .learning-map-v6-kind {
+  color: #8be4bb;
+}
+
+:root[data-theme="dark"] .student-shell #learning-path-card .learning-map-v6-legend {
+  color: #b0bfd3;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-fast
+  .learning-map-v6-area {
+  color: #91bcff;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-comprehension
+  .learning-map-v6-area {
+  color: #ffb18c;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-common
+  .learning-map-v6-area {
+  color: #bfb0ff;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-integrated
+  .learning-map-v6-area {
+  color: #73d8bc;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.area-assessment
+  .learning-map-v6-area {
+  color: #f2a2cb;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.kind-practice
+  .learning-map-v6-kind,
+:root[data-theme="dark"] .student-shell .learning-path-step-type.kind-practice {
+  color: #77dce3;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.kind-reinforcement
+  .learning-map-v6-kind,
+:root[data-theme="dark"] .student-shell .learning-path-step-type.kind-reinforcement {
+  color: #c4adff;
+}
+
+:root[data-theme="dark"]
+  .student-shell
+  #learning-path-card
+  .learning-map-v6-step.kind-checkpoint
+  .learning-map-v6-kind,
+:root[data-theme="dark"] .student-shell .learning-path-step-type.kind-checkpoint {
+  color: #ffb78d;
 }
 
 .student-shell .training-activities-list {

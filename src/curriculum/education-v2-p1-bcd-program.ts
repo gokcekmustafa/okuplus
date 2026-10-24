@@ -1954,7 +1954,7 @@ function buildP1BCDCycle2Programs(): P1BCDProgram[] {
       },
       assessment: {
         title: "Bağlamdan anlamı ölç",
-        body: "Atölyede kullanılan örnek parçalar ayrı kutulara yerleştirildi. Her kutuya parçanın hangi düzenekte denendiğini gösteren bir etiket takıldı. Ekip, notlarını incelerken ‘uygun’ sözcüğünün bazen parçanın ölçüsünü, bazen de deneme amacına uyduğunu belirten bir seçim olduğunu fark etti.",
+        body: "Atölyede kullanılan örnek parçalar ayrı kutulara yerleştirildi. Bir notta, ‘Parçanın ölçüsü bu düzeneğe uygun.’ yazıyordu. Başka bir notta ise ‘Bu parça deneme amacına uygun.’ ifadesi yer aldı. Ekip, iki notu karşılaştırıp aynı sözcüğün birinde ölçü, diğerinde amaç için kullanıldığını belirtti.",
         skillCode: "RC_DETAIL",
       },
       exercises: [
