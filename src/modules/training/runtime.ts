@@ -297,7 +297,7 @@ const MAIN_IDEA_SPEC: ComprehensionSpec = {
   skillCode: "RC_MAIN_IDEA",
   rendererKey: MAIN_IDEA_RENDERER,
   optionCount: 4,
-  allowedDifficulties: ["FOUNDATION", "DEVELOPING"],
+  allowedDifficulties: ["FOUNDATION", "DEVELOPING", "CHALLENGING"],
 };
 
 const DETAIL_EVIDENCE_SPEC: ComprehensionSpec = {

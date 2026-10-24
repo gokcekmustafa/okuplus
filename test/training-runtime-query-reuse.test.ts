@@ -4,6 +4,10 @@ import {
   type TrainingExerciseContract,
 } from "../src/modules/training/exercise-contract.js";
 import { loadTrainingRuntimeGraph } from "../src/modules/training/runtime.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_5_8,
+  p1ACycle5To8TemplateVersionId,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
 import { prisma } from "../src/lib/prisma.js";
 
 vi.mock("../src/lib/prisma.js", () => ({
@@ -140,5 +144,40 @@ describe("training runtime graph query reuse", () => {
     expect(findUnique).toHaveBeenCalledTimes(1);
     expect(graph.questions).toHaveLength(1);
     expect(graph.questions[0]?.questionVersionId).toBe("question-version-1");
+  });
+
+  it("accepts the challenging MAIN_IDEA graph used by Cycle 7 station 66", async () => {
+    const cycle = EDUCATION_V2_P1_A_CYCLE_5_8.find(({ sequence }) => sequence === 7)!;
+    const station = cycle.sourceCycle.sourceStations[3]!;
+    const exercise = cycle.program.exercises.find(({ key }) => key === station.key)!;
+    const adjacentSteps = cycle.program.path.units[0]!.steps.slice(2, 5);
+    const step = adjacentSteps[1]!;
+    const templateVersionId = p1ACycle5To8TemplateVersionId(7, station.key);
+
+    expect(adjacentSteps.map(({ type }) => type)).toEqual([
+      "REINFORCEMENT",
+      "PRACTICE",
+      "ASSESSMENT",
+    ]);
+    expect(step.type).toBe("PRACTICE");
+    expect(exercise.contract.family).toBe("MAIN_IDEA");
+    expect(exercise.contract.difficulty).toBe("CHALLENGING");
+    findUnique.mockResolvedValue({
+      ...row(),
+      id: templateVersionId,
+      config: exercise.contract,
+    } as never);
+
+    const graph = await loadTrainingRuntimeGraph(templateVersionId, {
+      userId: "student-1",
+      tenantId: "tenant-1",
+      platformRole: null,
+    });
+
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: templateVersionId } }),
+    );
+    expect(graph.versionId).toBe(templateVersionId);
+    expect(graph.config.difficulty).toBe("CHALLENGING");
   });
 });
