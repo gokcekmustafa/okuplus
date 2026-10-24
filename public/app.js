@@ -3071,7 +3071,7 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
     continuation.timingSequence = learningPathTimingSequence;
     markLearningPathCompletionConfirmed();
   } else learningPathTimingActive = false;
-  clearLearningPathTransitionStatus();
+  setLearningPathTransitionStatus("");
   navigate("dashboard", {
     ...(visualPosition ? { learningPathReturnPosition: visualPosition } : {}),
     continuation,
