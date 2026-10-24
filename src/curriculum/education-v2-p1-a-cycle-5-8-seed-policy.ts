@@ -6,7 +6,7 @@ export type EducationV2P1ACycle5To8SeedRequest = {
   dryRun: boolean;
   operation: string | undefined;
   confirmation: string | undefined;
-  graphScope: "CYCLE_5_ONLY" | "CYCLES_5_TO_8";
+  graphScope: "CYCLE_5_ONLY" | "CYCLES_5_TO_8" | "CYCLES_9_TO_12";
   productionApproval: string | undefined;
   expectedProductionApproval: string;
   protectedProductionWorkflow: boolean;
@@ -20,7 +20,12 @@ export type EducationV2P1ACycle5To8SeedRequest = {
 export function isEducationV2P1ACycle5To8SeedRequestAuthorized(
   request: EducationV2P1ACycle5To8SeedRequest,
 ): boolean {
-  const scope = request.graphScope === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8";
+  const scope =
+    request.graphScope === "CYCLE_5_ONLY"
+      ? "CYCLE_5"
+      : request.graphScope === "CYCLES_5_TO_8"
+        ? "CYCLE_5_8"
+        : "CYCLES_9_TO_12";
   if (request.operation === "PLAN_ONLY") {
     return request.dryRun && request.confirmation === `PLAN_EDUCATION_V2_P1_A_${scope}`;
   }

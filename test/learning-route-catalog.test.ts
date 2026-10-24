@@ -409,13 +409,13 @@ describe("versioned learning routes", () => {
     expect(a[7]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(nextLearningRouteCycle(a[7]!.pathCode)).toBe(a[8]);
     expect(a[8]!.publicationApproved()).toBe(false);
-    expect(a[8]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+    expect(a[8]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[8]!.pathCode)).toBe(a[9]);
     expect(a[9]!.publicationApproved()).toBe(false);
-    expect(a[9]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+    expect(a[9]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[9]!.pathCode)).toBe(a[10]);
     expect(a[10]!.publicationApproved()).toBe(false);
-    expect(a[10]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+    expect(a[10]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[10]!.pathCode)).toBe(a[11]);
     expect(a[11]!.publicationApproved()).toBe(false);
     expect(a[11]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
@@ -488,7 +488,9 @@ describe("versioned learning routes", () => {
     for (let index = 8; index < a.length; index += 1) {
       expect(a[index]!.publicationApproved()).toBe(false);
       expect(a[index]!.manifest.steps).toHaveLength(5);
-      expect(a[index]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+      expect(a[index]!.manifest.completion.nextCycle).toBe(
+        a[index]!.sequence >= 9 && a[index]!.sequence < 12 ? "ASSIGN_NEXT" : "REVIEW_REQUIRED",
+      );
       expect(nextLearningRouteCycle(a[index]!.pathCode)).toBe(a[index + 1] ?? null);
     }
     expect(nextLearningRouteCycle("unknown-route")).toBeNull();

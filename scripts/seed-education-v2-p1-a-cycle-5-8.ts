@@ -20,8 +20,13 @@ import {
   type EducationV2P1ACycle5To8GraphScope,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
 import {
+  isEducationV2P1ACycle9To12ProductionAssignmentEnabled,
+  educationV2P1ACycle9To12ProductionApproval,
+  EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID,
+} from "../src/curriculum/education-v2-p1-a-cycle-9-12-release.js";
+import {
   educationV2P1ACycle5To8AnswerKey,
-  getEducationV2P1ACycle5To8,
+  getEducationV2P1ACycle,
   p1ACycle5To8AssessmentId,
   p1ACycle5To8ContentVersionId,
   p1ACycle5To8Id,
@@ -29,7 +34,6 @@ import {
   p1ACycle5To8QuestionVersionId,
   p1ACycle5To8TemplateId,
   p1ACycle5To8TemplateVersionId,
-  type EducationV2P1ACycle5To8Sequence,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
 import type { P1AProgram } from "../src/curriculum/education-v2-p1-a-program.js";
 import type { EducationV2P1ExpansionDraftCycle } from "../src/curriculum/education-v2-p1-800-draft-cycles.js";
@@ -39,45 +43,68 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
 import {
   isCycle5To8PitrEvidenceValid,
+  isCycle9To12PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
+  type Cycle9To12PitrEvidenceExpectation,
 } from "./production-cycle4-pitr-restore-evidence.js";
 
-const ACTIVE_SEQUENCE = Number(process.env.CYCLE58_SEQUENCE ?? "5");
-if (![5, 6, 7, 8].includes(ACTIVE_SEQUENCE)) {
-  throw new Error("CYCLE58_SEQUENCE 5, 6, 7 veya 8 olmalı");
+const ACTIVE_SEQUENCE = Number(
+  process.env.CYCLE912_SEQUENCE ?? process.env.CYCLE58_SEQUENCE ?? "5",
+);
+if (![5, 6, 7, 8, 9, 10, 11, 12].includes(ACTIVE_SEQUENCE)) {
+  throw new Error("Döngü sıra numarası 5–12 aralığında olmalı");
 }
-const ACTIVE_CYCLE = getEducationV2P1ACycle5To8(ACTIVE_SEQUENCE);
+const ACTIVE_CYCLE = getEducationV2P1ACycle(ACTIVE_SEQUENCE);
 if (!ACTIVE_CYCLE) throw new Error(`Cycle ${ACTIVE_SEQUENCE} programı bulunamadı`);
 const ACTIVE_SOURCE_CYCLE = ACTIVE_CYCLE.sourceCycle;
 const ACTIVE_PROGRAM = ACTIVE_CYCLE.program;
 const ACTIVE_PROGRAM_ID = ACTIVE_PROGRAM.programId;
 const ACTIVE_VERSION = ACTIVE_CYCLE.manifest.cycleVersion;
-const ACTIVE_SEQUENCE_TYPED = ACTIVE_SEQUENCE as EducationV2P1ACycle5To8Sequence;
-
 function activeId(kind: Parameters<typeof p1ACycle5To8Id>[1], key: string): string {
-  return p1ACycle5To8Id(ACTIVE_SEQUENCE_TYPED, kind, key);
+  return p1ACycle5To8Id(ACTIVE_SEQUENCE, kind, key);
 }
-const activeContentVersionId = (key: string) =>
-  p1ACycle5To8ContentVersionId(ACTIVE_SEQUENCE_TYPED, key);
-const activeTemplateId = (key: string) => p1ACycle5To8TemplateId(ACTIVE_SEQUENCE_TYPED, key);
+const activeContentVersionId = (key: string) => p1ACycle5To8ContentVersionId(ACTIVE_SEQUENCE, key);
+const activeTemplateId = (key: string) => p1ACycle5To8TemplateId(ACTIVE_SEQUENCE, key);
 const activeTemplateVersionId = (key: string) =>
-  p1ACycle5To8TemplateVersionId(ACTIVE_SEQUENCE_TYPED, key);
+  p1ACycle5To8TemplateVersionId(ACTIVE_SEQUENCE, key);
 const activeQuestionId = (exerciseKey: string, questionKey: string) =>
-  p1ACycle5To8QuestionId(ACTIVE_SEQUENCE_TYPED, `${exerciseKey}-${questionKey}`);
+  p1ACycle5To8QuestionId(ACTIVE_SEQUENCE, `${exerciseKey}-${questionKey}`);
 const activeQuestionVersionId = (exerciseKey: string, questionKey: string) =>
-  p1ACycle5To8QuestionVersionId(ACTIVE_SEQUENCE_TYPED, `${exerciseKey}-${questionKey}`);
-const activeAssessmentId = (key: string) => p1ACycle5To8AssessmentId(ACTIVE_SEQUENCE_TYPED, key);
+  p1ACycle5To8QuestionVersionId(ACTIVE_SEQUENCE, `${exerciseKey}-${questionKey}`);
+const activeAssessmentId = (key: string) => p1ACycle5To8AssessmentId(ACTIVE_SEQUENCE, key);
 
-const ACTIVE_SOURCE_RELEASE_COMMIT = process.env.GITHUB_SHA?.trim().toLowerCase() ?? "";
-const rawGraphScope = process.env.CYCLE58_GRAPH_SCOPE?.trim() || "CYCLES_5_TO_8";
-if (rawGraphScope !== "CYCLE_5_ONLY" && rawGraphScope !== "CYCLES_5_TO_8") {
-  throw new Error("CYCLE58_GRAPH_SCOPE geçersiz");
+const rawGraphScope =
+  process.env.CYCLE912_GRAPH_SCOPE?.trim() ??
+  process.env.CYCLE58_GRAPH_SCOPE?.trim() ??
+  (ACTIVE_SEQUENCE <= 8 ? "CYCLES_5_TO_8" : "CYCLES_9_TO_12");
+if (
+  rawGraphScope !== "CYCLE_5_ONLY" &&
+  rawGraphScope !== "CYCLES_5_TO_8" &&
+  rawGraphScope !== "CYCLES_9_TO_12"
+) {
+  throw new Error("Cycle grafik kapsamı geçersiz");
 }
 const ACTIVE_GRAPH_SCOPE = rawGraphScope as EducationV2P1ACycle5To8GraphScope;
-const ACTIVE_PRODUCTION_CONFIRMATION = educationV2P1ACycle5To8ProductionApproval(
-  ACTIVE_GRAPH_SCOPE,
-  ACTIVE_SOURCE_RELEASE_COMMIT,
-);
+const IS_CYCLE_9_TO_12 = ACTIVE_GRAPH_SCOPE === "CYCLES_9_TO_12";
+const ACTIVE_OPERATION_ENV = IS_CYCLE_9_TO_12 ? "CYCLE912_OPERATION" : "CYCLE58_OPERATION";
+const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_9_TO_12 ? "CYCLE912_CONFIRMATION" : "CYCLE58_CONFIRMATION";
+const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_9_TO_12 ? "CYCLE912_RELEASE_ID" : "CYCLE58_RELEASE_ID";
+const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_9_TO_12
+  ? "CYCLE912_RELEASE_COMMIT"
+  : "CYCLE58_RELEASE_COMMIT";
+const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_9_TO_12
+  ? "Manual Education V2 P1-A Cycles 9–12 production provision"
+  : "Manual Education V2 P1-A Cycles 5–8 production provision";
+const ACTIVE_SCOPE_LABEL = IS_CYCLE_9_TO_12 ? "Cycle 9–12" : "Cycle 5–8";
+const ACTIVE_SOURCE_RELEASE_COMMIT = process.env.GITHUB_SHA?.trim().toLowerCase() ?? "";
+const ACTIVE_RELEASE_ID =
+  ACTIVE_GRAPH_SCOPE === "CYCLES_9_TO_12"
+    ? EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID
+    : EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID;
+const ACTIVE_PRODUCTION_CONFIRMATION =
+  ACTIVE_GRAPH_SCOPE === "CYCLES_9_TO_12"
+    ? educationV2P1ACycle9To12ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+    : educationV2P1ACycle5To8ProductionApproval(ACTIVE_GRAPH_SCOPE, ACTIVE_SOURCE_RELEASE_COMMIT);
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -87,17 +114,21 @@ if ([...args].some((arg) => arg !== "--apply" && arg !== "--dry-run")) {
 if (args.has("--apply") && args.has("--dry-run")) {
   throw new Error("--apply ve --dry-run birlikte kullanılamaz");
 }
-const TARGET_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_ENVIRONMENT";
-const DATABASE_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_DATABASE_URL";
-const PRODUCTION_DATABASE_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_DATABASE_URL";
-const PRODUCTION_DATABASE_NAME_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_DATABASE_NAME";
-const PRODUCTION_DATABASE_HOST_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_DATABASE_HOST";
-const PRODUCTION_RELEASE_ID_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_RELEASE_ID";
-const PRODUCTION_RELEASE_COMMIT_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_RELEASE_COMMIT";
-const PRODUCTION_APPROVAL_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_PRODUCTION_APPROVAL";
-const APPROVED_FINGERPRINT_ENV = "EDUCATION_V2_P1_A_CYCLE_5_8_APPROVED_TARGET_FINGERPRINT";
-const PITR_EVIDENCE_PATH_ENV = "CYCLE58_PITR_EVIDENCE_PATH";
-const APPROVED_RELEASE_ID = EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID;
+const ENVIRONMENT_SUFFIX = IS_CYCLE_9_TO_12 ? "9_12" : "5_8";
+const ENVIRONMENT_PREFIX = `EDUCATION_V2_P1_A_CYCLE_${ENVIRONMENT_SUFFIX}`;
+const TARGET_ENV = `${ENVIRONMENT_PREFIX}_ENVIRONMENT`;
+const DATABASE_ENV = `${ENVIRONMENT_PREFIX}_DATABASE_URL`;
+const PRODUCTION_DATABASE_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_DATABASE_URL`;
+const PRODUCTION_DATABASE_NAME_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_DATABASE_NAME`;
+const PRODUCTION_DATABASE_HOST_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_DATABASE_HOST`;
+const PRODUCTION_RELEASE_ID_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_ID`;
+const PRODUCTION_RELEASE_COMMIT_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_COMMIT`;
+const PRODUCTION_APPROVAL_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_APPROVAL`;
+const APPROVED_FINGERPRINT_ENV = `${ENVIRONMENT_PREFIX}_APPROVED_TARGET_FINGERPRINT`;
+const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_9_TO_12
+  ? "CYCLE912_PITR_EVIDENCE_PATH"
+  : "CYCLE58_PITR_EVIDENCE_PATH";
+const APPROVED_RELEASE_ID = ACTIVE_RELEASE_ID;
 const PRODUCTION_CONFIRMATION = ACTIVE_PRODUCTION_CONFIRMATION;
 type TargetEnvironment = "TEST" | "PRODUCTION";
 type Target = CatalogTarget & { approvedTarget: CatalogTarget; approvedFingerprint: string };
@@ -121,7 +152,7 @@ type Plan = {
 type Identity = { database: string; db_user: string; host: string | null; port: number | null };
 
 function fail(message: string): never {
-  throw new Error(`Education V2 P1-A Cycle ${ACTIVE_SEQUENCE}–8 seed reddedildi: ${message}`);
+  throw new Error(`Education V2 P1-A Cycle ${ACTIVE_SEQUENCE} seed reddedildi: ${message}`);
 }
 
 function required(name: string): string {
@@ -138,17 +169,27 @@ function assertPitrRestoreEvidence(): void {
   } catch {
     fail("aynı korumalı workflow çalışmasına ait PITR kanıt dosyası okunamadı");
   }
-  const expected: Cycle5To8PitrEvidenceExpectation = {
+  const expectedBase = {
     runId: process.env.GITHUB_RUN_ID ?? "",
     runAttempt: process.env.GITHUB_RUN_ATTEMPT || "1",
     sha: process.env.GITHUB_SHA?.toLowerCase() ?? "",
     database: required(PRODUCTION_DATABASE_NAME_ENV),
     role: required("PRODUCTION_DB_APPROVED_USER"),
     port: required("PRODUCTION_DB_APPROVED_PORT"),
-    scope: "cycle5-8",
-    graphScope: ACTIVE_GRAPH_SCOPE,
   };
-  if (!isCycle5To8PitrEvidenceValid(evidence, expected)) {
+  const valid =
+    ACTIVE_GRAPH_SCOPE === "CYCLES_9_TO_12"
+      ? isCycle9To12PitrEvidenceValid(evidence, {
+          ...expectedBase,
+          scope: "cycle9-12",
+          graphScope: "CYCLES_9_TO_12",
+        } satisfies Cycle9To12PitrEvidenceExpectation)
+      : isCycle5To8PitrEvidenceValid(evidence, {
+          ...expectedBase,
+          scope: "cycle5-8",
+          graphScope: ACTIVE_GRAPH_SCOPE,
+        } satisfies Cycle5To8PitrEvidenceExpectation);
+  if (!valid) {
     fail("geçerli, başarılı ve aynı çalışmaya bağlı PITR geri yükleme kanıtı gerekli");
   }
 }
@@ -227,30 +268,40 @@ function readTarget(): Target | null {
     const releaseCommit = required(PRODUCTION_RELEASE_COMMIT_ENV).toLowerCase();
     if (
       releaseId !== APPROVED_RELEASE_ID ||
-      process.env.CYCLE58_RELEASE_ID !== APPROVED_RELEASE_ID ||
+      process.env[ACTIVE_RELEASE_INPUT_ID_ENV] !== APPROVED_RELEASE_ID ||
       !/^[0-9a-f]{40}$/u.test(ACTIVE_SOURCE_RELEASE_COMMIT) ||
       releaseCommit !== ACTIVE_SOURCE_RELEASE_COMMIT ||
-      process.env.CYCLE58_RELEASE_COMMIT?.trim().toLowerCase() !== ACTIVE_SOURCE_RELEASE_COMMIT
+      process.env[ACTIVE_RELEASE_INPUT_COMMIT_ENV]?.trim().toLowerCase() !==
+        ACTIVE_SOURCE_RELEASE_COMMIT
     ) {
-      fail("production release id/commit güncel Cycle 5–8 kaynak içeriğiyle eşleşmiyor");
+      fail(
+        `production release id/commit güncel ${ACTIVE_SCOPE_LABEL} kaynak içeriğiyle eşleşmiyor`,
+      );
     }
     if (target.database !== expectedDatabase || target.host !== expectedHost) {
-      fail("production database kimliği beklenen Cycle 5–8 hedefiyle eşleşmiyor");
+      fail(`production database kimliği beklenen ${ACTIVE_SCOPE_LABEL} hedefiyle eşleşmiyor`);
+    }
+    if (!educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).includes(ACTIVE_SEQUENCE)) {
+      fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
     }
     if (
-      !educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).includes(ACTIVE_SEQUENCE_TYPED)
+      !dryRun &&
+      IS_CYCLE_9_TO_12 &&
+      educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).some(
+        (sequence) => !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence),
+      )
     ) {
-      fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
+      fail("Cycle 9–12 için açık ürün sahibi yayın kapısı etkin değil");
     }
     const protectedProductionWorkflow =
       process.env.GITHUB_ACTIONS === "true" &&
       process.env.GITHUB_REF === "refs/heads/master" &&
-      process.env.GITHUB_WORKFLOW === "Manual Education V2 P1-A Cycles 5–8 production provision";
+      process.env.GITHUB_WORKFLOW === ACTIVE_PRODUCTION_WORKFLOW;
     if (
       !isEducationV2P1ACycle5To8SeedRequestAuthorized({
         dryRun,
-        operation: process.env.CYCLE58_OPERATION,
-        confirmation: process.env.CYCLE58_CONFIRMATION,
+        operation: process.env[ACTIVE_OPERATION_ENV],
+        confirmation: process.env[ACTIVE_CONFIRMATION_ENV],
         graphScope: ACTIVE_GRAPH_SCOPE,
         productionApproval: process.env[PRODUCTION_APPROVAL_ENV],
         expectedProductionApproval: PRODUCTION_CONFIRMATION,
@@ -260,7 +311,7 @@ function readTarget(): Target | null {
       fail(
         dryRun
           ? "read-only plan için PLAN_ONLY onayı veya korumalı APPLY ön onayı gerekli"
-          : "Cycle 5–8 APPLY için korumalı workflow ve açık yayın onayı gerekli",
+          : `${ACTIVE_SCOPE_LABEL} APPLY için korumalı workflow ve açık yayın onayı gerekli`,
       );
     }
     if (!dryRun) assertPitrRestoreEvidence();

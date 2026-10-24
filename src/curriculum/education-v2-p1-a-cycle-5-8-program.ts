@@ -84,7 +84,7 @@ const templateTypeByCategory = {
 >;
 
 export function p1ACycle5To8Id(
-  sequence: EducationV2P1ACycle5To8Sequence,
+  sequence: number,
   kind:
     | "content"
     | "contentVersion"
@@ -101,23 +101,17 @@ export function p1ACycle5To8Id(
   return `${CYCLE_PREFIX}-${sequence}-${kind}-${key}`;
 }
 
-export const p1ACycle5To8ContentVersionId = (
-  sequence: EducationV2P1ACycle5To8Sequence,
-  key: string,
-) => p1ACycle5To8Id(sequence, "contentVersion", `${key}-v${sequence}`);
-export const p1ACycle5To8TemplateId = (sequence: EducationV2P1ACycle5To8Sequence, key: string) =>
+export const p1ACycle5To8ContentVersionId = (sequence: number, key: string) =>
+  p1ACycle5To8Id(sequence, "contentVersion", `${key}-v${sequence}`);
+export const p1ACycle5To8TemplateId = (sequence: number, key: string) =>
   p1ACycle5To8Id(sequence, "template", key);
-export const p1ACycle5To8TemplateVersionId = (
-  sequence: EducationV2P1ACycle5To8Sequence,
-  key: string,
-) => p1ACycle5To8Id(sequence, "templateVersion", `${key}-v${sequence}`);
-export const p1ACycle5To8QuestionId = (sequence: EducationV2P1ACycle5To8Sequence, key: string) =>
+export const p1ACycle5To8TemplateVersionId = (sequence: number, key: string) =>
+  p1ACycle5To8Id(sequence, "templateVersion", `${key}-v${sequence}`);
+export const p1ACycle5To8QuestionId = (sequence: number, key: string) =>
   p1ACycle5To8Id(sequence, "question", key);
-export const p1ACycle5To8QuestionVersionId = (
-  sequence: EducationV2P1ACycle5To8Sequence,
-  key: string,
-) => p1ACycle5To8Id(sequence, "questionVersion", `${key}-v${sequence}`);
-export const p1ACycle5To8AssessmentId = (sequence: EducationV2P1ACycle5To8Sequence, key: string) =>
+export const p1ACycle5To8QuestionVersionId = (sequence: number, key: string) =>
+  p1ACycle5To8Id(sequence, "questionVersion", `${key}-v${sequence}`);
+export const p1ACycle5To8AssessmentId = (sequence: number, key: string) =>
   p1ACycle5To8Id(sequence, "assessment", `${key}-v${sequence}`);
 
 export type EducationV2P1ACycle5To8Program = {
@@ -127,9 +121,14 @@ export type EducationV2P1ACycle5To8Program = {
   manifest: LearningCycleManifest;
 };
 
+export type EducationV2P1ACycleProgram<TSequence extends number = number> = Omit<
+  EducationV2P1ACycle5To8Program,
+  "sequence"
+> & { sequence: TSequence };
+
 export function isCompleteEducationV2P1ACycle5To8Source(
   sourceCycle: EducationV2P1ExpansionDraftCycle | undefined,
-  sequence: EducationV2P1ACycle5To8Sequence,
+  sequence: number,
 ): sourceCycle is EducationV2P1ExpansionDraftCycle {
   return Boolean(
     sourceCycle &&
@@ -234,12 +233,24 @@ export function educationV2P1ACycle5To8AnswerKey(
   };
 }
 
-function buildCycle(sequence: EducationV2P1ACycle5To8Sequence): EducationV2P1ACycle5To8Program {
+function buildCycle<TSequence extends number>(
+  sequence: TSequence,
+  finalSequence: number,
+): EducationV2P1ACycleProgram<TSequence> {
   const sourceCycle = getEducationV2P1ExpansionDraftCycle("A", sequence);
   if (!isCompleteEducationV2P1ACycle5To8Source(sourceCycle, sequence)) {
     throw new Error(
       `Cycle ${sequence} kaynak taslağı beş istasyon/15 soru sözleşmesini karşılamıyor.`,
     );
+  }
+  if (
+    sequence > 8 &&
+    (sourceCycle.sourceVerifiedStationCount !== 5 ||
+      sourceCycle.sourceStations.some(
+        (station) => station.provenanceStatus !== "SOURCE_VERIFIED" || !station.sourceEvidence,
+      ))
+  ) {
+    throw new Error(`Cycle ${sequence} üretim adayı için beş doğrulanmış kaynak gereklidir.`);
   }
 
   const programId = `${CYCLE_ID_PREFIX}-${sequence}`;
@@ -448,7 +459,7 @@ function buildCycle(sequence: EducationV2P1ACycle5To8Sequence): EducationV2P1ACy
       requiredStepKeys: steps.map((step) => step.key),
       checkpointStepKeys: [lastStation.key],
       requiresFinalMeasurement: false,
-      nextCycle: sequence < 8 ? "ASSIGN_NEXT" : "REVIEW_REQUIRED",
+      nextCycle: sequence < finalSequence ? "ASSIGN_NEXT" : "REVIEW_REQUIRED",
     },
   };
 
@@ -461,7 +472,20 @@ function buildCycle(sequence: EducationV2P1ACycle5To8Sequence): EducationV2P1ACy
   return { sequence, sourceCycle, program, manifest };
 }
 
-export const EDUCATION_V2_P1_A_CYCLE_5_8 = EDUCATION_V2_P1_A_CYCLE_5_8_SEQUENCES.map(buildCycle);
+export const EDUCATION_V2_P1_A_CYCLE_5_8: EducationV2P1ACycle5To8Program[] =
+  EDUCATION_V2_P1_A_CYCLE_5_8_SEQUENCES.map((sequence) => buildCycle(sequence, 8));
+
+/** Source-verified, versioned A-route package prepared beyond the already released 72 steps. */
+export const EDUCATION_V2_P1_A_CYCLE_9_12_SEQUENCES = [9, 10, 11, 12] as const;
+export const EDUCATION_V2_P1_A_CYCLE_9_12: EducationV2P1ACycleProgram<
+  (typeof EDUCATION_V2_P1_A_CYCLE_9_12_SEQUENCES)[number]
+>[] = EDUCATION_V2_P1_A_CYCLE_9_12_SEQUENCES.map((sequence) => buildCycle(sequence, 12));
+
+export function getEducationV2P1ACycle(sequence: number): EducationV2P1ACycleProgram | undefined {
+  return [...EDUCATION_V2_P1_A_CYCLE_5_8, ...EDUCATION_V2_P1_A_CYCLE_9_12].find(
+    (cycle) => cycle.sequence === sequence,
+  );
+}
 
 export function getEducationV2P1ACycle5To8(
   sequence: number,
