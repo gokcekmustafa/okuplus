@@ -10,6 +10,7 @@ import {
   EDUCATION_V2_P0_PATH_SCOPE_CODE,
   getProgramExercise,
 } from "../src/curriculum/education-v2-p0-program.js";
+import { P0_STATION9_V3_RELEASE_DECISION } from "../src/curriculum/p0-station9-release-decision.js";
 import { parseLessonMetadata } from "../src/modules/lessons/contract.js";
 import {
   resolveTrainingRuntimeConfig,
@@ -322,10 +323,23 @@ async function findPublishedTemplate(
     const hasCompleteAcademicLessonContent = lesson.stages.every((stage) =>
       academicStages.has(stage.stage),
     );
+    const metadataTemplateIds = new Set(
+      candidate.contents.flatMap((entry) => {
+        const metadata = parseLessonMetadata(entry.contentVersion.metadata);
+        return metadata?.contractVersion === 2 &&
+          metadata.skillCode === lesson.skillCode &&
+          metadata.area === lesson.area &&
+          metadata.stage
+          ? [metadata.exerciseTemplateVersionId]
+          : [];
+      }),
+    );
     return (
       contentIds.size > 0 &&
       hasSkillLessonContent &&
       hasCompleteAcademicLessonContent &&
+      metadataTemplateIds.size === 1 &&
+      metadataTemplateIds.has(candidate.id) &&
       candidate.questions.length > 0 &&
       candidate.questions.every(
         (entry) =>
@@ -406,6 +420,59 @@ async function assertPublishedTemplateGraph(
     ) {
       fail(`exercise graph beklenen Eğitim V2 sözleşmesiyle eşleşmiyor: ${id}`);
     }
+  }
+}
+
+async function assertPublishedStation9V3Graph(
+  tx: Prisma.TransactionClient,
+  baseTemplateVersionId: string,
+  activeTemplateVersionId: string,
+): Promise<void> {
+  const select = {
+    id: true,
+    templateId: true,
+    version: true,
+    config: true,
+    status: true,
+    template: { select: { status: true, deletedAt: true } },
+    contents: {
+      orderBy: { position: "asc" as const },
+      select: { contentVersionId: true, position: true },
+    },
+    questions: {
+      orderBy: { position: "asc" as const },
+      select: { questionVersionId: true, questionId: true, position: true },
+    },
+  };
+  const [base, active] = await Promise.all([
+    tx.exerciseTemplateVersion.findUnique({ where: { id: baseTemplateVersionId }, select }),
+    tx.exerciseTemplateVersion.findUnique({ where: { id: activeTemplateVersionId }, select }),
+  ]);
+  if (
+    !base ||
+    !active ||
+    base.id !== P0_STATION9_V3_RELEASE_DECISION.baseTemplateVersionId ||
+    base.status !== "PUBLISHED" ||
+    active.id !== P0_STATION9_V3_RELEASE_DECISION.templateVersionId ||
+    active.templateId !== base.templateId ||
+    active.version !== 3 ||
+    active.status !== "PUBLISHED" ||
+    active.template.status !== "PUBLISHED" ||
+    active.template.deletedAt !== null ||
+    !isDeepStrictEqual(active.config, base.config) ||
+    !isDeepStrictEqual(active.contents, base.contents)
+  ) {
+    fail("P0 istasyon 9 academic-v3 template graph doğrulanamadı");
+  }
+  const expectedQuestions = base.questions.map((question) => ({
+    ...question,
+    questionVersionId:
+      question.questionVersionId === P0_STATION9_V3_RELEASE_DECISION.baseQuestionVersionId
+        ? P0_STATION9_V3_RELEASE_DECISION.questionVersionId
+        : question.questionVersionId,
+  }));
+  if (!isDeepStrictEqual(active.questions, expectedQuestions)) {
+    fail("P0 istasyon 9 academic-v3 soru bağlantıları doğrulanamadı");
   }
 }
 
@@ -603,11 +670,29 @@ async function main(): Promise<void> {
             await findPublishedLessonContent(tx, lesson, stage.stage),
           );
         }
-        const template = await findPublishedTemplate(tx, lesson);
-        templateBySkill.set(lesson.skillCode, template.id);
+        const sourceTemplate = await findPublishedTemplate(tx, lesson);
+        let practiceTemplateVersionId = sourceTemplate.id;
+        if (lesson.skillCode === "FAST_CHUNKING") {
+          if (sourceTemplate.id !== P0_STATION9_V3_RELEASE_DECISION.baseTemplateVersionId) {
+            fail("P0 istasyon 9 kaynak academic-v2 template eşleşmesi değişti");
+          }
+          const releaseExercise = getProgramExercise(P0_STATION9_V3_RELEASE_DECISION.exerciseKey);
+          await assertPublishedTemplateGraph(
+            tx,
+            P0_STATION9_V3_RELEASE_DECISION.templateVersionId,
+            releaseExercise.contract,
+          );
+          await assertPublishedStation9V3Graph(
+            tx,
+            sourceTemplate.id,
+            P0_STATION9_V3_RELEASE_DECISION.templateVersionId,
+          );
+          practiceTemplateVersionId = P0_STATION9_V3_RELEASE_DECISION.templateVersionId;
+        }
+        templateBySkill.set(lesson.skillCode, practiceTemplateVersionId);
         for (const stage of lesson.stages) {
           const content = contentBySkillStage.get(`${lesson.skillCode}:${stage.stage}`)!;
-          if (content.exerciseTemplateVersionId !== template.id) {
+          if (content.exerciseTemplateVersionId !== sourceTemplate.id) {
             fail(
               `${lesson.skillCode}/${stage.stage} içerik sürümü gerçek published template version ile bağlı değil`,
             );

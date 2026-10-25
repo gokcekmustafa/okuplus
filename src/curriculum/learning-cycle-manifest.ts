@@ -11,6 +11,10 @@ import {
   type ProgramExercise,
 } from "./education-v2-p0-program.js";
 import {
+  P0_STATION9_V3_RELEASE_DECISION,
+  p0QuestionVersionForActiveExercise,
+} from "./p0-station9-release-decision.js";
+import {
   EDUCATION_V2_P1_A_PATH_VERSION,
   EDUCATION_V2_P1_A_LEARNING_OUTCOMES,
   EDUCATION_V2_P1_A_PROGRAM,
@@ -798,24 +802,35 @@ function p0ExerciseReference(
   exercise: ProgramExercise,
   academicVersion = true,
 ): LearningCycleVersionedReference {
+  const isStation9Exercise = exercise.key === P0_STATION9_V3_RELEASE_DECISION.exerciseKey;
   return {
     key: exercise.key,
-    versionId: academicVersion
-      ? getProgramIds("templateVersion", `${exercise.key}-academic-v2`)
-      : getProgramIds("templateVersion", `${exercise.key}-v1`),
-    questionVersionIds: exercise.questions.map((question) =>
-      p0QuestionVersionId(exercise.key, question.key),
+    versionId: isStation9Exercise
+      ? P0_STATION9_V3_RELEASE_DECISION.templateVersionId
+      : academicVersion
+        ? getProgramIds("templateVersion", `${exercise.key}-academic-v2`)
+        : getProgramIds("templateVersion", `${exercise.key}-v1`),
+    questionVersionIds: exercise.questions.map(
+      (question) =>
+        p0QuestionVersionForActiveExercise(exercise.key, question.key) ??
+        p0QuestionVersionId(exercise.key, question.key),
     ),
   };
 }
 
 function p0QuestionVersionCatalog(): string[] {
-  return EDUCATION_V2_P0_PROGRAM.exercises.flatMap((exercise) =>
-    exercise.questions.map((question) => p0QuestionVersionId(exercise.key, question.key)),
-  );
+  return [
+    ...EDUCATION_V2_P0_PROGRAM.exercises.flatMap((exercise) =>
+      exercise.questions.map((question) => p0QuestionVersionId(exercise.key, question.key)),
+    ),
+    P0_STATION9_V3_RELEASE_DECISION.questionVersionId,
+  ];
 }
 
 function p0ExerciseVersionId(exercise: ProgramExercise): string {
+  if (exercise.key === P0_STATION9_V3_RELEASE_DECISION.exerciseKey) {
+    return P0_STATION9_V3_RELEASE_DECISION.templateVersionId;
+  }
   const isCommonVersion = exercise.key === "common-reinforcement" || exercise.key === "common-test";
   return getProgramIds(
     "templateVersion",
@@ -838,8 +853,10 @@ function p0ExerciseVersions(): LearningCycleCatalogVersion[] {
   return EDUCATION_V2_P0_PROGRAM.exercises.map((exercise) => ({
     key: exercise.key,
     versionId: p0ExerciseVersionId(exercise),
-    questionVersionIds: exercise.questions.map((question) =>
-      p0QuestionVersionId(exercise.key, question.key),
+    questionVersionIds: exercise.questions.map(
+      (question) =>
+        p0QuestionVersionForActiveExercise(exercise.key, question.key) ??
+        p0QuestionVersionId(exercise.key, question.key),
     ),
   }));
 }
@@ -971,7 +988,7 @@ export function buildEducationV2P0LearningCycleManifest(): LearningCycleManifest
   return {
     schemaVersion: LEARNING_CYCLE_MANIFEST_SCHEMA_VERSION,
     cycleId: EDUCATION_V2_P0_PROGRAM_ID,
-    cycleVersion: 1,
+    cycleVersion: 2,
     sequence: 0,
     routeFamily: "P0",
     targetSkillCodes: ACADEMIC_P0_LESSONS.map((lesson) => lesson.skillCode),
