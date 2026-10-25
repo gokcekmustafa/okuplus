@@ -20,26 +20,28 @@ export function resolveSeedLearningStepSkillId(input: {
  * name narrower curriculum targets. Keep this mapping explicit and fail closed
  * for targets that have no reviewed application competency.
  */
-const curriculumSkillToStoredSkill: Readonly<Record<string, string>> = {
-  FAST_SCAN: "FAST_ATTENTION",
-  RC_CLASSIFY: "RC_DETAIL",
-  RC_CONTEXT_CLUES: "RC_DETAIL",
-  RC_EXPLANATION: "RC_INFERENCE",
-  RC_MODEL_LIMITS: "RC_INFERENCE",
-  RC_RELATION: "RC_INFERENCE",
-  RC_SYNTHESIS: "RC_INFERENCE",
-  RC_CONNECTOR: "RC_DETAIL",
-  RC_STRUCTURE: "RC_MAIN_IDEA",
-  RC_EVIDENCE: "RC_DETAIL",
-  RC_CAUSE_EFFECT: "RC_INFERENCE",
-  RC_COMPARE_CONTRAST: "RC_INFERENCE",
-  RC_SEQUENCE: "RC_DETAIL",
-  RC_VOCABULARY_CONTEXT: "RC_DETAIL",
-  RC_DATA_INTERPRETATION: "RC_DETAIL",
-  RC_LIMITS: "RC_INFERENCE",
+const curriculumSkillToStoredSkills: Readonly<Record<string, readonly string[]>> = {
+  FAST_SCAN: ["FAST_ATTENTION"],
+  RC_CLASSIFY: ["RC_DETAIL"],
+  RC_CONTEXT_CLUES: ["RC_DETAIL"],
+  RC_EXPLANATION: ["RC_INFERENCE"],
+  RC_MODEL_LIMITS: ["RC_INFERENCE"],
+  RC_RELATION: ["RC_INFERENCE"],
+  RC_SYNTHESIS: ["RC_INFERENCE"],
+  RC_CONNECTOR: ["RC_DETAIL"],
+  RC_STRUCTURE: ["RC_MAIN_IDEA"],
+  RC_EVIDENCE: ["RC_DETAIL"],
+  // Claim/evidence work includes locating textual details and judging their inferential support.
+  RC_CLAIM_EVIDENCE: ["RC_DETAIL", "RC_INFERENCE"],
+  RC_CAUSE_EFFECT: ["RC_INFERENCE"],
+  RC_COMPARE_CONTRAST: ["RC_INFERENCE"],
+  RC_SEQUENCE: ["RC_DETAIL"],
+  RC_VOCABULARY_CONTEXT: ["RC_DETAIL"],
+  RC_DATA_INTERPRETATION: ["RC_DETAIL"],
+  RC_LIMITS: ["RC_INFERENCE"],
 };
 
-const storedSkillCodes = new Set([
+const storedSkillCodeCatalog = new Set([
   "FAST_ATTENTION",
   "FAST_RECOGNITION",
   "FAST_CHUNKING",
@@ -49,23 +51,28 @@ const storedSkillCodes = new Set([
 ]);
 
 export function mapCurriculumSkillCodeToStoredSkillCode(code: string): string | null {
-  if (storedSkillCodes.has(code)) return code;
-  return curriculumSkillToStoredSkill[code] ?? null;
+  if (storedSkillCodeCatalog.has(code)) return code;
+  const mapped = curriculumSkillToStoredSkills[code];
+  return mapped?.length === 1 ? (mapped[0] ?? null) : null;
 }
 
 export function mapCurriculumSkillCodesToStoredSkillCodes(codes: readonly string[]): {
   storedSkillCodes: string[];
   unmappedSkillCodes: string[];
 } {
-  const storedSkillCodes = new Set<string>();
+  const mappedStoredSkillCodes = new Set<string>();
   const unmappedSkillCodes = new Set<string>();
   for (const code of codes) {
-    const storedCode = mapCurriculumSkillCodeToStoredSkillCode(code);
-    if (storedCode) storedSkillCodes.add(storedCode);
+    if (storedSkillCodeCatalog.has(code)) {
+      mappedStoredSkillCodes.add(code);
+      continue;
+    }
+    const mappedCodes = curriculumSkillToStoredSkills[code];
+    if (mappedCodes) for (const storedCode of mappedCodes) mappedStoredSkillCodes.add(storedCode);
     else unmappedSkillCodes.add(code);
   }
   return {
-    storedSkillCodes: [...storedSkillCodes],
+    storedSkillCodes: [...mappedStoredSkillCodes],
     unmappedSkillCodes: [...unmappedSkillCodes],
   };
 }

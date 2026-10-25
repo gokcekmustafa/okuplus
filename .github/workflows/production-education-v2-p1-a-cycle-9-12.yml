@@ -224,7 +224,7 @@ jobs:
             if (report.immutableReleaseId !== process.env.CYCLE912_RELEASE_ID) fail("immutable release ID mismatch");
             if (report.expectedSourceCommit !== process.env.CYCLE912_RELEASE_COMMIT) fail("source commit mismatch");
             if (report.state === "CONFLICT") fail("graph state is CONFLICT; refusing to overwrite it");
-            if (!["MISSING", "EXISTING"].includes(report.state)) fail("graph state is unrecognized; refusing to write");
+            if (!["MISSING", "EXISTING", "SKILL_LINKS_MISSING"].includes(report.state)) fail("graph state is unrecognized; refusing to write");
             if (report.stepCount !== 5) fail("expected five learning steps");
             if (report.contentCount !== 5) fail("expected five content versions");
             if (report.exerciseCount !== 5) fail("expected five exercises");
@@ -265,7 +265,8 @@ jobs:
               const report = JSON.parse(fs.readFileSync(`cycle${sequence}-apply.json`, "utf8"));
               const fail = (reason) => { console.error(`FAIL: Cycle ${sequence} ${reason}`); process.exit(1); };
               if (report.status !== "PASS") fail("apply did not pass");
-              if (report.dbChanged !== true && report.state !== "EXISTING") fail("graph neither created nor already present");
+              if (!((report.dbChanged === true && ["MISSING", "SKILL_LINKS_REPAIRED"].includes(report.state)) ||
+                    (report.dbChanged === false && report.state === "EXISTING"))) fail("graph neither created/repaired nor already present");
             '
             cat "cycle${sequence}-apply.json" >> "${GITHUB_STEP_SUMMARY}"
           done

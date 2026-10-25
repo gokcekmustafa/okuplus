@@ -121,6 +121,11 @@ describe("learning-step skill links", () => {
     ).toEqual({ storedSkillCodes: ["RC_INFERENCE", "RC_DETAIL"], unmappedSkillCodes: [] });
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_UNREVIEWED_TARGET")).toBeNull();
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CLAIM_EVIDENCE")).toBeNull();
+    expect(mapCurriculumSkillCodesToStoredSkillCodes(["RC_CLAIM_EVIDENCE"])).toEqual({
+      storedSkillCodes: ["RC_DETAIL", "RC_INFERENCE"],
+      unmappedSkillCodes: [],
+    });
+    expect(singleStoredSkillCodeForOutcome(["RC_CLAIM_EVIDENCE"])).toBeNull();
   });
 
   it("covers the authored A-route skill vocabulary through Cycle 16 without inventing mappings", () => {

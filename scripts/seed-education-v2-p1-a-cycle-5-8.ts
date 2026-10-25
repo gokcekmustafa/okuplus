@@ -14,6 +14,10 @@ import {
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
 import {
+  expectedContentSkillLinks,
+  inspectContentSkillLinks,
+} from "../src/curriculum/content-skill-link-repair.js";
+import {
   mapCurriculumSkillCodesToStoredSkillCodes,
   singleStoredSkillCodeForOutcome,
 } from "../src/curriculum/learning-step-skill-link.js";
@@ -55,6 +59,11 @@ import {
   educationV2P1ACycle5To8SeedAction,
   isEducationV2P1ACycle5To8SeedRequestAuthorized,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
+import {
+  compareContentSkillLinks,
+  ensureContentSkillLinks,
+  expectedContentSkillLinks,
+} from "../src/curriculum/content-skill-link-repair.js";
 import {
   isCycle5To8PitrEvidenceValid,
   isCycle9To12PitrEvidenceValid,
@@ -556,7 +565,7 @@ function flattenedSteps() {
 async function graphState(
   tx: Prisma.TransactionClient,
   plans: Plan[],
-): Promise<"MISSING" | "EXISTING" | "CONFLICT"> {
+): Promise<"MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" | "CONFLICT"> {
   const contentIds = plans.map((plan) => plan.contentId);
   const contentVersionIds = plans.map((plan) => plan.contentVersionId);
   const templateIds = plans.flatMap((plan) =>
@@ -746,7 +755,6 @@ async function graphState(
   const existingCount =
     contents.length +
     versions.length +
-    contentSkills.length +
     templates.length +
     templateVersions.length +
     questions.length +
@@ -757,14 +765,9 @@ async function graphState(
     steps.length;
   if (existingCount === 0) return "MISSING";
 
-  const expectedCurriculumSkillLinkCount = plans.reduce(
-    (total, plan) => total + plan.curriculumSkills.length,
-    0,
-  );
   const expectedCount =
     contentIds.length +
     contentVersionIds.length +
-    expectedCurriculumSkillLinkCount +
     templateIds.length +
     templateVersionIds.length +
     questionIds.length +
@@ -774,6 +777,12 @@ async function graphState(
     unitIds.length +
     stepIds.length;
   if (existingCount !== expectedCount) return "CONFLICT";
+
+  const skillLinkComparison = compareContentSkillLinks(
+    expectedContentSkillLinks(plans),
+    contentSkills,
+  );
+  if (skillLinkComparison.state === "CONFLICT") return "CONFLICT";
 
   const contentById = new Map(contents.map((item) => [item.id, item]));
   const versionById = new Map(versions.map((item) => [item.id, item]));
@@ -831,14 +840,6 @@ async function graphState(
         item.publishedAt !== null
       );
     }) &&
-    contentSkills.length === expectedCurriculumSkillLinkCount &&
-    contentSkills.every((item) =>
-      plans.some(
-        (plan) =>
-          plan.contentId === item.contentId &&
-          plan.curriculumSkills.some((skill) => skill.id === item.skillId),
-      ),
-    ) &&
     templates.every((item) => {
       const plan = plans.find((candidate) => candidate.exerciseTemplateId === item.id);
       return (
@@ -1046,7 +1047,21 @@ async function graphState(
         })
       );
     });
-  return graphIsPublished ? "EXISTING" : "CONFLICT";
+  return graphIsPublished
+    ? skillLinkComparison.state === "MISSING"
+      ? "SKILL_LINKS_MISSING"
+      : "EXISTING"
+    : "CONFLICT";
+}
+
+async function repairMissingContentSkillLinks(
+  tx: Prisma.TransactionClient,
+  plans: readonly Plan[],
+): Promise<number> {
+  const result = await ensureContentSkillLinks(tx.contentSkill, expectedContentSkillLinks(plans));
+  if (result.state === "CONFLICT")
+    fail("mevcut ContentSkill ilişkileri kaynak planıyla çelişiyor; otomatik değişiklik yapılmadı");
+  return result.insertedCount;
 }
 
 async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): Promise<void> {
@@ -1420,11 +1435,35 @@ async function main(): Promise<void> {
       if (skills.length !== requiredSkillCodes.length)
         fail("döngü için gerekli skill kataloğu eksik");
       const plans = planRecords(skills);
-      const state = await graphState(tx, plans);
+      let state = await graphState(tx, plans);
       const action = educationV2P1ACycle5To8SeedAction(state, dryRun);
       if (action === "STOP_CONFLICT")
         fail("stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
-      if (action !== "CREATE_MISSING") return { state, dbChanged: false };
+      let missingSkillLinkCount = 0;
+      if (state === "SKILL_LINKS_MISSING") {
+        const comparison = await inspectContentSkillLinks(
+          tx.contentSkill,
+          expectedContentSkillLinks(plans),
+        );
+        if (comparison.state === "CONFLICT")
+          fail("içerik-beceri bağlantıları kaynak planıyla çelişiyor");
+        missingSkillLinkCount = comparison.missingLinks.length;
+        if (comparison.state === "COMPLETE") {
+          state = "EXISTING";
+        }
+      }
+      const verifiedAction = educationV2P1ACycle5To8SeedAction(state, dryRun);
+      if (verifiedAction === "REPAIR_SKILL_LINKS") {
+        const insertedSkillLinkCount = await repairMissingContentSkillLinks(tx, plans);
+        return {
+          state: "SKILL_LINKS_REPAIRED",
+          dbChanged: insertedSkillLinkCount > 0,
+          missingSkillLinkCount,
+          insertedSkillLinkCount,
+        };
+      }
+      if (verifiedAction !== "CREATE_MISSING")
+        return { state, dbChanged: false, missingSkillLinkCount };
       await createContentGraph(tx, plans);
       await createLearningPath(tx, plans);
       return { state, dbChanged: true };

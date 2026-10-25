@@ -237,7 +237,7 @@ jobs:
               if (report.status !== "PASS" || report.dbChanged !== false ||
                   report.immutableReleaseId !== process.env.CYCLE58_RELEASE_ID ||
                   report.expectedSourceCommit !== process.env.CYCLE58_RELEASE_COMMIT ||
-                  !["MISSING", "EXISTING"].includes(report.state)) process.exit(1);
+                  !["MISSING", "EXISTING", "SKILL_LINKS_MISSING"].includes(report.state)) process.exit(1);
               if (report.stepCount !== 5 || report.contentCount !== 5 ||
                   report.exerciseCount !== 5 || report.questionCount !== 15 ||
                   report.assessmentCount !== 1) process.exit(1);
@@ -277,7 +277,8 @@ jobs:
               const sequence = Number(process.env.CYCLE58_SEQUENCE);
               const report = JSON.parse(fs.readFileSync(`cycle${sequence}-apply.json`, "utf8"));
               if (report.status !== "PASS" ||
-                  (report.dbChanged !== true && report.state !== "EXISTING")) process.exit(1);
+                  !((report.dbChanged === true && ["MISSING", "SKILL_LINKS_REPAIRED"].includes(report.state)) ||
+                    (report.dbChanged === false && report.state === "EXISTING"))) process.exit(1);
             '
             cat "cycle${sequence}-apply.json" >> "${GITHUB_STEP_SUMMARY}"
           done

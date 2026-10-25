@@ -647,6 +647,9 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
       valid: true,
       state: "MISSING",
     });
+    expect(
+      validateCycle17To20ReadOnlyPlanReport({ ...report, state: "SKILL_LINKS_MISSING" }, expected),
+    ).toEqual({ valid: true, state: "SKILL_LINKS_MISSING" });
     expect(validateCycle17To20ReadOnlyPlanReport({ ...report, dbChanged: true }, expected)).toEqual(
       {
         valid: false,

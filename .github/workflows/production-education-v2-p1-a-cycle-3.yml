@@ -184,7 +184,7 @@ jobs:
             const fs = require("node:fs");
             const report = JSON.parse(fs.readFileSync("cycle3-plan-before.json", "utf8"));
             if (report.status !== "PASS" || report.dbChanged !== false) process.exit(1);
-            if (!["MISSING", "EXISTING"].includes(report.state)) process.exit(1);
+            if (!["MISSING", "EXISTING", "SKILL_LINKS_MISSING"].includes(report.state)) process.exit(1);
           '
           cat cycle3-plan-before.json >> "${GITHUB_STEP_SUMMARY}"
 
@@ -198,7 +198,9 @@ jobs:
           node --input-type=commonjs -e '
             const fs = require("node:fs");
             const report = JSON.parse(fs.readFileSync("cycle3-apply.json", "utf8"));
-            if (report.status !== "PASS" || (report.dbChanged !== true && report.state !== "EXISTING")) process.exit(1);
+            if (report.status !== "PASS" ||
+                !((report.dbChanged === true && ["MISSING", "SKILL_LINKS_REPAIRED"].includes(report.state)) ||
+                  (report.dbChanged === false && report.state === "EXISTING"))) process.exit(1);
           '
           cat cycle3-apply.json >> "${GITHUB_STEP_SUMMARY}"
 

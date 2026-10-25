@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export type Cycle17To20Sequence = 17 | 18 | 19 | 20;
 export type Cycle17To20PlanValidation =
-  | { valid: true; state: "MISSING" | "EXISTING" }
+  | { valid: true; state: "MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" }
   | {
       valid: false;
       reason:
@@ -54,7 +54,11 @@ export function validateCycle17To20ReadOnlyPlanReport(
     return { valid: false, reason: "GRAPH_SCOPE_MISMATCH" };
   }
   if (value.sequence !== expected.sequence) return { valid: false, reason: "SEQUENCE_MISMATCH" };
-  if (value.state !== "MISSING" && value.state !== "EXISTING") {
+  if (
+    value.state !== "MISSING" &&
+    value.state !== "EXISTING" &&
+    value.state !== "SKILL_LINKS_MISSING"
+  ) {
     return { valid: false, reason: "GRAPH_STATE_INVALID" };
   }
   if (value.dbChanged !== false) return { valid: false, reason: "PLAN_REPORTED_WRITE" };

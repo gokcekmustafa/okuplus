@@ -414,6 +414,10 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     ).toBe(false);
     expect(educationV2P1ACycle5To8SeedAction("MISSING", true)).toBe("PLAN_ONLY");
     expect(educationV2P1ACycle5To8SeedAction("MISSING", false)).toBe("CREATE_MISSING");
+    expect(educationV2P1ACycle5To8SeedAction("SKILL_LINKS_MISSING", true)).toBe("PLAN_ONLY");
+    expect(educationV2P1ACycle5To8SeedAction("SKILL_LINKS_MISSING", false)).toBe(
+      "REPAIR_SKILL_LINKS",
+    );
     expect(educationV2P1ACycle5To8SeedAction("EXISTING", false)).toBe("REUSE_EXISTING");
     expect(educationV2P1ACycle5To8SeedAction("EXISTING", true)).toBe("PLAN_ONLY");
     expect(educationV2P1ACycle5To8SeedAction("CONFLICT", false)).toBe("STOP_CONFLICT");
@@ -495,6 +499,9 @@ describe("P1-A Cycles 5–8 versioned curriculum", () => {
     expect(workflow).not.toContain("prisma migrate deploy");
     expect(seeder).toContain("isCycle5To8PitrEvidenceValid");
     expect(seeder).toContain('action === "STOP_CONFLICT"');
+    expect(seeder).toContain('verifiedAction === "REPAIR_SKILL_LINKS"');
+    expect(workflow).toContain('"SKILL_LINKS_MISSING"');
+    expect(workflow).toContain('"SKILL_LINKS_REPAIRED"');
     expect(seeder.indexOf("if (!dryRun) assertPitrRestoreEvidence();")).toBeLessThan(
       seeder.indexOf("const prisma = new PrismaClient("),
     );

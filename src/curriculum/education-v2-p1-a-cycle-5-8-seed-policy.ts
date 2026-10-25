@@ -1,6 +1,7 @@
-export type EducationV2P1ACycle5To8GraphState = "MISSING" | "EXISTING" | "CONFLICT";
+export type EducationV2P1ACycle5To8GraphState =
+  "MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" | "CONFLICT";
 export type EducationV2P1ACycle5To8SeedAction =
-  "PLAN_ONLY" | "REUSE_EXISTING" | "CREATE_MISSING" | "STOP_CONFLICT";
+  "PLAN_ONLY" | "REUSE_EXISTING" | "CREATE_MISSING" | "REPAIR_SKILL_LINKS" | "STOP_CONFLICT";
 
 export type EducationV2P1ACycle5To8SeedRequest = {
   dryRun: boolean;
@@ -49,5 +50,6 @@ export function educationV2P1ACycle5To8SeedAction(
 ): EducationV2P1ACycle5To8SeedAction {
   if (state === "CONFLICT") return "STOP_CONFLICT";
   if (dryRun) return "PLAN_ONLY";
+  if (state === "SKILL_LINKS_MISSING") return "REPAIR_SKILL_LINKS";
   return state === "EXISTING" ? "REUSE_EXISTING" : "CREATE_MISSING";
 }

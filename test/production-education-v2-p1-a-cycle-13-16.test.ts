@@ -35,6 +35,7 @@ import {
   nextLearningRouteCycle,
 } from "../src/curriculum/learning-route-catalog.js";
 import { parseTrainingExerciseVersionConfig } from "../src/modules/training/exercise-contract.js";
+import { validateCycle13To16ReadOnlyPlanReport } from "../scripts/verify-cycle13-16-plan-report.js";
 
 const workflow = readFileSync(
   new URL("../.github/workflows/production-education-v2-p1-a-cycle-13-16.yml", import.meta.url),
@@ -294,6 +295,37 @@ function graphFor(sequence: number) {
 }
 
 describe("P1-A source-verified Cycles 13–16 package", () => {
+  it("accepts a read-only plan that identifies only missing source skill relations", () => {
+    const report = {
+      status: "PASS",
+      mode: "DRY_RUN",
+      immutableReleaseId: "release-13",
+      productionReleaseId: "release-13",
+      expectedSourceCommit: "a".repeat(40),
+      productionReleaseCommit: "a".repeat(40),
+      sequence: 13,
+      state: "SKILL_LINKS_MISSING",
+      dbChanged: false,
+      stepCount: 5,
+      contentCount: 5,
+      exerciseCount: 5,
+      questionCount: 15,
+      assessmentCount: 1,
+    };
+    const expected = { sequence: 13 as const, releaseId: "release-13", commit: "a".repeat(40) };
+
+    expect(validateCycle13To16ReadOnlyPlanReport(report, expected)).toEqual({
+      valid: true,
+      state: "SKILL_LINKS_MISSING",
+    });
+    expect(validateCycle13To16ReadOnlyPlanReport({ ...report, dbChanged: true }, expected)).toEqual(
+      { valid: false, reason: "PLAN_REPORTED_WRITE" },
+    );
+    expect(
+      validateCycle13To16ReadOnlyPlanReport({ ...report, state: "CONFLICT" }, expected),
+    ).toEqual({ valid: false, reason: "GRAPH_STATE_INVALID" });
+  });
+
   it("binds 20 evidence-backed stations and 60 distinct questions to their versioned programs", () => {
     expect(EDUCATION_V2_P1_A_CYCLE_13_16_SEQUENCES).toEqual([13, 14, 15, 16]);
     expect(EDUCATION_V2_P1_A_CYCLE_13_16).toHaveLength(4);

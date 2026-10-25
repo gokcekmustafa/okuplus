@@ -28,6 +28,12 @@ import {
   buildSeedLearningSkillContext,
   resolveSeedLearningStepSkillId,
 } from "../src/curriculum/learning-step-skill-link.js";
+import {
+  compareContentSkillLinks,
+  ensureContentSkillLinks,
+  expectedContentSkillLinks,
+  inspectContentSkillLinks,
+} from "../src/curriculum/content-skill-link-repair.js";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -258,7 +264,7 @@ async function graphState(
   tx: Prisma.TransactionClient,
   plans: Plan[],
   skills: Array<{ id: string; code: string }>,
-): Promise<"MISSING" | "EXISTING" | "CONFLICT"> {
+): Promise<"MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" | "CONFLICT"> {
   const states = await Promise.all(
     plans.map(async (plan) => {
       const counts = await Promise.all([
@@ -282,7 +288,6 @@ async function graphState(
       const expected = [
         1,
         1,
-        plan.curriculumSkills.length,
         plan.exerciseTemplateId ? 1 : 0,
         plan.exerciseTemplateVersionId ? 1 : 0,
         plan.questions.length,
@@ -291,14 +296,16 @@ async function graphState(
       if (counts.every((count) => (Array.isArray(count) ? count.length === 0 : count === 0)))
         return "MISSING" as const;
       const links = counts[2] as Array<{ skillId: string }>;
-      const linksMatch =
-        links.length === plan.curriculumSkills.length &&
-        links.every((link) => plan.curriculumSkills.some((skill) => skill.id === link.skillId));
-      const countsMatch = counts.every((count, index) =>
-        Array.isArray(count) ? index === 2 : count === expected[index],
+      const linkComparison = compareContentSkillLinks(
+        expectedContentSkillLinks([plan]),
+        links.map((link) => ({ contentId: plan.contentId, skillId: link.skillId })),
       );
-      if (countsMatch && linksMatch) return "EXISTING" as const;
-      return "CONFLICT" as const;
+      const countsMatch = expected.every(
+        (value, index) => counts[index < 2 ? index : index + 1] === value,
+      );
+      if (!countsMatch || linkComparison.state === "CONFLICT") return "CONFLICT" as const;
+      if (linkComparison.state === "MISSING") return "SKILL_LINKS_MISSING" as const;
+      return "EXISTING" as const;
     }),
   );
   if (states.includes("CONFLICT")) return "CONFLICT";
@@ -369,12 +376,26 @@ async function graphState(
     )
       return "CONFLICT";
   }
-  if (states.includes("EXISTING") || assessmentStates.includes("EXISTING") || actualPathCount > 0) {
+  if (
+    states.some((state) => state === "EXISTING" || state === "SKILL_LINKS_MISSING") ||
+    assessmentStates.includes("EXISTING") ||
+    actualPathCount > 0
+  ) {
     if (states.includes("MISSING") || assessmentStates.includes("MISSING") || actualPathCount === 0)
       return "CONFLICT";
-    return "EXISTING";
+    return states.includes("SKILL_LINKS_MISSING") ? "SKILL_LINKS_MISSING" : "EXISTING";
   }
   return "MISSING";
+}
+
+async function repairMissingContentSkillLinks(
+  tx: Prisma.TransactionClient,
+  plans: readonly Plan[],
+): Promise<number> {
+  const result = await ensureContentSkillLinks(tx.contentSkill, expectedContentSkillLinks(plans));
+  if (result.state === "CONFLICT")
+    fail("mevcut ContentSkill ilişkileri kaynak planıyla çelişiyor; otomatik değişiklik yapılmadı");
+  return result.insertedCount;
 }
 
 async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): Promise<void> {
@@ -730,10 +751,31 @@ async function main(): Promise<void> {
       });
       const plans = planRecords(skills);
       if (skills.length !== 3) fail("P1-A için mevcut RC skill kataloğu eksik");
-      const state = await graphState(tx, plans, skills);
+      let state = await graphState(tx, plans, skills);
       if (state === "CONFLICT")
         fail("P1-A stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
-      if (dryRun || state === "EXISTING") return { state, dbChanged: false };
+      let missingSkillLinkCount = 0;
+      if (state === "SKILL_LINKS_MISSING") {
+        const comparison = await inspectContentSkillLinks(
+          tx.contentSkill,
+          expectedContentSkillLinks(plans),
+        );
+        if (comparison.state === "CONFLICT")
+          fail("P1-A içerik-beceri bağlantıları kaynak planıyla çelişiyor");
+        missingSkillLinkCount = comparison.missingLinks.length;
+        if (comparison.state === "COMPLETE") state = "EXISTING";
+      }
+      if (dryRun) return { state, dbChanged: false, missingSkillLinkCount };
+      if (state === "SKILL_LINKS_MISSING") {
+        const insertedSkillLinkCount = await repairMissingContentSkillLinks(tx, plans);
+        return {
+          state: "SKILL_LINKS_REPAIRED",
+          dbChanged: insertedSkillLinkCount > 0,
+          missingSkillLinkCount,
+          insertedSkillLinkCount,
+        };
+      }
+      if (state === "EXISTING") return { state, dbChanged: false };
       await createContentGraph(tx, plans);
       // P0/P1 pilot paths are intentionally unscoped to a Level row. The
       // G8_12 suffix is part of the canonical path code, not a production

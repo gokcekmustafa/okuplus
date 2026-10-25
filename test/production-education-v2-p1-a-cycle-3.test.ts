@@ -68,15 +68,23 @@ describe("protected Cycle 3 production provision", () => {
     expect(seeder).toContain("PRODUCTION_BACKUP_CONFIRMATION_ENV");
   });
 
-  it("applies only a complete missing graph and refuses partial/conflicting records", () => {
-    expect(seeder).toContain('Promise<"MISSING" | "EXISTING" | "CONFLICT">');
+  it("repairs only absent source skill links and refuses other partial/conflicting records", () => {
+    expect(seeder).toContain(
+      'Promise<"MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" | "CONFLICT">',
+    );
     expect(seeder).toContain('if (existingCount === 0) return "MISSING"');
-    expect(seeder).toContain('return graphIsPublished ? "EXISTING" : "CONFLICT"');
+    expect(seeder).toContain('state === "SKILL_LINKS_MISSING"');
     expect(seeder).toContain("Cycle 3 stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
-    expect(seeder).toContain('if (dryRun || state === "EXISTING")');
+    expect(seeder).toContain("ensureContentSkillLinks");
+    expect(seeder).toContain('state: "SKILL_LINKS_REPAIRED"');
+    expect(seeder).toContain(
+      "if (dryRun) return { state, dbChanged: false, missingSkillLinkCount }",
+    );
     expect(workflow).toContain("scripts/seed-education-v2-p1-a-cycle-3.ts --apply");
     expect(workflow).toContain('report.state !== "EXISTING"');
     expect(workflow).toContain("CYCLE3_GRAPH_POSTCONDITION=EXISTING");
+    expect(workflow).toContain('"SKILL_LINKS_MISSING"');
+    expect(workflow).toContain('"SKILL_LINKS_REPAIRED"');
   });
 
   it("records the explicit source release separately from graph provisioning and student assignment", () => {

@@ -19,15 +19,18 @@ describe("P1-A Cycle 2 provisioning contract", () => {
     expect(source).toContain("DB_FINGERPRINT_DATABASE_URL");
   });
 
-  it("fails closed for a partial graph and never overwrites existing rows", async () => {
+  it("repairs only absent source skill links and fails closed for other partial graphs", async () => {
     const source = await seedSource();
     expect(source).toContain('if (existingCount === 0) return "MISSING"');
     expect(source).toContain('if (existingCount !== expectedCount) return "CONFLICT"');
     expect(source).toContain(
       'fail("Cycle 2 stable graph kısmi veya uyumsuz; overwrite yapılmayacak")',
     );
+    expect(source).toContain('state === "SKILL_LINKS_MISSING"');
+    expect(source).toContain("ensureContentSkillLinks");
+    expect(source).toContain('state: "SKILL_LINKS_REPAIRED"');
     expect(source).toContain(
-      'if (dryRun || state === "EXISTING") return { state, dbChanged: false }',
+      "if (dryRun) return { state, dbChanged: false, missingSkillLinkCount }",
     );
   });
 

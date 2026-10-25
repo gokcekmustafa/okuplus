@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type Cycle13To16Sequence = 13 | 14 | 15 | 16;
-export type Cycle13To16PlanState = "MISSING" | "EXISTING";
+export type Cycle13To16PlanState = "MISSING" | "EXISTING" | "SKILL_LINKS_MISSING";
 
 export type Cycle13To16PlanValidation =
   | { valid: true; state: Cycle13To16PlanState }
@@ -51,7 +51,10 @@ export function validateCycle13To16ReadOnlyPlanReport(
     return { valid: false, reason: "RELEASE_COMMIT_MISMATCH" };
   }
   if (value.sequence !== expected.sequence) return { valid: false, reason: "SEQUENCE_MISMATCH" };
-  if (typeof value.state !== "string" || !["MISSING", "EXISTING"].includes(value.state)) {
+  if (
+    typeof value.state !== "string" ||
+    !["MISSING", "EXISTING", "SKILL_LINKS_MISSING"].includes(value.state)
+  ) {
     return { valid: false, reason: "GRAPH_STATE_INVALID" };
   }
   if (value.dbChanged !== false) return { valid: false, reason: "PLAN_REPORTED_WRITE" };

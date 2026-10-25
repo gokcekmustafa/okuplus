@@ -209,7 +209,7 @@ jobs:
             npx --no-install tsx scripts/seed-education-v2-p1-a-cycle-5-8.ts --apply >"cycle${sequence}-apply.json"
             node --input-type=commonjs -e '
               const fs=require("node:fs"),s=Number(process.env.CYCLE1720_SEQUENCE),r=JSON.parse(fs.readFileSync(`cycle${s}-apply.json`,`utf8`));
-              if(r.status!=="PASS"||(r.dbChanged!==true&&r.state!=="EXISTING")){console.error(`FAIL: Cycle ${s} graph apply failed`);process.exit(1)}'
+              if(r.status!=="PASS"||!((r.dbChanged===true&&["MISSING","SKILL_LINKS_REPAIRED"].includes(r.state))||(r.dbChanged===false&&r.state==="EXISTING"))){console.error(`FAIL: Cycle ${s} graph apply failed`);process.exit(1)}'
             cat "cycle${sequence}-apply.json" >> "${GITHUB_STEP_SUMMARY}"
           done
 

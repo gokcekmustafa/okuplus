@@ -186,8 +186,12 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(workflow).not.toContain("Cycle 3");
     expect(workflow).not.toContain("prisma migrate");
 
-    expect(seeder).toContain('Promise<"MISSING" | "EXISTING" | "CONFLICT">');
-    expect(seeder).toContain('if (dryRun || state === "EXISTING")');
+    expect(seeder).toContain(
+      'Promise<"MISSING" | "EXISTING" | "SKILL_LINKS_MISSING" | "CONFLICT">',
+    );
+    expect(seeder).toContain('state === "SKILL_LINKS_MISSING"');
+    expect(seeder).toContain("ensureContentSkillLinks");
+    expect(seeder).toContain('state: "SKILL_LINKS_REPAIRED"');
     expect(seeder).toContain("production APPLY yalnızca korumalı master workflow");
     expect(seeder).toContain("assertPitrRestoreEvidence");
     expect(seeder).toContain("contentOrigin: plan.sourceStation.contentOrigin");
@@ -198,6 +202,8 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(seeder).not.toContain("studentLearningPath");
     expect(seeder).not.toContain("studentLearningStep");
     expect(seeder).not.toContain("I_HAVE_VERIFIED_PRODUCTION_BACKUP_AND_ROLLBACK");
+    expect(workflow).toContain('"SKILL_LINKS_MISSING"');
+    expect(workflow).toContain('"SKILL_LINKS_REPAIRED"');
   });
 
   it("creates a recent UTC timestamp strictly inside the PITR retention window", () => {
