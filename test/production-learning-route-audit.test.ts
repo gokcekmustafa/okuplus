@@ -8,6 +8,7 @@ import {
   productionLearningRouteAuditStatus,
   type ProductionLearningRoutePathSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
+import { mapCurriculumSkillCodesToStoredSkillCodes } from "../src/curriculum/learning-step-skill-link.js";
 
 const workflow = readFileSync(
   new URL("../.github/workflows/production-learning-route-audit.yml", import.meta.url),
@@ -55,6 +56,8 @@ function publishedPath(
             ),
           ),
         ];
+        const mappedSkillTargets = mapCurriculumSkillCodesToStoredSkillCodes(expectedSkillCodes);
+        const hasSingleOutcomeSkill = mappedSkillTargets.storedSkillCodes.length === 1;
         const prerequisites = expected.prerequisiteKeys.map((key) =>
           idByKey.get(`${cycle.programId}:${key}`)!,
         );
@@ -88,10 +91,22 @@ function publishedPath(
           unpublishedQuestionVersionCount: 0,
           linkedContentVersionIds: [],
           unpublishedLinkedContentVersionCount: 0,
-          skillCode: expectedSkillCodes[0] ?? null,
+          skillCode: hasSingleOutcomeSkill
+            ? (mappedSkillTargets.storedSkillCodes[0] ?? null)
+            : null,
           skillCategory: "COMPREHENSION",
+          linkedContentSkillCodes: mappedSkillTargets.storedSkillCodes,
+          unresolvedLinkedContentSkillCount: 0,
+          linkedQuestionSkillCodes: mappedSkillTargets.storedSkillCodes,
+          unresolvedLinkedQuestionSkillCount: 0,
           expectedSkillCodes,
-          skillLinkState: expectedSkillCodes.length ? "MATCHED" : "NOT_REQUIRED",
+          expectedStoredSkillCodes: mappedSkillTargets.storedSkillCodes,
+          unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,
+          skillLinkState: expectedSkillCodes.length
+            ? hasSingleOutcomeSkill
+              ? "MATCHED"
+              : "MATCHED_BY_CONTENT_SKILLS"
+            : "NOT_REQUIRED",
           warningCodes: [],
           prerequisiteStableKey: null,
           prerequisitePathId: null,
@@ -160,6 +175,75 @@ describe("production A-D learning route audit", () => {
       { routeStatus: "ACTIVE", countVisibleToAuditRole: 2 },
     ]);
     expect(JSON.stringify(audit)).not.toContain("internal-path-id");
+  });
+
+  it("validates the source fixtures for all 19 approved P1 routes and 105 steps", () => {
+    const approvedCycles = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.publicationApproved());
+    expect(approvedCycles).toHaveLength(19);
+    expect(approvedCycles.reduce((total, cycle) => total + cycle.manifest.steps.length, 0)).toBe(
+      105,
+    );
+    for (const cycle of approvedCycles) {
+      for (const outcome of cycle.manifest.learningOutcomes) {
+        expect(
+          mapCurriculumSkillCodesToStoredSkillCodes(outcome.targetSkillCodes).unmappedSkillCodes,
+          `${cycle.pathCode}:${outcome.key}`,
+        ).toEqual([]);
+      }
+    }
+
+    const audit = buildProductionLearningRouteAudit({
+      sourceCycles: approvedCycles,
+      paths: approvedCycles.map((cycle) => publishedPath(cycle)),
+      enrollments: [],
+    });
+    expect(audit.routeIntegrityStatus).toBe("PASS");
+    expect(audit.status).toBe("PASS");
+    expect(audit.dataQualityStatus).toBe("CLEAN");
+    expect(audit.productionP1PublishedStepCount).toBe(105);
+    expect(audit.blockedOrIncompletePathCount).toBe(0);
+  });
+
+  it("maps the nine reported A-cycle outcomes through the reviewed stored-skill taxonomy", () => {
+    const cases = [
+      [5, "EDU_V2_P1_A_EXPANSION_5_A5_STRATEGY", ["RC_INFERENCE", "RC_DETAIL"]],
+      [9, "EDU_V2_P1_A_EXPANSION_9_A9_SNOW_LIGHT_SCATTERING", ["RC_INFERENCE", "RC_DETAIL"]],
+      [9, "EDU_V2_P1_A_EXPANSION_9_A9_COMMON_SUNSET_MODEL", ["RC_INFERENCE"]],
+      [12, "EDU_V2_P1_A_EXPANSION_12_A12_INTEGRATED_CLASSIFICATION", ["RC_DETAIL", "RC_INFERENCE"]],
+      [14, "EDU_V2_P1_A_EXPANSION_14_A14_COMMON_SPACE_ROCK_TERMS", ["RC_DETAIL"]],
+      [14, "EDU_V2_P1_A_EXPANSION_14_A14_INTEGRATED_SOLAR_ENERGY", ["RC_DETAIL", "RC_INFERENCE"]],
+      [15, "EDU_V2_P1_A_EXPANSION_15_A15_COMMON_PLAN_VERSUS_RESULT", ["RC_DETAIL", "RC_INFERENCE"]],
+      [
+        15,
+        "EDU_V2_P1_A_EXPANSION_15_A15_INTEGRATED_COLD_NIGHT_SOUND",
+        ["RC_DETAIL", "RC_INFERENCE", "FAST_ATTENTION"],
+      ],
+      [
+        16,
+        "EDU_V2_P1_A_EXPANSION_16_A16_COMPREHENSION_ECOSYSTEM_SERVICES",
+        ["RC_DETAIL", "RC_INFERENCE"],
+      ],
+    ] as const;
+
+    for (const [sequence, stableKey, expectedStoredSkills] of cases) {
+      const cycle = LEARNING_ROUTE_CYCLES.find(
+        (candidate) => candidate.routeFamily === "A" && candidate.sequence === sequence,
+      );
+      const step = cycle?.manifest.steps.find((candidate) => candidate.stableKey === stableKey);
+      expect(step, stableKey).toBeDefined();
+      const rawSkillCodes = [
+        ...new Set(
+          step!.learningOutcomeKeys.flatMap(
+            (key) =>
+              cycle!.manifest.learningOutcomes.find((outcome) => outcome.key === key)
+                ?.targetSkillCodes ?? [],
+          ),
+        ),
+      ];
+      const mapped = mapCurriculumSkillCodesToStoredSkillCodes(rawSkillCodes);
+      expect(mapped.unmappedSkillCodes, stableKey).toEqual([]);
+      expect(mapped.storedSkillCodes, stableKey).toEqual(expectedStoredSkills);
+    }
   });
 
   it("reports missing published source cycles and unknown production path codes without treating them as ready", () => {
@@ -253,6 +337,80 @@ describe("production A-D learning route audit", () => {
     expect(
       classifySkillLink({ expectedSkillCodes, skillId: "skill-fk", skillCode: "RC_DETAIL" }),
     ).toEqual({ state: "MATCHED", warningCode: null });
+  });
+
+  it("represents multi-skill outcomes through linked content skills, not an arbitrary scalar", () => {
+    const expectedSkillCodes = ["RC_INFERENCE", "RC_DETAIL"];
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL"],
+      }),
+    ).toEqual({ state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE"],
+      }),
+    ).toEqual({ state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE"],
+        linkedQuestionSkillCodes: ["RC_DETAIL"],
+      }),
+    ).toEqual({ state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL", "FAST_ATTENTION"],
+      }),
+    ).toEqual({ state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: "outside-skill",
+        skillCode: "RC_MAIN_IDEA",
+        linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL"],
+      }),
+    ).toEqual({
+      state: "OUTSIDE_OUTCOME_TARGETS",
+      warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+    });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL"],
+        unresolvedLinkedContentSkillCount: 1,
+      }),
+    ).toEqual({
+      state: "TARGET_UNRESOLVED",
+      warningCode: "SKILL_LINK_TARGET_UNRESOLVED",
+    });
+  });
+
+  it("keeps unknown outcome-to-catalog mappings visible as data-quality warnings", () => {
+    expect(
+      classifySkillLink({
+        expectedSkillCodes: [],
+        unmappedExpectedSkillCodes: ["RC_UNREVIEWED_TARGET"],
+        skillId: null,
+        skillCode: null,
+      }),
+    ).toEqual({
+      state: "UNMAPPED_OUTCOME_TARGET",
+      warningCode: "SKILL_OUTCOME_TARGET_UNMAPPED",
+    });
   });
 
   it("distinguishes a missing content FK from an unresolved target and an unpublished version", () => {

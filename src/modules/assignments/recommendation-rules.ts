@@ -24,6 +24,33 @@ export type AssignmentRecommendationSignal = {
   learningStepTitle: string | null;
 };
 
+export function learningStepSkillContextIds(
+  input: {
+    skillId: string | null;
+    linkedContentSkillIds?: readonly string[];
+  } | null,
+): string[] {
+  if (!input) return [];
+  return [
+    ...new Set([...(input.skillId ? [input.skillId] : []), ...(input.linkedContentSkillIds ?? [])]),
+  ];
+}
+
+export function recommendationCandidateSkillIds(input: {
+  templateSkillId: string | null;
+  linkedContentSkillIds: readonly string[];
+  requestedSkillIds: readonly string[];
+}): string[] {
+  const requested = new Set(input.requestedSkillIds);
+  return [
+    ...new Set(
+      [input.templateSkillId, ...input.linkedContentSkillIds].filter(
+        (skillId): skillId is string => skillId !== null && requested.has(skillId),
+      ),
+    ),
+  ];
+}
+
 export type AssignmentRecommendationCandidate = {
   templateId: string;
   templateVersionId: string;

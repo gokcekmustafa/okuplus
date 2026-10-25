@@ -14,6 +14,10 @@ import {
   type CatalogTarget,
 } from "../src/curriculum/catalog-target-verification.js";
 import {
+  mapCurriculumSkillCodesToStoredSkillCodes,
+  singleStoredSkillCodeForOutcome,
+} from "../src/curriculum/learning-step-skill-link.js";
+import {
   educationV2P1ACycle5To8ProductionApproval,
   educationV2P1ACycle5To8ScopeSequences,
   EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID,
@@ -217,6 +221,7 @@ type Plan = {
   contentId: string;
   contentVersionId: string;
   skillId: string;
+  curriculumSkills: Array<{ code: string; id: string }>;
   exercise?: Program["exercises"][number];
   exerciseTemplateId?: string;
   exerciseTemplateVersionId?: string;
@@ -456,6 +461,24 @@ function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
       (candidate) => candidate.key === content.key,
     );
     if (!sourceStation) fail(`kaynak taslak istasyonu bulunamadı: ${content.key}`);
+    const mappedCurriculumSkills = mapCurriculumSkillCodesToStoredSkillCodes(
+      sourceStation.skillCodes,
+    );
+    if (mappedCurriculumSkills.unmappedSkillCodes.length > 0)
+      fail(
+        `kaynak kazanım becerileri uygulama kataloğuna eşlenemiyor: ${mappedCurriculumSkills.unmappedSkillCodes.join(", ")}`,
+      );
+    const curriculumSkills = [
+      ...new Map(
+        [content.skillCode, ...mappedCurriculumSkills.storedSkillCodes]
+          .map((code) => {
+            const id = skillByCode.get(code);
+            if (!id) fail(`kazanım için mevcut uygulama becerisi bulunamadı: ${code}`);
+            return { code, id };
+          })
+          .map((skill) => [skill.id, skill]),
+      ).values(),
+    ];
     const exercise = ACTIVE_PROGRAM.exercises.find(
       (candidate) => candidate.contentKey === content.key,
     );
@@ -473,6 +496,7 @@ function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
       contentId: activeId("content", content.key),
       contentVersionId: activeContentVersionId(content.key),
       skillId,
+      curriculumSkills,
       exercise,
       exerciseTemplateId: exercise ? activeTemplateId(exercise.key) : undefined,
       exerciseTemplateVersionId: exercise ? activeTemplateVersionId(exercise.key) : undefined,
@@ -709,6 +733,7 @@ async function graphState(
         source: true,
         status: true,
         isActive: true,
+        skillId: true,
         contentVersionId: true,
         exerciseTemplateVersionId: true,
         assessmentId: true,
@@ -732,10 +757,14 @@ async function graphState(
     steps.length;
   if (existingCount === 0) return "MISSING";
 
+  const expectedCurriculumSkillLinkCount = plans.reduce(
+    (total, plan) => total + plan.curriculumSkills.length,
+    0,
+  );
   const expectedCount =
     contentIds.length +
     contentVersionIds.length +
-    contentIds.length +
+    expectedCurriculumSkillLinkCount +
     templateIds.length +
     templateVersionIds.length +
     questionIds.length +
@@ -754,6 +783,9 @@ async function graphState(
   const questionVersionById = new Map(questionVersions.map((item) => [item.id, item]));
   const unitById = new Map(units.map((item) => [item.id, item]));
   const stepByKey = new Map(steps.map((item) => [item.stableKey, item]));
+  const sourceStationByKey = new Map(
+    ACTIVE_SOURCE_CYCLE.sourceStations.map((station) => [station.key, station]),
+  );
   const expectedStepByKey = new Map(flattenedSteps().map((step) => [step.key, step]));
   const path = paths[0];
   const graphIsPublished =
@@ -799,9 +831,13 @@ async function graphState(
         item.publishedAt !== null
       );
     }) &&
-    contentSkills.length === contentIds.length &&
+    contentSkills.length === expectedCurriculumSkillLinkCount &&
     contentSkills.every((item) =>
-      plans.some((plan) => plan.contentId === item.contentId && plan.skillId === item.skillId),
+      plans.some(
+        (plan) =>
+          plan.contentId === item.contentId &&
+          plan.curriculumSkills.some((skill) => skill.id === item.skillId),
+      ),
     ) &&
     templates.every((item) => {
       const plan = plans.find((candidate) => candidate.exerciseTemplateId === item.id);
@@ -910,6 +946,15 @@ async function graphState(
       const expectedPreviousId = expectedPreviousKey
         ? stepByKey.get(`${ACTIVE_PROGRAM_ID}:${expectedPreviousKey}`)?.id
         : null;
+      const sourceStation = expected ? sourceStationByKey.get(expected.key) : undefined;
+      const expectedSkillCode = sourceStation
+        ? singleStoredSkillCodeForOutcome(sourceStation.skillCodes)
+        : null;
+      const expectedSkillId = expectedSkillCode
+        ? (plans
+            .flatMap((plan) => plan.curriculumSkills)
+            .find((skill) => skill.code === expectedSkillCode)?.id ?? null)
+        : null;
       return (
         expected !== undefined &&
         item.tenantId === null &&
@@ -928,6 +973,7 @@ async function graphState(
           (expected.exerciseKey ? activeTemplateVersionId(expected.exerciseKey) : null) &&
         item.assessmentId ===
           (expected.assessmentKey ? activeAssessmentId(expected.assessmentKey) : null) &&
+        item.skillId === expectedSkillId &&
         item.prerequisiteStepId === expectedPreviousId &&
         canonicalJson(item.completionRule) ===
           canonicalJson({
@@ -948,20 +994,8 @@ async function graphState(
             area: ACTIVE_PROGRAM.path.area,
             unitCode: expectedUnit?.code,
             stepType: expected.type,
-            skillCode:
-              (expected.contentKey &&
-                ACTIVE_PROGRAM.content.find((content) => content.key === expected.contentKey)
-                  ?.skillCode) ??
-              (expected.exerciseKey &&
-                (() => {
-                  const exercise = ACTIVE_PROGRAM.exercises.find(
-                    (item) => item.key === expected.exerciseKey,
-                  );
-                  return ACTIVE_PROGRAM.content.find(
-                    (content) => content.key === exercise?.contentKey,
-                  )?.skillCode;
-                })()) ??
-              null,
+            skillCode: expectedSkillCode,
+            outcomeSkillCodes: sourceStation?.skillCodes ?? [],
           })
       );
     }) &&
@@ -1048,7 +1082,9 @@ async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): 
         status: "DRAFT",
       },
     });
-    await tx.contentSkill.create({ data: { contentId: content.id, skillId: plan.skillId } });
+    for (const skill of plan.curriculumSkills) {
+      await tx.contentSkill.create({ data: { contentId: content.id, skillId: skill.id } });
+    }
 
     const questionVersionByKey = new Map<string, { id: string; questionId: string }>();
     for (const planned of plan.questions) {
@@ -1174,7 +1210,7 @@ async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): 
   }
 }
 
-async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
+async function createLearningPath(tx: Prisma.TransactionClient, plans: Plan[]): Promise<void> {
   const path = ACTIVE_PROGRAM.path;
   const pathId = activeId("path", path.code);
   await tx.learningPath.create({
@@ -1206,14 +1242,12 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
       activeAssessmentId(assessment.key),
     ]),
   );
-  const skillByContentKey = new Map(
-    ACTIVE_PROGRAM.content.map((content) => [content.key, content.skillCode]),
+  const skillIdByCode = new Map(
+    plans.flatMap((plan) => plan.curriculumSkills.map((skill) => [skill.code, skill.id] as const)),
   );
-  const skills = await tx.skill.findMany({
-    where: { code: { in: [...new Set(skillByContentKey.values())] } },
-    select: { id: true, code: true },
-  });
-  const skillIdByCode = new Map(skills.map((skill) => [skill.code, skill.id]));
+  const sourceStationByKey = new Map(
+    ACTIVE_SOURCE_CYCLE.sourceStations.map((station) => [station.key, station]),
+  );
 
   for (const unit of path.units) {
     const unitId = activeId("unit", unit.code);
@@ -1249,12 +1283,9 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
         fail(`alıştırma sürümü eksik: ${step.key}`);
       }
       if (step.type === "ASSESSMENT" && !assessmentId) fail(`değerlendirme eksik: ${step.key}`);
-      const exercise = step.exerciseKey
-        ? ACTIVE_PROGRAM.exercises.find((item) => item.key === step.exerciseKey)
-        : undefined;
-      const skillCode =
-        (step.contentKey && skillByContentKey.get(step.contentKey)) ||
-        (exercise && skillByContentKey.get(exercise.contentKey));
+      const sourceStation = sourceStationByKey.get(step.key);
+      if (!sourceStation) fail(`öğrenme adımı kaynak istasyonla eşleşmiyor: ${step.key}`);
+      const skillCode = singleStoredSkillCodeForOutcome(sourceStation.skillCodes);
       const skillId = skillCode ? skillIdByCode.get(skillCode) : undefined;
       if (skillCode && !skillId) fail(`mevcut skill bulunamadı: ${skillCode}`);
       await tx.learningStep.create({
@@ -1286,6 +1317,7 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
             unitCode: unit.code,
             stepType: step.type,
             skillCode: skillCode ?? null,
+            outcomeSkillCodes: [...sourceStation.skillCodes],
           }),
         },
       });
@@ -1369,7 +1401,17 @@ async function main(): Promise<void> {
       await tx.$executeRaw`SELECT set_config('app.platform_role', 'CONTENT_EDITOR', true)`;
       await tx.$executeRaw`SELECT set_config('app.user_id', 'education-v2-p1-a-cycle-5-8-provisioner', true)`;
       const requiredSkillCodes = [
-        ...new Set(ACTIVE_PROGRAM.content.map((content) => content.skillCode)),
+        ...new Set([
+          ...ACTIVE_PROGRAM.content.map((content) => content.skillCode),
+          ...ACTIVE_SOURCE_CYCLE.sourceStations.flatMap((station) => {
+            const mapped = mapCurriculumSkillCodesToStoredSkillCodes(station.skillCodes);
+            if (mapped.unmappedSkillCodes.length > 0)
+              fail(
+                `kaynak kazanım becerileri uygulama kataloğuna eşlenemiyor: ${mapped.unmappedSkillCodes.join(", ")}`,
+              );
+            return mapped.storedSkillCodes;
+          }),
+        ]),
       ];
       const skills = await tx.skill.findMany({
         where: { code: { in: requiredSkillCodes } },
@@ -1384,7 +1426,7 @@ async function main(): Promise<void> {
         fail("stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
       if (action !== "CREATE_MISSING") return { state, dbChanged: false };
       await createContentGraph(tx, plans);
-      await createLearningPath(tx);
+      await createLearningPath(tx, plans);
       return { state, dbChanged: true };
     });
     console.log(

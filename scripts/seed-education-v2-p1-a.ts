@@ -11,6 +11,7 @@ import {
 } from "../src/curriculum/catalog-target-verification.js";
 import {
   EDUCATION_V2_P1_A_PATH_VERSION,
+  EDUCATION_V2_P1_A_LEARNING_OUTCOMES,
   EDUCATION_V2_P1_A_PROGRAM,
   EDUCATION_V2_P1_A_PROGRAM_ID,
   p1AAssessmentId,
@@ -23,6 +24,10 @@ import {
   p1ATemplateVersionId,
   p1AUnitId,
 } from "../src/curriculum/education-v2-p1-a-program.js";
+import {
+  buildSeedLearningSkillContext,
+  resolveSeedLearningStepSkillId,
+} from "../src/curriculum/learning-step-skill-link.js";
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -44,6 +49,7 @@ type Plan = {
   contentId: string;
   contentVersionId: string;
   skillId: string;
+  curriculumSkills: Array<{ code: string; id: string }>;
   exercise?: (typeof EDUCATION_V2_P1_A_PROGRAM.exercises)[number];
   exerciseTemplateId?: string;
   exerciseTemplateVersionId?: string;
@@ -154,9 +160,37 @@ async function verifyTarget(
 
 function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
   const skillByCode = new Map(skills.map((skill) => [skill.code, skill.id]));
+  const skillById = new Map(skills.map((skill) => [skill.id, skill.code]));
+  const exercises = EDUCATION_V2_P1_A_PROGRAM.exercises;
+  const assessments = EDUCATION_V2_P1_A_PROGRAM.assessments;
+  const skillContext = buildSeedLearningSkillContext({
+    outcomes: EDUCATION_V2_P1_A_LEARNING_OUTCOMES,
+    steps: EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps),
+    skillIdByCode: skillByCode,
+    exerciseContentKeyByKey: new Map(
+      exercises.map((exercise) => [exercise.key, exercise.contentKey]),
+    ),
+    assessmentExerciseKeyByKey: new Map(
+      assessments.map((assessment) => [assessment.key, assessment.templateExerciseKey]),
+    ),
+  });
   return EDUCATION_V2_P1_A_PROGRAM.content.map((content) => {
     const skillId = skillByCode.get(content.skillCode);
     if (!skillId) fail(`gerekli mevcut skill bulunamadı: ${content.skillCode}`);
+    const curriculumSkillIds = skillContext.skillIdsByContentKey.get(content.key) ?? [];
+    const curriculumSkills = [
+      ...new Map(
+        [
+          { code: content.skillCode, id: skillId },
+          ...curriculumSkillIds.map((id) => ({
+            code: skillById.get(id) ?? "",
+            id,
+          })),
+        ].map((item) => [item.id, item]),
+      ).values(),
+    ];
+    if (curriculumSkills.some((skill) => !skill.code))
+      fail(`kazanım becerileri içerik bağlantısına eşlenemiyor: ${content.key}`);
     const exercise = EDUCATION_V2_P1_A_PROGRAM.exercises.find(
       (candidate) => candidate.contentKey === content.key,
     );
@@ -173,6 +207,7 @@ function planRecords(skills: Array<{ id: string; code: string }>): Plan[] {
       contentId: p1AId("content", content.key),
       contentVersionId: p1AContentVersionId(content.key),
       skillId,
+      curriculumSkills,
       exercise,
       exerciseTemplateId: exercise ? p1ATemplateId(exercise.key) : undefined,
       exerciseTemplateVersionId: exercise ? p1ATemplateVersionId(exercise.key) : undefined,
@@ -222,12 +257,17 @@ function assessmentConfig(
 async function graphState(
   tx: Prisma.TransactionClient,
   plans: Plan[],
+  skills: Array<{ id: string; code: string }>,
 ): Promise<"MISSING" | "EXISTING" | "CONFLICT"> {
   const states = await Promise.all(
     plans.map(async (plan) => {
       const counts = await Promise.all([
         tx.content.count({ where: { id: plan.contentId } }),
         tx.contentVersion.count({ where: { id: plan.contentVersionId } }),
+        tx.contentSkill.findMany({
+          where: { contentId: plan.contentId },
+          select: { skillId: true },
+        }),
         plan.exerciseTemplateId
           ? tx.exerciseTemplate.count({ where: { id: plan.exerciseTemplateId } })
           : Promise.resolve(0),
@@ -242,13 +282,22 @@ async function graphState(
       const expected = [
         1,
         1,
+        plan.curriculumSkills.length,
         plan.exerciseTemplateId ? 1 : 0,
         plan.exerciseTemplateVersionId ? 1 : 0,
         plan.questions.length,
         plan.questions.length,
       ];
-      if (counts.every((count) => count === 0)) return "MISSING" as const;
-      if (counts.every((count, index) => count === expected[index])) return "EXISTING" as const;
+      if (counts.every((count) => (Array.isArray(count) ? count.length === 0 : count === 0)))
+        return "MISSING" as const;
+      const links = counts[2] as Array<{ skillId: string }>;
+      const linksMatch =
+        links.length === plan.curriculumSkills.length &&
+        links.every((link) => plan.curriculumSkills.some((skill) => skill.id === link.skillId));
+      const countsMatch = counts.every((count, index) =>
+        Array.isArray(count) ? index === 2 : count === expected[index],
+      );
+      if (countsMatch && linksMatch) return "EXISTING" as const;
       return "CONFLICT" as const;
     }),
   );
@@ -286,6 +335,40 @@ async function graphState(
     EDUCATION_V2_P1_A_PROGRAM.path.units.reduce((sum, unit) => sum + unit.steps.length, 0);
   const actualPathCount = existingPathCount.reduce((sum, count) => sum + count, 0);
   if (actualPathCount > 0 && actualPathCount !== expectedPathCount) return "CONFLICT";
+  if (actualPathCount > 0) {
+    const skillContext = buildSeedLearningSkillContext({
+      outcomes: EDUCATION_V2_P1_A_LEARNING_OUTCOMES,
+      steps: EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps),
+      skillIdByCode: new Map(skills.map((skill) => [skill.code, skill.id])),
+      exerciseContentKeyByKey: new Map(
+        EDUCATION_V2_P1_A_PROGRAM.exercises.map((exercise) => [exercise.key, exercise.contentKey]),
+      ),
+      assessmentExerciseKeyByKey: new Map(
+        EDUCATION_V2_P1_A_PROGRAM.assessments.map((assessment) => [
+          assessment.key,
+          assessment.templateExerciseKey,
+        ]),
+      ),
+    });
+    const expectedSkillByStepId = new Map(
+      flattenedSteps().map((step) => [
+        p1AStepId(step.key),
+        resolveSeedLearningStepSkillId({
+          learningOutcomeKeys: step.learningOutcomeKeys,
+          skillIdsByOutcomeKey: skillContext.skillIdsByOutcomeKey,
+        }),
+      ]),
+    );
+    const existingSteps = await tx.learningStep.findMany({
+      where: { id: { in: [...expectedSkillByStepId.keys()] } },
+      select: { id: true, skillId: true },
+    });
+    if (
+      existingSteps.length !== expectedSkillByStepId.size ||
+      existingSteps.some((step) => expectedSkillByStepId.get(step.id) !== step.skillId)
+    )
+      return "CONFLICT";
+  }
   if (states.includes("EXISTING") || assessmentStates.includes("EXISTING") || actualPathCount > 0) {
     if (states.includes("MISSING") || assessmentStates.includes("MISSING") || actualPathCount === 0)
       return "CONFLICT";
@@ -337,7 +420,9 @@ async function createContentGraph(tx: Prisma.TransactionClient, plans: Plan[]): 
         status: "DRAFT",
       },
     });
-    await tx.contentSkill.create({ data: { contentId: content.id, skillId: plan.skillId } });
+    for (const skill of plan.curriculumSkills) {
+      await tx.contentSkill.create({ data: { contentId: content.id, skillId: skill.id } });
+    }
 
     const questionVersionByKey = new Map<string, { id: string; questionId: string }>();
     for (const planned of plan.questions) {
@@ -459,7 +544,10 @@ function flattenedSteps() {
   return EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps);
 }
 
-async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
+async function createLearningPath(
+  tx: Prisma.TransactionClient,
+  skills: Array<{ id: string; code: string }>,
+): Promise<void> {
   const path = EDUCATION_V2_P1_A_PROGRAM.path;
   const pathId = p1AId("path", path.code);
   await tx.learningPath.create({
@@ -494,6 +582,21 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
       p1AAssessmentId(assessment.key),
     ]),
   );
+  const skillByCode = new Map(skills.map((skill) => [skill.code, skill.id]));
+  const skillContext = buildSeedLearningSkillContext({
+    outcomes: EDUCATION_V2_P1_A_LEARNING_OUTCOMES,
+    steps: EDUCATION_V2_P1_A_PROGRAM.path.units.flatMap((unit) => unit.steps),
+    skillIdByCode: skillByCode,
+    exerciseContentKeyByKey: new Map(
+      EDUCATION_V2_P1_A_PROGRAM.exercises.map((exercise) => [exercise.key, exercise.contentKey]),
+    ),
+    assessmentExerciseKeyByKey: new Map(
+      EDUCATION_V2_P1_A_PROGRAM.assessments.map((assessment) => [
+        assessment.key,
+        assessment.templateExerciseKey,
+      ]),
+    ),
+  });
 
   for (const unit of path.units) {
     const unitId = p1AUnitId(unit.code);
@@ -532,9 +635,10 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
         ...(step.completionRule ?? {}),
         ...(prerequisiteStepIds.length > 0 ? { prerequisiteStepIds } : {}),
       };
-      const content = step.contentKey
-        ? EDUCATION_V2_P1_A_PROGRAM.content.find((item) => item.key === step.contentKey)
-        : undefined;
+      const skillId = resolveSeedLearningStepSkillId({
+        learningOutcomeKeys: step.learningOutcomeKeys,
+        skillIdsByOutcomeKey: skillContext.skillIdsByOutcomeKey,
+      });
       await tx.learningStep.create({
         data: {
           id: p1AStepId(step.key),
@@ -552,6 +656,7 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
           contentVersionId,
           exerciseTemplateVersionId: templateVersionId,
           assessmentId,
+          skillId,
           completionRule: asJson(completionRule),
           metadata: asJson({
             programId: EDUCATION_V2_P1_A_PROGRAM_ID,
@@ -559,7 +664,9 @@ async function createLearningPath(tx: Prisma.TransactionClient): Promise<void> {
             area: path.area,
             unitCode: unit.code,
             stepType: step.type,
-            skillCode: content?.skillCode ?? null,
+            skillCode: skillId
+              ? (skills.find((skill) => skill.id === skillId)?.code ?? null)
+              : null,
           }),
         },
       });
@@ -623,7 +730,7 @@ async function main(): Promise<void> {
       });
       const plans = planRecords(skills);
       if (skills.length !== 3) fail("P1-A için mevcut RC skill kataloğu eksik");
-      const state = await graphState(tx, plans);
+      const state = await graphState(tx, plans, skills);
       if (state === "CONFLICT")
         fail("P1-A stable graph kısmi veya uyumsuz; overwrite yapılmayacak");
       if (dryRun || state === "EXISTING") return { state, dbChanged: false };
@@ -632,7 +739,7 @@ async function main(): Promise<void> {
       // G8_12 suffix is part of the canonical path code, not a production
       // Level record, and production already uses the path's tenant-safe
       // publication scope for candidate matching.
-      await createLearningPath(tx);
+      await createLearningPath(tx, skills);
       return { state, dbChanged: true };
     });
     console.log(

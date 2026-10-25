@@ -12,6 +12,7 @@ import {
   type ProductionLearningRoutePathSnapshot,
   type ProductionLearningRouteStepSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
+import { mapCurriculumSkillCodesToStoredSkillCodes } from "../src/curriculum/learning-step-skill-link.js";
 import { parseCatalogTargetUrl } from "../src/curriculum/catalog-target-verification.js";
 import { providerForHost, targetIdentityFingerprint } from "../src/lib/db-fingerprint-contract.js";
 import { resolveTrainingRuntimeConfig } from "../src/modules/training/exercise-contract.js";
@@ -195,7 +196,15 @@ async function main(): Promise<void> {
                       select: {
                         id: true,
                         status: true,
-                        content: { select: { status: true, deletedAt: true } },
+                        content: {
+                          select: {
+                            status: true,
+                            deletedAt: true,
+                            contentSkills: {
+                              select: { skillId: true, skill: { select: { code: true } } },
+                            },
+                          },
+                        },
                       },
                     },
                     exerciseTemplateVersionId: true,
@@ -212,7 +221,15 @@ async function main(): Promise<void> {
                             contentVersion: {
                               select: {
                                 status: true,
-                                content: { select: { status: true, deletedAt: true } },
+                                content: {
+                                  select: {
+                                    status: true,
+                                    deletedAt: true,
+                                    contentSkills: {
+                                      select: { skillId: true, skill: { select: { code: true } } },
+                                    },
+                                  },
+                                },
                               },
                             },
                           },
@@ -225,7 +242,14 @@ async function main(): Promise<void> {
                             questionVersion: {
                               select: {
                                 status: true,
-                                question: { select: { status: true, deletedAt: true } },
+                                question: {
+                                  select: {
+                                    status: true,
+                                    deletedAt: true,
+                                    skillId: true,
+                                    skill: { select: { code: true } },
+                                  },
+                                },
                               },
                             },
                           },
@@ -274,7 +298,15 @@ async function main(): Promise<void> {
                     contentVersion: {
                       select: {
                         status: true,
-                        content: { select: { status: true, deletedAt: true } },
+                        content: {
+                          select: {
+                            status: true,
+                            deletedAt: true,
+                            contentSkills: {
+                              select: { skillId: true, skill: { select: { code: true } } },
+                            },
+                          },
+                        },
                       },
                     },
                   },
@@ -287,7 +319,14 @@ async function main(): Promise<void> {
                     questionVersion: {
                       select: {
                         status: true,
-                        question: { select: { status: true, deletedAt: true } },
+                        question: {
+                          select: {
+                            status: true,
+                            deletedAt: true,
+                            skillId: true,
+                            skill: { select: { code: true } },
+                          },
+                        },
                       },
                     },
                   },
@@ -350,6 +389,32 @@ async function main(): Promise<void> {
                 const linkedContentVersionIds = linkedContentRows.map(
                   (item) => item.contentVersionId,
                 );
+                const linkedContentSkillRows = [
+                  ...(step.contentVersion?.content.contentSkills ?? []),
+                  ...linkedContentRows.flatMap((item) => item.contentVersion.content.contentSkills),
+                ];
+                const linkedContentSkillCodes = [
+                  ...new Set(
+                    linkedContentSkillRows
+                      .map((item) => item.skill.code)
+                      .filter((code): code is string => Boolean(code)),
+                  ),
+                ];
+                const unresolvedLinkedContentSkillCount = linkedContentSkillRows.filter(
+                  (item) => !item.skill.code,
+                ).length;
+                const linkedQuestionSkillCodes = [
+                  ...new Set(
+                    questionRows
+                      .map((item) => item.questionVersion.question.skill?.code ?? null)
+                      .filter((code): code is string => Boolean(code)),
+                  ),
+                ];
+                const unresolvedLinkedQuestionSkillCount = questionRows.filter(
+                  (item) =>
+                    item.questionVersion.question.skillId !== null &&
+                    !item.questionVersion.question.skill?.code,
+                ).length;
                 const unpublishedQuestionVersionCount = questionRows.filter(
                   (item) =>
                     item.questionVersion.status !== "PUBLISHED" ||
@@ -453,10 +518,17 @@ async function main(): Promise<void> {
                         ),
                       ]
                     : [];
+                const mappedSkillTargets =
+                  mapCurriculumSkillCodesToStoredSkillCodes(expectedSkillCodes);
                 const skillLink = classifySkillLink({
-                  expectedSkillCodes,
+                  expectedSkillCodes: mappedSkillTargets.storedSkillCodes,
+                  unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,
                   skillId: step.skillId,
                   skillCode: step.skill?.code ?? null,
+                  linkedContentSkillCodes,
+                  unresolvedLinkedContentSkillCount,
+                  linkedQuestionSkillCodes,
+                  unresolvedLinkedQuestionSkillCount,
                 });
                 if (skillLink.warningCode) warnings.push(skillLink.warningCode);
 
@@ -527,7 +599,13 @@ async function main(): Promise<void> {
                   unpublishedLinkedContentVersionCount,
                   skillCode: step.skill?.code ?? null,
                   skillCategory: step.skill?.category ?? null,
+                  linkedContentSkillCodes,
+                  unresolvedLinkedContentSkillCount,
+                  linkedQuestionSkillCodes,
+                  unresolvedLinkedQuestionSkillCount,
                   expectedSkillCodes,
+                  expectedStoredSkillCodes: mappedSkillTargets.storedSkillCodes,
+                  unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,
                   skillLinkState: skillLink.state,
                   prerequisiteStableKey: step.prerequisiteStep?.stableKey ?? null,
                   prerequisitePathId: step.prerequisiteStep?.unit.pathId ?? null,

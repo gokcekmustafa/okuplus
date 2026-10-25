@@ -33,7 +33,13 @@ export type ProductionLearningRouteStepSnapshot = {
   unpublishedLinkedContentVersionCount: number;
   skillCode: string | null;
   skillCategory: string | null;
+  linkedContentSkillCodes: readonly string[];
+  unresolvedLinkedContentSkillCount: number;
+  linkedQuestionSkillCodes: readonly string[];
+  unresolvedLinkedQuestionSkillCount: number;
   expectedSkillCodes: readonly string[];
+  expectedStoredSkillCodes: readonly string[];
+  unmappedExpectedSkillCodes: readonly string[];
   skillLinkState: SkillLinkState;
   warningCodes: readonly string[];
   prerequisiteStableKey: string | null;
@@ -49,6 +55,8 @@ export type SkillLinkState =
   | "MISSING_FOREIGN_KEY"
   | "TARGET_UNRESOLVED"
   | "MATCHED"
+  | "MATCHED_BY_CONTENT_SKILLS"
+  | "UNMAPPED_OUTCOME_TARGET"
   | "OUTSIDE_OUTCOME_TARGETS";
 
 export type ContentVersionLinkState =
@@ -79,19 +87,47 @@ export function productionLearningRouteAuditStatus(
 /** Distinguishes a missing link from a linked row hidden by RLS. */
 export function classifySkillLink(input: {
   expectedSkillCodes: readonly string[];
+  unmappedExpectedSkillCodes?: readonly string[];
   skillId: string | null;
   skillCode: string | null;
+  linkedContentSkillCodes?: readonly string[];
+  unresolvedLinkedContentSkillCount?: number;
+  linkedQuestionSkillCodes?: readonly string[];
+  unresolvedLinkedQuestionSkillCount?: number;
 }): { state: SkillLinkState; warningCode: string | null } {
-  if (input.expectedSkillCodes.length === 0) return { state: "NOT_REQUIRED", warningCode: null };
-  if (!input.skillId) return { state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" };
-  if (!input.skillCode)
+  const unmappedExpectedSkillCodes = input.unmappedExpectedSkillCodes ?? [];
+  if (input.expectedSkillCodes.length === 0 && unmappedExpectedSkillCodes.length === 0)
+    return { state: "NOT_REQUIRED", warningCode: null };
+  if (unmappedExpectedSkillCodes.length > 0)
+    return { state: "UNMAPPED_OUTCOME_TARGET", warningCode: "SKILL_OUTCOME_TARGET_UNMAPPED" };
+
+  const linkedContentSkillCodes = [...new Set(input.linkedContentSkillCodes ?? [])];
+  const unresolvedLinkedContentSkillCount = input.unresolvedLinkedContentSkillCount ?? 0;
+  const linkedQuestionSkillCodes = [...new Set(input.linkedQuestionSkillCodes ?? [])];
+  const unresolvedLinkedQuestionSkillCount = input.unresolvedLinkedQuestionSkillCount ?? 0;
+  if (input.skillId && !input.skillCode)
     return { state: "TARGET_UNRESOLVED", warningCode: "SKILL_LINK_TARGET_UNRESOLVED" };
-  if (!input.expectedSkillCodes.includes(input.skillCode))
+  if (unresolvedLinkedContentSkillCount > 0 || unresolvedLinkedQuestionSkillCount > 0)
+    return { state: "TARGET_UNRESOLVED", warningCode: "SKILL_LINK_TARGET_UNRESOLVED" };
+  if (input.skillId && input.skillCode && !input.expectedSkillCodes.includes(input.skillCode))
     return {
       state: "OUTSIDE_OUTCOME_TARGETS",
       warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
     };
-  return { state: "MATCHED", warningCode: null };
+
+  // Content and question competencies are broader instructional metadata than
+  // the step's single scalar outcome. They may legitimately include related
+  // training skills, so only an explicit LearningStep.skillId can be
+  // classified as an outside-outcome assignment. For multi-skill outcomes,
+  // require the linked content/question graph to cover every mapped target.
+  const linkedSkillCodes = new Set([...linkedContentSkillCodes, ...linkedQuestionSkillCodes]);
+
+  if (input.expectedSkillCodes.every((code) => linkedSkillCodes.has(code)))
+    return { state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null };
+
+  if (input.skillId && input.skillCode && input.expectedSkillCodes.length === 1)
+    return { state: "MATCHED", warningCode: null };
+  return { state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" };
 }
 
 /** An FK whose row is not visible cannot be called absent without bypassing RLS. */
@@ -500,7 +536,11 @@ export function buildProductionLearningRouteAudit(input: {
               isActive: step.isActive,
               skillCode: step.skillCode,
               skillCategory: step.skillCategory,
+              linkedContentSkillCodes: step.linkedContentSkillCodes,
+              unresolvedLinkedContentSkillCount: step.unresolvedLinkedContentSkillCount,
               expectedSkillCodes: step.expectedSkillCodes,
+              expectedStoredSkillCodes: step.expectedStoredSkillCodes,
+              unmappedExpectedSkillCodes: step.unmappedExpectedSkillCodes,
               skillLinkState: step.skillLinkState,
               contentVersionLinkState: step.contentVersionLinkState,
               contentVersionFallbackReady: step.contentVersionFallbackReady,

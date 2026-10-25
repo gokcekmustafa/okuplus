@@ -7,6 +7,8 @@ import { getRecentAssignmentSkillSignals } from "./results-service.js";
 import {
   ASSIGNMENT_RECOMMENDATION_RULES,
   buildRecommendationDecisions,
+  learningStepSkillContextIds,
+  recommendationCandidateSkillIds,
   type AssignmentRecommendationSignal,
 } from "./recommendation-rules.js";
 
@@ -127,12 +129,71 @@ async function loadCurrentLearningStep(studentId: string, tenantId: string) {
     },
     select: {
       currentStep: {
-        select: { id: true, title: true, skillId: true, exerciseTemplateVersionId: true },
+        select: {
+          id: true,
+          title: true,
+          skillId: true,
+          exerciseTemplateVersionId: true,
+          contentVersion: {
+            select: { content: { select: { contentSkills: { select: { skillId: true } } } } },
+          },
+          exerciseTemplateVersion: {
+            select: {
+              contents: {
+                select: {
+                  contentVersion: {
+                    select: {
+                      content: { select: { contentSkills: { select: { skillId: true } } } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          assessment: { select: { config: true } },
+        },
       },
     },
     orderBy: { startedAt: "desc" },
   });
-  return enrollment?.currentStep ?? null;
+  const step = enrollment?.currentStep;
+  if (!step) return null;
+  const assessmentConfig = step.assessment?.config;
+  const assessmentTemplateVersionId =
+    assessmentConfig &&
+    typeof assessmentConfig === "object" &&
+    !Array.isArray(assessmentConfig) &&
+    "templateVersionId" in assessmentConfig &&
+    typeof assessmentConfig.templateVersionId === "string"
+      ? assessmentConfig.templateVersionId
+      : null;
+  const assessmentTemplateVersion = assessmentTemplateVersionId
+    ? await prisma.exerciseTemplateVersion.findUnique({
+        where: { id: assessmentTemplateVersionId },
+        select: {
+          contents: {
+            select: {
+              contentVersion: {
+                select: { content: { select: { contentSkills: { select: { skillId: true } } } } },
+              },
+            },
+          },
+        },
+      })
+    : null;
+  const linkedContentSkillIds = [
+    ...(step.contentVersion?.content.contentSkills.map((item) => item.skillId) ?? []),
+    ...(step.exerciseTemplateVersion?.contents.flatMap((item) =>
+      item.contentVersion.content.contentSkills.map((skill) => skill.skillId),
+    ) ?? []),
+    ...(assessmentTemplateVersion?.contents.flatMap((item) =>
+      item.contentVersion.content.contentSkills.map((skill) => skill.skillId),
+    ) ?? []),
+  ];
+  return {
+    ...step,
+    linkedContentSkillIds,
+  };
 }
 
 async function loadCandidates(
@@ -172,26 +233,21 @@ async function loadCandidates(
     orderBy: [{ title: "asc" }, { id: "asc" }],
   });
   return rows.flatMap((row) => {
-    const skillId =
-      row.skillId ??
-      row.content?.contentSkills
-        .filter((item) => skillIds.includes(item.skillId))
-        .sort((a, b) => a.skillId.localeCompare(b.skillId))[0]?.skillId;
     const versionId = row.versions[0]?.id ?? null;
-    if (!skillId || !versionId) return [];
-    return [
-      {
-        templateId: row.id,
-        templateVersionId: versionId,
-        templateTitle: row.title,
-        templateType: row.type,
-        skillId,
-        learningStepId:
-          currentStep && currentStep.exerciseTemplateVersionId === versionId
-            ? currentStep.id
-            : null,
-      },
-    ];
+    if (!versionId) return [];
+    return recommendationCandidateSkillIds({
+      templateSkillId: row.skillId,
+      linkedContentSkillIds: row.content?.contentSkills.map((item) => item.skillId) ?? [],
+      requestedSkillIds: skillIds,
+    }).map((skillId) => ({
+      templateId: row.id,
+      templateVersionId: versionId,
+      templateTitle: row.title,
+      templateType: row.type,
+      skillId,
+      learningStepId:
+        currentStep && currentStep.exerciseTemplateVersionId === versionId ? currentStep.id : null,
+    }));
   });
 }
 
@@ -206,7 +262,8 @@ async function evaluateForStudent(
   ]);
   const assignmentBySkill = new Map(assignmentSignals.map((signal) => [signal.skillId, signal]));
   const skillIds = new Set<string>(assignmentSignals.map((signal) => signal.skillId));
-  if (currentStep?.skillId) skillIds.add(currentStep.skillId);
+  const currentStepSkillIds = learningStepSkillContextIds(currentStep);
+  for (const skillId of currentStepSkillIds) skillIds.add(skillId);
 
   const skills = await prisma.skill.findMany({
     where: {
@@ -228,8 +285,8 @@ async function evaluateForStudent(
       skillName: skill.name,
       measurementScore: measurementScores.get(skill.code) ?? null,
       recentAssignmentScores: assignmentSignal?.scores ?? [],
-      learningStepId: currentStep?.skillId === skill.id ? currentStep.id : null,
-      learningStepTitle: currentStep?.skillId === skill.id ? currentStep.title : null,
+      learningStepId: currentStepSkillIds.includes(skill.id) ? currentStep!.id : null,
+      learningStepTitle: currentStepSkillIds.includes(skill.id) ? currentStep!.title : null,
     };
   });
   const decisions = buildRecommendationDecisions(signals, candidates);

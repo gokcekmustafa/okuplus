@@ -19,6 +19,7 @@ import {
   validateLearningCycleManifest,
   type LearningCycleManifest,
 } from "./learning-cycle-manifest.js";
+import { mapCurriculumSkillCodeToStoredSkillCode } from "./learning-step-skill-link.js";
 
 export const EDUCATION_V2_P1_A_CYCLE_5_8_SEQUENCES = [5, 6, 7, 8] as const;
 export type EducationV2P1ACycle5To8Sequence =
@@ -36,20 +37,6 @@ const supportedCompetencies = new Set<TrainingExerciseVersionConfig["competency"
   "RC_DETAIL",
   "RC_INFERENCE",
 ]);
-
-const competencyBySkill: Readonly<Record<string, TrainingExerciseVersionConfig["competency"]>> = {
-  RC_RELATION: "RC_INFERENCE",
-  RC_CONNECTOR: "RC_DETAIL",
-  RC_STRUCTURE: "RC_MAIN_IDEA",
-  RC_EVIDENCE: "RC_DETAIL",
-  RC_CAUSE_EFFECT: "RC_INFERENCE",
-  RC_COMPARE_CONTRAST: "RC_INFERENCE",
-  RC_SEQUENCE: "RC_DETAIL",
-  RC_SYNTHESIS: "RC_INFERENCE",
-  RC_VOCABULARY_CONTEXT: "RC_DETAIL",
-  RC_DATA_INTERPRETATION: "RC_DETAIL",
-  RC_LIMITS: "RC_INFERENCE",
-};
 
 const familyByCompetency = {
   FAST_ATTENTION: "ATTENTION_BURST",
@@ -146,8 +133,9 @@ function competencyFor(
   if (direct) return direct as TrainingExerciseVersionConfig["competency"];
 
   for (const code of questionSource.skillCodes) {
-    const mapped = competencyBySkill[code];
-    if (mapped) return mapped;
+    const mapped = mapCurriculumSkillCodeToStoredSkillCode(code);
+    if (mapped && supportedCompetencies.has(mapped as TrainingExerciseVersionConfig["competency"]))
+      return mapped as TrainingExerciseVersionConfig["competency"];
   }
 
   throw new Error(`Cycle ${questionSource.sequence} skill eşlemesi eksik: ${questionSource.key}`);
