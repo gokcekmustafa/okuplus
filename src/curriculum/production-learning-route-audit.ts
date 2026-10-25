@@ -11,6 +11,8 @@ export type ProductionLearningRouteStepSnapshot = {
   prerequisiteStepId: string | null;
   completionRule: unknown;
   contentVersionId: string | null;
+  contentVersionLinkState: ContentVersionLinkState;
+  contentVersionFallbackReady: boolean;
   contentVersionStatus: string | null;
   contentStatus: string | null;
   contentDeleted: boolean | null;
@@ -31,6 +33,9 @@ export type ProductionLearningRouteStepSnapshot = {
   unpublishedLinkedContentVersionCount: number;
   skillCode: string | null;
   skillCategory: string | null;
+  expectedSkillCodes: readonly string[];
+  skillLinkState: SkillLinkState;
+  warningCodes: readonly string[];
   prerequisiteStableKey: string | null;
   prerequisitePathId: string | null;
   configuredPrerequisiteIds: readonly string[];
@@ -38,6 +43,104 @@ export type ProductionLearningRouteStepSnapshot = {
   expectedResourceLinksMatch: boolean;
   issueCodes: readonly string[];
 };
+
+export type SkillLinkState =
+  | "NOT_REQUIRED"
+  | "MISSING_FOREIGN_KEY"
+  | "TARGET_UNRESOLVED"
+  | "MATCHED"
+  | "OUTSIDE_OUTCOME_TARGETS";
+
+export type ContentVersionLinkState =
+  | "NOT_REQUIRED"
+  | "MISSING_FOREIGN_KEY"
+  | "TARGET_UNRESOLVED"
+  | "PUBLISHED"
+  | "NOT_PUBLISHED"
+  | "OPTIONAL_FALLBACK_READY"
+  | "OPTIONAL_FALLBACK_TARGET_UNRESOLVED"
+  | "OPTIONAL_FALLBACK_NOT_PUBLISHED";
+
+/** Distinguishes a missing link from a linked row hidden by RLS. */
+export function classifySkillLink(input: {
+  expectedSkillCodes: readonly string[];
+  skillId: string | null;
+  skillCode: string | null;
+}): { state: SkillLinkState; warningCode: string | null } {
+  if (input.expectedSkillCodes.length === 0) return { state: "NOT_REQUIRED", warningCode: null };
+  if (!input.skillId) return { state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" };
+  if (!input.skillCode)
+    return { state: "TARGET_UNRESOLVED", warningCode: "SKILL_LINK_TARGET_UNRESOLVED" };
+  if (!input.expectedSkillCodes.includes(input.skillCode))
+    return {
+      state: "OUTSIDE_OUTCOME_TARGETS",
+      warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+    };
+  return { state: "MATCHED", warningCode: null };
+}
+
+/** An FK whose row is not visible cannot be called absent without bypassing RLS. */
+export function classifyContentVersionLink(input: {
+  required: boolean;
+  fallbackResourceReady: boolean;
+  contentVersionId: string | null;
+  relationVisible: boolean;
+  versionStatus: string | null;
+  contentStatus: string | null;
+  contentDeleted: boolean | null;
+}): {
+  state: ContentVersionLinkState;
+  issueCode: string | null;
+  warningCode: string | null;
+} {
+  if (!input.contentVersionId) {
+    if (input.fallbackResourceReady)
+      return { state: "OPTIONAL_FALLBACK_READY", issueCode: null, warningCode: null };
+    if (!input.required) return { state: "NOT_REQUIRED", issueCode: null, warningCode: null };
+    return {
+      state: "MISSING_FOREIGN_KEY",
+      issueCode: "CONTENT_VERSION_LINK_MISSING",
+      warningCode: null,
+    };
+  }
+  if (!input.relationVisible) {
+    if (input.fallbackResourceReady)
+      return {
+        state: "OPTIONAL_FALLBACK_TARGET_UNRESOLVED",
+        issueCode: null,
+        warningCode: "CONTENT_VERSION_TARGET_UNRESOLVED",
+      };
+    if (!input.required)
+      return {
+        state: "TARGET_UNRESOLVED",
+        issueCode: null,
+        warningCode: "CONTENT_VERSION_TARGET_UNRESOLVED",
+      };
+    return {
+      state: "TARGET_UNRESOLVED",
+      issueCode: "CONTENT_VERSION_TARGET_UNRESOLVED",
+      warningCode: null,
+    };
+  }
+  if (
+    input.versionStatus !== "PUBLISHED" ||
+    input.contentStatus !== "PUBLISHED" ||
+    input.contentDeleted !== false
+  ) {
+    if (input.fallbackResourceReady)
+      return {
+        state: "OPTIONAL_FALLBACK_NOT_PUBLISHED",
+        issueCode: null,
+        warningCode: "CONTENT_VERSION_NOT_PUBLISHED_OPTIONAL_FALLBACK",
+      };
+    return {
+      state: "NOT_PUBLISHED",
+      issueCode: "CONTENT_VERSION_NOT_PUBLISHED",
+      warningCode: null,
+    };
+  }
+  return { state: "PUBLISHED", issueCode: null, warningCode: null };
+}
 
 export type ProductionLearningRouteUnitSnapshot = {
   code: string;
@@ -123,6 +226,12 @@ function issueCodes(path: ProductionLearningRoutePathSnapshot): string[] {
     ...(unit.status !== "PUBLISHED" ? [`UNIT_NOT_PUBLISHED:${unit.code}`] : []),
     ...unit.steps.flatMap((step) => step.issueCodes.map((code) => `${code}:${step.stableKey}`)),
   ]);
+}
+
+function warningCodes(path: ProductionLearningRoutePathSnapshot): string[] {
+  return path.units.flatMap((unit) =>
+    unit.steps.flatMap((step) => step.warningCodes.map((code) => `${code}:${step.stableKey}`)),
+  );
 }
 
 function graphAccessState(path: ProductionLearningRoutePathSnapshot): string {
@@ -265,6 +374,8 @@ export function buildProductionLearningRouteAudit(input: {
         publishedPathSourceMatches: publishedPaths.filter(sourceGraphMatches).length,
         publishedPathsWithLinkIssues: publishedPaths.filter((path) => issueCodes(path).length > 0)
           .length,
+        publishedPathsWithWarnings: publishedPaths.filter((path) => warningCodes(path).length > 0)
+          .length,
       },
       visibleEnrollmentCountsByPathAndStatus: enrollmentCounts,
       paths: routePaths.map((path) => {
@@ -342,6 +453,10 @@ export function buildProductionLearningRouteAudit(input: {
               isActive: step.isActive,
               skillCode: step.skillCode,
               skillCategory: step.skillCategory,
+              expectedSkillCodes: step.expectedSkillCodes,
+              skillLinkState: step.skillLinkState,
+              contentVersionLinkState: step.contentVersionLinkState,
+              contentVersionFallbackReady: step.contentVersionFallbackReady,
               contentVersionStatus: step.contentVersionStatus,
               contentStatus: step.contentStatus,
               exerciseTemplateVersionStatus: step.exerciseTemplateVersionStatus,
@@ -354,9 +469,11 @@ export function buildProductionLearningRouteAudit(input: {
               configuredPrerequisiteStableKeys: step.configuredPrerequisiteStableKeys,
               expectedResourceLinksMatch: step.expectedResourceLinksMatch,
               issues: step.issueCodes,
+              warnings: step.warningCodes,
             })),
           })),
           published,
+          warnings: warningCodes(path),
         };
       }),
     };
@@ -374,16 +491,18 @@ export function buildProductionLearningRouteAudit(input: {
     }));
   const blockedOrIncompletePathCount = input.paths.filter(
     (path) =>
-      /^EDUCATION_V2_P1_/u.test(path.code) && graphAccessState(path) !== "READY_FOR_ASSIGNMENT",
+      /^EDUCATION_V2_P1_/u.test(path.code) &&
+      isPublishedPath(path) &&
+      graphAccessState(path) !== "READY_FOR_ASSIGNMENT",
   ).length;
   const hasFailures =
     blockedOrIncompletePathCount > 0 ||
     routes.some(
       (route) =>
-        route.source.releaseBlockedCycleCount > 0 ||
         route.production.missingPublishedSourcePaths.length > 0 ||
         route.production.unmatchedProductionPaths.length > 0 ||
-        route.production.publishedPathsWithLinkIssues > 0,
+        route.production.publishedPathsWithLinkIssues > 0 ||
+        route.production.publishedPathsWithWarnings > 0,
     ) ||
     unmatchedP1Paths.length > 0;
 

@@ -6,11 +6,14 @@ import {
 } from "../src/curriculum/learning-route-catalog.js";
 import {
   buildProductionLearningRouteAudit,
+  classifyContentVersionLink,
+  classifySkillLink,
   type ProductionLearningRoutePathSnapshot,
   type ProductionLearningRouteStepSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
 import { parseCatalogTargetUrl } from "../src/curriculum/catalog-target-verification.js";
 import { providerForHost, targetIdentityFingerprint } from "../src/lib/db-fingerprint-contract.js";
+import { resolveTrainingRuntimeConfig } from "../src/modules/training/exercise-contract.js";
 
 const AUDIT_SOURCE_COMMIT = process.env.GITHUB_SHA?.trim() || "UNVERIFIED";
 
@@ -200,6 +203,7 @@ async function main(): Promise<void> {
                         id: true,
                         status: true,
                         template: { select: { status: true, deletedAt: true } },
+                        config: true,
                         contents: {
                           orderBy: { position: "asc" },
                           select: {
@@ -231,6 +235,7 @@ async function main(): Promise<void> {
                     assessment: {
                       select: { status: true, deletedAt: true, config: true },
                     },
+                    skillId: true,
                     skill: { select: { code: true, category: true } },
                   },
                 },
@@ -331,6 +336,7 @@ async function main(): Promise<void> {
               status: unit.status,
               steps: unit.steps.map((step): ProductionLearningRouteStepSnapshot => {
                 const issues: string[] = [];
+                const warnings: string[] = [];
                 const expected = expectedSteps.get(step.stableKey);
                 const assessmentTemplateId = assessmentTemplateVersionId(step.assessment?.config);
                 const assessmentTemplate = assessmentTemplateId
@@ -363,16 +369,30 @@ async function main(): Promise<void> {
                 if (unit.status !== "PUBLISHED" && step.status === "PUBLISHED")
                   issues.push("STEP_IN_UNPUBLISHED_UNIT");
 
-                if (step.type === "TEACHING" || step.type === "SMALL_STUDY") {
-                  if (!step.contentVersionId || !step.contentVersion)
-                    issues.push("CONTENT_VERSION_MISSING");
-                  else if (
-                    step.contentVersion.status !== "PUBLISHED" ||
-                    step.contentVersion.content.status !== "PUBLISHED" ||
-                    step.contentVersion.content.deletedAt !== null
-                  )
-                    issues.push("CONTENT_VERSION_NOT_PUBLISHED");
-                }
+                const smallStudyTemplateReady = Boolean(
+                  step.type === "SMALL_STUDY" &&
+                  step.exerciseTemplateVersionId &&
+                  step.exerciseTemplateVersion?.status === "PUBLISHED" &&
+                  step.exerciseTemplateVersion.template.status === "PUBLISHED" &&
+                  step.exerciseTemplateVersion.template.deletedAt === null &&
+                  resolveTrainingRuntimeConfig("TRAINING", step.exerciseTemplateVersion.config)
+                    .status === "READY",
+                );
+                const contentVersionLink = classifyContentVersionLink({
+                  required:
+                    step.type === "TEACHING" ||
+                    (step.type === "SMALL_STUDY" && !smallStudyTemplateReady),
+                  fallbackResourceReady: smallStudyTemplateReady,
+                  contentVersionId: step.contentVersionId,
+                  relationVisible: Boolean(step.contentVersion),
+                  versionStatus: step.contentVersion?.status ?? null,
+                  contentStatus: step.contentVersion?.content.status ?? null,
+                  contentDeleted: step.contentVersion
+                    ? step.contentVersion.content.deletedAt !== null
+                    : null,
+                });
+                if (contentVersionLink.issueCode) issues.push(contentVersionLink.issueCode);
+                if (contentVersionLink.warningCode) warnings.push(contentVersionLink.warningCode);
                 if (step.type === "PRACTICE" || step.type === "REINFORCEMENT") {
                   if (!step.exerciseTemplateVersionId || !step.exerciseTemplateVersion)
                     issues.push("EXERCISE_TEMPLATE_VERSION_MISSING");
@@ -432,11 +452,12 @@ async function main(): Promise<void> {
                         ),
                       ]
                     : [];
-                if (
-                  expectedSkillCodes.length > 0 &&
-                  (!step.skill?.code || !expectedSkillCodes.includes(step.skill.code))
-                )
-                  issues.push("SKILL_LINK_MISSING_OR_MISMATCHED");
+                const skillLink = classifySkillLink({
+                  expectedSkillCodes,
+                  skillId: step.skillId,
+                  skillCode: step.skill?.code ?? null,
+                });
+                if (skillLink.warningCode) warnings.push(skillLink.warningCode);
 
                 const configuredPrerequisiteIds = stringArray(
                   objectValue(step.completionRule)?.prerequisiteStepIds,
@@ -471,6 +492,8 @@ async function main(): Promise<void> {
                   prerequisiteStepId: step.prerequisiteStepId,
                   completionRule: step.completionRule,
                   contentVersionId: step.contentVersionId,
+                  contentVersionLinkState: contentVersionLink.state,
+                  contentVersionFallbackReady: smallStudyTemplateReady,
                   contentVersionStatus: step.contentVersion?.status ?? null,
                   contentStatus: step.contentVersion?.content.status ?? null,
                   contentDeleted:
@@ -503,6 +526,8 @@ async function main(): Promise<void> {
                   unpublishedLinkedContentVersionCount,
                   skillCode: step.skill?.code ?? null,
                   skillCategory: step.skill?.category ?? null,
+                  expectedSkillCodes,
+                  skillLinkState: skillLink.state,
                   prerequisiteStableKey: step.prerequisiteStep?.stableKey ?? null,
                   prerequisitePathId: step.prerequisiteStep?.unit.pathId ?? null,
                   configuredPrerequisiteIds,
@@ -511,6 +536,7 @@ async function main(): Promise<void> {
                   ),
                   expectedResourceLinksMatch,
                   issueCodes: [...new Set(issues)],
+                  warningCodes: [...new Set(warnings)],
                 };
               }),
             })),
@@ -542,7 +568,12 @@ async function main(): Promise<void> {
             tenantAndEnrollmentRows: rlsVisibility,
             countsDescribeOnlyRowsVisibleToThisRole: true,
           },
-          routeScope: "GLOBAL_AND_TENANT_SCOPED_P1_PATHS",
+          routeScope: "P1_PATHS_VISIBLE_TO_AUDIT_ROLE",
+          tenantScopedPathVisibility:
+            rlsVisibility === "RLS_BYPASS_CONFIRMED"
+              ? "ALL_SCOPES_VISIBLE"
+              : "TENANT_SCOPED_ROWS_MAY_BE_FILTERED",
+          pathAndStepCountsDescribeVisibleRowsOnly: true,
           enrollmentCountsAreVisibleToAuditRoleOnly: true,
         };
       },

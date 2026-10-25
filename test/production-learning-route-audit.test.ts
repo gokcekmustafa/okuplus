@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { LEARNING_ROUTE_CYCLES } from "../src/curriculum/learning-route-catalog.js";
 import {
   buildProductionLearningRouteAudit,
+  classifyContentVersionLink,
+  classifySkillLink,
   type ProductionLearningRoutePathSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
 
@@ -43,6 +45,15 @@ function publishedPath(
         const stableKey = `${cycle.programId}:${item.key}`;
         const questionVersionIds =
           expected.exercise?.questionVersionIds ?? expected.assessment?.questionVersionIds ?? [];
+        const expectedSkillCodes = [
+          ...new Set(
+            expected.learningOutcomeKeys.flatMap(
+              (key) =>
+                cycle.manifest.learningOutcomes.find((outcome) => outcome.key === key)
+                  ?.targetSkillCodes ?? [],
+            ),
+          ),
+        ];
         const prerequisites = expected.prerequisiteKeys.map((key) =>
           idByKey.get(`${cycle.programId}:${key}`)!,
         );
@@ -56,6 +67,8 @@ function publishedPath(
           prerequisiteStepId: null,
           completionRule: { prerequisiteStepIds: prerequisites },
           contentVersionId: expected.content?.versionId ?? null,
+          contentVersionLinkState: expected.content ? "PUBLISHED" : "NOT_REQUIRED",
+          contentVersionFallbackReady: false,
           contentVersionStatus: expected.content ? "PUBLISHED" : null,
           contentStatus: expected.content ? "PUBLISHED" : null,
           contentDeleted: expected.content ? false : null,
@@ -74,13 +87,11 @@ function publishedPath(
           unpublishedQuestionVersionCount: 0,
           linkedContentVersionIds: [],
           unpublishedLinkedContentVersionCount: 0,
-          skillCode:
-            expected.learningOutcomeKeys.flatMap(
-              (key) =>
-                cycle.manifest.learningOutcomes.find((outcome) => outcome.key === key)
-                  ?.targetSkillCodes ?? [],
-            )[0] ?? null,
+          skillCode: expectedSkillCodes[0] ?? null,
           skillCategory: "COMPREHENSION",
+          expectedSkillCodes,
+          skillLinkState: expectedSkillCodes.length ? "MATCHED" : "NOT_REQUIRED",
+          warningCodes: [],
           prerequisiteStableKey: null,
           prerequisitePathId: null,
           configuredPrerequisiteIds: prerequisites,
@@ -177,7 +188,7 @@ describe("production A-D learning route audit", () => {
         ...unit,
         steps: unit.steps.map((step, stepIndex) =>
           unitIndex === 0 && stepIndex === 0
-            ? { ...step, issueCodes: ["CONTENT_VERSION_MISSING"] }
+            ? { ...step, issueCodes: ["CONTENT_VERSION_LINK_MISSING"] }
             : step,
         ),
       })),
@@ -212,5 +223,135 @@ describe("production A-D learning route audit", () => {
     expect(
       audit.routes.find((item) => item.routeFamily === "A")?.paths[0]?.assignmentReadiness,
     ).toBe("GRAPH_DOES_NOT_MATCH_SOURCE");
+  });
+
+  it("distinguishes a missing skill link from an RLS-hidden or non-outcome target", () => {
+    const expectedSkillCodes = ["RC_DETAIL"];
+    expect(classifySkillLink({ expectedSkillCodes, skillId: null, skillCode: null })).toEqual({
+      state: "MISSING_FOREIGN_KEY",
+      warningCode: "SKILL_LINK_MISSING",
+    });
+    expect(classifySkillLink({ expectedSkillCodes, skillId: "skill-fk", skillCode: null })).toEqual(
+      {
+        state: "TARGET_UNRESOLVED",
+        warningCode: "SKILL_LINK_TARGET_UNRESOLVED",
+      },
+    );
+    expect(
+      classifySkillLink({ expectedSkillCodes, skillId: "skill-fk", skillCode: "RC_MAIN_IDEA" }),
+    ).toEqual({
+      state: "OUTSIDE_OUTCOME_TARGETS",
+      warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+    });
+    expect(
+      classifySkillLink({ expectedSkillCodes, skillId: "skill-fk", skillCode: "RC_DETAIL" }),
+    ).toEqual({ state: "MATCHED", warningCode: null });
+  });
+
+  it("distinguishes a missing content FK from an unresolved target and an unpublished version", () => {
+    expect(
+      classifyContentVersionLink({
+        required: true,
+        fallbackResourceReady: false,
+        contentVersionId: null,
+        relationVisible: false,
+        versionStatus: null,
+        contentStatus: null,
+        contentDeleted: null,
+      }),
+    ).toEqual({
+      state: "MISSING_FOREIGN_KEY",
+      issueCode: "CONTENT_VERSION_LINK_MISSING",
+      warningCode: null,
+    });
+    expect(
+      classifyContentVersionLink({
+        required: true,
+        fallbackResourceReady: false,
+        contentVersionId: "content-fk",
+        relationVisible: false,
+        versionStatus: null,
+        contentStatus: null,
+        contentDeleted: null,
+      }),
+    ).toEqual({
+      state: "TARGET_UNRESOLVED",
+      issueCode: "CONTENT_VERSION_TARGET_UNRESOLVED",
+      warningCode: null,
+    });
+    expect(
+      classifyContentVersionLink({
+        required: true,
+        fallbackResourceReady: false,
+        contentVersionId: "content-fk",
+        relationVisible: true,
+        versionStatus: "DRAFT",
+        contentStatus: "PUBLISHED",
+        contentDeleted: false,
+      }),
+    ).toEqual({
+      state: "NOT_PUBLISHED",
+      issueCode: "CONTENT_VERSION_NOT_PUBLISHED",
+      warningCode: null,
+    });
+  });
+
+  it("allows a missing small-study text link when the published training fallback is runnable", () => {
+    expect(
+      classifyContentVersionLink({
+        required: false,
+        fallbackResourceReady: true,
+        contentVersionId: null,
+        relationVisible: false,
+        versionStatus: null,
+        contentStatus: null,
+        contentDeleted: null,
+      }),
+    ).toEqual({
+      state: "OPTIONAL_FALLBACK_READY",
+      issueCode: null,
+      warningCode: null,
+    });
+  });
+
+  it("does not count deliberately release-blocked source drafts as production graph failures", () => {
+    const cycle = LEARNING_ROUTE_CYCLES.find((candidate) => candidate.routeFamily === "A")!;
+    const blockedCycle = { ...cycle, publicationApproved: () => false };
+    const audit = buildProductionLearningRouteAudit({
+      sourceCycles: [blockedCycle],
+      paths: [],
+      enrollments: [],
+    });
+    expect(
+      audit.routes.find((item) => item.routeFamily === "A")?.source.releaseBlockedCycleCount,
+    ).toBe(1);
+    expect(audit.status).toBe("PASS");
+  });
+
+  it("reports skill-link discrepancies as warnings without blocking student assignment", () => {
+    const cycle = LEARNING_ROUTE_CYCLES.find((candidate) => candidate.routeFamily === "A")!;
+    const path = publishedPath(cycle);
+    const warned = {
+      ...path,
+      units: path.units.map((unit, unitIndex) => ({
+        ...unit,
+        steps: unit.steps.map((step, stepIndex) =>
+          unitIndex === 0 && stepIndex === 0
+            ? { ...step, warningCodes: ["SKILL_LINK_OUTSIDE_OUTCOME_TARGETS"] }
+            : step,
+        ),
+      })),
+    };
+    const audit = buildProductionLearningRouteAudit({
+      sourceCycles: [cycle],
+      paths: [warned],
+      enrollments: [],
+    });
+    const route = audit.routes.find((item) => item.routeFamily === "A")!;
+    expect(route.production.publishedPathsWithWarnings).toBe(1);
+    expect(route.paths[0]?.assignmentReadiness).toBe(
+      cycle.publicationApproved() ? "READY_FOR_ASSIGNMENT" : "SOURCE_RELEASE_BLOCKED",
+    );
+    expect(audit.status).toBe("PARTIAL");
   });
 });
