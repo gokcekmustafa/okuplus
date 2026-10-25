@@ -98,9 +98,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_release="$(npx --no-install tsx -e 'import { p0Station9V3ReleaseFingerprint } from "./src/curriculum/p0-station9-question-release.js"; process.stdout.write(p0Station9V3ReleaseFingerprint())')"
+          expected_release="$(npx --no-install tsx -e 'import { p0Station9V3ReleaseFingerprint } from "./src/curriculum/p0-station9-question-release.ts"; process.stdout.write(p0Station9V3ReleaseFingerprint())')"
           test "${expected_release}" = "${PRODUCTION_CURRICULUM_REPAIR_RELEASE_ID}"
-          expected_approval="$(npx --no-install tsx -e 'import { p0Station9OwnerApprovalToken } from "./src/curriculum/p0-station9-question-release.js"; process.stdout.write(p0Station9OwnerApprovalToken(process.env.GITHUB_SHA ?? ""))')"
+          expected_approval="$(npx --no-install tsx -e 'import { p0Station9OwnerApprovalToken } from "./src/curriculum/p0-station9-question-release.ts"; process.stdout.write(p0Station9OwnerApprovalToken(process.env.GITHUB_SHA ?? ""))')"
           test "${expected_approval}" = "${PRODUCTION_CURRICULUM_REPAIR_OWNER_APPROVAL}"
           echo "P0_STATION9_RELEASE_FINGERPRINT=PASS" >> "${GITHUB_STEP_SUMMARY}"
           echo "PRODUCT_OWNER_APPROVAL=PASS_FOR_STATION_9_V3_ONLY" >> "${GITHUB_STEP_SUMMARY}"

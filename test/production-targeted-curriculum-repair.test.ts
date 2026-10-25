@@ -23,6 +23,8 @@ describe("targeted production curriculum repair scope", () => {
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
     expect(workflow).toContain("PRODUCTION_CURRICULUM_REPAIR_OWNER_APPROVAL");
     expect(workflow).toContain("contents: read");
+    expect(workflow).toContain("p0-station9-question-release.ts");
+    expect(workflow).not.toContain("p0-station9-question-release.js");
     expect(workflow).not.toMatch(/migrate deploy|migrate resolve|seed-education-v2/u);
   });
 
