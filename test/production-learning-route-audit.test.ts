@@ -5,6 +5,7 @@ import {
   buildProductionLearningRouteAudit,
   classifyContentVersionLink,
   classifySkillLink,
+  productionLearningRouteAuditStatus,
   type ProductionLearningRoutePathSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
 
@@ -115,6 +116,9 @@ describe("production A-D learning route audit", () => {
     expect(workflow).toContain("PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT");
     expect(workflow).toContain("secrets.PRODUCTION_DATABASE_URL");
     expect(workflow).toContain("Audit all production P1 route graphs in a read-only transaction");
+    expect(workflow).toContain('.routeIntegrityStatus // "UNKNOWN"');
+    expect(workflow).toContain('.dataQualityStatus // "UNKNOWN"');
+    expect(workflow).toContain('.auditRoleVisibility.tenantAndEnrollmentRows // "UNKNOWN"');
     expect(workflow).not.toContain("migrate deploy");
     expect(workflow).not.toContain("--apply");
   });
@@ -201,6 +205,8 @@ describe("production A-D learning route audit", () => {
     expect(
       audit.routes.find((item) => item.routeFamily === "A")?.paths[0]?.assignmentReadiness,
     ).toBe("GRAPH_HAS_INCOMPLETE_LINKS");
+    expect(audit.routeIntegrityStatus).toBe("PARTIAL");
+    expect(audit.status).toBe("PARTIAL");
   });
 
   it("rejects a production unit sequence that differs from the source route order", () => {
@@ -223,6 +229,7 @@ describe("production A-D learning route audit", () => {
     expect(
       audit.routes.find((item) => item.routeFamily === "A")?.paths[0]?.assignmentReadiness,
     ).toBe("GRAPH_DOES_NOT_MATCH_SOURCE");
+    expect(audit.routeIntegrityStatus).toBe("PARTIAL");
   });
 
   it("distinguishes a missing skill link from an RLS-hidden or non-outcome target", () => {
@@ -328,17 +335,29 @@ describe("production A-D learning route audit", () => {
     expect(audit.status).toBe("PASS");
   });
 
-  it("reports skill-link discrepancies as warnings without blocking student assignment", () => {
+  it("reports skill-link discrepancies as data-quality warnings without failing route integrity", () => {
     const cycle = LEARNING_ROUTE_CYCLES.find((candidate) => candidate.routeFamily === "A")!;
     const path = publishedPath(cycle);
+    const missingSkillStepKey = path.units[0]?.steps[1]?.stableKey;
+    const mismatchedSkillStepKey = path.units[0]?.steps[0]?.stableKey;
     const warned = {
       ...path,
       units: path.units.map((unit, unitIndex) => ({
         ...unit,
         steps: unit.steps.map((step, stepIndex) =>
           unitIndex === 0 && stepIndex === 0
-            ? { ...step, warningCodes: ["SKILL_LINK_OUTSIDE_OUTCOME_TARGETS"] }
-            : step,
+            ? {
+                ...step,
+                skillLinkState: "OUTSIDE_OUTCOME_TARGETS",
+                warningCodes: ["SKILL_LINK_OUTSIDE_OUTCOME_TARGETS"],
+              }
+            : unitIndex === 0 && stepIndex === 1
+              ? {
+                  ...step,
+                  skillLinkState: "MISSING_FOREIGN_KEY",
+                  warningCodes: ["SKILL_LINK_MISSING"],
+                }
+              : step,
         ),
       })),
     };
@@ -349,9 +368,68 @@ describe("production A-D learning route audit", () => {
     });
     const route = audit.routes.find((item) => item.routeFamily === "A")!;
     expect(route.production.publishedPathsWithWarnings).toBe(1);
+    expect(route.production.dataQualityWarningCount).toBe(2);
+    expect(route.production.dataQualityWarningsByCode).toEqual({
+      SKILL_LINK_MISSING: 1,
+      SKILL_LINK_OUTSIDE_OUTCOME_TARGETS: 1,
+    });
     expect(route.paths[0]?.assignmentReadiness).toBe(
       cycle.publicationApproved() ? "READY_FOR_ASSIGNMENT" : "SOURCE_RELEASE_BLOCKED",
     );
+    expect(audit.routeIntegrityStatus).toBe("PASS");
+    expect(audit.status).toBe("PASS");
+    expect(audit.dataQualityStatus).toBe("WARNINGS_PRESENT");
+    expect(audit.dataQualityWarningCount).toBe(2);
+    expect(audit.dataQualityWarningsByCode).toEqual({
+      SKILL_LINK_OUTSIDE_OUTCOME_TARGETS: 1,
+      SKILL_LINK_MISSING: 1,
+    });
+    expect(audit.dataQualityWarnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pathCode: cycle.pathCode,
+          stableKey: missingSkillStepKey,
+          code: "SKILL_LINK_MISSING",
+        }),
+        expect.objectContaining({
+          pathCode: cycle.pathCode,
+          stableKey: mismatchedSkillStepKey,
+          code: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+        }),
+      ]),
+    );
+  });
+
+  it.each([
+    "CONTENT_VERSION_LINK_MISSING",
+    "EXERCISE_TEMPLATE_VERSION_MISSING",
+    "EXERCISE_HAS_NO_QUESTION_VERSIONS",
+    "PREREQUISITE_MISSING_OR_OUTSIDE_PATH",
+  ])("keeps blocking route issue %s as PARTIAL", (issueCode) => {
+    const cycle = LEARNING_ROUTE_CYCLES.find((candidate) => candidate.routeFamily === "A")!;
+    const path = publishedPath(cycle);
+    const broken = {
+      ...path,
+      units: path.units.map((unit, unitIndex) => ({
+        ...unit,
+        steps: unit.steps.map((step, stepIndex) =>
+          unitIndex === 0 && stepIndex === 0 ? { ...step, issueCodes: [issueCode] } : step,
+        ),
+      })),
+    };
+    const audit = buildProductionLearningRouteAudit({
+      sourceCycles: [cycle],
+      paths: [broken],
+      enrollments: [],
+    });
+    expect(audit.routeIntegrityStatus).toBe("PARTIAL");
     expect(audit.status).toBe("PARTIAL");
+    expect(audit.blockedOrIncompletePathCount).toBe(1);
+  });
+
+  it("does not pass the overall audit when RLS visibility is not verified", () => {
+    expect(productionLearningRouteAuditStatus("PASS", "RLS_BYPASS_CONFIRMED")).toBe("PASS");
+    expect(productionLearningRouteAuditStatus("PASS", "RLS_FILTER_POSSIBLE")).toBe("PARTIAL");
+    expect(productionLearningRouteAuditStatus("PARTIAL", "RLS_BYPASS_CONFIRMED")).toBe("PARTIAL");
   });
 });

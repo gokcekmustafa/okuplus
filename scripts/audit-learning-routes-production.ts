@@ -8,6 +8,7 @@ import {
   buildProductionLearningRouteAudit,
   classifyContentVersionLink,
   classifySkillLink,
+  productionLearningRouteAuditStatus,
   type ProductionLearningRoutePathSnapshot,
   type ProductionLearningRouteStepSnapshot,
 } from "../src/curriculum/production-learning-route-audit.js";
@@ -554,10 +555,10 @@ async function main(): Promise<void> {
             : "RLS_FILTER_POSSIBLE";
         return {
           ...routeAudit,
-          status:
-            routeAudit.status === "PASS" && rlsVisibility === "RLS_BYPASS_CONFIRMED"
-              ? "PASS"
-              : "PARTIAL",
+          status: productionLearningRouteAuditStatus(
+            routeAudit.routeIntegrityStatus,
+            rlsVisibility,
+          ),
           productionWrite: "NO" as const,
           transactionMode: "READ ONLY" as const,
           auditSourceCommit: AUDIT_SOURCE_COMMIT,

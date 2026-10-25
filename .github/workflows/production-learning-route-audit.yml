@@ -82,7 +82,12 @@ jobs:
           set -e
           cat production-learning-route-audit.json >> "${GITHUB_STEP_SUMMARY}"
           if [ "${audit_exit_code}" -ne 0 ]; then
-            echo "Production route audit is blocked or found incomplete routes; no write was attempted."
+            audit_status="$(jq -r '.status // "UNKNOWN"' production-learning-route-audit.json)"
+            route_integrity="$(jq -r '.routeIntegrityStatus // "UNKNOWN"' production-learning-route-audit.json)"
+            data_quality="$(jq -r '.dataQualityStatus // "UNKNOWN"' production-learning-route-audit.json)"
+            warning_count="$(jq -r '.dataQualityWarningCount // 0' production-learning-route-audit.json)"
+            visibility="$(jq -r '.auditRoleVisibility.tenantAndEnrollmentRows // "UNKNOWN"' production-learning-route-audit.json)"
+            echo "Production route audit did not pass: overall=${audit_status}; route integrity=${route_integrity}; data quality=${data_quality} (${warning_count} warnings); row visibility=${visibility}. No write was attempted."
             exit "${audit_exit_code}"
           fi
 

@@ -61,6 +61,21 @@ export type ContentVersionLinkState =
   | "OPTIONAL_FALLBACK_TARGET_UNRESOLVED"
   | "OPTIONAL_FALLBACK_NOT_PUBLISHED";
 
+export type ProductionLearningRouteIntegrityStatus = "PASS" | "PARTIAL";
+export type ProductionLearningRouteDataQualityStatus = "CLEAN" | "WARNINGS_PRESENT";
+export type ProductionLearningRouteVisibilityStatus =
+  "RLS_BYPASS_CONFIRMED" | "RLS_FILTER_POSSIBLE";
+
+/** RLS uncertainty remains a blocker even when all visible route graphs are sound. */
+export function productionLearningRouteAuditStatus(
+  routeIntegrityStatus: ProductionLearningRouteIntegrityStatus,
+  visibilityStatus: ProductionLearningRouteVisibilityStatus,
+): ProductionLearningRouteIntegrityStatus {
+  return routeIntegrityStatus === "PASS" && visibilityStatus === "RLS_BYPASS_CONFIRMED"
+    ? "PASS"
+    : "PARTIAL";
+}
+
 /** Distinguishes a missing link from a linked row hidden by RLS. */
 export function classifySkillLink(input: {
   expectedSkillCodes: readonly string[];
@@ -229,9 +244,13 @@ function issueCodes(path: ProductionLearningRoutePathSnapshot): string[] {
 }
 
 function warningCodes(path: ProductionLearningRoutePathSnapshot): string[] {
-  return path.units.flatMap((unit) =>
-    unit.steps.flatMap((step) => step.warningCodes.map((code) => `${code}:${step.stableKey}`)),
-  );
+  return path.units
+    .filter((unit) => unit.status === "PUBLISHED")
+    .flatMap((unit) =>
+      unit.steps
+        .filter((step) => step.status === "PUBLISHED")
+        .flatMap((step) => step.warningCodes.map((code) => `${code}:${step.stableKey}`)),
+    );
 }
 
 function graphAccessState(path: ProductionLearningRoutePathSnapshot): string {
@@ -262,11 +281,36 @@ export function buildProductionLearningRouteAudit(input: {
     enrollmentsByPath.set(enrollment.learningPathId, rows);
   }
 
+  const dataQualityWarningDetails = input.paths.filter(isPublishedPath).flatMap((path) =>
+    path.units
+      .filter((unit) => unit.status === "PUBLISHED")
+      .flatMap((unit) =>
+        unit.steps
+          .filter((step) => step.status === "PUBLISHED")
+          .flatMap((step) =>
+            step.warningCodes.map((code) => ({
+              routeFamily: routeFamilyForCode(path.code),
+              pathCode: path.code,
+              pathVersion: path.version,
+              unitCode: unit.code,
+              stableKey: step.stableKey,
+              code,
+            })),
+          ),
+      ),
+  );
+  const dataQualityWarningsByCode = counts(dataQualityWarningDetails.map((item) => item.code));
+  const dataQualityStatus: ProductionLearningRouteDataQualityStatus =
+    dataQualityWarningDetails.length > 0 ? "WARNINGS_PRESENT" : "CLEAN";
+
   const routes = ROUTE_FAMILIES.map((routeFamily) => {
     const sourceCycles = input.sourceCycles.filter((cycle) => cycle.routeFamily === routeFamily);
     const routePaths = input.paths.filter((path) => routeFamilyForCode(path.code) === routeFamily);
     const publishedPaths = routePaths.filter(isPublishedPath);
     const steps = publishedPaths.flatMap(publishedSteps);
+    const routeDataQualityWarnings = dataQualityWarningDetails.filter(
+      (warning) => warning.routeFamily === routeFamily,
+    );
     const sourceExpectedCodes = new Set(sourceCycles.map((cycle) => cycle.pathCode));
     const sourceCyclesWithoutPublishedGraph = sourceCycles
       .filter(
@@ -376,6 +420,9 @@ export function buildProductionLearningRouteAudit(input: {
           .length,
         publishedPathsWithWarnings: publishedPaths.filter((path) => warningCodes(path).length > 0)
           .length,
+        dataQualityStatus: routeDataQualityWarnings.length > 0 ? "WARNINGS_PRESENT" : "CLEAN",
+        dataQualityWarningCount: routeDataQualityWarnings.length,
+        dataQualityWarningsByCode: counts(routeDataQualityWarnings.map((item) => item.code)),
       },
       visibleEnrollmentCountsByPathAndStatus: enrollmentCounts,
       paths: routePaths.map((path) => {
@@ -495,19 +542,28 @@ export function buildProductionLearningRouteAudit(input: {
       isPublishedPath(path) &&
       graphAccessState(path) !== "READY_FOR_ASSIGNMENT",
   ).length;
-  const hasFailures =
+  const hasRouteIntegrityFailures =
     blockedOrIncompletePathCount > 0 ||
     routes.some(
       (route) =>
         route.production.missingPublishedSourcePaths.length > 0 ||
         route.production.unmatchedProductionPaths.length > 0 ||
-        route.production.publishedPathsWithLinkIssues > 0 ||
-        route.production.publishedPathsWithWarnings > 0,
+        route.production.publishedPathsWithLinkIssues > 0,
     ) ||
     unmatchedP1Paths.length > 0;
+  const routeIntegrityStatus: ProductionLearningRouteIntegrityStatus = hasRouteIntegrityFailures
+    ? "PARTIAL"
+    : "PASS";
 
   return {
-    status: hasFailures ? "PARTIAL" : "PASS",
+    // `status` is retained as the route-integrity result for existing consumers.
+    // Data-quality warnings remain visible below but do not imply an unusable route.
+    status: routeIntegrityStatus,
+    routeIntegrityStatus,
+    dataQualityStatus,
+    dataQualityWarningCount: dataQualityWarningDetails.length,
+    dataQualityWarningsByCode,
+    dataQualityWarnings: dataQualityWarningDetails,
     sourceRouteCycleCount: input.sourceCycles.length,
     sourceStepCount: input.sourceCycles.reduce(
       (total, cycle) => total + cycle.manifest.steps.length,
