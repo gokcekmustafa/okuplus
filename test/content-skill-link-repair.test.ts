@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareContentSkillLinks,
+  buildContentSkillPlan,
   ensureContentSkillLinks,
   expectedContentSkillLinks,
   inspectContentSkillLinks,
@@ -52,6 +53,75 @@ describe("source-authorized content-skill relation repair", () => {
       state: "MISSING",
       missingLinks: [expected[1]!, expected[2]!],
       unexpectedLinks: [],
+    });
+  });
+
+  it("plans each unique missing pair once, excludes present pairs, and blocks unexpected relations", () => {
+    const sourceTargets = [
+      {
+        contentId: "content-a",
+        skillId: "skill-main",
+        skillCode: "RC_MAIN_IDEA",
+        pathCode: "route-a",
+        sourceStationKey: "station-1",
+        contentKey: "passage-1",
+        reason: "SOURCE_PRIMARY_COMPETENCY",
+      },
+      {
+        contentId: "content-a",
+        skillId: "skill-main",
+        skillCode: "RC_MAIN_IDEA",
+        pathCode: "route-a",
+        sourceStationKey: "station-2",
+        contentKey: "passage-1",
+        reason: "SOURCE_PRIMARY_COMPETENCY",
+      },
+      {
+        contentId: "content-a",
+        skillId: "skill-detail",
+        skillCode: "RC_DETAIL",
+        pathCode: "route-a",
+        sourceStationKey: "station-1",
+        contentKey: "passage-1",
+        reason: "LEARNING_OUTCOME_TARGET",
+      },
+    ];
+    const plan = buildContentSkillPlan(sourceTargets, [
+      { contentId: "content-a", skillId: "skill-main", skillCode: "RC_MAIN_IDEA" },
+      { contentId: "content-a", skillId: "unexpected", skillCode: "FAST_ATTENTION" },
+    ]);
+
+    expect(plan.expectedUniquePairCount).toBe(2);
+    expect(plan.missingPairs).toEqual([
+      {
+        contentId: "content-a",
+        skillId: "skill-detail",
+        skillCode: "RC_DETAIL",
+        sourceReferences: [
+          {
+            pathCode: "route-a",
+            sourceStationKey: "station-1",
+            contentKey: "passage-1",
+            reason: "LEARNING_OUTCOME_TARGET",
+          },
+        ],
+      },
+    ]);
+    expect(plan.unexpectedRelations).toEqual([
+      {
+        contentId: "content-a",
+        skillId: "unexpected",
+        skillCode: "FAST_ATTENTION",
+        reason: "EXISTING_RELATION_NOT_IN_SOURCE_PLAN",
+      },
+    ]);
+    expect(plan.decision).toBe("STOP_CONFLICT");
+  });
+
+  it("blocks a plan when source content or skill identity cannot be resolved", () => {
+    expect(buildContentSkillPlan([], [], 1)).toMatchObject({
+      missingPairs: [],
+      decision: "STOP_UNRESOLVED_SOURCE_LINK",
     });
   });
 

@@ -37,6 +37,7 @@ import {
   EDUCATION_V2_P1_800_DRAFT_CYCLES,
   type EducationV2P1ExpansionCategory,
 } from "./education-v2-p1-800-draft-cycles.js";
+import { mapCurriculumSkillCodesToStoredSkillCodes } from "./learning-step-skill-link.js";
 
 /** A route is an explicit chain of immutable content releases, not a level reassessment. */
 export type LearningRouteCycle = {
@@ -272,7 +273,7 @@ type AuthoredSkillProgram = {
     }[];
   };
   content: readonly { key: string; skillCode: string }[];
-  exercises: readonly { key: string; skillCode: string }[];
+  exercises: readonly { key: string; skillCode: string; contentKey: string }[];
   assessments: readonly { key: string; templateExerciseKey: string }[];
 };
 
@@ -329,6 +330,86 @@ export function sourcePrimarySkillCodesForRouteStep(
     if (exercise) skillCodes.add(exercise.skillCode);
   }
   return [...skillCodes];
+}
+
+export type SourceContentSkillTarget = {
+  pathCode: string;
+  sourceStationKey: string;
+  contentKey: string;
+  skillCode: string;
+  reason: "SOURCE_PRIMARY_COMPETENCY" | "LEARNING_OUTCOME_TARGET";
+};
+
+/**
+ * Returns the reviewed source mappings that provisioning stores on the
+ * content row for one route step. The result intentionally remains separate
+ * from the scalar LearningStep.skillId field so multi-skill outcomes survive.
+ */
+export function sourceContentSkillTargetsForRouteStep(
+  pathCode: string,
+  stableKey: string,
+): readonly SourceContentSkillTarget[] {
+  const cycle = cyclesByCode.get(pathCode);
+  if (!cycle) return [];
+  const program = authoredSkillPrograms.find(
+    (candidate) => candidate.programId === cycle.programId && candidate.path.code === pathCode,
+  );
+  if (!program) return [];
+
+  const localStepKey = stableKey.startsWith(`${program.programId}:`)
+    ? stableKey.slice(program.programId.length + 1)
+    : stableKey;
+  const step = program.path.units
+    .flatMap((unit) => unit.steps)
+    .find((item) => item.key === localStepKey);
+  if (!step) return [];
+
+  const contentKey =
+    step.contentKey ??
+    (step.exerciseKey
+      ? program.exercises.find((item) => item.key === step.exerciseKey)?.contentKey
+      : undefined) ??
+    (step.assessmentKey
+      ? (() => {
+          const assessment = program.assessments.find((item) => item.key === step.assessmentKey);
+          return assessment
+            ? program.exercises.find((item) => item.key === assessment.templateExerciseKey)
+                ?.contentKey
+            : undefined;
+        })()
+      : undefined);
+  if (!contentKey) return [];
+
+  const targets = new Map<string, SourceContentSkillTarget>();
+  for (const skillCode of sourcePrimarySkillCodesForRouteStep(pathCode, stableKey)) {
+    targets.set(`${contentKey}|${skillCode}|SOURCE_PRIMARY_COMPETENCY`, {
+      pathCode,
+      sourceStationKey: localStepKey,
+      contentKey,
+      skillCode,
+      reason: "SOURCE_PRIMARY_COMPETENCY",
+    });
+  }
+
+  const manifestStep = cycle.manifest.steps.find((item) => item.stableKey === localStepKey);
+  if (!manifestStep) return [...targets.values()];
+  const outcomeCodes = mapCurriculumSkillCodesToStoredSkillCodes(
+    manifestStep.learningOutcomeKeys.flatMap(
+      (key) =>
+        cycle.manifest.learningOutcomes.find((outcome) => outcome.key === key)?.targetSkillCodes ??
+        [],
+    ),
+  );
+  for (const skillCode of outcomeCodes.storedSkillCodes) {
+    targets.set(`${contentKey}|${skillCode}|LEARNING_OUTCOME_TARGET`, {
+      pathCode,
+      sourceStationKey: localStepKey,
+      contentKey,
+      skillCode,
+      reason: "LEARNING_OUTCOME_TARGET",
+    });
+  }
+  return [...targets.values()];
 }
 
 export function learningRouteCycle(pathCode: string): LearningRouteCycle | null {

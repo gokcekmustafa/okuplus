@@ -4,7 +4,9 @@ import {
   LEARNING_ROUTE_CYCLES,
   learningRouteCycle,
   sourcePrimarySkillCodesForRouteStep,
+  sourceContentSkillTargetsForRouteStep,
 } from "../src/curriculum/learning-route-catalog.js";
+import { buildContentSkillPlan } from "../src/curriculum/content-skill-link-repair.js";
 import {
   buildProductionLearningRouteAudit,
   classifyContentVersionLink,
@@ -199,6 +201,7 @@ async function main(): Promise<void> {
                         status: true,
                         content: {
                           select: {
+                            id: true,
                             status: true,
                             deletedAt: true,
                             contentSkills: {
@@ -221,9 +224,11 @@ async function main(): Promise<void> {
                             contentVersionId: true,
                             contentVersion: {
                               select: {
+                                id: true,
                                 status: true,
                                 content: {
                                   select: {
+                                    id: true,
                                     status: true,
                                     deletedAt: true,
                                     contentSkills: {
@@ -298,9 +303,11 @@ async function main(): Promise<void> {
                     contentVersionId: true,
                     contentVersion: {
                       select: {
+                        id: true,
                         status: true,
                         content: {
                           select: {
+                            id: true,
                             status: true,
                             deletedAt: true,
                             contentSkills: {
@@ -337,6 +344,147 @@ async function main(): Promise<void> {
           : [];
         const assessmentTemplateById = new Map(
           assessmentTemplates.map((version) => [version.id, version]),
+        );
+
+        const contentIdByVersionId = new Map<string, string>();
+        const rememberContentVersion = (version: { id: string; content: { id: string } }) => {
+          contentIdByVersionId.set(version.id, version.content.id);
+        };
+        for (const path of rawPaths) {
+          for (const unit of path.units) {
+            for (const step of unit.steps) {
+              if (step.contentVersion) rememberContentVersion(step.contentVersion);
+              for (const item of step.exerciseTemplateVersion?.contents ?? []) {
+                rememberContentVersion(item.contentVersion);
+              }
+              const assessmentVersionId = assessmentTemplateVersionId(step.assessment?.config);
+              const assessmentTemplate = assessmentVersionId
+                ? assessmentTemplateById.get(assessmentVersionId)
+                : undefined;
+              for (const item of assessmentTemplate?.contents ?? []) {
+                rememberContentVersion(item.contentVersion);
+              }
+            }
+          }
+        }
+
+        const pendingSourceTargets: Array<{
+          contentId: string | null;
+          contentVersionId: string | null;
+          pathCode: string;
+          sourceStationKey: string;
+          contentKey: string;
+          skillCode: string;
+          reason: string;
+        }> = [];
+        for (const path of rawPaths) {
+          if (path.status !== "PUBLISHED" || path.deletedAt !== null) continue;
+          const cycle = learningRouteCycle(path.code);
+          if (!cycle) continue;
+          const sourceStepKeys = new Set(
+            cycle.manifest.steps.map((step) => `${cycle.programId}:${step.stableKey}`),
+          );
+          for (const unit of path.units) {
+            for (const step of unit.steps) {
+              if (
+                step.status !== "PUBLISHED" ||
+                !step.isActive ||
+                !sourceStepKeys.has(step.stableKey)
+              )
+                continue;
+              for (const source of sourceContentSkillTargetsForRouteStep(
+                path.code,
+                step.stableKey,
+              )) {
+                const sourceContentVersion = cycle.manifest.resourceCatalog.contentVersions.find(
+                  (entry) => entry.key === source.contentKey,
+                );
+                const contentVersionId = sourceContentVersion?.versionId ?? null;
+                pendingSourceTargets.push({
+                  contentId: contentVersionId
+                    ? (contentIdByVersionId.get(contentVersionId) ?? null)
+                    : null,
+                  contentVersionId,
+                  pathCode: source.pathCode,
+                  sourceStationKey: source.sourceStationKey,
+                  contentKey: source.contentKey,
+                  skillCode: source.skillCode,
+                  reason: source.reason,
+                });
+              }
+            }
+          }
+        }
+        const sourceSkillCodes = [
+          ...new Set(pendingSourceTargets.map((target) => target.skillCode)),
+        ];
+        const sourceSkills = sourceSkillCodes.length
+          ? await tx.skill.findMany({
+              where: { code: { in: sourceSkillCodes } },
+              select: { id: true, code: true },
+            })
+          : [];
+        const skillIdByCode = new Map(sourceSkills.map((skill) => [skill.code, skill.id]));
+        const unresolvedSourceTargets: Array<{
+          pathCode: string;
+          sourceStationKey: string;
+          contentKey: string;
+          skillCode: string;
+          reason: string;
+          cause: "SOURCE_VERSION_NOT_LINKED" | "SKILL_CODE_NOT_FOUND";
+        }> = [];
+        const resolvedSourceTargets: Array<{
+          contentId: string;
+          skillId: string;
+          skillCode: string;
+          pathCode: string;
+          sourceStationKey: string;
+          contentKey: string;
+          reason: string;
+        }> = [];
+        for (const target of pendingSourceTargets) {
+          if (!target.contentId || !target.contentVersionId) {
+            unresolvedSourceTargets.push({
+              pathCode: target.pathCode,
+              sourceStationKey: target.sourceStationKey,
+              contentKey: target.contentKey,
+              skillCode: target.skillCode,
+              reason: target.reason,
+              cause: "SOURCE_VERSION_NOT_LINKED",
+            });
+            continue;
+          }
+          const skillId = skillIdByCode.get(target.skillCode);
+          if (!skillId) {
+            unresolvedSourceTargets.push({
+              pathCode: target.pathCode,
+              sourceStationKey: target.sourceStationKey,
+              contentKey: target.contentKey,
+              skillCode: target.skillCode,
+              reason: target.reason,
+              cause: "SKILL_CODE_NOT_FOUND",
+            });
+            continue;
+          }
+          resolvedSourceTargets.push({ ...target, contentId: target.contentId, skillId });
+        }
+        const plannedContentIds = [
+          ...new Set(resolvedSourceTargets.map((target) => target.contentId)),
+        ];
+        const currentContentSkills = plannedContentIds.length
+          ? await tx.contentSkill.findMany({
+              where: { contentId: { in: plannedContentIds } },
+              select: { contentId: true, skillId: true, skill: { select: { code: true } } },
+            })
+          : [];
+        const contentSkillPlan = buildContentSkillPlan(
+          resolvedSourceTargets,
+          currentContentSkills.map((link) => ({
+            contentId: link.contentId,
+            skillId: link.skillId,
+            skillCode: link.skill.code,
+          })),
+          unresolvedSourceTargets.length,
         );
 
         const pathIds = rawPaths.map((path) => path.id);
@@ -638,6 +786,14 @@ async function main(): Promise<void> {
           identity.role_is_superuser || identity.role_bypasses_rls
             ? "RLS_BYPASS_CONFIRMED"
             : "RLS_FILTER_POSSIBLE";
+        const contentSkillPlanDecision =
+          contentSkillPlan.decision !== "PLAN_ONLY_READY"
+            ? contentSkillPlan.decision
+            : routeAudit.routeIntegrityStatus !== "PASS"
+              ? "STOP_ROUTE_INTEGRITY"
+              : rlsVisibility !== "RLS_BYPASS_CONFIRMED"
+                ? "STOP_RLS_VISIBILITY"
+                : "PLAN_ONLY_READY";
         return {
           ...routeAudit,
           status: productionLearningRouteAuditStatus(
@@ -661,6 +817,19 @@ async function main(): Promise<void> {
               : "TENANT_SCOPED_ROWS_MAY_BE_FILTERED",
           pathAndStepCountsDescribeVisibleRowsOnly: true,
           enrollmentCountsAreVisibleToAuditRoleOnly: true,
+          contentSkillLinkPlan: {
+            operation: "PLAN_ONLY" as const,
+            productionWrite: "NO" as const,
+            transactionMode: "READ ONLY" as const,
+            expectedUniquePairCount: contentSkillPlan.expectedUniquePairCount,
+            missingUniquePairCount: contentSkillPlan.missingPairs.length,
+            missingPairs: contentSkillPlan.missingPairs,
+            unexpectedRelationCount: contentSkillPlan.unexpectedRelations.length,
+            unexpectedRelations: contentSkillPlan.unexpectedRelations,
+            unresolvedSourceTargets,
+            decision: contentSkillPlanDecision,
+            noStudentIdentitiesIncluded: true,
+          },
         };
       },
       { maxWait: 10_000, timeout: 120_000 },

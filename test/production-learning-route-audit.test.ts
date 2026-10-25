@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   LEARNING_ROUTE_CYCLES,
   sourcePrimarySkillCodesForRouteStep,
+  sourceContentSkillTargetsForRouteStep,
 } from "../src/curriculum/learning-route-catalog.js";
 import {
   buildProductionLearningRouteAudit,
@@ -160,6 +161,31 @@ describe("production A-D learning route audit", () => {
     expect(script).not.toMatch(
       /tx\.\w+\.(?:create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(/u,
     );
+    expect(script).toContain('operation: "PLAN_ONLY"');
+    expect(script).toContain("buildContentSkillPlan");
+    expect(script).toContain("missingUniquePairCount");
+    expect(script).toContain("unexpectedRelations");
+    expect(script).toContain("sourceContentSkillTargetsForRouteStep");
+  });
+
+  it("maps a published source step to its content, skill code, and source reason", () => {
+    const cycle = LEARNING_ROUTE_CYCLES.find((candidate) => candidate.routeFamily === "A")!;
+    const sourceStep = cycle.manifest.steps.find(
+      (step) => step.content || step.exercise || step.assessment,
+    )!;
+    const targets = sourceContentSkillTargetsForRouteStep(
+      cycle.pathCode,
+      `${cycle.programId}:${sourceStep.stableKey}`,
+    );
+
+    expect(targets.length).toBeGreaterThan(0);
+    expect(targets.every((target) => target.contentKey.length > 0)).toBe(true);
+    expect(targets.every((target) => target.skillCode.length > 0)).toBe(true);
+    expect(
+      targets.every((target) =>
+        ["SOURCE_PRIMARY_COMPETENCY", "LEARNING_OUTCOME_TARGET"].includes(target.reason),
+      ),
+    ).toBe(true);
   });
 
   it("compares published graphs to source, classifies disabled routes and excludes internal IDs", () => {
