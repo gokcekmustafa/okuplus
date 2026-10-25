@@ -234,16 +234,16 @@ describe("multiple-choice package quality", () => {
     );
     expect(unique).toHaveLength(2529);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(2667);
+    expect(allVersions).toHaveLength(2680);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(2640);
+    ).toHaveLength(2653);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,
         0,
       ) - allVersions.length,
-    ).toBe(57);
+    ).toBe(62);
     expect(
       allVersions.every(
         (version) =>

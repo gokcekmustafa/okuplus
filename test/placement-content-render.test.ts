@@ -33,6 +33,7 @@ function harness() {
     escapeHtml: (value: string) => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
     exerciseQuestions: [],
     currentExerciseQuestionIndex: 0,
+    currentFastReadingMeasurement: () => null,
   });
   runInContext(renderCode, context);
   return { context, get, run: (code: string) => runInContext(code, context) };

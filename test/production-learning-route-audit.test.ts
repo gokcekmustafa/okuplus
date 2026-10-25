@@ -207,11 +207,11 @@ describe("production A-D learning route audit", () => {
     expect(JSON.stringify(audit)).not.toContain("internal-path-id");
   });
 
-  it("validates the source fixtures for all 19 approved P1 routes and 105 steps", () => {
+  it("validates the source fixtures for all 23 approved P1 routes and 125 steps", () => {
     const approvedCycles = LEARNING_ROUTE_CYCLES.filter((cycle) => cycle.publicationApproved());
-    expect(approvedCycles).toHaveLength(19);
+    expect(approvedCycles).toHaveLength(23);
     expect(approvedCycles.reduce((total, cycle) => total + cycle.manifest.steps.length, 0)).toBe(
-      105,
+      125,
     );
     for (const cycle of approvedCycles) {
       for (const outcome of cycle.manifest.learningOutcomes) {
@@ -230,7 +230,7 @@ describe("production A-D learning route audit", () => {
     expect(audit.routeIntegrityStatus).toBe("PASS");
     expect(audit.status).toBe("PASS");
     expect(audit.dataQualityStatus).toBe("CLEAN");
-    expect(audit.productionP1PublishedStepCount).toBe(105);
+    expect(audit.productionP1PublishedStepCount).toBe(125);
     expect(audit.blockedOrIncompletePathCount).toBe(0);
   });
 

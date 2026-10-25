@@ -95,6 +95,10 @@ function buildCandidate(args: {
   patches: Readonly<Record<string, QuestionPatch>>;
   answerKeyCorrectionReasons?: Readonly<Record<string, string>>;
   questionVersionId(exerciseKey: string, questionKey: string): string;
+  baseQuestionVersionStatus?(
+    exerciseKey: string,
+    questionKey: string,
+  ): "SOURCE_CURRENT" | "REVISION_CANDIDATE";
   templateVersionId(exerciseKey: string): string;
   nextQuestionVersionId(exerciseKey: string, questionKey: string, version: number): string;
   nextTemplateVersionId(exerciseKey: string, version: number): string;
@@ -133,7 +137,9 @@ function buildCandidate(args: {
         sourceVersionId: patch
           ? args.nextQuestionVersionId(exercise.key, question.key, args.revisionVersion)
           : args.questionVersionId(exercise.key, question.key),
-        sourceVersionStatus: patch ? "REVISION_CANDIDATE" : "SOURCE_CURRENT",
+        sourceVersionStatus: patch
+          ? "REVISION_CANDIDATE"
+          : (args.baseQuestionVersionStatus?.(exercise.key, question.key) ?? "SOURCE_CURRENT"),
         prompt: question.prompt,
         contentKey: exercise.contentKey,
         sourceText: contentByKey.get(exercise.contentKey),
@@ -685,6 +691,10 @@ function questionQualityCandidate(args: {
   nextTemplateVersionId(exerciseKey: string, version: number): string;
   contentPatches: Readonly<Record<string, QuestionPatch>>;
   answerKeyCorrectionReasons?: Readonly<Record<string, string>>;
+  baseQuestionVersionStatus?(
+    exerciseKey: string,
+    questionKey: string,
+  ): "SOURCE_CURRENT" | "REVISION_CANDIDATE";
 }): QuestionBankRevisionCandidate {
   const correctOptionIdOverrides = Object.fromEntries(
     Object.entries(args.contentPatches).flatMap(([questionKey, patch]) =>
@@ -881,7 +891,7 @@ const p0CompetencyTransferPatches: Readonly<Record<string, QuestionPatch>> = {
   },
   "common-test-1": {
     prompt:
-      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nMetnin ana düşüncesi hangisidir?",
+      "Metin: Okul girişindeki paylaşım rafına öğrenciler bitirdikleri kitapları bırakıyor. Rafı alanlar kısa öneri notları ekleyebiliyor. Görevli, hangi öğrencinin hangi kitabı bitirdiğini kaydetmiyor.\n\nMetnin ana düşüncesi hangisidir?",
     options: [
       {
         id: "a",
@@ -905,48 +915,48 @@ const p0CompetencyTransferPatches: Readonly<Record<string, QuestionPatch>> = {
       },
     ],
     explanation:
-      "Kitapların bırakılıp yenilerinin gelmesi paylaşım köşesinin kullanıldığını gösterir; öğretmen okuma tamamlanmasını takip etmediklerini belirtir.",
-    hint: "Kitapların gelişiyle öğretmenin belirtmediği ölçümü birlikte değerlendir.",
+      "Raf kitapların paylaşılmasını ve öneri notlarını sağlıyor; görevli ise kimin hangi kitabı bitirdiğini kaydetmiyor.",
+    hint: "Rafın ne işe yaradığını ve görevlinin hangi bilgiyi kaydetmediğini birlikte düşün.",
   },
   "common-test-2": {
     prompt:
-      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nİkinci hafta kaç yeni kitap geldi?",
+      "Metin: Robotik kulübü karton prototipleri saydı. İlk hafta dört model hazırlanmıştı. Sonraki hafta öğrenciler altı yeni model daha yaptı.\n\nSonraki hafta kaç yeni model hazırlandı?",
     options: [
-      { id: "a", text: "Dört kitap.", position: 1 },
-      { id: "b", text: "Dokuz kitap.", position: 2 },
-      { id: "c", text: "On iki kitap.", position: 3 },
-      { id: "d", text: "Bu sayı metinde verilmemiştir.", position: 4 },
+      { id: "a", text: "Dört model.", position: 1 },
+      { id: "b", text: "Altı model.", position: 2 },
+      { id: "c", text: "On model.", position: 3 },
+      { id: "d", text: "Sayı metinde verilmemiştir.", position: 4 },
     ],
     correctOptionId: "b",
-    explanation: "Metnin ikinci cümlesi sonraki hafta dokuz yeni kitap geldiğini söylüyor.",
-    hint: "İlk haftadaki 12 ile sonraki haftadaki sayıyı karıştırma.",
+    explanation: "Metnin son cümlesi sonraki hafta altı yeni model yapıldığını söylüyor.",
+    hint: "İlk haftadaki sayıyı değil, sonraki haftayı anlatan cümleyi bul.",
   },
   "common-test-3": {
     prompt:
-      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nMetnin desteklediği sınırlı çıkarım hangisidir?",
+      "Metin: Tiyatro kulübünün prova listesinde beş öğrenci adı vardı. Sorumlu, prova odasına beş sandalye hazırladığını söyledi.\n\nBu iki ayrıntı hangi sınırlı çıkarımı destekler?",
     options: [
-      { id: "a", text: "Dokuz yeni kitap gelmesi köşeye ilgi olduğunu düşündürür.", position: 1 },
-      { id: "b", text: "Dokuz kitabın tamamı öğrenciler tarafından bitirilmiştir.", position: 2 },
-      { id: "c", text: "Her öğrenci aynı kitabı okuyup tamamlamıştır.", position: 3 },
-      { id: "d", text: "Kitap köşesi okul dışındaki okurlara da açılmıştır.", position: 4 },
+      { id: "a", text: "Prova için beş öğrencinin gelmesi bekleniyor.", position: 1 },
+      { id: "b", text: "Listedeki herkes bütün provalara katılmıştır.", position: 2 },
+      { id: "c", text: "Sorumlu listedeki öğrencilerin hepsini tanıyor.", position: 3 },
+      { id: "d", text: "O gün odaya yalnızca bu beş kişi girebilir.", position: 4 },
     ],
     explanation:
-      "Yeni kitapların gelmesi köşenin kullanıldığını düşündürür; hangi kitapların bitirildiği takip edilmediği için tamamlanma çıkarılamaz.",
-    hint: "Yeni kitap gelişinin gösterdiğiyle metnin özellikle ölçmediğini ayır.",
+      "Beş isim ve beş sandalye, beş öğrencinin prova için beklendiğini destekler; katılım veya başka kişilerin girişi hakkında bilgi vermez.",
+    hint: "İsim sayısıyla hazırlanan sandalyeleri karşılaştır; metnin söylemediği ayrıntıları ekleme.",
   },
   "common-test-4": {
     prompt:
-      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nHangi bilgi metinden çıkarılamaz?",
+      "Metin: Masa tenisi turnuvasının ilk gününde altı maç oynandı. İkinci gün dört maç daha yapıldı. Duyuruda finalin cuma günü yapılacağı yazıyordu. Sonuç tablosunda oyuncu adları yer almadığından kazanan belirtilmiyordu.\n\nHangi bilgi metinden çıkarılamaz?",
     options: [
-      { id: "a", text: "İlk hafta köşeye 12 kitap bırakıldığı.", position: 1 },
-      { id: "b", text: "Sonraki hafta 9 yeni kitap geldiği.", position: 2 },
-      { id: "c", text: "Kitapların kimler tarafından bitirildiği.", position: 3 },
-      { id: "d", text: "Köşenin okul koridorunda bulunduğu.", position: 4 },
+      { id: "a", text: "İlk gün altı maç oynandığı.", position: 1 },
+      { id: "b", text: "İkinci gün dört maç yapıldığı.", position: 2 },
+      { id: "c", text: "Turnuvayı hangi oyuncunun kazandığı.", position: 3 },
+      { id: "d", text: "Finalin cuma günü yapılacağı.", position: 4 },
     ],
     correctOptionId: "c",
     explanation:
-      "Öğretmen kitapların hangilerinin bitirildiğini takip etmediklerini söylüyor; bu bilgi metinden çıkarılamaz.",
-    hint: "Öğretmenin hangi bilgiyi takip etmediğini bul.",
+      "Metin maç sayılarını ve final gününü veriyor; sonuç tablosunda oyuncu adları bulunmadığı için kazananı belirtmiyor.",
+    hint: "Verilen maç sayılarını ve final gününü, özellikle belirtilmeyen sonuç bilgisiyle karşılaştır.",
   },
 };
 
@@ -984,6 +994,10 @@ const p0CompetencyTransferCandidate = questionQualityCandidate({
   nextQuestionVersionId: (exerciseKey, questionKey, version) =>
     getProgramIds("questionVersion", `${exerciseKey}-${questionKey}-v${version}`),
   nextTemplateVersionId: p0RevisionExerciseTemplateVersionId,
+  baseQuestionVersionStatus: (_exerciseKey, questionKey) =>
+    p0QuestionQualityV3.changedQuestions.some((item) => item.questionKey === questionKey)
+      ? "REVISION_CANDIDATE"
+      : "SOURCE_CURRENT",
 });
 
 export const QUESTION_BANK_VERSIONED_REVISION_CANDIDATES: readonly QuestionBankRevisionCandidate[] =

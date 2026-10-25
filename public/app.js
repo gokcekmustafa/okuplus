@@ -11182,6 +11182,7 @@ let exerciseScope = null;
 let exerciseQuestionRenderToken = 0;
 let activeFastReadingMeasurement = null;
 let fastReadingTimerTicker = null;
+let fastReadingMeasurementEventsBound = false;
 let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
@@ -14306,26 +14307,30 @@ function stopFastReadingMeasurement() {
   }
 }
 
-document.addEventListener("visibilitychange", updateFastReadingClock);
-window.addEventListener("pagehide", () => activeFastReadingMeasurement?.timer.pause());
-window.addEventListener("pageshow", updateFastReadingClock);
-window.addEventListener("scroll", updateFastReadingClock, { passive: true });
-window.addEventListener("resize", updateFastReadingClock);
-document.addEventListener("click", (event) => {
-  const button = event.target?.closest?.("#student-reading-continue");
-  if (!button || exerciseBusy) return;
-  const measurement = currentFastReadingMeasurement();
-  if (!measurement || measurement.completed) return;
-  updateFastReadingClock();
-  measurement.durationMs = measurement.timer.finish();
-  measurement.completed = true;
-  if (fastReadingTimerTicker) {
-    clearInterval(fastReadingTimerTicker);
-    fastReadingTimerTicker = null;
-  }
-  renderExerciseSession();
-  renderExerciseQuestion();
-});
+function setupFastReadingMeasurementEvents() {
+  if (fastReadingMeasurementEventsBound) return;
+  fastReadingMeasurementEventsBound = true;
+  document.addEventListener("visibilitychange", updateFastReadingClock);
+  window.addEventListener("pagehide", () => activeFastReadingMeasurement?.timer.pause());
+  window.addEventListener("pageshow", updateFastReadingClock);
+  window.addEventListener("scroll", updateFastReadingClock, { passive: true });
+  window.addEventListener("resize", updateFastReadingClock);
+  document.addEventListener("click", (event) => {
+    const button = event.target?.closest?.("#student-reading-continue");
+    if (!button || exerciseBusy) return;
+    const measurement = currentFastReadingMeasurement();
+    if (!measurement || measurement.completed) return;
+    updateFastReadingClock();
+    measurement.durationMs = measurement.timer.finish();
+    measurement.completed = true;
+    if (fastReadingTimerTicker) {
+      clearInterval(fastReadingTimerTicker);
+      fastReadingTimerTicker = null;
+    }
+    renderExerciseSession();
+    renderExerciseQuestion();
+  });
+}
 function fastReadingFamilyClass(family) {
   if (!isFastReadingExercise()) return "";
   return `exercise-fast-reading exercise-fast-reading-${String(family).toLowerCase().replaceAll("_", "-")}`;
@@ -15319,6 +15324,7 @@ async function handleExerciseComplete() {
   }
 }
 function setupExerciseEvents() {
+  setupFastReadingMeasurementEvents();
   $("start-daily-training")?.addEventListener("click", () => void window.startDailyTraining());
   $("today-training-retry")?.addEventListener("click", () => void loadToday());
   $("learning-path-retry")?.addEventListener("click", () => void loadLearningPath());

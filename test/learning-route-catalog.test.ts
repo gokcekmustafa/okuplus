@@ -298,8 +298,8 @@ describe("versioned learning routes", () => {
       {
         route: "A",
         authored: 220,
-        releaseApprovedSource: 80,
-        sourceVerifiedDraft: 130,
+        releaseApprovedSource: 100,
+        sourceVerifiedDraft: 110,
         sourceQualified: 210,
         reviewRequired: 10,
         sourceRemaining: 0,
@@ -463,16 +463,20 @@ describe("versioned learning routes", () => {
     expect(a[15]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(a[15]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[15]!.pathCode)).toBe(a[16]);
-    expect(a[16]!.publicationApproved()).toBe(false);
+    expect(a[16]!.publicationApproved()).toBe(true);
+    expect(a[16]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[16]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[16]!.pathCode)).toBe(a[17]);
-    expect(a[17]!.publicationApproved()).toBe(false);
+    expect(a[17]!.publicationApproved()).toBe(true);
+    expect(a[17]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[17]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[17]!.pathCode)).toBe(a[18]);
-    expect(a[18]!.publicationApproved()).toBe(false);
+    expect(a[18]!.publicationApproved()).toBe(true);
+    expect(a[18]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[18]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[18]!.pathCode)).toBe(a[19]);
-    expect(a[19]!.publicationApproved()).toBe(false);
+    expect(a[19]!.publicationApproved()).toBe(true);
+    expect(a[19]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[19]!.manifest.steps).toHaveLength(5);
     expect(a[20]!.publicationApproved()).toBe(false);
     expect(a[20]!.manifest.steps).toHaveLength(5);
@@ -517,7 +521,7 @@ describe("versioned learning routes", () => {
     expect(a[33]!.publicationApproved()).toBe(false);
     expect(a[33]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 16);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 20);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
