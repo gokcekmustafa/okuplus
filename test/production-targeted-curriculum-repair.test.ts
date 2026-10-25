@@ -25,6 +25,10 @@ describe("targeted production curriculum repair scope", () => {
     expect(workflow).toContain("contents: read");
     expect(workflow).toContain("p0-station9-question-release.ts");
     expect(workflow).not.toContain("p0-station9-question-release.js");
+    expect(workflow).toContain(
+      "- name: Apply one atomic, source-verified production transaction\n        env:\n          PRODUCTION_CURRICULUM_REPAIR_REPORT_PATH: ${{ runner.temp }}",
+    );
+    expect(workflow).not.toMatch(/^ {6}PRODUCTION_CURRICULUM_REPAIR_REPORT_PATH:.*runner\.temp/mu);
     expect(workflow).not.toMatch(/migrate deploy|migrate resolve|seed-education-v2/u);
   });
 
