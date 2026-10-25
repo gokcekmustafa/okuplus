@@ -6,6 +6,11 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   GUEST_COOKIE_NAME,
   GUEST_CSRF_COOKIE_NAME,
+  GUEST_NATIVE_TOKEN_HEADER,
+  GUEST_NATIVE_TRANSPORT_HEADER,
+  GUEST_NATIVE_TRANSPORT_VALUE,
+  getGuestToken,
+  isNativeGuestTransportRequest,
   setGuestCookies,
 } from "../src/modules/guest-diagnostic/cookies.js";
 import {
@@ -80,6 +85,59 @@ describe("guest diagnostic security infrastructure", () => {
         "https://www.okupratik.com",
       ]),
     ).toThrow("CSRF");
+  });
+
+  it("accepts native guest credentials only from an exact Capacitor origin with the secure-storage marker", () => {
+    const token = "a".repeat(43);
+    for (const origin of ["https://localhost", "capacitor://localhost"]) {
+      const nativeRequest = {
+        method: "GET",
+        headers: {
+          origin,
+          [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+          [GUEST_NATIVE_TOKEN_HEADER]: token,
+        },
+      } as unknown as FastifyRequest;
+      expect(isNativeGuestTransportRequest(nativeRequest)).toBe(true);
+      expect(getGuestToken(nativeRequest)).toBe(token);
+    }
+
+    const untrustedRequest = {
+      method: "GET",
+      headers: {
+        origin: "https://attacker.example",
+        [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+        [GUEST_NATIVE_TOKEN_HEADER]: token,
+      },
+    } as unknown as FastifyRequest;
+    expect(isNativeGuestTransportRequest(untrustedRequest)).toBe(false);
+    expect(getGuestToken(untrustedRequest)).toBeUndefined();
+  });
+
+  it("validates native CSRF credentials against the stored hash and exact app origin", () => {
+    const token = createGuestCsrfToken();
+    const headers = {
+      origin: "https://localhost",
+      [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+      "x-csrf-token": token,
+    };
+    expect(() =>
+      assertGuestCsrfRequest(
+        { method: "POST", headers } as unknown as FastifyRequest,
+        hashGuestToken(token),
+        ["https://localhost", "capacitor://localhost"],
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertGuestCsrfRequest(
+        {
+          method: "POST",
+          headers: { ...headers, origin: "https://attacker.example" },
+        } as unknown as FastifyRequest,
+        hashGuestToken(token),
+        ["https://localhost", "capacitor://localhost"],
+      ),
+    ).toThrow();
   });
 
   it("does not apply CSRF validation to safe methods", () => {

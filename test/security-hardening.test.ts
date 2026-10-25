@@ -188,25 +188,36 @@ describe("8I-2 security hardening", () => {
         headers: {
           origin: CAPACITOR_ANDROID_ORIGIN,
           "access-control-request-method": "POST",
-          "access-control-request-headers": "content-type,x-auth-transport",
+          "access-control-request-headers":
+            "content-type,x-auth-transport,x-okupratik-guest-transport,x-okupratik-guest-token,x-csrf-token",
         },
       });
       expect(nativePreflight.statusCode).toBe(204);
       expect(nativePreflight.headers["access-control-allow-origin"]).toBe(CAPACITOR_ANDROID_ORIGIN);
       expect(nativePreflight.headers["access-control-allow-credentials"]).toBe("true");
       expect(nativePreflight.headers["access-control-allow-headers"]).toContain("x-auth-transport");
+      expect(nativePreflight.headers["access-control-allow-headers"]).toContain(
+        "x-okupratik-guest-transport",
+      );
+      expect(nativePreflight.headers["access-control-allow-headers"]).toContain(
+        "x-okupratik-guest-token",
+      );
     } finally {
       await app.close();
     }
   });
 
-  it("adds only the exact Capacitor Android origin to configured auth origins", () => {
+  it("adds only the exact Capacitor Android and iOS origins to configured auth origins", () => {
     expect(getAllowedOrigins("https://www.okupratik.com")).toEqual([
       "https://www.okupratik.com",
       CAPACITOR_ANDROID_ORIGIN,
+      "capacitor://localhost",
     ]);
-    expect(getAllowedOrigins(CAPACITOR_ANDROID_ORIGIN)).toEqual([CAPACITOR_ANDROID_ORIGIN]);
-    expect(getAllowedOrigins("")).toEqual([CAPACITOR_ANDROID_ORIGIN]);
+    expect(getAllowedOrigins(CAPACITOR_ANDROID_ORIGIN)).toEqual([
+      CAPACITOR_ANDROID_ORIGIN,
+      "capacitor://localhost",
+    ]);
+    expect(getAllowedOrigins("")).toEqual([CAPACITOR_ANDROID_ORIGIN, "capacitor://localhost"]);
     expect(getAllowedOrigins("https://www.okupratik.com")).not.toContain("*");
     expect(
       checkRequestOrigin(

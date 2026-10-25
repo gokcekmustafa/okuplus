@@ -34,16 +34,15 @@ export function assertGuestCsrfRequest(
 ): void {
   if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
 
-  const cookieToken = getGuestCsrfToken(request);
+  const csrfCredential = getGuestCsrfToken(request);
   const headerToken = headerValue(request);
   if (
-    !cookieToken ||
+    !csrfCredential ||
     !headerToken ||
-    cookieToken !== headerToken ||
-    !hashesMatch(hashGuestToken(cookieToken), expectedTokenHash)
+    csrfCredential !== headerToken ||
+    !hashesMatch(hashGuestToken(csrfCredential), expectedTokenHash)
   ) {
     throw forbiddenError("CSRF doğrulaması gerekli");
   }
-
   assertRequestOrigin(request, allowedOrigins);
 }

@@ -13,6 +13,7 @@ import {
   detectNativeMobileRuntime,
   requestNativeGoogleCredential,
 } from "./mobile-auth.js";
+import { createGuestDiagnosticClient } from "./guest-diagnostic-client.js";
 
 const uiMotion = createUiMotion();
 // Web'de access + refresh token localStorage'da tutulur. Native kabukta
@@ -67,6 +68,13 @@ const guestDiagnosticState = {
   feedbackReady: false,
   busy: false,
 };
+
+const guestDiagnosticClient = createGuestDiagnosticClient({
+  nativeMobileRuntime,
+  secureStorage: secureStoragePlugin,
+  browserCsrfHeaders: guestCsrfHeaders,
+  parseResponse,
+});
 
 const $ = (id) => document.getElementById(id);
 
@@ -513,7 +521,7 @@ function setStoredGuestSessionId(sessionId) {
   try {
     sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, sessionId);
   } catch {
-    /* Session storage is optional; the HttpOnly cookie remains authoritative. */
+    /* Session ID is only a convenience; credentials remain in secure storage/cookies. */
   }
 }
 
@@ -523,16 +531,11 @@ async function claimGuestDiagnosticForCurrentUser() {
   if (!sessionId || !accessToken) return false;
 
   try {
-    const response = await fetch(`/guest/diagnostics/${encodeURIComponent(sessionId)}/claim`, {
+    await guestApi(`/guest/diagnostics/${encodeURIComponent(sessionId)}/claim`, {
       method: "POST",
-      credentials: "include",
-      headers: {
-        ...authHeaders(accessToken, tenantId),
-        ...guestCsrfHeaders(),
-      },
+      headers: authHeaders(accessToken, tenantId),
     });
-    await parseResponse(response);
-    clearStoredGuestSession();
+    await clearStoredGuestSession();
     return true;
   } catch {
     // Account access must not be blocked by an expired or already-cleared
@@ -575,7 +578,8 @@ async function loadClaimedGuestDiagnostic() {
   }
 }
 
-function clearStoredGuestSession() {
+async function clearStoredGuestSession() {
+  await guestDiagnosticClient.clear();
   try {
     sessionStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
   } catch {
@@ -590,17 +594,18 @@ function clearStoredGuestSession() {
   guestDiagnosticState.feedbackReady = false;
 }
 
+async function clearExpiredGuestSessionOrReport() {
+  try {
+    await clearStoredGuestSession();
+    return true;
+  } catch (error) {
+    showGuestError(error, "Tekrar dene");
+    return false;
+  }
+}
+
 async function guestApi(path, options = {}) {
-  const method = String(options.method || "GET").toUpperCase();
-  const headers = {
-    ...(method === "POST" && options.body !== undefined && options.body !== null
-      ? { "content-type": "application/json" }
-      : {}),
-    ...(method === "POST" ? guestCsrfHeaders() : {}),
-    ...(options.headers || {}),
-  };
-  const response = await fetch(path, { ...options, credentials: "include", headers });
-  return parseResponse(response);
+  return guestDiagnosticClient.request(path, options);
 }
 
 async function parseResponse(res) {
@@ -696,6 +701,13 @@ function showGuestLoading(
 }
 
 function guestErrorMessage(error) {
+  if (
+    error?.code === "GUEST_SECURE_STORAGE_UNAVAILABLE" ||
+    error?.code === "GUEST_CREDENTIAL_MISSING" ||
+    error?.code === "GUEST_CREDENTIAL_INVALID"
+  ) {
+    return error.message;
+  }
   if (error?.status === 409)
     return "Tanı oturumun şu anda işleniyor. Birkaç saniye bekleyip tekrar dene.";
   if (error?.status === 429) return "Çok fazla deneme yapıldı. Lütfen biraz sonra tekrar dene.";
@@ -927,7 +939,7 @@ async function startGuestDiagnostic() {
     setStoredGuestSessionId(data.sessionId);
     await loadGuestQuestions();
   } catch (error) {
-    if (isGuestSessionExpired(error)) clearStoredGuestSession();
+    if (isGuestSessionExpired(error) && !(await clearExpiredGuestSessionOrReport())) return;
     showGuestError(error, isGuestSessionExpired(error) ? "Yeni tanı başlat" : "Tekrar dene");
   } finally {
     guestDiagnosticState.busy = false;
@@ -943,7 +955,7 @@ async function completeGuestDiagnostic() {
     );
     await loadGuestResult();
   } catch (error) {
-    if (isGuestSessionExpired(error)) clearStoredGuestSession();
+    if (isGuestSessionExpired(error) && !(await clearExpiredGuestSessionOrReport())) return;
     showGuestError(
       error,
       isGuestSessionExpired(error) ? "Yeni tanı başlat" : "Sonucu tekrar yükle",
@@ -1004,7 +1016,7 @@ async function submitGuestAnswer() {
     requestAnimationFrame(() => $("guest-answer-submit")?.focus({ preventScroll: true }));
   } catch (error) {
     if (isGuestSessionExpired(error)) {
-      clearStoredGuestSession();
+      if (!(await clearExpiredGuestSessionOrReport())) return;
       showGuestError(error, "Yeni tanı başlat");
     } else {
       $("guest-question-error").textContent = guestErrorMessage(error);

@@ -40,6 +40,14 @@ sarmalayıcısının yerine geçmez. Android'de sosyal giriş, Credential Manage
 Google ID tokenı alır; her denemede üretilen nonce tokena eklenir ve backend
 tokenın imzasını, issuer, audience, süresini ve nonce eşleşmesini doğrular.
 
+Üye olmadan kullanılan tanı akışı web'de host-only HttpOnly çerezlerini kullanır.
+Capacitor uygulamasının yerel origin'i üretim API'sinden farklı olduğundan native
+akış üçüncü taraf çerezlerine dayanmaz: sunucunun native origin için verdiği guest
+kimlik bilgileri aynı Secure Storage köprüsünde saklanır ve sonraki isteklerde
+yalnızca sabit Capacitor origin'lerinden gönderilir. Yanıt gövdesindeki native
+kimlik bilgileri istemcide depoya yazıldıktan sonra yanıttan çıkarılır; normal web
+yanıtı bu bilgileri içermez.
+
 Android Google girişi için Google Auth Platform'da sunucu/web OAuth istemcisi ve
 `com.okupratik.app` paket kimliği ile dağıtılan imza sertifikasına bağlı Android
 OAuth istemcisi doğru yapılandırılmış olmalıdır. Sunucu/web istemci kimliği

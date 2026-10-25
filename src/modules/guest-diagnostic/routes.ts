@@ -8,7 +8,12 @@ import { ok } from "../../lib/response.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import type { AuthProvider } from "../auth/index.js";
 import { setNoStore } from "../auth/cookies.js";
-import { clearGuestCookies, getGuestToken, setGuestCookies } from "./cookies.js";
+import {
+  clearGuestCookies,
+  getGuestToken,
+  isNativeGuestTransportRequest,
+  setGuestCookies,
+} from "./cookies.js";
 import { GUEST_DIAGNOSTIC_SESSION_TTL_SECONDS } from "./definition.js";
 import { guestRateLimitIdentifier, createGuestRateLimiter } from "./rate-limit.js";
 import {
@@ -77,10 +82,10 @@ export async function guestDiagnosticRoutes(
   function sendCreatedCookies(
     reply: FastifyReply,
     result: { token: string; csrfToken: string; resumed: boolean },
+    nativeTransport: boolean,
   ): void {
-    if (!result.resumed) {
-      // The token pair never enters the JSON response; the opaque session
-      // token is HttpOnly and the CSRF token is a separate host-only cookie.
+    if (!nativeTransport && !result.resumed) {
+      // Browser sessions use the opaque HttpOnly token and separate CSRF cookie.
       setGuestCookies(reply, result.token, result.csrfToken, GUEST_DIAGNOSTIC_SESSION_TTL_SECONDS);
     }
   }
@@ -88,8 +93,17 @@ export async function guestDiagnosticRoutes(
   app.post("/guest/diagnostics", async (request, reply) => {
     setNoStore(reply);
     const result = await handle(() => createOrResumeGuestDiagnostic(dependencies(request)));
-    sendCreatedCookies(reply, result);
+    const nativeTransport = isNativeGuestTransportRequest(request);
+    sendCreatedCookies(reply, result, nativeTransport);
     const { token: _token, csrfToken: _csrfToken, ...publicResult } = result;
+    if (nativeTransport && !result.resumed) {
+      return reply.status(201).send(
+        ok({
+          ...publicResult,
+          nativeCredential: { token: result.token, csrfToken: result.csrfToken },
+        }),
+      );
+    }
     return reply.status(result.resumed ? 200 : 201).send(ok(publicResult));
   });
 

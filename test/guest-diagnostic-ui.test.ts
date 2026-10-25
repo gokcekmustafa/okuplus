@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const app = readFileSync("public/app.js", "utf8").replace(/\r\n/gu, "\n");
 const index = readFileSync("public/index.html", "utf8");
 const styles = readFileSync("public/styles.css", "utf8");
+const guestClient = readFileSync("public/guest-diagnostic-client.js", "utf8");
 
 describe("guest-first diagnostic frontend", () => {
   it("shows an explicit guest landing while preserving the authenticated session gate", () => {
@@ -14,7 +15,7 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain('$("guest-header-login-btn")?.addEventListener("click", showLogin);');
     expect(app).toContain("const me = await fetchMe(accessToken, tenantId);");
     expect(app).toContain("showDashboard(me);");
-    expect(app).toContain('fetch(path, { ...options, credentials: "include", headers })');
+    expect(app).toContain("return guestDiagnosticClient.request(path, options);");
     expect(index).toContain('id="view-guest"');
     expect(index).toContain('id="guest-intro"');
     expect(index).toContain('id="guest-start"');
@@ -45,6 +46,11 @@ describe("guest-first diagnostic frontend", () => {
     expect(app).toContain("__Host-oku_guest_csrf");
     expect(app).toContain("sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY");
     expect(app).not.toContain("oku.guestToken");
+    expect(guestClient).toContain('credentials: nativeMobileRuntime ? "omit" : "include"');
+    expect(guestClient).toContain("secureStorage.setItem");
+    expect(guestClient).not.toContain("localStorage");
+    expect(guestClient).not.toContain("sessionStorage");
+    expect(guestClient).toContain("headers[NATIVE_TOKEN_HEADER] = credential.token");
     expect(index).toContain('id="guest-signup-btn"');
     expect(index).toContain('id="guest-login-btn"');
     expect(index).toContain('id="login-form"');

@@ -34,6 +34,10 @@ describe("OkuPratik mobile foundation", () => {
       );
       const app = await readFile(join(outputDir, "app.js"), "utf8");
       const mobileAuth = await readFile(join(outputDir, "mobile-auth.js"), "utf8");
+      const guestDiagnosticClient = await readFile(
+        join(outputDir, "guest-diagnostic-client.js"),
+        "utf8",
+      );
 
       expect(index).toContain('src="/capacitor.js"');
       expect(index).toContain('src="/secure-storage-plugin.js"');
@@ -59,6 +63,11 @@ describe("OkuPratik mobile foundation", () => {
       expect(runtime).toContain('addListener("backButton"');
       expect(app).toContain('const SECURE_SESSION_KEY = "oku.session.v1";');
       expect(app).toContain("globalThis.fetch = (input, init)");
+      expect(app).toContain('from "./guest-diagnostic-client.js"');
+      expect(guestDiagnosticClient).toContain("GUEST_DIAGNOSTIC_CREDENTIAL_KEY");
+      expect(guestDiagnosticClient).toContain(
+        'credentials: nativeMobileRuntime ? "omit" : "include"',
+      );
       expect(app).toContain("nativeMobileRuntime");
       expect(app).toContain(
         "await secureStoragePlugin.setItem(SECURE_SESSION_KEY, JSON.stringify(session))",

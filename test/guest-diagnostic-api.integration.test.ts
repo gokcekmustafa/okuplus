@@ -6,6 +6,9 @@ import { buildApp } from "../src/app.js";
 import {
   GUEST_COOKIE_NAME,
   GUEST_CSRF_COOKIE_NAME,
+  GUEST_NATIVE_TOKEN_HEADER,
+  GUEST_NATIVE_TRANSPORT_HEADER,
+  GUEST_NATIVE_TRANSPORT_VALUE,
 } from "../src/modules/guest-diagnostic/cookies.js";
 import { GUEST_DIAGNOSTIC_CONFIG_KEY } from "../src/modules/guest-diagnostic/definition.js";
 import { loadEnv } from "../src/config/env.js";
@@ -13,6 +16,7 @@ import { loadEnv } from "../src/config/env.js";
 const integrationEnabled = process.env.GUEST_API_INTEGRATION === "true";
 const integrationDescribe = integrationEnabled ? describe : describe.skip;
 const ORIGIN = "https://www.okupratik.com";
+const NATIVE_ORIGIN = "https://localhost";
 
 type CookieJar = Partial<Record<typeof GUEST_COOKIE_NAME | typeof GUEST_CSRF_COOKIE_NAME, string>>;
 type JsonBody = {
@@ -93,6 +97,7 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
     expect(result.success).toBe(true);
     expect(resultData).not.toHaveProperty("token");
     expect(resultData).not.toHaveProperty("csrfToken");
+    expect(resultData).not.toHaveProperty("nativeCredential");
     return { id: resultData.sessionId as string, cookies: setCookieHeaders(response) };
   }
 
@@ -193,6 +198,65 @@ integrationDescribe("Guest Diagnostic V1 API integration", () => {
       headers: { cookie: cookieHeader(cookiesA) },
     });
     expect(crossSession.statusCode).toBe(404);
+  });
+
+  it("starts and reads a guest diagnostic from the Capacitor origin without cross-site cookies", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/guest/diagnostics",
+      headers: {
+        origin: NATIVE_ORIGIN,
+        [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.headers["set-cookie"]).toBeUndefined();
+    const createdData = data(created);
+    const nativeCredential = createdData.nativeCredential as
+      { token: string; csrfToken: string } | undefined;
+    expect(nativeCredential?.token).toMatch(/^[A-Za-z0-9_-]{32,128}$/u);
+    expect(nativeCredential?.csrfToken).toMatch(/^[A-Za-z0-9_-]{32,128}$/u);
+    expect(createdData).not.toHaveProperty("token");
+    expect(createdData).not.toHaveProperty("csrfToken");
+
+    const headers = {
+      origin: NATIVE_ORIGIN,
+      [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+      [GUEST_NATIVE_TOKEN_HEADER]: nativeCredential!.token,
+      "x-csrf-token": nativeCredential!.csrfToken,
+    };
+    const questions = await app.inject({
+      method: "GET",
+      url: `/guest/diagnostics/${createdData.sessionId}/questions`,
+      headers,
+    });
+    expect(questions.statusCode).toBe(200);
+    expect(data(questions).questions).toHaveLength(8);
+
+    const answer = await app.inject({
+      method: "POST",
+      url: `/guest/diagnostics/${createdData.sessionId}/answers`,
+      headers,
+      payload: {
+        itemId: "item-1",
+        clientAnswerId: `native-${randomUUID()}`,
+        answer: answersByPosition[1],
+      },
+    });
+    expect(answer.statusCode).toBe(200);
+  });
+
+  it("does not expose native guest credentials to an untrusted origin", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/guest/diagnostics",
+      headers: {
+        origin: "https://attacker.example",
+        [GUEST_NATIVE_TRANSPORT_HEADER]: GUEST_NATIVE_TRANSPORT_VALUE,
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(body(response).data).toBeUndefined();
   });
 
   it("enforces CSRF and session ownership for answer submission", async () => {
