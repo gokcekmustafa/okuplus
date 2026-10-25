@@ -2,6 +2,7 @@ import { Prisma, type LearningAreaCode, type PilotEventType } from "@prisma/clie
 import { prisma } from "../../lib/prisma.js";
 import { forbiddenError } from "../../lib/errors.js";
 import { assertStudentScope, type OrganizationScope } from "../organization-admin/policy.js";
+import { latestComparableAssessmentResult } from "./assessment-comparison.js";
 
 const DEFAULT_RANGE_DAYS = 30;
 const MAX_RANGE_DAYS = 366;
@@ -739,13 +740,17 @@ async function getOrganizationAnalyticsStudentDetail(
         studentId,
         completedAt: { gte: range.from, lt: range.toExclusive },
       },
-      select: { id: true, score: true, completedAt: true },
+      select: { id: true, assessmentId: true, score: true, completedAt: true },
       orderBy: { completedAt: "desc" },
       take: MAX_ACTIVITY_ROWS,
     }),
     prisma.studentBaseline.findUnique({
       where: { tenantId_studentId: { tenantId: scope.tenantId, studentId } },
-      select: { sourceAssessmentResult: { select: { score: true } } },
+      select: {
+        sourceAssessmentResult: {
+          select: { id: true, assessmentId: true, score: true, completedAt: true },
+        },
+      },
     }),
     prisma.studentProgress.findMany({
       where: {
@@ -831,6 +836,10 @@ async function getOrganizationAnalyticsStudentDetail(
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const baselineScore = baseline?.sourceAssessmentResult.score ?? null;
   const latestMeasurementScore = measurementScores[0] ?? null;
+  const comparableFollowUp = latestComparableAssessmentResult(
+    baseline?.sourceAssessmentResult ?? null,
+    assessmentResults,
+  );
   const speedPoints = studentProgress.flatMap((item) =>
     item.skill.code.startsWith("FAST_") && item.fluencyWcpm !== null
       ? [{ at: item.periodEnd, value: item.fluencyWcpm }]
@@ -912,8 +921,8 @@ async function getOrganizationAnalyticsStudentDetail(
       baselineScore,
       latestMeasurementScore,
       improvementFromBaseline:
-        baselineScore !== null && latestMeasurementScore !== null
-          ? latestMeasurementScore - baselineScore
+        baselineScore !== null && comparableFollowUp !== null
+          ? comparableFollowUp.score! - baselineScore
           : null,
       readingSpeed: {
         available: speedPoints.length > 0,
@@ -1232,12 +1241,9 @@ async function getPlatformAnalyticsStudentDetail(
         0,
       ),
     ),
-    baselineScore:
-      details.find((detail) => detail.performance.baselineScore !== null)?.performance
-        .baselineScore ?? null,
-    latestMeasurementScore:
-      details.find((detail) => detail.performance.latestMeasurementScore !== null)?.performance
-        .latestMeasurementScore ?? null,
+    // A multi-tenant view has no single assessment context to compare safely.
+    baselineScore: null as number | null,
+    latestMeasurementScore: null as number | null,
     improvementFromBaseline: null as number | null,
     readingSpeed: {
       available: true,
@@ -1255,10 +1261,6 @@ async function getPlatformAnalyticsStudentDetail(
   };
   performance.readingSpeed.available = performance.readingSpeed.points.length > 0;
   performance.readingComprehension.available = performance.readingComprehension.points.length > 0;
-  if (performance.baselineScore !== null && performance.latestMeasurementScore !== null) {
-    performance.improvementFromBaseline =
-      performance.latestMeasurementScore - performance.baselineScore;
-  }
   const activityItems = details
     .flatMap((detail) => detail.activity.items)
     .sort((a, b) => b.at.getTime() - a.at.getTime());
