@@ -21,8 +21,8 @@ import {
 } from "../assessments/adaptive-measurement-scoring.js";
 import {
   isTrainingConfigCandidate,
-  isTrainingVersionConfig,
   loadTrainingRuntimeGraph,
+  resolveTrainingRuntimeConfig,
 } from "../training/runtime.js";
 import { syncTrainingSessionItem } from "../training/daily-session.js";
 import {
@@ -48,6 +48,7 @@ import {
   reconcileP1ToNextCycle,
   resolveP1CycleTransitionStep,
 } from "../student-learning/p1-transition.js";
+import { buildFastReadingMeasurement } from "../training/fast-reading-measurement.js";
 
 export interface ExerciseSessionDetail {
   id: string;
@@ -635,6 +636,7 @@ export async function listQuestionsForSession(
 export async function completeExerciseSession(
   id: string,
   actor: { userId: string; tenantId: string | null; platformRole: PlatformRole | null },
+  completion: { readingDurationMs?: number } = {},
 ): Promise<ExerciseSessionDetail> {
   const session = await prisma.exerciseSession.findUnique({
     where: { id },
@@ -651,11 +653,16 @@ export async function completeExerciseSession(
         },
       },
       deviceInfo: true,
+      startedAt: true,
       status: true,
       templateVersionId: true,
       templateVersion: {
         select: {
           config: true,
+          contents: {
+            select: { contentVersion: { select: { body: true } } },
+            orderBy: { position: "asc" },
+          },
           questions: {
             select: {
               questionVersionId: true,
@@ -699,17 +706,14 @@ export async function completeExerciseSession(
   if (session.status !== "IN_PROGRESS")
     throw validationError("Yalnızca devam eden oturum tamamlanabilir");
 
+  const trainingConfigCandidate =
+    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config);
+  const trainingConfigResolution = trainingConfigCandidate
+    ? resolveTrainingRuntimeConfig("TRAINING", session.templateVersion.config)
+    : null;
   const trainingConfig =
-    session.assessmentId === null && isTrainingConfigCandidate(session.templateVersion.config)
-      ? isTrainingVersionConfig(session.templateVersion.config)
-        ? session.templateVersion.config
-        : null
-      : null;
-  if (
-    session.assessmentId === null &&
-    isTrainingConfigCandidate(session.templateVersion.config) &&
-    !trainingConfig
-  ) {
+    trainingConfigResolution?.status === "READY" ? trainingConfigResolution.config : null;
+  if (trainingConfigCandidate && !trainingConfig) {
     throw validationError("Egzersiz sürümü yapılandırması geçersiz veya eksik");
   }
 
@@ -746,6 +750,15 @@ export async function completeExerciseSession(
   );
   const totalRawScore = scoredAttempts.reduce((sum, a) => sum + (a.rawScore ?? 0), 0);
   const averageScore = scoredAttempts.length > 0 ? totalRawScore / scoredAttempts.length : null;
+  const fastReadingMeasurement = trainingConfig
+    ? buildFastReadingMeasurement({
+        family: trainingConfig.family,
+        readingDurationMs: completion.readingDurationMs,
+        sessionAgeMs: Date.now() - session.startedAt.getTime(),
+        contentBodies: session.templateVersion.contents.map((item) => item.contentVersion.body),
+        comprehensionAccuracy: averageScore,
+      })
+    : null;
   const openEndedPending = session.templateVersion.questions.filter(
     (q) => q.questionVersion.question.type === "OPEN_ENDED",
   ).length;
@@ -802,6 +815,7 @@ export async function completeExerciseSession(
     openEndedTotal: openEndedPending,
     openEndedAnswered,
     pendingEvaluation: openEndedPending > openEndedAnswered,
+    ...(fastReadingMeasurement ? { fastReadingMeasurement } : {}),
     ...(placementScoring
       ? {
           placementScoring: {

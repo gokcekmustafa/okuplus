@@ -1,6 +1,7 @@
 import {
   FAST_READING_RENDERERS,
   parseTrainingExerciseVersionConfig,
+  timeRoleForTrainingFamily,
   type TrainingExerciseVersionConfig,
 } from "../modules/training/exercise-contract.js";
 import { LESSON_METADATA_TYPE } from "../modules/lessons/contract.js";
@@ -204,7 +205,7 @@ function contract(
     scoring: {
       mode: "DETERMINISTIC",
       primarySignal: "ACCURACY",
-      timeRole: "NONE",
+      timeRole: timeRoleForTrainingFamily(family),
       maxScore: 1,
       openEnded: false,
     },

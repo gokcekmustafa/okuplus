@@ -4,6 +4,7 @@ import { validationError } from "../../lib/errors.js";
 import type { AuthProvider } from "../auth/index.js";
 import { requireAuth } from "../../middleware/authenticate.js";
 import { completeExerciseSession, getExerciseSession, listQuestionsForSession } from "./service.js";
+import { completeExerciseSessionSchema } from "./schemas.js";
 
 function id(request: FastifyRequest) {
   const value = (request.params as { id?: string }).id;
@@ -28,7 +29,13 @@ export async function sessionStudentRoutes(
     ok(await listQuestionsForSession(id(request), actor(request))),
   );
   app.post("/student/sessions/:id/complete", { preHandler }, async (request) =>
-    ok(await completeExerciseSession(id(request), actor(request))),
+    ok(
+      await completeExerciseSession(
+        id(request),
+        actor(request),
+        completeExerciseSessionSchema.parse(request.body ?? {}),
+      ),
+    ),
   );
   app.get("/student/sessions/:id/detail", { preHandler }, async (request) =>
     ok(await getExerciseSession(id(request), actor(request))),

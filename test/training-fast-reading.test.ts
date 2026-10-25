@@ -1,8 +1,23 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildTrainingFeedback } from "../src/modules/training/runtime.js";
+import { buildFastReadingMeasurement } from "../src/modules/training/fast-reading-measurement.js";
+import { EDUCATION_V2_P0_PROGRAM } from "../src/curriculum/education-v2-p0-program.js";
+import { ACADEMIC_P0_LESSONS } from "../src/curriculum/academic-reading-p0.js";
+import { EDUCATION_V2_P1_A_PROGRAM } from "../src/curriculum/education-v2-p1-a-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-v2-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_3_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-3-program.js";
+import { EDUCATION_V2_P1_A_CYCLE_4_PROGRAM } from "../src/curriculum/education-v2-p1-a-cycle-4-program.js";
+import {
+  EDUCATION_V2_P1_A_CYCLE_5_8,
+  EDUCATION_V2_P1_A_CYCLE_9_12,
+  EDUCATION_V2_P1_A_CYCLE_13_16,
+  EDUCATION_V2_P1_A_CYCLE_17_20,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
+import { EDUCATION_V2_P1_BCD_PROGRAMS } from "../src/curriculum/education-v2-p1-bcd-program.js";
 import {
   parseTrainingExerciseContract,
+  resolveTrainingRuntimeConfig,
   safeParseTrainingExerciseVersionConfig,
   toTrainingExerciseVersionConfig,
   validatePublishedExerciseGraph,
@@ -184,5 +199,123 @@ describe("fast-reading training v1", () => {
     // All families now keep corrective feedback inline, including fast reading.
     expect(submitHandler).not.toContain("showCelebration(");
     expect(submitHandler).toContain("showExerciseFeedback(data)");
+  });
+
+  it("marks every source fast-reading exercise as timed secondary to accuracy", () => {
+    const programs = [
+      EDUCATION_V2_P0_PROGRAM,
+      EDUCATION_V2_P1_A_PROGRAM,
+      EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
+      EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+      EDUCATION_V2_P1_A_CYCLE_4_PROGRAM,
+      ...EDUCATION_V2_P1_A_CYCLE_5_8.map((cycle) => cycle.program),
+      ...EDUCATION_V2_P1_A_CYCLE_9_12.map((cycle) => cycle.program),
+      ...EDUCATION_V2_P1_A_CYCLE_13_16.map((cycle) => cycle.program),
+      ...EDUCATION_V2_P1_A_CYCLE_17_20.map((cycle) => cycle.program),
+      ...EDUCATION_V2_P1_BCD_PROGRAMS,
+    ];
+    const fastExercises = programs.flatMap((program) =>
+      program.exercises.filter((exercise) =>
+        ["ATTENTION_BURST", "RAPID_RECOGNITION", "PHRASE_CHUNKING"].includes(
+          exercise.contract.family,
+        ),
+      ),
+    );
+    expect(fastExercises).toHaveLength(23);
+    expect(
+      fastExercises.every((exercise) => exercise.contract.scoring.timeRole === "SECONDARY"),
+    ).toBe(true);
+    const timedAuthoringLessons = ACADEMIC_P0_LESSONS.filter(
+      (lesson) =>
+        lesson.area === "FAST_READING" &&
+        lesson.measurementSignals.includes("CONTROLLED_TASK_TIME"),
+    );
+    expect(timedAuthoringLessons).toHaveLength(3);
+  });
+
+  it("keeps speed secondary and withholds the speed indicator when comprehension is low", () => {
+    const recorded = buildFastReadingMeasurement({
+      family: "ATTENTION_BURST",
+      readingDurationMs: 30_000,
+      sessionAgeMs: 60_000,
+      contentBodies: [Array.from({ length: 20 }, (_, index) => `kelime${index + 1}`).join(" ")],
+      comprehensionAccuracy: 1,
+    });
+    expect(recorded).toMatchObject({ status: "RECORDED", speedEligible: true });
+    expect(recorded?.wordsPerMinute).toBe(40);
+    expect(
+      buildFastReadingMeasurement({
+        family: "PHRASE_CHUNKING",
+        readingDurationMs: 30_000,
+        sessionAgeMs: 60_000,
+        contentBodies: ["Bir metin burada bulunuyor."],
+        comprehensionAccuracy: 0.5,
+      })?.speedEligible,
+    ).toBe(false);
+    expect(
+      buildFastReadingMeasurement({
+        family: "MAIN_IDEA",
+        readingDurationMs: 30_000,
+        sessionAgeMs: 60_000,
+        contentBodies: ["Bir metin."],
+        comprehensionAccuracy: 1,
+      }),
+    ).toBeNull();
+    const legacyFastConfig = toTrainingExerciseVersionConfig(
+      fastContract("ATTENTION_BURST", "FAST_ATTENTION", "QUESTION_ATTENTION_BURST"),
+    );
+    legacyFastConfig.scoring.timeRole = "NONE";
+    expect(resolveTrainingRuntimeConfig("TRAINING", legacyFastConfig)).toMatchObject({
+      status: "READY",
+      config: { scoring: { primarySignal: "ACCURACY", timeRole: "SECONDARY" } },
+    });
+    expect(
+      buildFastReadingMeasurement({
+        family: "ATTENTION_BURST",
+        readingDurationMs: 20_000,
+        sessionAgeMs: 10_000,
+        contentBodies: ["Bir metin."],
+        comprehensionAccuracy: 1,
+      })?.status,
+    ).toBe("NOT_RECORDED");
+  });
+
+  it("collects only visible foreground reading time and pauses across interruptions", async () => {
+    const { createForegroundReadingTimer } = await import("../public/fast-reading-timer.js");
+    let now = 0;
+    const timer = createForegroundReadingTimer(() => now);
+    timer.resume();
+    now = 2_000;
+    timer.pause();
+    now = 20_000;
+    expect(timer.elapsedMs()).toBe(2_000);
+    timer.resume();
+    now = 23_500;
+    expect(timer.finish()).toBe(5_500);
+    expect(timer.isRunning()).toBe(false);
+    timer.resume();
+    now = 30_000;
+    expect(timer.elapsedMs()).toBe(5_500);
+  });
+
+  it("shows reading first, starts question exposure after the explicit handoff, and never scores speed as accuracy", () => {
+    const app = readFileSync("public/app.js", "utf8");
+    const html = readFileSync("public/index.html", "utf8");
+    const readStage = app.slice(
+      app.indexOf("function currentFastReadingMeasurement"),
+      app.indexOf("function renderExerciseResult"),
+    );
+    expect(readStage).toContain(
+      'document.addEventListener("visibilitychange", updateFastReadingClock)',
+    );
+    expect(readStage).toContain("card.getBoundingClientRect()");
+    expect(readStage).toContain('window.addEventListener("scroll", updateFastReadingClock');
+    expect(readStage).toContain("measurement.timer.finish()");
+    expect(app).toContain("body: JSON.stringify(completionBody)");
+    expect(app).toContain("fastReading.speedEligible");
+    expect(html).toContain("Metni okudum, sorulara geç");
+    expect(app).toContain(
+      "const readingPending = Boolean(readingMeasurement && !readingMeasurement.completed)",
+    );
   });
 });

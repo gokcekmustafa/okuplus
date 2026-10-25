@@ -32,7 +32,7 @@ import {
 import type { MultipleChoiceQualityQuestion } from "./option-length-quality.js";
 
 type QuestionPatch = Pick<ProgramQuestion, "options"> &
-  Partial<Pick<ProgramQuestion, "prompt" | "explanation" | "hint">>;
+  Partial<Pick<ProgramQuestion, "prompt" | "explanation" | "hint" | "correctOptionId">>;
 
 export type QuestionBankRevisionCandidate = {
   key: string;
@@ -258,24 +258,22 @@ function balancedPositionPatches(
   exercises: readonly {
     questions: readonly ProgramQuestion[];
   }[],
+  correctOptionIdOverrides: Readonly<Record<string, string>> = {},
 ): Record<string, QuestionPatch> {
   const patches: Record<string, QuestionPatch> = {};
   let questionIndex = 0;
   for (const exercise of exercises) {
     for (const question of exercise.questions) {
-      const correct = question.options.find((option) => option.id === question.correctOptionId);
+      const correctOptionId = correctOptionIdOverrides[question.key] ?? question.correctOptionId;
+      const correct = question.options.find((option) => option.id === correctOptionId);
       if (!correct || question.options.length !== 4) {
         questionIndex += 1;
         continue;
       }
       const targetPosition = questionIndex % question.options.length;
-      const currentPosition = question.options.findIndex(
-        (option) => option.id === question.correctOptionId,
-      );
+      const currentPosition = question.options.findIndex((option) => option.id === correctOptionId);
       if (currentPosition !== targetPosition) {
-        const remaining = question.options.filter(
-          (option) => option.id !== question.correctOptionId,
-        );
+        const remaining = question.options.filter((option) => option.id !== correctOptionId);
         remaining.splice(targetPosition, 0, correct);
         patches[question.key] = {
           options: remaining.map((option, index) => ({
@@ -686,8 +684,14 @@ function questionQualityCandidate(args: {
   nextQuestionVersionId(exerciseKey: string, questionKey: string, version: number): string;
   nextTemplateVersionId(exerciseKey: string, version: number): string;
   contentPatches: Readonly<Record<string, QuestionPatch>>;
+  answerKeyCorrectionReasons?: Readonly<Record<string, string>>;
 }): QuestionBankRevisionCandidate {
-  const positionPatches = balancedPositionPatches(args.exercises);
+  const correctOptionIdOverrides = Object.fromEntries(
+    Object.entries(args.contentPatches).flatMap(([questionKey, patch]) =>
+      patch.correctOptionId ? [[questionKey, patch.correctOptionId]] : [],
+    ),
+  );
+  const positionPatches = balancedPositionPatches(args.exercises, correctOptionIdOverrides);
   const patches = { ...positionPatches };
   for (const [questionKey, contentPatch] of Object.entries(args.contentPatches)) {
     const baseQuestion = args.exercises
@@ -722,6 +726,265 @@ const cycle3AnswerKeyCorrections = {
   "p1a-v3-evidence-practice-3":
     "Eski doğru seçenek yine aynı su bölümünün hem toprağa hem bitkilere ulaştığını ima ediyordu. Yeni seçenek metnin desteklediği iki ayrı katkıyı sınırlı biçimde özetliyor.",
 } as const;
+
+const p0QuestionQualityV3 = questionQualityCandidate({
+  key: `${p0.programId}:question-quality-v3`,
+  programId: p0.programId,
+  programVersion: 1,
+  revisionVersion: 3,
+  exercises: p0.exercises,
+  contents: p0.content,
+  contentPatches: initialQuestionCorrections[p0.programId]!,
+  questionVersionId: p0QuestionVersionId,
+  templateVersionId: p0CurrentExerciseTemplateVersionId,
+  nextQuestionVersionId: (exerciseKey, questionKey, version) =>
+    getProgramIds("questionVersion", `${exerciseKey}-${questionKey}-v${version}`),
+  nextTemplateVersionId: p0RevisionExerciseTemplateVersionId,
+});
+
+const p0V3QuestionByKey = new Map(
+  p0QuestionQualityV3.changedQuestions.map((item) => [item.questionKey, item.question]),
+);
+const p0V3TemplateByExercise = new Map(
+  p0QuestionQualityV3.templateVersions.map((item) => [item.exerciseKey, item.templateVersionId]),
+);
+const p0V3Exercises = p0.exercises.map((exercise) => ({
+  ...exercise,
+  questions: exercise.questions.map((question) => p0V3QuestionByKey.get(question.key) ?? question),
+}));
+
+const p0CompetencyTransferPatches: Readonly<Record<string, QuestionPatch>> = {
+  "fast-attention-study-2": {
+    prompt:
+      "Okuma hedefin duyurudaki başlangıç saatini bulmak. Hangi cümle bu hedefe doğrudan kanıt verir?\n\n‘Kitap kulübü perşembe günü toplanacak. Buluşma saat 16.30’da başlayacak. Katılımcılar yanlarında bir kitap getirebilir.’",
+    options: [
+      { id: "a", text: "Kitap kulübü perşembe günü toplanacak.", position: 1 },
+      { id: "b", text: "Buluşma saat 16.30’da başlayacak.", position: 2 },
+      { id: "c", text: "Katılımcılar yanlarında kitap getirebilir.", position: 3 },
+      { id: "d", text: "Duyuruda başlangıç saati verilmemiştir.", position: 4 },
+    ],
+    correctOptionId: "b",
+    explanation:
+      "Hedef başlangıç saatini bulmaktır; ikinci cümle saati doğrudan 16.30 olarak verir.",
+    hint: "Önce aradığın bilgiyi belirle, sonra yalnızca o bilgiyi veren cümleyi bul.",
+  },
+  "fast-recognition-practice-1": {
+    prompt:
+      "‘Ece kütüphaneden atlası ödünç aldı ve cuma günü geri getirdi.’ cümlesinde ‘ödünç aldı’ ne anlama gelir?",
+    options: [
+      { id: "a", text: "Atlası satın alıp kendisine sakladı.", position: 1 },
+      { id: "b", text: "Atlası bir süre kullanıp geri verdi.", position: 2 },
+      { id: "c", text: "Atlası kütüphaneye bağışladı.", position: 3 },
+      { id: "d", text: "Atlası daha sonra almak üzere ayırttı.", position: 4 },
+    ],
+    correctOptionId: "b",
+    explanation:
+      "Cuma günü geri getirmesi, atlası kalıcı olarak almadığını; bir süre kullanmak için aldığını gösterir.",
+    hint: "‘Geri getirdi’ ayrıntısı, atlasın nasıl alındığını anlamana yardım eder.",
+  },
+  "fast-recognition-practice-2": {
+    prompt:
+      "‘Konser salonunun kapısı aralıktı; koridordan müzik sesi duyuluyordu.’ cümlesinde ‘aralıktı’ sözcüğü nasıl bir kapıyı anlatır?",
+    options: [
+      { id: "a", text: "Tamamen açık bir kapıyı.", position: 1 },
+      { id: "b", text: "Kapalı ama kilitlenmemiş bir kapıyı.", position: 2 },
+      { id: "c", text: "Bir miktar açık, tam kapanmamış bir kapıyı.", position: 3 },
+      { id: "d", text: "Kapalı ve kilitli bir kapıyı.", position: 4 },
+    ],
+    correctOptionId: "c",
+    explanation:
+      "‘Aralık’ kapı tam kapalı değildir; cümledeki koridora yayılan ses de bunu destekler.",
+    hint: "Kapının tamamen kapalı mı, yoksa biraz açık mı olduğunu düşün.",
+  },
+  "rc-main-idea-practice-1": {
+    prompt:
+      "Metin: Mahalledeki kitap paylaşım rafına herkes okuyup bitirdiği kitapları bırakabiliyor. Rafı kullananlar kitapların yanına kısa öneriler de yazıyor. Böylece okurlar yeni kitapları birbirlerinin önerileriyle seçebiliyor.\n\nMetnin ana düşüncesi hangisidir?",
+    options: [
+      { id: "a", text: "Raf yalnızca kitapların saklanması için kullanılır.", position: 1 },
+      {
+        id: "b",
+        text: "Paylaşım rafı, okurların kitap ve öneri alışverişi yapmasını sağlar.",
+        position: 2,
+      },
+      { id: "c", text: "Mahalledeki herkes aynı kitabı okumayı seçer.", position: 3 },
+      { id: "d", text: "Kitap önerileri yalnızca kütüphane görevlilerinden alınır.", position: 4 },
+    ],
+    explanation:
+      "Kitap bırakılması ve öneri yazılması, okurların birbirine kitap seçimi konusunda destek olduğunu gösterir.",
+    hint: "Kitap bırakma ve öneri yazma ayrıntılarını birlikte kapsayan düşünceyi ara.",
+  },
+  "rc-main-idea-practice-2": {
+    prompt:
+      "Metin: Okulun bahçesindeki küçük yağmur ölçeri her sabah kontrol ediliyor. Öğrenciler ölçümü çizelgeye yazıyor ve haftanın sonunda değerleri karşılaştırıyor. Böylece yağışın günlere göre nasıl değiştiğini izleyebiliyorlar.\n\nMetnin ana düşüncesi hangisidir?",
+    options: [
+      { id: "a", text: "Ölçümler yalnızca haftanın son günü yapılır.", position: 1 },
+      { id: "b", text: "Çizelge yağmurun ne zaman yağacağını kesin bildirir.", position: 2 },
+      { id: "c", text: "Günlük ölçümler yağış değişimini izlemeye yardım eder.", position: 3 },
+      { id: "d", text: "Öğrenciler yağmur ölçerini bahçeden kaldırmıştır.", position: 4 },
+    ],
+    correctOptionId: "c",
+    explanation:
+      "Sabah ölçümlerinin çizelgeye yazılıp karşılaştırılması, yağışın günlere göre değişimini izlemeyi sağlar.",
+    hint: "Günlük ölçüm ve hafta sonundaki karşılaştırmanın ortak amacını bul.",
+  },
+  "rc-detail-study-1": {
+    prompt:
+      "Metin: Kent müzesindeki gönüllüler eski fotoğrafları tarih sırasına göre dizdi. Her fotoğrafın yanına çekildiği yıl ve yeri yazan bir kart koydular. Ziyaretçiler böylece aynı sokağın farklı yıllardaki görünümünü karşılaştırabiliyor.\n\nFotoğraf kartlarında hangi iki bilgi bulunuyor?",
+    options: [
+      { id: "a", text: "Fotoğrafı çeken kişinin adı ve çekim yılı.", position: 1 },
+      { id: "b", text: "Fotoğrafın çekildiği yıl ve çekildiği yer.", position: 2 },
+      { id: "c", text: "Fotoğrafın çekildiği mevsim ve gün.", position: 3 },
+      { id: "d", text: "Fotoğrafı müzeye getiren kişinin adı.", position: 4 },
+    ],
+    explanation: "İkinci cümle kartlarda yıl ve yer bilgisinin bulunduğunu açıkça söylüyor.",
+    hint: "Fotoğrafın yanındaki kartta yazan bilgileri bul.",
+  },
+  "rc-detail-study-2": {
+    prompt:
+      "Metin: Spor salonunda yeni bir su sebili kuruldu. Görevli, sebilin girişten sonra sağdaki duvarın yanında olduğunu belirtti. Öğrenciler matara doldurmak için bu noktayı kullanıyor.\n\nSu sebili nerede bulunuyor?",
+    options: [
+      { id: "a", text: "Girişten sonra sağ duvarın yanı.", position: 1 },
+      { id: "b", text: "Girişten sonra sol duvarın yanında.", position: 2 },
+      { id: "c", text: "Girişten önce sağ duvarın yanında.", position: 3 },
+      { id: "d", text: "Girişten sonra sağ duvarın karşısında.", position: 4 },
+    ],
+    explanation: "Görevlinin verdiği konum, girişten sonra sağdaki duvarın yanıdır.",
+    hint: "Konumu tarif eden cümleye dön.",
+  },
+  "rc-inference-practice-1": {
+    prompt:
+      "Metin: Atölye kapısında ‘Bugün içeride çalışma var’ yazısı asılıydı. Koridordan aralıklı çekiç sesleri geliyordu.\n\nBu iki ayrıntıdan hangi sınırlı sonuca ulaşılabilir?",
+    options: [
+      { id: "a", text: "Atölyede o sırada bir çalışma yapılıyor olabilir.", position: 1 },
+      { id: "b", text: "Atölye bütün hafta kapalı kalacaktır.", position: 2 },
+      { id: "c", text: "Çalışmayı yapan kişi kesinlikle öğretmendir.", position: 3 },
+      { id: "d", text: "Atölyede yeni bir bina kurulmaktadır.", position: 4 },
+    ],
+    correctOptionId: "a",
+    explanation:
+      "Kapıdaki yazı ve içeriden gelen ses birlikte çalışma yapıldığı sonucunu destekler; çalışmanın süresi veya kimin yaptığı belli değildir.",
+    hint: "Yalnızca yazı ve sesin birlikte desteklediği sonucu seç.",
+  },
+  "rc-inference-practice-2": {
+    prompt:
+      "Metin: Gezi grubunun listesinde dört öğrenci adı vardı. Rehber, müze girişinde dört bilet ayırdığını söyledi.\n\nBu iki ayrıntı hangi sonucu destekler?",
+    options: [
+      { id: "a", text: "Listedeki öğrencilerin tamamı müzeyi daha önce gezdi.", position: 1 },
+      { id: "b", text: "Grubun dört öğrenciden oluşması bekleniyor.", position: 2 },
+      { id: "c", text: "Rehber listedeki öğrencilerin hepsini tanıyor.", position: 3 },
+      { id: "d", text: "Müze o gün yalnızca bu gruba açık olacak.", position: 4 },
+    ],
+    correctOptionId: "b",
+    explanation:
+      "Dört isim ve dört ayrılmış bilet, dört öğrencinin grupta olmasının beklendiğini destekler; başka bilgiler çıkarılamaz.",
+    hint: "İsim sayısı ile ayrılan bilet sayısını karşılaştır.",
+  },
+  "common-test-1": {
+    prompt:
+      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nMetnin ana düşüncesi hangisidir?",
+    options: [
+      {
+        id: "a",
+        text: "Paylaşım köşesi kitapları buluşturuyor; bitirme bilgisi izlenmiyor.",
+        position: 1,
+      },
+      {
+        id: "b",
+        text: "Köşe kitapları topluyor; öğretmen bitirme durumunu kayda geçiriyor.",
+        position: 2,
+      },
+      {
+        id: "c",
+        text: "İki haftalık sayılar, kitapların kimlerce tamamlandığını gösteriyor.",
+        position: 3,
+      },
+      {
+        id: "d",
+        text: "Rafı gören sınıflar kitapları yalnızca ödünç almak için bırakıyor.",
+        position: 4,
+      },
+    ],
+    explanation:
+      "Kitapların bırakılıp yenilerinin gelmesi paylaşım köşesinin kullanıldığını gösterir; öğretmen okuma tamamlanmasını takip etmediklerini belirtir.",
+    hint: "Kitapların gelişiyle öğretmenin belirtmediği ölçümü birlikte değerlendir.",
+  },
+  "common-test-2": {
+    prompt:
+      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nİkinci hafta kaç yeni kitap geldi?",
+    options: [
+      { id: "a", text: "Dört kitap.", position: 1 },
+      { id: "b", text: "Dokuz kitap.", position: 2 },
+      { id: "c", text: "On iki kitap.", position: 3 },
+      { id: "d", text: "Bu sayı metinde verilmemiştir.", position: 4 },
+    ],
+    correctOptionId: "b",
+    explanation: "Metnin ikinci cümlesi sonraki hafta dokuz yeni kitap geldiğini söylüyor.",
+    hint: "İlk haftadaki 12 ile sonraki haftadaki sayıyı karıştırma.",
+  },
+  "common-test-3": {
+    prompt:
+      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nMetnin desteklediği sınırlı çıkarım hangisidir?",
+    options: [
+      { id: "a", text: "Dokuz yeni kitap gelmesi köşeye ilgi olduğunu düşündürür.", position: 1 },
+      { id: "b", text: "Dokuz kitabın tamamı öğrenciler tarafından bitirilmiştir.", position: 2 },
+      { id: "c", text: "Her öğrenci aynı kitabı okuyup tamamlamıştır.", position: 3 },
+      { id: "d", text: "Kitap köşesi okul dışındaki okurlara da açılmıştır.", position: 4 },
+    ],
+    explanation:
+      "Yeni kitapların gelmesi köşenin kullanıldığını düşündürür; hangi kitapların bitirildiği takip edilmediği için tamamlanma çıkarılamaz.",
+    hint: "Yeni kitap gelişinin gösterdiğiyle metnin özellikle ölçmediğini ayır.",
+  },
+  "common-test-4": {
+    prompt:
+      "Metin: Okulun koridorundaki kitap paylaşım köşesine öğrenciler okudukları kitapları bırakıyor. İlk hafta 12 kitap bırakıldı; sonraki hafta rafı gören sınıflardan 9 yeni kitap geldi. Öğretmen, hangi kitapların bitirildiğini takip etmediklerini söyledi.\n\nHangi bilgi metinden çıkarılamaz?",
+    options: [
+      { id: "a", text: "İlk hafta köşeye 12 kitap bırakıldığı.", position: 1 },
+      { id: "b", text: "Sonraki hafta 9 yeni kitap geldiği.", position: 2 },
+      { id: "c", text: "Kitapların kimler tarafından bitirildiği.", position: 3 },
+      { id: "d", text: "Köşenin okul koridorunda bulunduğu.", position: 4 },
+    ],
+    correctOptionId: "c",
+    explanation:
+      "Öğretmen kitapların hangilerinin bitirildiğini takip etmediklerini söylüyor; bu bilgi metinden çıkarılamaz.",
+    hint: "Öğretmenin hangi bilgiyi takip etmediğini bul.",
+  },
+};
+
+const p0CompetencyTransferCandidate = questionQualityCandidate({
+  key: `${p0.programId}:competency-transfer-v4`,
+  programId: p0.programId,
+  programVersion: 1,
+  revisionVersion: 4,
+  exercises: p0V3Exercises,
+  contents: p0.content,
+  contentPatches: p0CompetencyTransferPatches,
+  answerKeyCorrectionReasons: {
+    "fast-attention-study-2":
+      "Yeni kök başlangıç saatini soruyor; doğru seçenek, duyuruda başlangıç saatini açıkça veren cümle olmalıdır.",
+    "fast-recognition-practice-1":
+      "Yeni kök ‘ödünç aldı’ sözcüğünü soruyor; geri getirme ayrıntısı geçici kullanımı doğrular.",
+    "fast-recognition-practice-2":
+      "Yeni kök ‘aralıktı’ sözcüğünün anlamını soruyor; doğru seçenek kapının tam kapanmamış olduğunu belirtir.",
+    "rc-main-idea-practice-2":
+      "Yeni metinde günlük ölçümlerin çizelgeyle karşılaştırılması yağış değişimini izlemeyi destekler.",
+    "rc-inference-practice-1":
+      "Kapıdaki duyuru ve içeriden gelen ses, atölyede o sırada çalışma olabileceği sonucunu sınırlarıyla destekler.",
+    "rc-inference-practice-2":
+      "Dört öğrenci adı ve dört ayrılmış bilet, dört öğrencinin beklendiği sonucunu destekler.",
+    "common-test-2":
+      "Yeni kök ikinci haftadaki yeni kitap sayısını soruyor; metindeki sayı dokuzdur.",
+    "common-test-4":
+      "Metin bitirme durumunun takip edilmediğini söylediğinden, kitapları kimin bitirdiği çıkarılamaz.",
+  },
+  questionVersionId: (exerciseKey, questionKey) =>
+    p0QuestionQualityV3.changedQuestions.find((item) => item.questionKey === questionKey)
+      ?.questionVersionId ?? p0QuestionVersionId(exerciseKey, questionKey),
+  templateVersionId: (exerciseKey) =>
+    p0V3TemplateByExercise.get(exerciseKey) ?? p0CurrentExerciseTemplateVersionId(exerciseKey),
+  nextQuestionVersionId: (exerciseKey, questionKey, version) =>
+    getProgramIds("questionVersion", `${exerciseKey}-${questionKey}-v${version}`),
+  nextTemplateVersionId: p0RevisionExerciseTemplateVersionId,
+});
 
 export const QUESTION_BANK_VERSIONED_REVISION_CANDIDATES: readonly QuestionBankRevisionCandidate[] =
   [
@@ -765,20 +1028,8 @@ export const QUESTION_BANK_VERSIONED_REVISION_CANDIDATES: readonly QuestionBankR
           p1BCDId(program, "templateVersion", `${exerciseKey}-v2`),
       }),
     ),
-    questionQualityCandidate({
-      key: `${p0.programId}:question-quality-v3`,
-      programId: p0.programId,
-      programVersion: 1,
-      revisionVersion: 3,
-      exercises: p0.exercises,
-      contents: p0.content,
-      contentPatches: initialQuestionCorrections[p0.programId]!,
-      questionVersionId: p0QuestionVersionId,
-      templateVersionId: p0CurrentExerciseTemplateVersionId,
-      nextQuestionVersionId: (exerciseKey, questionKey, version) =>
-        getProgramIds("questionVersion", `${exerciseKey}-${questionKey}-v${version}`),
-      nextTemplateVersionId: p0RevisionExerciseTemplateVersionId,
-    }),
+    p0QuestionQualityV3,
+    p0CompetencyTransferCandidate,
     ...bcdInitialPrograms.map((program) =>
       questionQualityCandidate({
         key: `${program.programId}:question-quality-v3`,

@@ -57,6 +57,13 @@ export const FAST_READING_FAMILIES = [
   "PHRASE_CHUNKING",
 ] as const;
 
+/** Fast reading records time as a secondary signal; correctness remains primary. */
+export function timeRoleForTrainingFamily(family: TrainingExerciseFamily): "NONE" | "SECONDARY" {
+  return FAST_READING_FAMILIES.includes(family as (typeof FAST_READING_FAMILIES)[number])
+    ? "SECONDARY"
+    : "NONE";
+}
+
 export const TRAINING_INTERACTION_TYPES = ["MULTIPLE_CHOICE", "TRUE_FALSE", "CONFIGURED"] as const;
 
 const stableKeySchema = z
@@ -559,10 +566,19 @@ export function resolveTrainingRuntimeConfig(
     };
   }
 
+  const config = parsed.data;
+  // Older published snapshots used NONE for fast-reading families. Preserve
+  // their immutable DB rows while enabling the newly implemented measurement
+  // as a secondary signal at runtime; deterministic scoring stays accuracy-only.
+  const effectiveConfig =
+    FAST_READING_FAMILIES.includes(config.family as (typeof FAST_READING_FAMILIES)[number]) &&
+    config.scoring.timeRole === "NONE"
+      ? { ...config, scoring: { ...config.scoring, timeRole: "SECONDARY" as const } }
+      : config;
   return {
     status: "READY",
     source: "VERSION_SNAPSHOT",
-    config: parsed.data,
+    config: effectiveConfig,
   };
 }
 

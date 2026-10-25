@@ -551,7 +551,7 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
     );
   });
 
-  it("connects Cycle 16 through 20 while keeping unpublished cycles locked", () => {
+  it("recognizes the approved Cycle 17–20 release while keeping missing production graphs locked", () => {
     const cycle16 = getEducationV2P1ACycle(16)!;
     const catalog16 = LEARNING_ROUTE_CYCLES.find(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence === 16,
@@ -566,8 +566,8 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
       expect(catalog.programId).toBe(cycle.program.programId);
       expect(catalog.manifest).toBe(cycle.manifest);
       expect(matchesLearningRouteGraph(graphFor(sequence))).toBe(true);
-      expect(catalog.publicationApproved()).toBe(false);
-      expect(catalog.authoringStatus).toBe("DRAFT_NOT_RELEASED");
+      expect(catalog.publicationApproved()).toBe(true);
+      expect(catalog.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
       expect(nextLearningRouteCycle(catalog.pathCode)?.sequence).toBe(sequence + 1);
     }
     expect(cycle16.manifest.steps).toHaveLength(5);
@@ -582,14 +582,15 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
     expect(
       planned.every((node) => node.status === "locked" && node.availability === "UNAVAILABLE"),
     ).toBe(true);
+    expect(planned.every((node) => node.planningStatus === "GRAPH_NOT_AVAILABLE")).toBe(true);
   });
 
   it("uses an independent release identity and preserves the owner publication gate", () => {
     expect(EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_DECISIONS).toEqual(
       [17, 18, 19, 20].map((sequence) => ({
         sequence,
-        status: "OWNER_RELEASE_REQUIRED",
-        explicitPublicationApproved: false,
+        status: "OWNER_RELEASE_APPROVED",
+        explicitPublicationApproved: true,
       })),
     );
     expect(EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_FINGERPRINT).toMatch(/^[a-f0-9]{64}$/u);
@@ -597,6 +598,9 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
       EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_FINGERPRINT,
     );
     for (const sequence of [17, 18, 19, 20]) {
+      expect(isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence)).toBe(true);
+    }
+    for (const sequence of [16, 21]) {
       expect(isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence)).toBe(false);
     }
     const approval = educationV2P1ACycle17To20ProductionApproval("a".repeat(40));

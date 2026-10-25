@@ -43,7 +43,7 @@ describe("versioned multiple-choice question revisions", () => {
     const contentCandidates = QUESTION_BANK_VERSIONED_REVISION_CANDIDATES.filter(
       (candidate) => candidate.revisionKind === "QUESTION_CONTENT",
     );
-    expect(contentCandidates).toHaveLength(6);
+    expect(contentCandidates).toHaveLength(7);
     const cycle2 = contentCandidates.find((candidate) => candidate.baseProgramVersion === 2)!;
     const cycle3 = contentCandidates.find((candidate) => candidate.baseProgramVersion === 3)!;
 
@@ -258,5 +258,95 @@ describe("versioned multiple-choice question revisions", () => {
         .find((item) => item.questionKey === "p1d-study-1")
         ?.question.options.find((option) => option.id === "a")?.text,
     ).toContain("Mevsime göre");
+  });
+
+  it("adds an unpublished immutable P0 v4 transfer candidate for the competency and unseen-text corrections", () => {
+    const candidate = QUESTION_BANK_VERSIONED_REVISION_CANDIDATES.find((item) =>
+      item.key.endsWith(":competency-transfer-v4"),
+    )!;
+    const expectedKeys = [
+      "fast-attention-study-2",
+      "fast-recognition-practice-1",
+      "fast-recognition-practice-2",
+      "rc-detail-study-1",
+      "rc-detail-study-2",
+      "rc-main-idea-practice-1",
+      "rc-main-idea-practice-2",
+      "rc-inference-practice-1",
+      "rc-inference-practice-2",
+      "common-test-1",
+      "common-test-2",
+      "common-test-3",
+      "common-test-4",
+    ];
+    expect(candidate.revisionVersion).toBe(4);
+    expect(candidate.publicationApproved).toBe(false);
+    expect(candidate.changedQuestions.map((item) => item.questionKey)).toEqual(expectedKeys);
+    expect(candidate.templateVersions).toHaveLength(6);
+    for (const item of candidate.changedQuestions) {
+      expect(item.questionVersionId).toContain("-v4");
+      expect(item.questionVersionId).not.toBe(item.baseQuestionVersionId);
+      expect(item.question.options).toHaveLength(4);
+      expect(
+        item.question.options.filter((option) => option.id === item.question.correctOptionId),
+      ).toHaveLength(1);
+      expect(item.question.explanation.trim()).not.toBe("");
+      expect(item.question.hint.trim()).not.toBe("");
+      if (/^(rc-main-idea|rc-detail|rc-inference|common-test)/u.test(item.questionKey)) {
+        // The transfer prompts contain a fresh self-contained reading stimulus.
+        expect(item.question.prompt).toMatch(/Metin:/u);
+      }
+    }
+    expect(
+      candidate.changedQuestions.find((item) => item.questionKey === "fast-attention-study-2")
+        ?.question.correctOptionId,
+    ).toBe("b");
+    expect(
+      Object.fromEntries(
+        candidate.changedQuestions.map((item) => [item.questionKey, item.question.correctOptionId]),
+      ),
+    ).toMatchObject({
+      "fast-attention-study-2": "b",
+      "fast-recognition-practice-1": "b",
+      "fast-recognition-practice-2": "c",
+      "rc-main-idea-practice-1": "b",
+      "rc-main-idea-practice-2": "c",
+      "rc-detail-study-1": "b",
+      "rc-detail-study-2": "a",
+      "rc-inference-practice-1": "a",
+      "rc-inference-practice-2": "b",
+      "common-test-1": "a",
+      "common-test-2": "b",
+      "common-test-3": "a",
+      "common-test-4": "c",
+    });
+    expect(
+      candidate.changedQuestions
+        .filter((item) => item.answerKeyChanged)
+        .map((item) => item.questionKey),
+    ).toEqual([
+      "fast-attention-study-2",
+      "fast-recognition-practice-1",
+      "fast-recognition-practice-2",
+      "rc-main-idea-practice-2",
+      "rc-inference-practice-1",
+      "rc-inference-practice-2",
+      "common-test-2",
+      "common-test-4",
+    ]);
+    expect(
+      candidate.changedQuestions
+        .filter((item) => item.answerKeyChanged)
+        .every((item) => Boolean(item.answerKeyCorrectionReason)),
+    ).toBe(true);
+    expect(
+      candidate.changedQuestions.find((item) => item.questionKey === "fast-recognition-practice-2")
+        ?.question.prompt,
+    ).toContain("aralıktı");
+    for (const template of candidate.templateVersions) {
+      expect(template.baseTemplateVersionId).toMatch(/(?:academic-|common-test-)v3$/u);
+      expect(template.templateVersionId).toMatch(/(?:academic-|common-test-)v4$/u);
+      expect(template.questionVersionIds.some((id) => id.endsWith("-v4"))).toBe(true);
+    }
   });
 });

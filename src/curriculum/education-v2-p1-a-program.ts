@@ -1,5 +1,6 @@
 import {
   parseTrainingExerciseVersionConfig,
+  timeRoleForTrainingFamily,
   type TrainingExerciseVersionConfig,
 } from "../modules/training/exercise-contract.js";
 import type {
@@ -130,7 +131,7 @@ function contract(
     scoring: {
       mode: "DETERMINISTIC",
       primarySignal: "ACCURACY",
-      timeRole: "NONE",
+      timeRole: timeRoleForTrainingFamily(family),
       maxScore: 1,
       openEnded: false,
     },

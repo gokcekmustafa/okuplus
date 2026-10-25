@@ -1,6 +1,7 @@
 import {
   FAST_READING_RENDERERS,
   parseTrainingExerciseVersionConfig,
+  timeRoleForTrainingFamily,
   type TrainingExerciseVersionConfig,
 } from "../modules/training/exercise-contract.js";
 import type {
@@ -124,7 +125,7 @@ function makeContract(
     scoring: {
       mode: "DETERMINISTIC",
       primarySignal: "ACCURACY",
-      timeRole: "NONE",
+      timeRole: timeRoleForTrainingFamily(familyBySkill[skillCode]),
       maxScore: 1,
       openEnded: false,
     },

@@ -14,4 +14,10 @@ export const createExerciseSessionSchema = z.object({
   sessionType: z.enum(["PRACTICE", "ASSESSMENT"]).optional(),
 });
 
+export const completeExerciseSessionSchema = z
+  .object({
+    readingDurationMs: z.number().int().min(0).max(3_600_000).optional(),
+  })
+  .strict();
+
 export type CreateExerciseSessionInput = z.infer<typeof createExerciseSessionSchema>;

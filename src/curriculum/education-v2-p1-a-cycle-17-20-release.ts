@@ -32,12 +32,12 @@ export const EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_FINGERPRINT = createHash("sha
   .digest("hex");
 export const EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_ID = `OKU-EDUCATION-V2-P1-A-CYCLE-17-20@v1:${EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_FINGERPRINT}`;
 
-/** Product-owner review is still pending; source verification is a separate fact. */
+/** Explicit product-owner release decision supplied for this four-cycle package. */
 export const EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_DECISIONS: readonly EducationV2P1ACycle17To20ReleaseDecision[] =
   EDUCATION_V2_P1_A_CYCLE_17_20_SEQUENCES.map((sequence) => ({
     sequence,
-    status: "OWNER_RELEASE_REQUIRED",
-    explicitPublicationApproved: false,
+    status: "OWNER_RELEASE_APPROVED",
+    explicitPublicationApproved: true,
   }));
 
 export function isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence: number): boolean {

@@ -14,6 +14,7 @@ import {
   requestNativeGoogleCredential,
 } from "./mobile-auth.js";
 import { createGuestDiagnosticClient } from "./guest-diagnostic-client.js";
+import { createForegroundReadingTimer } from "./fast-reading-timer.js";
 
 const uiMotion = createUiMotion();
 // Web'de access + refresh token localStorage'da tutulur. Native kabukta
@@ -11179,6 +11180,8 @@ let exerciseRequest = null;
 let exerciseRequestedSessionId = null;
 let exerciseScope = null;
 let exerciseQuestionRenderToken = 0;
+let activeFastReadingMeasurement = null;
+let fastReadingTimerTicker = null;
 let exerciseReviewMode = false;
 let dailyTrainingSessionId = null;
 let dailyTrainingSummary = null;
@@ -13735,6 +13738,7 @@ function resetDailyTrainingState() {
   rememberDailyTrainingState(null);
 }
 function resetExerciseState() {
+  stopFastReadingMeasurement();
   exerciseQuestionRenderToken++;
   exerciseSession = null;
   exerciseQuestions = [];
@@ -14180,9 +14184,14 @@ function renderExerciseSession() {
     `;
   }
   const qCard = $("exercise-questions-card");
+  const readingMeasurement = currentFastReadingMeasurement();
+  const readingPending = Boolean(readingMeasurement && !readingMeasurement.completed);
   if (qCard)
     qCard.style.display =
-      exerciseSession && exerciseQuestions.length && exerciseSession.status === "IN_PROGRESS"
+      exerciseSession &&
+      exerciseQuestions.length &&
+      exerciseSession.status === "IN_PROGRESS" &&
+      !readingPending
         ? "block"
         : "none";
   const resultCard = $("exercise-result-card");
@@ -14216,6 +14225,107 @@ function isFastReadingExercise() {
   const family = exerciseSession?.templateVersion?.training?.family;
   return ["ATTENTION_BURST", "RAPID_RECOGNITION", "PHRASE_CHUNKING"].includes(family);
 }
+
+function currentFastReadingMeasurement(session = exerciseSession) {
+  if (
+    isPlatformUser !== false ||
+    session?.status !== "IN_PROGRESS" ||
+    !["ATTENTION_BURST", "RAPID_RECOGNITION", "PHRASE_CHUNKING"].includes(
+      session?.templateVersion?.training?.family,
+    )
+  ) {
+    return null;
+  }
+  if (activeFastReadingMeasurement?.sessionId !== session.id) {
+    stopFastReadingMeasurement();
+    activeFastReadingMeasurement = {
+      sessionId: session.id,
+      timer: createForegroundReadingTimer(),
+      completed: false,
+      durationMs: null,
+    };
+  }
+  return activeFastReadingMeasurement;
+}
+
+function fastReadingCardIsVisible() {
+  const card = $("student-reading-card");
+  if (
+    !card ||
+    document.visibilityState === "hidden" ||
+    getComputedStyle(card).display === "none" ||
+    card.getClientRects().length === 0
+  ) {
+    return false;
+  }
+  const rect = card.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  return (
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.bottom > 0 &&
+    rect.top < viewportHeight &&
+    rect.right > 0 &&
+    rect.left < viewportWidth
+  );
+}
+
+function formatActiveReadingDuration(durationMs) {
+  const seconds = Math.floor(Math.max(0, durationMs) / 1000);
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function updateFastReadingClock() {
+  const measurement = currentFastReadingMeasurement();
+  if (!measurement || measurement.completed) {
+    measurement?.timer.pause();
+    if (fastReadingTimerTicker) {
+      clearInterval(fastReadingTimerTicker);
+      fastReadingTimerTicker = null;
+    }
+    return;
+  }
+  if (fastReadingCardIsVisible()) measurement.timer.resume();
+  else measurement.timer.pause();
+  const status = $("fast-reading-timer-status");
+  if (status) {
+    status.textContent = `Etkin okuma süresi: ${formatActiveReadingDuration(measurement.timer.elapsedMs())}`;
+  }
+  if (!fastReadingTimerTicker) {
+    fastReadingTimerTicker = setInterval(updateFastReadingClock, 500);
+  }
+}
+
+function stopFastReadingMeasurement() {
+  activeFastReadingMeasurement?.timer.pause();
+  activeFastReadingMeasurement = null;
+  if (fastReadingTimerTicker) {
+    clearInterval(fastReadingTimerTicker);
+    fastReadingTimerTicker = null;
+  }
+}
+
+document.addEventListener("visibilitychange", updateFastReadingClock);
+window.addEventListener("pagehide", () => activeFastReadingMeasurement?.timer.pause());
+window.addEventListener("pageshow", updateFastReadingClock);
+window.addEventListener("scroll", updateFastReadingClock, { passive: true });
+window.addEventListener("resize", updateFastReadingClock);
+document.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("#student-reading-continue");
+  if (!button || exerciseBusy) return;
+  const measurement = currentFastReadingMeasurement();
+  if (!measurement || measurement.completed) return;
+  updateFastReadingClock();
+  measurement.durationMs = measurement.timer.finish();
+  measurement.completed = true;
+  if (fastReadingTimerTicker) {
+    clearInterval(fastReadingTimerTicker);
+    fastReadingTimerTicker = null;
+  }
+  renderExerciseSession();
+  renderExerciseQuestion();
+});
 function fastReadingFamilyClass(family) {
   if (!isFastReadingExercise()) return "";
   return `exercise-fast-reading exercise-fast-reading-${String(family).toLowerCase().replaceAll("_", "-")}`;
@@ -14248,6 +14358,21 @@ function renderStudentReading(session, question = exerciseQuestions[currentExerc
     .map((paragraph) => `<p>${escapeHtml(paragraph.trim())}</p>`)
     .join("");
   card.style.display = "block";
+  const measurement = currentFastReadingMeasurement(session);
+  const timerStatus = $("fast-reading-timer-status");
+  const continueButton = $("student-reading-continue");
+  const stage = $("fast-reading-reading-stage");
+  if (stage) stage.hidden = !measurement;
+  if (measurement) {
+    if (measurement.completed) {
+      if (timerStatus) timerStatus.textContent = "Metin okundu; sorulara geçebilirsin.";
+      if (continueButton) continueButton.hidden = true;
+      measurement.timer.pause();
+    } else {
+      if (continueButton) continueButton.hidden = false;
+      updateFastReadingClock();
+    }
+  }
 }
 function renderExerciseResult() {
   const body = $("exercise-result-body");
@@ -14276,6 +14401,14 @@ function renderExerciseResult() {
       typeof activeLearningStepNavigation !== "undefined" &&
       Boolean(activeLearningStepNavigation?.previousStep || activeLearningStepNavigation?.nextStep);
     const pending = Math.max(0, (s.attempted ?? 0) - (s.scoredCount ?? 0));
+    const fastReading = s.fastReadingMeasurement;
+    const fastReadingResult = fastReading
+      ? fastReading.status !== "RECORDED"
+        ? "Okuma süresi ölçülemedi."
+        : fastReading.speedEligible
+          ? `Etkin okuma: ${formatActiveReadingDuration(fastReading.activeReadingDurationMs)} · ${fastReading.wordsPerMinute} kelime/dk · anlama doğruluğu %${Math.round((fastReading.comprehensionAccuracy ?? 0) * 100)}`
+          : `Etkin okuma süresi kaydedildi; anlama doğruluğu %${Math.round((fastReading.comprehensionAccuracy ?? 0) * 100)} olduğu için hız göstergesi sunulmuyor.`
+      : "";
     const g = exerciseGamification;
     if (isIndependentActivity) {
       body.innerHTML = `
@@ -14287,6 +14420,7 @@ function renderExerciseResult() {
           <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
           <div><dt>Doğru cevap</dt><dd>${s.scoredCount == null ? "—" : s.scoredCount}</dd></div>
           <div><dt>Ortalama</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
+          ${fastReadingResult ? `<div class="exercise-result-wide"><dt>Okuma ve anlama</dt><dd>${escapeHtml(fastReadingResult)}</dd></div>` : ""}
         </dl>
         <div class="training-home-actions">
           <button id="exercise-replay" type="button" class="btn btn-secondary">Tekrar oyna</button>
@@ -14431,6 +14565,12 @@ function renderExerciseQuestion() {
   }
   const q = exerciseQuestions[currentExerciseQuestionIndex];
   if (!q) return;
+  const readingMeasurement = currentFastReadingMeasurement();
+  if (readingMeasurement && !readingMeasurement.completed) {
+    container.innerHTML = "";
+    if (counter) counter.textContent = "";
+    return;
+  }
   const renderToken = ++exerciseQuestionRenderToken;
   const renderedQuestionVersionId = q.questionVersionId;
   if (isPlatformUser === false && typeof recordPilotTelemetry === "function")
@@ -15022,10 +15162,15 @@ async function handleExerciseComplete() {
     // The completion POST is authoritative. Avoid a redundant preflight GET
     // on the normal path; if its response is lost, the recovery read below
     // still reconciles the server's final session state.
+    const fastReadingMeasurement = currentFastReadingMeasurement(originalSession);
+    const completionBody =
+      fastReadingMeasurement?.completed && Number.isInteger(fastReadingMeasurement.durationMs)
+        ? { readingDurationMs: fastReadingMeasurement.durationMs }
+        : {};
     const completed = await parseResponse(
       await exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/complete`, {
         method: "POST",
-        body: "{}",
+        body: JSON.stringify(completionBody),
       }),
     );
     if (!isCurrent()) return;
