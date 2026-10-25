@@ -472,6 +472,11 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
   it("keeps the corrected source claims, skills, numbers, and question versions precise", () => {
     const cycle17 = getEducationV2P1ACycle(17)!.sourceCycle.sourceStations;
     const supercell = cycle17.find((station) => station.key.endsWith("A17_INTEGRATED_SUPERCELL"))!;
+    const supercellQuestion2 = supercell.questions.find(({ key }) => key === "a17-super-2")!;
+    expect(supercellQuestion2.versionId).toMatch(/_V2$/u);
+    expect(supercellQuestion2.explanation).toContain("Son cümle");
+    expect(supercellQuestion2.explanation).toContain("ilişkili olabileceğini");
+    expect(supercellQuestion2.hint).toContain("Son cümledeki");
     const supercellQuestion = supercell.questions.find(({ key }) => key === "a17-super-3")!;
     expect(supercell.text).not.toMatch(/radar|tek bir bulut görüntüsü|yerde yaşanacak sonuç/iu);
     expect(supercellQuestion.prompt).toBe("Metne göre her mezosiklon hortum oluşturur mu?");
@@ -485,6 +490,10 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
     expect(thermodynamics.text).not.toMatch(
       /makinenin verimi|ölçümleri gerekir|ideal bir kristal/iu,
     );
+    const zerothLawQuestion = thermodynamics.questions.find(({ key }) => key === "a17-thermo-1")!;
+    expect(zerothLawQuestion.versionId).toMatch(/_V2$/u);
+    expect(zerothLawQuestion.explanation).toContain("Üçüncü cümle");
+    expect(zerothLawQuestion.hint).toContain("Üçüncü cümle");
     expect(
       thermodynamics.questions
         .filter(({ key }) => key.startsWith("a17-thermo-"))

@@ -84,6 +84,12 @@ const draftQuestionRevisionsV2: Readonly<
     }
   >
 > = {
+  "a17-super-2": {
+    correct: "Bunların süper hücreyle ilişkili olabileceğini",
+    explanation:
+      "Son cümle, süper hücrelerin dolu, aşağı yönlü hava patlaması veya şiddetli yağmur gibi tehlikelerle ilişkili olabileceğini belirtir.",
+    hint: "Son cümledeki ‘olabilir’ ifadesinin kapsamını koru.",
+  },
   "a17-super-3": {
     correct: "Hayır; metin bunun her mezosiklon için geçerli olmadığını söylüyor.",
     prompt: "Metne göre her mezosiklon hortum oluşturur mu?",
@@ -103,6 +109,8 @@ const draftQuestionRevisionsV2: Readonly<
       "Doğal süreçlerin ilerleme yönünü",
       "Mutlak sıfıra yaklaşırken entropinin değişimini",
     ],
+    explanation: "Üçüncü cümle sıfırıncı yasayı sıcaklık bakımından denge ilişkisiyle tanımlar.",
+    hint: "Üçüncü cümlede sıfırıncı yasa için verilen tanımı seç.",
   },
   "a17-thermo-2": {
     correct: "Süreçler entropinin arttığı yönde ilerler.",

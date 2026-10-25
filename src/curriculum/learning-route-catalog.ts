@@ -289,6 +289,11 @@ const authoredSkillPrograms: readonly AuthoredSkillProgram[] = [
   ...EDUCATION_V2_P1_BCD_PROGRAMS,
 ];
 
+function localLearningRouteStepKey(programId: string, stableKey: string): string {
+  const expectedPrefix = `${programId}:`;
+  return stableKey.startsWith(expectedPrefix) ? stableKey.slice(expectedPrefix.length) : stableKey;
+}
+
 /**
  * Returns only the source-authored primary competency for this step's linked
  * content/exercise. Outcome targets are evaluated separately by the audit;
@@ -306,9 +311,7 @@ export function sourcePrimarySkillCodesForRouteStep(
   );
   if (!program) return [];
 
-  const localStepKey = stableKey.startsWith(`${program.programId}:`)
-    ? stableKey.slice(program.programId.length + 1)
-    : stableKey;
+  const localStepKey = localLearningRouteStepKey(program.programId, stableKey);
   const step = program.path.units
     .flatMap((unit) => unit.steps)
     .find((item) => item.key === localStepKey);
@@ -356,9 +359,7 @@ export function sourceContentSkillTargetsForRouteStep(
   );
   if (!program) return [];
 
-  const localStepKey = stableKey.startsWith(`${program.programId}:`)
-    ? stableKey.slice(program.programId.length + 1)
-    : stableKey;
+  const localStepKey = localLearningRouteStepKey(program.programId, stableKey);
   const step = program.path.units
     .flatMap((unit) => unit.steps)
     .find((item) => item.key === localStepKey);
@@ -439,7 +440,10 @@ export function learningRouteStationCategory(
   pathCode: string,
   stableKey: string,
 ): EducationV2P1ExpansionCategory | null {
-  return stationCategoriesByRouteKey.get(`${pathCode}\u0000${stableKey}`) ?? null;
+  const cycle = cyclesByCode.get(pathCode);
+  if (!cycle) return null;
+  const localStepKey = localLearningRouteStepKey(cycle.programId, stableKey);
+  return stationCategoriesByRouteKey.get(`${pathCode}\u0000${localStepKey}`) ?? null;
 }
 
 export function nextLearningRouteCycle(pathCode: string): LearningRouteCycle | null {

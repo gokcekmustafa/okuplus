@@ -304,7 +304,10 @@ describe("student dashboard release 0.4", () => {
         learningPathCode: cycle4!.pathCode,
         code: step.stableKey,
         type: step.type,
-        stationCategory: learningRouteStationCategory(cycle4!.pathCode, step.stableKey),
+        stationCategory: learningRouteStationCategory(
+          cycle4!.pathCode,
+          `${cycle4!.programId}:${step.stableKey}`,
+        ),
         status: index === 0 ? "active" : "locked",
         availability: "READY",
       })),
@@ -318,7 +321,7 @@ describe("student dashboard release 0.4", () => {
     const station48Markup = articleForNode(container, "cycle-4-step-1");
     const station48Category = learningRouteStationCategory(
       cycle4!.pathCode,
-      cycle4!.manifest.steps[0]!.stableKey,
+      `${cycle4!.programId}:${cycle4!.manifest.steps[0]!.stableKey}`,
     );
     expect(station48Category).toBeTruthy();
     const categoryLabels: Record<string, string> = {
@@ -335,6 +338,53 @@ describe("student dashboard release 0.4", () => {
     expect(nodeAtStation(48)).not.toContain(" disabled");
     expect(nodeAtStation(52)).toContain('data-node-id="cycle-4-step-5"');
     expect(nodeAtStation(53)).toContain('data-node-id="planned:A:5:1"');
+
+    for (const cycle of LEARNING_ROUTE_CYCLES.filter(
+      (candidate) =>
+        candidate.routeFamily === "A" && candidate.sequence >= 5 && candidate.sequence <= 20,
+    )) {
+      realGroups.push({
+        path: { area: "READING_COMPREHENSION", code: cycle.pathCode },
+        nodes: cycle.manifest.steps.map((step) => ({
+          id: `cycle-${cycle.sequence}-step-${step.order}`,
+          learningPathCode: cycle.pathCode,
+          code: step.stableKey,
+          type: step.type,
+          stationCategory: learningRouteStationCategory(
+            cycle.pathCode,
+            `${cycle.programId}:${step.stableKey}`,
+          ),
+          status: "locked",
+          availability: "READY",
+        })),
+      });
+    }
+    plannedGroup.nodes = buildPlannedLearningRouteNodes({
+      currentPathCode: LEARNING_ROUTE_CYCLES.find(
+        (cycle) => cycle.routeFamily === "A" && cycle.sequence === 20,
+      )!.pathCode,
+      visibleStationCount: 132,
+    });
+    runInContext("renderLearningPathMap(realGroups.concat([plannedGroup]), null)", context);
+    for (const cycle of LEARNING_ROUTE_CYCLES.filter(
+      (candidate) =>
+        candidate.routeFamily === "A" && candidate.sequence >= 4 && candidate.sequence <= 20,
+    )) {
+      for (const step of cycle.manifest.steps) {
+        const category = learningRouteStationCategory(
+          cycle.pathCode,
+          `${cycle.programId}:${step.stableKey}`,
+        );
+        expect(category, `${cycle.pathCode}/${step.stableKey}`).toBeTruthy();
+        const station = 47 + (cycle.sequence - 4) * 5 + step.order;
+        expect(articleForNode(container, `cycle-${cycle.sequence}-step-${step.order}`)).toContain(
+          `<span class="learning-map-v6-area">${categoryLabels[category!]}</span>`,
+        );
+        expect(nodeAtStation(station)).toContain(
+          `data-node-id="cycle-${cycle.sequence}-step-${step.order}"`,
+        );
+      }
+    }
   });
 
   it("uses the Learning Path response for the dashboard today card", () => {

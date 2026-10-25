@@ -143,7 +143,28 @@ describe("versioned learning routes", () => {
           expect(learningRouteStationCategory(cycle.pathCode, step.stableKey)).toBe(
             station.category,
           );
+          expect(
+            learningRouteStationCategory(cycle.pathCode, `${cycle.programId}:${step.stableKey}`),
+          ).toBe(station.category);
         }
+      }
+    }
+
+    for (const sequence of [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]) {
+      const cycle = LEARNING_ROUTE_CYCLES.find(
+        (candidate) => candidate.routeFamily === "A" && candidate.sequence === sequence,
+      )!;
+      const source = EDUCATION_V2_P1_800_DRAFT_CYCLES.find(
+        (candidate) => candidate.routeFamily === "A" && candidate.sequence === sequence,
+      )!;
+
+      expect(cycle.manifest.steps).toHaveLength(5);
+      for (const step of cycle.manifest.steps) {
+        const expected = source.sourceStations.find((station) => station.key === step.stableKey);
+        expect(expected, `A cycle ${sequence}/${step.stableKey}`).toBeDefined();
+        expect(
+          learningRouteStationCategory(cycle.pathCode, `${cycle.programId}:${step.stableKey}`),
+        ).toBe(expected!.category);
       }
     }
 
@@ -162,6 +183,10 @@ describe("versioned learning routes", () => {
       /questions|correctOptionId|explanation|sourceUrl|passage/iu,
     );
     expect(learningRouteStationCategory(cycle6.pathCode, "not-a-source-step")).toBeNull();
+    expect(
+      learningRouteStationCategory(cycle6.pathCode, `${cycle6.programId}:not-a-source-step`),
+    ).toBeNull();
+    expect(learningRouteStationCategory(cycle6.pathCode, "other-program:some-step")).toBeNull();
   });
 
   it("counts P0 history with real P1 cycles before reserving the remainder", () => {
