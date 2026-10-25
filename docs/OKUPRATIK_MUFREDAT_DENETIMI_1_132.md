@@ -1,20 +1,21 @@
 # OkuPratik — 1–132 Müfredat ve yayın hazırlığı denetimi
 
-- **Üretildi:** 2026-10-25T20:59:05Z (UTC)
-- **Denetlenen kaynak commit:** `9ba0bd0a129851ab37f634d1660886e1a3fbfdf1`
+- **Güncellendi:** 2026-10-25T21:10:55Z (UTC)
+- **Envanter taban commit:** `9ba0bd0a129851ab37f634d1660886e1a3fbfdf1`
+- **Canlı denetimdeki kaynak commit:** `44097a7a51f87c4b431810a27dd4d2eaef007373`
 - **Kaynak dal:** `master`
 - **Kapsam:** 1–132, 132 istasyon ve 333 soru; tam soru kökleri, seçenekler, cevap kimlikleri, açıklamalar, ipuçları, sürüm kimlikleri ve kaynak kayıtları bu belgenin yanındaki JSON dosyasında.
-- **Üretim durumu:** Bu rapor yazılırken canlı audit henüz çalıştırılmadı. Production graph, öğrenci erişimi ve API kategori etiketi `UNVERIFIED`.
+- **Üretim durumu:** Korumalı salt-okunur canlı denetim run `40233745331` ile tamamlandı; rota bütünlüğü PASS, 89 beceri bağlantısı veri kalitesi uyarısı mevcut. Öğrenciye özel erişim ve authenticated API kategori alanı `UNVERIFIED`.
 - **Üretime yazma:** Yok. Migration, seed, publish, assignment veya öğrenci ilerlemesi değişikliği yapılmadı.
 
 ## Yönetici özeti
 
 - Kaynak envanteri: **132 istasyon / 333 soru**.
 - Editoryal sınıflandırma: **80 PASS, 51 REVIEW, 1 FAIL**. Kaynak kalite sınıfı canlı üretimde yayımlanma veya öğrenci erişimi anlamına gelmez.
-- Kategori etiketi kusuru: route `stableKey` içindeki yalnızca beklenen `programId:` öneki çıkarılmadan eşleştirme yapıldığı için cycles 4–20 istasyon kategorisi bulunamıyor ve genel “Okuduğunu Anlama” alanına düşebiliyordu. Normalleştirme ve UI regresyon testleri eklendi; canlı dağıtım/API henüz bu rapor aşamasında doğrulanmadı.
+- Kategori etiketi kusuru: route `stableKey` içindeki yalnızca beklenen `programId:` öneki çıkarılmadan eşleştirme yapıldığı için cycles 4–20 istasyon kategorisi bulunamıyor ve genel “Okuduğunu Anlama” alanına düşebiliyordu. Normalleştirme ve UI regresyon testleri eklendi; commit `44097a7` için Vercel Production check `success`. Öğrenci oturumu gerektiren gerçek kategori API alanı doğrulanmadı (anonim GET 401).
 - En kritik içerik bulgusu: **istasyon 9 / `fast-chunking-practice-1`**; mevcut soru kökü iki doğru sözcük grubuna izin veriyor.
 - 48–57: özgün içerik var, fakat kaynak/edisyon incelemesi bekliyor; kaynak doğrulanmış sayılmadı.
-- 113–132: TÜBİTAK kaynakları ve 60 soru incelendi; gerekli iki açıklama/hint V2 taslak düzeltmesi içeriyor. Cycle 17–20 üretim yayın kapısı kapalı, ürün sahibinin yayın kararı gerekiyor.
+- 113–132: TÜBİTAK kaynakları ve 60 soru incelendi; iki açıklama/hint V2 taslak revizyonu içeriyor. Cycle 17–20 kaynakta mevcut ancak canlı üretimde yayımlanmamış; ürün sahibinin yayın kararı gerekiyor.
 - P1 gövde uzunluğu: 23–132 arası **110 içeriğin tamamı 100 kelimenin altında**; bu bir otomatik ret değil, özellikle çoklu kanıt/çıkarım değerlendirmelerinde yeterli uyaran kontrolü gerektiren editoryal işaret.
 - 27 Hızlı Okuma istasyonunda görevler hızlı bilgi taramayı içeriyor; kaynak beceri yapılandırmasında zaman ölçümü yok. Dolayısıyla ölçülen hız değil, tarama/doğruluk görevleridir; adlandırma/ölçüm kararı gerektirir.
 
@@ -22,7 +23,7 @@
 
 - İstasyon numaraları 1–132 aralıksız: **True**.
 - Soru anahtarı benzersizliği: **True** (333 benzersiz soru kimliği).
-- Kaynak soru sürüm kimlikleri: 255 kayıtta 255 benzersiz.
+- Kaynak taslak soru sürüm kimlikleri: 255 kayıtta 255 benzersiz; eski P0 ve ilk döngü kaynak biçimlerinde kalan sorular için ayrı sourceQuestionVersionId yok. Buna karşın 333 sorunun tamamı benzersiz manifest/graph questionVersionId ile izleniyor.
 - Manifest/graph soru sürüm kimlikleri: 333 kayıtta 333 benzersiz.
 - Her çoktan seçmeli soruda dört seçenek, tek çözümlenen doğru seçenek, açıklama ve ipucu: yapısal kontrollerde tamamı geçti.
 - Değerlendirme adımları: 21; envanterde tümünde assessment version bağı mevcut. 21 ve 22 ise okuma dersi değil, sırasıyla ölçüm ve sonraki öğrenmeye geçiş kontrol adımıdır.
@@ -300,12 +301,12 @@ Her sorunun tam promptu, seçenek metinleri ve kimlikleri, cevap anahtarı, aç�
 
 ## 113–132 yayın hazırlığı
 
-| İstasyon aralığı   | Kaynakta program/içerik | Kaynak kanıtı                                                                                             | Soru/içerik sürümü                                                     | Kaynak yayın kapısı                           | Canlı grafik | Öğrenci erişimi |
-| ------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------- | ------------ | --------------- |
-| 113–117 / Cycle 17 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi; station 115 örnek deney özgün ve kaynağa ait bulgu diye sunulmuyor | Tutarlı aday; station 116 soru 2 ve 117 q1 için V2 taslak revizyonları | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `UNVERIFIED` | `UNVERIFIED`    |
-| 118–122 / Cycle 18 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi; 3.6 yıl gözlem / 3.5 yıl model tahmini ayrımı korunuyor            | İçerik ve soru kimlikleri mevcut                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `UNVERIFIED` | `UNVERIFIED`    |
-| 123–127 / Cycle 19 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi                                                                     | İçerik ve soru kimlikleri mevcut                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `UNVERIFIED` | `UNVERIFIED`    |
-| 128–132 / Cycle 20 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi                                                                     | İçerik ve soru kimlikleri mevcut                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `UNVERIFIED` | `UNVERIFIED`    |
+| İstasyon aralığı   | Kaynakta program/içerik | Kaynak kanıtı                                                                                                  | Soru/içerik sürümü                                                                     | Kaynak yayın kapısı                           | Canlı grafik                   | Öğrenci erişimi             |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------ | --------------------------- |
+| 113–117 / Cycle 17 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi; 115. istasyonun örnek deneyi özgün ve kaynağa ait bulgu diye sunulmuyor | Tutarlı aday; 116. istasyon soru 2 ve 117. istasyon soru 1 için V2 taslak revizyonları | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `NO_PUBLISHED_PRODUCTION_PATH` | `NOT_AVAILABLE_UNPUBLISHED` |
+| 118–122 / Cycle 18 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi; 3.6 yıl gözlem / 3.5 yıl model tahmini ayrımı korunuyor                 | İçerik ve soru kimlikleri mevcut                                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `NO_PUBLISHED_PRODUCTION_PATH` | `NOT_AVAILABLE_UNPUBLISHED` |
+| 123–127 / Cycle 19 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi                                                                          | İçerik ve soru kimlikleri mevcut                                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `NO_PUBLISHED_PRODUCTION_PATH` | `NOT_AVAILABLE_UNPUBLISHED` |
+| 128–132 / Cycle 20 | Var, 5 istasyon/15 soru | TÜBİTAK kaynakları bağımsız incelendi                                                                          | İçerik ve soru kimlikleri mevcut                                                       | `OWNER_RELEASE_REQUIRED` / yayın beyanı false | `NO_PUBLISHED_PRODUCTION_PATH` | `NOT_AVAILABLE_UNPUBLISHED` |
 
 Kaynak kodda hazırlanmış ve dış kaynağı doğrulanmış olmak, gerçek release/graph veya öğrenciye atanabilir olmakla aynı değildir. Bu görev kapsamında bu döngüler yayınlanmadı, APPLY/seed çalıştırılmadı ve atama yapılmadı. Ürün sahibinin yayın kararı sonrasında ayrı release/graph QA ve korumalı plan/apply süreci gerekir.
 
@@ -319,9 +320,23 @@ Kaynak kodda hazırlanmış ve dış kaynağı doğrulanmış olmak, gerçek rel
 6. Cycle 17–20 için yayın kararı ve release sürümünde V2 düzeltmelerinin kullanılması.
 7. Kısa P1 metinlerinden hangilerinde soru uyaranının yeterli olmadığı; her biri için tek tek içerik genişletme kararı.
 
-## Sınırlamalar ve güvenlik teyidi
+## Salt okunur canlı üretim doğrulaması
 
-- Canlı production DB sorgusu bu kaynak raporunu üretirken çalıştırılmadı; canlı grafik, UI/API kategori ve öğrenci erişimi `UNVERIFIED` kaldı. Bu rapor eklendikten sonra korumalı read-only audit yapılabilir; bu işlem için güncel master commit, hedef fingerprint ve GitHub Environment koruması gerekir.
+- GitHub Actions [run 40233745331](https://github.com/gokcekmustafa/okuplus/actions/runs/40233745331), commit `44097a7a51f87c4b431810a27dd4d2eaef007373`, artifact `12612929461`. Workflow hedef doğrulamasını geçti ve veritabanı transaction modu `READ ONLY`; rapor `productionWrite=NO`.
+- Canlı P1: 19/19 yayımlanmış yol kaynak grafiğiyle eşleşti; 22 yayımlanmış birim, 105 yayımlanmış/aktif adım, 0 pasif, 0 engellenmiş/eksik ve 0 eşleşmeyen yol. A=16 yol/90 adım, B=1/5, C=1/5, D=1/5. Tüm yollar graph düzeyinde `READY_FOR_ASSIGNMENT`; bu öğrenci bazında erişim kanıtı değildir.
+- Canlı denetimde 89 `SKILL_LINK_MISSING` uyarısı kaldı (A=79, B=5, C=5, D=0); uyarılar raporda korundu, bu görevde üretim bağlantısı değiştirilmedi. A ailesindeki 79 uyarı, 1–132 numaralı P0/P1-A envanterindeki karşılık gelen istasyonlara işlendi. B/C ailelerinin 10 uyarısı (B=5, C=5) numara uydurulmadan JSON’daki productionUnmappedWarnings bölümünde rota, birim ve adım anahtarlarıyla listelendi; B/C kaynaklarının numaralı 1–132 kapsamına karşılığı yok. Denetim rolü `superuser=false`, `bypassRls=true` bildirdi; bu yalnızca audit `PRODUCTION_DATABASE_URL` rolüdür, Vercel runtime rolü olarak yorumlanamaz.
+- Anonim `GET /student/learning-path` 401 döndü; yetkili öğrenci oturumu kullanılmadığı için gerçek API kategori alanı ve öğrenciye özel erişim doğrulanmadı. İstasyonlar 23–112 (A Cycle 1–16) canlı grafikte yayımlanmış ve aktif; 113–132 (Cycle 17–20) için canlı published path yok, release kapısı kapalı. P0 1–22 bu P1 audit kapsamına dahil değil.
 - Üretim DB’sine yazma, migration, seed, içerik publish/apply, assignment veya öğrenci ilerlemesi güncellemesi yapılmadı.
 - Editoryal değerlendirme kod/AI incelemesidir; dış uzman/öğretmen kurulunun incelemesi değildir.
-- Tam soru gövdeleri ve tüm option/key/explanation/hint alanları aynı dizindeki [JSON raporunda](./OKUPRATIK_MUFREDAT_DENETIMI_1_132.json) tutulmuştur.
+- Tam soru gövdeleri ve tüm seçenek/anahtar/açıklama/ipucu alanları aynı dizindeki [JSON raporunda](./OKUPRATIK_MUFREDAT_DENETIMI_1_132.json) tutulmuştur.
+
+## Canlı rota özeti
+
+| Rota | Kaynak döngüsü/adımı | Canlı yayımlanmış yol | Yayımlanmış/aktif adım | Eksik veya eşleşmeyen rota | Beceri bağlantısı uyarısı |
+| ---- | -------------------: | --------------------: | ---------------------: | -------------------------: | ------------------------: |
+| A    |             42 / 220 |                    16 |                90 / 90 |                          0 |   79 `SKILL_LINK_MISSING` |
+| B    |             41 / 205 |                     1 |                  5 / 5 |                          0 |    5 `SKILL_LINK_MISSING` |
+| C    |             41 / 205 |                     1 |                  5 / 5 |                          0 |    5 `SKILL_LINK_MISSING` |
+| D    |             41 / 205 |                     1 |                  5 / 5 |                          0 |                         0 |
+
+P0 1–22 P1 denetiminin kapsamında değildir. A rotasında 23–112 (Cycle 1–16) canlı grafikte yayımlanmış ve kaynakla eşleşmiştir. 113–132 (Cycle 17–20) için üretimde yayımlanmış grafik bulunmadı; kaynak yayın kapısı kapalıdır. 19 rotanın tamamında `currentStudentAccess=NOT_VERIFIABLE_WITHOUT_STUDENT_CONTEXT`; canlı öğrenci hesabı kullanılmadı.
