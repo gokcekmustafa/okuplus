@@ -36,7 +36,9 @@ Denetimde doğrulanabilir bir analitik kusuru düzeltildi: yönetici analitiği 
 | Gerçek öğrenci ataması ve tamamlanma/geçiş davranışı                | `UNVERIFIED` | Üretim öğrenci hesabı veya ilerleme kaydı incelenmedi.                           |
 | Hızlı okuma ve okuduğunu anlama kapsamının üretim oranı             | `UNVERIFIED` | Canlı LearningPath/step grafiği görülmedi.                                       |
 
-Mevcut korumalı audit workflow'u P0 kaynak kodunu production DB ile karşılaştırmak üzere tasarlanmış olsa da bu görevde çalıştırılmadı. Ayrıca mevcut script A/B/C/D'nin tüm döngülerini kapsayan genel bir müfredat denetimi değildir. Tam canlı kapsam için workflow'un güvenlik sınırları korunarak tüm yayımlanmış rota grafiklerini kapsaması ve doğrulanmış üretim-hedef raporu üretmesi gerekir.
+Mevcut `production-education-v2-p0-audit.yml` yalnızca P0 grafiğini denetler; A/B/C/D döngülerinin tamamını kapsamaz. Bu kapsam boşluğu için `.github/workflows/production-learning-route-audit.yml` ve `scripts/audit-learning-routes-production.ts` eklendi. Yeni workflow yalnızca `master` üzerinde manuel başlatılır, mevcut `production-migration` GitHub Environment'ını ve onaylı üretim hedef fingerprint alanlarını kullanır. Betik ilk SQL ifadesi olarak `SET TRANSACTION READ ONLY` çalıştırır; kimlik ve parmak izi eşleşmeden rota sorgularına geçmez.
+
+Yeni denetim kaynak katalogdaki P1 döngülerini üretimde görünen P1 yol/birim/adımlarla karşılaştırır; yol ve adım durumlarını, adım türlerini, Skill kategorilerini, içerik/şablon/soru/değerlendirme sürüm bağlantı kontrollerini, önkoşulları ve öğrenci yolu kayıtlarının yalnızca toplu durum sayılarını raporlamak üzere hazırlandı. Rapor öğrenci kimliği, cevap, soru metni veya cevap anahtarı içermez. RLS'yi atlayan rol doğrulanmadıkça genel durum `PARTIAL` kalır; öğrenci bazında erişim, yalnızca toplu atama sayılarından çıkarılmaz. Yeni workflow bu çalışma oturumunda başlatılamadı; dolayısıyla bu kod değişikliği canlı envanter kanıtı değildir ve yukarıdaki üretim değerleri `UNVERIFIED` kalır.
 
 ## 4. Statik rota envanteri
 
@@ -162,7 +164,9 @@ Kod tabanındaki öğretim modeli; öğretim/modelleme, rehberli küçük çalı
 - `src/modules/analytics/assessment-comparison.ts` eklendi: yalnızca aynı assessment kimliğinde, baseline'dan sonra tamamlanan farklı bir sonucu karşılaştırılabilir aday sayar.
 - `src/modules/analytics/service.ts` güncellendi: kişi bazında farklı değerlendirme tür/kimliklerinin puan farkı gibi çıkarılması önlendi; çoklu-tenant birleştirilmiş görünümde keyfî baseline/latest puan çifti gösterilmez.
 - `test/analytics-assessment-comparison.test.ts` eklendi: aynı assessment, farklı assessment, eski/eş zamanlı sonuç, baseline kaydı ve eksik skor senaryolarını kapsar.
-- `docs/OKUPRATIK_AKADEMIK_VE_MUFREDAT_DENETIMI.md` oluşturuldu.
+- `.github/workflows/production-learning-route-audit.yml`, `scripts/audit-learning-routes-production.ts` ve `src/curriculum/production-learning-route-audit.ts` eklendi: tüm P1 rota grafiklerini onaylı hedef ve salt-okunur transaction ile denetleyen korumalı iş akışı.
+- `test/production-learning-route-audit.test.ts` eklendi: workflow korumaları, read-only transaction sırası, kaynak grafik eşleşmesi, yayın kapısı ve eksik/kırık grafik raporlaması.
+- Bu rapor yeni audit mekanizmasının canlıda çalıştırıldığını iddia etmez; GitHub Actions dispatch ve `production-migration` Environment erişimi bu oturumda kullanılamadı.
 - Bu görevde içerik sürümü, soru, müfredat, yayın durumu, öğrenci ataması veya ilerleme kaydı değiştirilmedi.
 - Üretim veritabanına bağlanılmadı; migration, seed, APPLY veya yayın işlemi yapılmadı.
 - Yerel doğrulama: karşılaştırma testi 4/4 geçti; `typecheck`, ESLint, Prettier, build ve `git diff --check` başarılı. Kaynak müfredat/soru envanteri QA çıktıları bu belgenin envanter tablolarına karşılık gelir; semantik incelemenin tamamı oldukları iddia edilmez.
@@ -173,4 +177,4 @@ Bu belge tek başına CI veya canlı Production dağıtımı iddiası taşımaz.
 
 **Durum: `PARTIAL`.** Statik kod/katalog ve mevcut telemetry tasarımı incelendi; canlı istasyon/öğrenci kapsamı doğrulanmadı ve tam soru bankası semantik incelemesi yapılmadı. Yeni MEB uygulama kademeleri nedeniyle 13–17 yaş hedefi sınıf/program bazında hizalanmalıdır. Kaynak QA kategori hedefleri de dört rotada karşılanmıyor.
 
-**Sıradaki en önemli iş:** production DB'ye yazmayan, onaylı hedef fingerprint'ini doğrulayan ve öğrenci kişisel verisini dışarı vermeyen bir yetkili salt-okunur audit çalıştırarak tüm yayımlanmış A/B/C/D LearningPath grafiklerini ve erişilebilir adımlarını envantere almak. Bu canlı envanter olmadan 52. istasyondan sonraki yayımlanmış kapsamı veya 1–200 istasyonların oynanabilirliğini söylemek mümkün değildir.
+**Sıradaki en önemli iş:** `production-learning-route-audit.yml` workflow'unu `master` üzerinden `LEARNING_ROUTE_AUDIT` onayıyla, mevcut Environment onayı ve hedef fingerprint kapıları altında bir kez çalıştırmak; artefaktı inceleyip RLS görünürlüğü eksikse rolün kapsamını yetkili DB yöneticisiyle doğrulamak. Workflow henüz çalışmadığından canlı A/B/C/D sayıları, üretim-kaynak farkları ve erişilebilir istasyonlar `UNVERIFIED` kalır.
