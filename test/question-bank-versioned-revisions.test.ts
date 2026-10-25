@@ -195,6 +195,46 @@ describe("versioned multiple-choice question revisions", () => {
       p0.changedQuestions.find((item) => item.questionKey === "fast-chunking-practice-1")?.question
         .prompt,
     ).toContain("gerçekleştiği yeri");
+    const chunkingSource = EDUCATION_V2_P0_PROGRAM.exercises
+      .flatMap((exercise) => exercise.questions)
+      .find((question) => question.key === "fast-chunking-practice-1")!;
+    const chunkingRevision = p0.changedQuestions.find(
+      (item) => item.questionKey === "fast-chunking-practice-1",
+    )!;
+    const revisedChunking = chunkingRevision.question;
+    expect(chunkingSource.prompt).toContain("birlikte anlam taşıyan grup");
+    expect(chunkingSource.options.map((option) => option.text)).toContain("kitap okudu");
+    expect(chunkingSource.correctOptionId).toBe("a");
+    expect(chunkingRevision.baseQuestionVersionId).toContain("-v1");
+    expect(chunkingRevision.questionVersionId).toContain("-v3");
+    expect(chunkingRevision.questionVersionId).not.toBe(chunkingRevision.baseQuestionVersionId);
+    expect(revisedChunking.prompt).toContain("Sessiz kütüphane köşesinde kitap okudu.");
+    expect(revisedChunking.options).toHaveLength(4);
+    expect(new Set(revisedChunking.options.map((option) => option.id))).toEqual(
+      new Set(["a", "b", "c", "d"]),
+    );
+    expect(
+      revisedChunking.options.filter((option) => option.id === revisedChunking.correctOptionId),
+    ).toHaveLength(1);
+    expect(revisedChunking.correctOptionId).toBe("a");
+    expect(revisedChunking.options.find((option) => option.id === "a")?.text).toBe(
+      "sessiz kütüphane köşesinde",
+    );
+    expect(revisedChunking.explanation).toContain("eylemin nerede gerçekleştiğini");
+    expect(revisedChunking.explanation).toContain("yer ekini");
+    expect(revisedChunking.hint).toContain("nerede gerçekleştiğini");
+    expect(
+      p0.templateVersions.some(
+        (template) =>
+          template.baseTemplateVersionId ===
+            "edu-v2-p0-templateVersion-fast-chunking-practice-academic-v2" &&
+          template.templateVersionId ===
+            "edu-v2-p0-templateVersion-fast-chunking-practice-academic-v3" &&
+          template.questionVersionIds.includes(chunkingRevision.questionVersionId),
+      ),
+    ).toBe(true);
+    expect(p0.publicationApproved).toBe(false);
+    expect(p0.editorialReviewStatus).toBe("REVIEW_REQUIRED");
     expect(
       p0.changedQuestions.find((item) => item.questionKey === "common-test-3")?.question
         .explanation,

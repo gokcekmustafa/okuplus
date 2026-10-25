@@ -294,6 +294,21 @@ function balancedPositionPatches(
 const p0 = EDUCATION_V2_P0_PROGRAM;
 const p1a = EDUCATION_V2_P1_A_PROGRAM;
 const bcdInitialPrograms = EDUCATION_V2_P1_BCD_PROGRAMS.filter((program) => program.sequence === 1);
+const p0CommonExerciseKeys = new Set(["common-reinforcement", "common-test"]);
+
+function p0CurrentExerciseTemplateVersionId(exerciseKey: string): string {
+  const versionKey = p0CommonExerciseKeys.has(exerciseKey)
+    ? `${exerciseKey}-v1`
+    : `${exerciseKey}-academic-v2`;
+  return getProgramIds("templateVersion", versionKey);
+}
+
+function p0RevisionExerciseTemplateVersionId(exerciseKey: string, version: number): string {
+  const versionKey = p0CommonExerciseKeys.has(exerciseKey)
+    ? `${exerciseKey}-v${version}`
+    : `${exerciseKey}-academic-v${version}`;
+  return getProgramIds("templateVersion", versionKey);
+}
 
 const initialQuestionCorrections: Readonly<
   Record<string, Readonly<Record<string, QuestionPatch>>>
@@ -318,6 +333,7 @@ const initialQuestionCorrections: Readonly<
       ],
       explanation:
         "‘Sessiz kütüphane köşesinde’ eylemin nerede gerçekleştiğini, yer ekini de koruyarak bildirir.",
+      hint: "Eylemin nerede gerçekleştiğini bildiren sözcükleri bul.",
     },
     "rc-main-idea-practice-1": {
       options: [
@@ -758,11 +774,10 @@ export const QUESTION_BANK_VERSIONED_REVISION_CANDIDATES: readonly QuestionBankR
       contents: p0.content,
       contentPatches: initialQuestionCorrections[p0.programId]!,
       questionVersionId: p0QuestionVersionId,
-      templateVersionId: p0TemplateVersionId,
+      templateVersionId: p0CurrentExerciseTemplateVersionId,
       nextQuestionVersionId: (exerciseKey, questionKey, version) =>
         getProgramIds("questionVersion", `${exerciseKey}-${questionKey}-v${version}`),
-      nextTemplateVersionId: (exerciseKey, version) =>
-        getProgramIds("templateVersion", `${exerciseKey}-v${version}`),
+      nextTemplateVersionId: p0RevisionExerciseTemplateVersionId,
     }),
     ...bcdInitialPrograms.map((program) =>
       questionQualityCandidate({
