@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   LEARNING_ROUTE_CYCLES,
   learningRouteCycle,
+  sourcePrimarySkillCodesForRouteStep,
 } from "../src/curriculum/learning-route-catalog.js";
 import {
   buildProductionLearningRouteAudit,
@@ -520,8 +521,12 @@ async function main(): Promise<void> {
                     : [];
                 const mappedSkillTargets =
                   mapCurriculumSkillCodesToStoredSkillCodes(expectedSkillCodes);
+                const allowedAdditionalSkillCodes = mapCurriculumSkillCodesToStoredSkillCodes(
+                  sourcePrimarySkillCodesForRouteStep(path.code, step.stableKey),
+                ).storedSkillCodes;
                 const skillLink = classifySkillLink({
                   expectedSkillCodes: mappedSkillTargets.storedSkillCodes,
+                  allowedAdditionalSkillCodes,
                   unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,
                   skillId: step.skillId,
                   skillCode: step.skill?.code ?? null,
@@ -531,6 +536,7 @@ async function main(): Promise<void> {
                   unresolvedLinkedQuestionSkillCount,
                 });
                 if (skillLink.warningCode) warnings.push(skillLink.warningCode);
+                warnings.push(...(skillLink.additionalWarningCodes ?? []));
 
                 const configuredPrerequisiteIds = stringArray(
                   objectValue(step.completionRule)?.prerequisiteStepIds,
@@ -603,6 +609,7 @@ async function main(): Promise<void> {
                   unresolvedLinkedContentSkillCount,
                   linkedQuestionSkillCodes,
                   unresolvedLinkedQuestionSkillCount,
+                  allowedAdditionalSkillCodes,
                   expectedSkillCodes,
                   expectedStoredSkillCodes: mappedSkillTargets.storedSkillCodes,
                   unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,

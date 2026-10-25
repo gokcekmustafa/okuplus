@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { LEARNING_ROUTE_CYCLES } from "../src/curriculum/learning-route-catalog.js";
+import {
+  LEARNING_ROUTE_CYCLES,
+  sourcePrimarySkillCodesForRouteStep,
+} from "../src/curriculum/learning-route-catalog.js";
 import {
   buildProductionLearningRouteAudit,
   classifyContentVersionLink,
@@ -99,6 +102,7 @@ function publishedPath(
           unresolvedLinkedContentSkillCount: 0,
           linkedQuestionSkillCodes: mappedSkillTargets.storedSkillCodes,
           unresolvedLinkedQuestionSkillCount: 0,
+          allowedAdditionalSkillCodes: [],
           expectedSkillCodes,
           expectedStoredSkillCodes: mappedSkillTargets.storedSkillCodes,
           unmappedExpectedSkillCodes: mappedSkillTargets.unmappedSkillCodes,
@@ -333,6 +337,7 @@ describe("production A-D learning route audit", () => {
     ).toEqual({
       state: "OUTSIDE_OUTCOME_TARGETS",
       warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+      additionalWarningCodes: ["SKILL_LINK_MISSING"],
     });
     expect(
       classifySkillLink({ expectedSkillCodes, skillId: "skill-fk", skillCode: "RC_DETAIL" }),
@@ -373,7 +378,31 @@ describe("production A-D learning route audit", () => {
         skillCode: null,
         linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL", "FAST_ATTENTION"],
       }),
+    ).toEqual({
+      state: "OUTSIDE_OUTCOME_TARGETS",
+      warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+    });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        allowedAdditionalSkillCodes: ["FAST_ATTENTION"],
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE", "RC_DETAIL", "FAST_ATTENTION"],
+      }),
     ).toEqual({ state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null });
+    expect(
+      classifySkillLink({
+        expectedSkillCodes,
+        skillId: null,
+        skillCode: null,
+        linkedContentSkillCodes: ["RC_INFERENCE", "FAST_ATTENTION"],
+      }),
+    ).toEqual({
+      state: "OUTSIDE_OUTCOME_TARGETS",
+      warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+      additionalWarningCodes: ["SKILL_LINK_MISSING"],
+    });
     expect(
       classifySkillLink({
         expectedSkillCodes,
@@ -411,6 +440,21 @@ describe("production A-D learning route audit", () => {
       state: "UNMAPPED_OUTCOME_TARGET",
       warningCode: "SKILL_OUTCOME_TARGET_UNMAPPED",
     });
+  });
+
+  it("derives permitted supplemental skills only from the linked authored resources", () => {
+    const cycle = LEARNING_ROUTE_CYCLES.find(
+      (candidate) => candidate.routeFamily === "A" && candidate.sequence === 5,
+    )!;
+    const step = cycle.manifest.steps.find((item) => item.content)!;
+    const sourceSkills = sourcePrimarySkillCodesForRouteStep(
+      cycle.pathCode,
+      `${cycle.programId}:${step.stableKey}`,
+    );
+    expect(sourceSkills.length).toBeGreaterThan(0);
+    expect(
+      sourcePrimarySkillCodesForRouteStep(cycle.pathCode, `${cycle.programId}:NOT_A_SOURCE_STEP`),
+    ).toEqual([]);
   });
 
   it("distinguishes a missing content FK from an unresolved target and an unpublished version", () => {
@@ -546,8 +590,13 @@ describe("production A-D learning route audit", () => {
       expect.arrayContaining([
         expect.objectContaining({
           pathCode: cycle.pathCode,
+          stepId: expect.any(String),
           stableKey: missingSkillStepKey,
           code: "SKILL_LINK_MISSING",
+          expectedOutcomeSkillCodes: expect.any(Array),
+          allowedAdditionalSkillCodes: expect.any(Array),
+          linkedContentSkillCodes: expect.any(Array),
+          linkedQuestionSkillCodes: expect.any(Array),
         }),
         expect.objectContaining({
           pathCode: cycle.pathCode,

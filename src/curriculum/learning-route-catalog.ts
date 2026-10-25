@@ -257,6 +257,80 @@ export const LEARNING_ROUTE_CYCLES: readonly LearningRouteCycle[] = [
 ];
 
 const cyclesByCode = new Map(LEARNING_ROUTE_CYCLES.map((cycle) => [cycle.pathCode, cycle]));
+
+type AuthoredSkillProgram = {
+  programId: string;
+  path: {
+    code: string;
+    units: readonly {
+      steps: readonly {
+        key: string;
+        contentKey?: string;
+        exerciseKey?: string;
+        assessmentKey?: string;
+      }[];
+    }[];
+  };
+  content: readonly { key: string; skillCode: string }[];
+  exercises: readonly { key: string; skillCode: string }[];
+  assessments: readonly { key: string; templateExerciseKey: string }[];
+};
+
+const authoredSkillPrograms: readonly AuthoredSkillProgram[] = [
+  EDUCATION_V2_P1_A_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_V2_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_3_PROGRAM,
+  EDUCATION_V2_P1_A_CYCLE_4_PROGRAM,
+  ...EDUCATION_V2_P1_A_CYCLE_5_8.map(({ program }) => program),
+  ...EDUCATION_V2_P1_A_CYCLE_9_12.map(({ program }) => program),
+  ...EDUCATION_V2_P1_A_CYCLE_13_16.map(({ program }) => program),
+  ...EDUCATION_V2_P1_A_CYCLE_17_20.map(({ program }) => program),
+  ...EDUCATION_V2_P1_BCD_PROGRAMS,
+];
+
+/**
+ * Returns only the source-authored primary competency for this step's linked
+ * content/exercise. Outcome targets are evaluated separately by the audit;
+ * this list prevents the expected instructional competency from masking an
+ * unrelated extra ContentSkill or Question skill relation.
+ */
+export function sourcePrimarySkillCodesForRouteStep(
+  pathCode: string,
+  stableKey: string,
+): readonly string[] {
+  const cycle = cyclesByCode.get(pathCode);
+  if (!cycle) return [];
+  const program = authoredSkillPrograms.find(
+    (candidate) => candidate.programId === cycle.programId && candidate.path.code === pathCode,
+  );
+  if (!program) return [];
+
+  const localStepKey = stableKey.startsWith(`${program.programId}:`)
+    ? stableKey.slice(program.programId.length + 1)
+    : stableKey;
+  const step = program.path.units
+    .flatMap((unit) => unit.steps)
+    .find((item) => item.key === localStepKey);
+  if (!step) return [];
+
+  const skillCodes = new Set<string>();
+  if (step.contentKey) {
+    const content = program.content.find((item) => item.key === step.contentKey);
+    if (content) skillCodes.add(content.skillCode);
+  }
+  const exerciseKeys = new Set<string>();
+  if (step.exerciseKey) exerciseKeys.add(step.exerciseKey);
+  if (step.assessmentKey) {
+    const assessment = program.assessments.find((item) => item.key === step.assessmentKey);
+    if (assessment) exerciseKeys.add(assessment.templateExerciseKey);
+  }
+  for (const exerciseKey of exerciseKeys) {
+    const exercise = program.exercises.find((item) => item.key === exerciseKey);
+    if (exercise) skillCodes.add(exercise.skillCode);
+  }
+  return [...skillCodes];
+}
+
 export function learningRouteCycle(pathCode: string): LearningRouteCycle | null {
   return cyclesByCode.get(pathCode) ?? null;
 }

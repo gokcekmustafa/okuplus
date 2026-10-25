@@ -37,6 +37,7 @@ export type ProductionLearningRouteStepSnapshot = {
   unresolvedLinkedContentSkillCount: number;
   linkedQuestionSkillCodes: readonly string[];
   unresolvedLinkedQuestionSkillCount: number;
+  allowedAdditionalSkillCodes: readonly string[];
   expectedSkillCodes: readonly string[];
   expectedStoredSkillCodes: readonly string[];
   unmappedExpectedSkillCodes: readonly string[];
@@ -87,6 +88,7 @@ export function productionLearningRouteAuditStatus(
 /** Distinguishes a missing link from a linked row hidden by RLS. */
 export function classifySkillLink(input: {
   expectedSkillCodes: readonly string[];
+  allowedAdditionalSkillCodes?: readonly string[];
   unmappedExpectedSkillCodes?: readonly string[];
   skillId: string | null;
   skillCode: string | null;
@@ -94,7 +96,11 @@ export function classifySkillLink(input: {
   unresolvedLinkedContentSkillCount?: number;
   linkedQuestionSkillCodes?: readonly string[];
   unresolvedLinkedQuestionSkillCount?: number;
-}): { state: SkillLinkState; warningCode: string | null } {
+}): {
+  state: SkillLinkState;
+  warningCode: string | null;
+  additionalWarningCodes?: readonly string[];
+} {
   const unmappedExpectedSkillCodes = input.unmappedExpectedSkillCodes ?? [];
   if (input.expectedSkillCodes.length === 0 && unmappedExpectedSkillCodes.length === 0)
     return { state: "NOT_REQUIRED", warningCode: null };
@@ -109,24 +115,37 @@ export function classifySkillLink(input: {
     return { state: "TARGET_UNRESOLVED", warningCode: "SKILL_LINK_TARGET_UNRESOLVED" };
   if (unresolvedLinkedContentSkillCount > 0 || unresolvedLinkedQuestionSkillCount > 0)
     return { state: "TARGET_UNRESOLVED", warningCode: "SKILL_LINK_TARGET_UNRESOLVED" };
-  if (input.skillId && input.skillCode && !input.expectedSkillCodes.includes(input.skillCode))
+  const linkedSkillCodes = new Set([...linkedContentSkillCodes, ...linkedQuestionSkillCodes]);
+  const actualSkillCodes = new Set(linkedSkillCodes);
+  if (input.skillId && input.skillCode) actualSkillCodes.add(input.skillCode);
+  const permittedSkillCodes = new Set([
+    ...input.expectedSkillCodes,
+    ...(input.allowedAdditionalSkillCodes ?? []),
+  ]);
+  const hasUnpermittedSkill = [...actualSkillCodes].some((code) => !permittedSkillCodes.has(code));
+  const allExpectedSkillsLinked = input.expectedSkillCodes.every((code) =>
+    actualSkillCodes.has(code),
+  );
+
+  // A primary competency authored on the linked source content/exercise is a
+  // permitted supplement. Any other extra relation remains visible as a
+  // warning, even when all outcome targets are also linked.
+  if (hasUnpermittedSkill)
     return {
       state: "OUTSIDE_OUTCOME_TARGETS",
       warningCode: "SKILL_LINK_OUTSIDE_OUTCOME_TARGETS",
+      ...(allExpectedSkillsLinked ? {} : { additionalWarningCodes: ["SKILL_LINK_MISSING"] }),
     };
 
-  // Content and question competencies are broader instructional metadata than
-  // the step's single scalar outcome. They may legitimately include related
-  // training skills, so only an explicit LearningStep.skillId can be
-  // classified as an outside-outcome assignment. For multi-skill outcomes,
-  // require the linked content/question graph to cover every mapped target.
-  const linkedSkillCodes = new Set([...linkedContentSkillCodes, ...linkedQuestionSkillCodes]);
-
-  if (input.expectedSkillCodes.every((code) => linkedSkillCodes.has(code)))
+  if (allExpectedSkillsLinked && input.expectedSkillCodes.length > 1)
+    return { state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null };
+  if (allExpectedSkillsLinked && linkedSkillCodes.size > 0)
     return { state: "MATCHED_BY_CONTENT_SKILLS", warningCode: null };
 
   if (input.skillId && input.skillCode && input.expectedSkillCodes.length === 1)
-    return { state: "MATCHED", warningCode: null };
+    return input.skillCode === input.expectedSkillCodes[0]
+      ? { state: "MATCHED", warningCode: null }
+      : { state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" };
   return { state: "MISSING_FOREIGN_KEY", warningCode: "SKILL_LINK_MISSING" };
 }
 
@@ -329,8 +348,17 @@ export function buildProductionLearningRouteAudit(input: {
               pathCode: path.code,
               pathVersion: path.version,
               unitCode: unit.code,
+              stepId: step.id,
               stableKey: step.stableKey,
               code,
+              skillLinkState: step.skillLinkState,
+              stepSkillCode: step.skillCode,
+              expectedOutcomeSkillCodes: step.expectedStoredSkillCodes,
+              allowedAdditionalSkillCodes: step.allowedAdditionalSkillCodes,
+              linkedContentSkillCodes: step.linkedContentSkillCodes,
+              linkedQuestionSkillCodes: step.linkedQuestionSkillCodes,
+              unresolvedLinkedContentSkillCount: step.unresolvedLinkedContentSkillCount,
+              unresolvedLinkedQuestionSkillCount: step.unresolvedLinkedQuestionSkillCount,
             })),
           ),
       ),
@@ -538,6 +566,9 @@ export function buildProductionLearningRouteAudit(input: {
               skillCategory: step.skillCategory,
               linkedContentSkillCodes: step.linkedContentSkillCodes,
               unresolvedLinkedContentSkillCount: step.unresolvedLinkedContentSkillCount,
+              linkedQuestionSkillCodes: step.linkedQuestionSkillCodes,
+              unresolvedLinkedQuestionSkillCount: step.unresolvedLinkedQuestionSkillCount,
+              allowedAdditionalSkillCodes: step.allowedAdditionalSkillCodes,
               expectedSkillCodes: step.expectedSkillCodes,
               expectedStoredSkillCodes: step.expectedStoredSkillCodes,
               unmappedExpectedSkillCodes: step.unmappedExpectedSkillCodes,
