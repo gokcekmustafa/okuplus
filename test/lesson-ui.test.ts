@@ -3,6 +3,10 @@ import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const studentLabelHelper = source.slice(
+  source.indexOf("function studentFacingLearningPathLabel("),
+  source.indexOf("function learningPathStationCategoryLabel("),
+);
 const code = source.slice(
   source.indexOf("function learningPathProgressLabel("),
   source.indexOf("function setupLessonEvents("),
@@ -24,11 +28,19 @@ function harness() {
     $: get,
     escapeHtml: (value: string) => value.replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
   });
+  runInContext(studentLabelHelper, context);
   runInContext(code, context);
   return { context, get, run: (script: string) => runInContext(script, context) };
 }
 
 describe("student lesson UI", () => {
+  it("uses the real student-facing learning path label helper", () => {
+    const h = harness();
+    expect(h.run('studentFacingLearningPathLabel("Beceri Değerlendirmesi")')).toBe(
+      "Beceri Değerlendirme",
+    );
+  });
+
   it("renders a roadmap lesson as one focused step without a lesson catalog", () => {
     const h = harness();
     h.run(
