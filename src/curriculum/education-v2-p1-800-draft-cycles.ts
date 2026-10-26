@@ -396,6 +396,243 @@ const draftQuestionRevisionsV2: Readonly<
   },
   "d40-size-2": { correct: "Doğal toz genellikle daha iridir" },
   "d40-smoke-3": { correct: "Dumanın buluta göre dikey konumunu" },
+  "a21-bionic-1": {
+    correct: "Işık enerjisini besindeki kimyasal enerjiye çevirmek",
+    distractors: [
+      "Karbondioksiti tek başına oksijene dönüştürmek",
+      "Suyu köklerden yapraklara taşımak",
+      "Besinde depolanan enerjiyi ışığa çevirmek",
+    ],
+  },
+  "a21-bionic-2": {
+    correct: "Fotosentez etkinliğinde artış gözlendi",
+    distractors: [
+      "Kloroplast sayısında artış olduğu gözlendi",
+      "Bitkilerin daha az ışık soğurduğu ölçüldü",
+      "Besin üretiminin her koşulda arttığı kanıtlandı",
+    ],
+  },
+  "a21-bionic-3": {
+    correct: "Etkinlik artışının besin miktarına yansımasını",
+    distractors: [
+      "Deneyde fotosentez etkinliğinin ölçüldüğünü",
+      "Araştırmada karbon nanotüplerin kullanıldığını",
+      "Kloroplastların ışık enerjisini kullandığını",
+    ],
+  },
+  "a22-richter-1": {
+    correct: "Sismik dalga titreşimlerini",
+    distractors: [
+      "Yer kabuğunun manyetik alanındaki değişimi",
+      "Deprem öncesi yer altı suyu basıncını",
+      "Havadaki basınç ve nem değişimini",
+    ],
+  },
+  "a22-richter-2": {
+    correct: "Sismografın kaydettiği dalga genliği",
+    distractors: [
+      "Depremin süresi ve artçı sayısı",
+      "Kayaçların sertliği ve günlük sıcaklığı",
+      "Yüzeydeki hasar ve bina yüksekliği",
+    ],
+  },
+  "a22-robot-3": {
+    correct: "Afet bölgelerinde arama-kurtarma",
+    distractors: [
+      "Deniz suyunu içme suyuna dönüştürme",
+      "Kırsal alanlarda ürün toplama",
+      "Yolcu taşıma araçlarının yönünü belirleme",
+    ],
+    explanation:
+      "Son cümlede arama-kurtarma, çevre gözlemi ve araştırma doğadan esinlenen robotların kullanım amaçları arasında sayılır.",
+    hint: "Son cümlede açıkça verilen görevlerden birini seç.",
+  },
+  "a22-surface-2": {
+    correct: "Damlalar bazı kirleri taşıyabilir",
+    distractors: [
+      "Kaplama kir parçacıklarını yüzeye bağlar",
+      "Su yüzey boyunca yayılarak kiri çözer",
+      "Kaplama etkisi kir türünden bağımsızdır",
+    ],
+  },
+  "a22-snow-1": {
+    correct: "Su molekülleri",
+    prompt: "İlk cümleye göre küçük parçacıkların çevresinde ne birikir?",
+    distractors: ["Buz kristalleri", "Hava akımları", "Tuz kristalleri"],
+    explanation:
+      "İlk cümle, su moleküllerinin küçük parçacıkların çevresinde birikebildiğini belirtir.",
+    hint: "İlk cümlede parçacıklarla su molekülleri arasındaki ilişkiyi bul.",
+  },
+  "a22-snow-2": {
+    correct: "Biyolojik süreçlerin oluşturduğu bileşikler",
+    distractors: [
+      "Deniz suyundaki tuz kristallerinin doğrudan yağması",
+      "Güneş ışığının su buharını katılaştırması",
+      "Buzulların çevredeki havayı ısıtması",
+    ],
+  },
+  "a23-eink-1": {
+    correct: "Artı yüklü beyaz pigmentleri",
+    explanation:
+      "Kaynakta, yüzeydeki eksi yüklü şeffaf elektrodun altındaki kapsüllerde bulunan artı yüklü beyaz pigmentleri üste doğru çektiği anlatılır.",
+    hint: "Şeffaf elektrodun yüküyle beyaz pigmentlerin yükünü karşılaştır.",
+  },
+  "a23-eink-2": {
+    correct: "Çevredeki ışığı geri yansıtarak",
+    distractors: [
+      "Ön yüzdeki arka ışığı kullanarak",
+      "Pigmentlerin elektrikle ışık yaymasını sağlayarak",
+      "Ekran yüzeyindeki ısıyı ışığa çevirerek",
+    ],
+  },
+  "a23-eink-3": {
+    correct: "Görüntü enerji kullanmadan kalabilir",
+    distractors: [
+      "Görüntüyü korumak için sürekli elektrik akımı gerekir",
+      "Pigmentler ekranda kaldığı sürece sürekli hareket eder",
+      "Ekran kapatıldığında görüntü hemen silinir",
+    ],
+  },
+  "a23-computer-1": {
+    correct: "Aritmetik ve mantıksal işlemler yapabilir",
+    distractors: [
+      "Verileri yalnızca belleğe kaydetme işlemini",
+      "Fiziksel değişimleri doğrudan hissetme işlemini",
+      "Yalnızca ekrana görüntü aktarma işlemini",
+    ],
+  },
+  "a23-rainbow-1": {
+    correct: "Farklı dalga boylarındaki ışınlardan",
+    distractors: [
+      "Yalnızca tek dalga boyundaki ışınlardan",
+      "Farklı şiddetteki ses dalgalarından",
+      "Su damlasının oluşturduğu gölgelerden",
+    ],
+  },
+  "a23-rainbow-2": {
+    correct: "Işığın farklı açılarla kırılması",
+    distractors: [
+      "Işığın damlada bütünüyle soğurulması",
+      "Yalnızca damlanın arka yüzeyinden yansıması",
+      "Su damlasının her rengi aynı yöne göndermesi",
+    ],
+  },
+  "a23-rainbow-3": {
+    correct: "Renklerin kırılma açıları farklıdır",
+    distractors: [
+      "Prizma beyaz ışığı yalnızca geri yansıtır",
+      "Bütün renklerin dalga boyu aynıdır",
+      "Cam her rengi eşit ölçüde soğurur",
+    ],
+  },
+  "a23-elevator-1": {
+    correct: "Dönme hareketini veren elektrik motorudur",
+    distractors: [
+      "Karşı ağırlığın çekme kuvveti oluşturmasıdır",
+      "Kılavuz rayların kabini yönlendirmesidir",
+      "Fren sisteminin hareketi durdurmasıdır",
+    ],
+  },
+  "a23-elevator-2": {
+    correct: "Kabin yükünü dengeleyip gereken kuvveti azaltması",
+    distractors: [
+      "Kabin yükünü artırıp motor kuvvetini yükseltmesi",
+      "Kabin hızını her katta aynı değere sabitlemesi",
+      "Kabin ile raylar arasındaki sürtünmeyi ortadan kaldırması",
+    ],
+  },
+  "a23-elevator-3": {
+    correct: "Kabin ile karşı ağırlığın yana doğru salınımını",
+    distractors: [
+      "Karşı ağırlığın kabin yükünü dengelemesini",
+      "Makaraya dönme hareketinin motorla verilmesini",
+      "Kabin kata ulaşınca frenle durdurulmasını",
+    ],
+  },
+  "a23-search-1": {
+    correct: "Evet ya da hayır biçiminde yanıt vererek",
+    prompt: "Kaynakta öğretmen öğrencilerin sorularını nasıl yanıtlıyor?",
+    distractors: [
+      "Not çizelgesindeki doğru satırı göstererek",
+      "Her tahminde sayısal bir ipucu vererek",
+      "Yanıt vermeden beklemeyi sürdürerek",
+    ],
+    explanation:
+      "Kaynakta öğretmenin notları açıklamadığı ve sorulara evet ya da hayır biçiminde yanıt verdiği örnek kullanılır.",
+    hint: "Örnekte öğretmenin verdiği yanıt biçimini hatırla.",
+  },
+  "a23-search-2": {
+    correct: "Notu bulmak için olasılıkları adım adım daraltır",
+    prompt: "Evet-hayır yanıtları, notu bulma sürecinde ne işe yarar?",
+    distractors: [
+      "Öğretmenin notu ilk soruda açıklamasını sağlar",
+      "Öğrencinin sınav kâğıdındaki yanıtları değiştirmesini sağlar",
+      "Not listesindeki bütün sonuçları göstermeyi sağlar",
+    ],
+    explanation:
+      "Öğrenciler, aldıkları notu bulmak için evet-hayır yanıtlarını kullanır; metin bunu bir arama problemi olarak ele alır.",
+    hint: "Yanıtların tahmin edilen notu bulmaya nasıl yardım ettiğini düşün.",
+  },
+  "a23-search-3": {
+    correct: "Gerekli en az soru sayısını hesaplamayı",
+    prompt: "Kaynak yazıda logaritma hangi soruyu yanıtlamak için kullanılıyor?",
+    distractors: [
+      "Öğrencilerin notlarını yükseltmeyi",
+      "Sınavdaki doğru cevap sayısını artırmayı",
+      "Öğretmenin öğrencilere vereceği notu belirlemeyi",
+    ],
+    explanation:
+      "Kaynak, öğrencilerin notlarını tahmin etmek için en az kaç soru sorabileceğini logaritma yardımıyla hesaplıyor.",
+    hint: "Kaynağın başlığındaki ‘en az kaç soru’ sorusunu bul.",
+  },
+  "a24-spectrum-3": {
+    correct: "Daha uzun dalga boylu ve daha düşük enerjili",
+    distractors: [
+      "Daha kısa dalga boylu ve daha yüksek enerjili",
+      "Aynı dalga boylu ve daha yüksek enerjili",
+      "Daha uzun dalga boylu ve daha yüksek enerjili",
+    ],
+  },
+  "a24-battery-2": {
+    correct: "Farklı metallerle",
+    distractors: ["Kurbağanın kaslarıyla", "Yalnızca bakırla", "Yalnızca tuzlu suyla"],
+  },
+  "a24-parasite-1": {
+    correct: "Konak bitkinin köklerine uzanan özel yapılarla",
+    distractors: [
+      "Konak bitkiden bağımsız olarak ışığı köklerde depolayarak",
+      "Yalnızca yaprak yüzeyinde su toplayarak",
+      "Topraktaki organik maddeleri tek başına sindirerek",
+    ],
+  },
+  "a24-parasite-3": {
+    correct: "Beslenme biçimleri farklılık gösterebilir",
+    distractors: [
+      "Bütün parazit bitkiler fotosentezi tamamen bırakır",
+      "Her tür besini yalnızca mantarlar aracılığıyla alır",
+      "Konak bitkiden alınan besin bütün türlerde aynıdır",
+    ],
+  },
+  "a24-music-2": {
+    correct: "Pop müzik",
+    prompt: "Kaynakta anlatılan çalışmada hangi müzik türü kullanıldı?",
+    distractors: ["Klasik müzik", "Enstrümantal caz", "Doğa sesleri"],
+    explanation:
+      "Kaynakta bir çalışmanın, pop müzik dinlenen ve müziksiz ortam koşullarındaki sonuçları karşılaştırdığı belirtilir.",
+    hint: "Araştırma örneğinde açıkça adı verilen müzik türünü bul.",
+  },
+  "a24-music-3": {
+    correct: "Bilgiyi hatırlama ve okuduğunu anlama",
+    prompt: "Kaynakta pop müzik ve sessiz ortam arasında hangi beceriler karşılaştırıldı?",
+    distractors: [
+      "Mekânsal algı ve görsel hafıza",
+      "Problem çözme hızı ve işitme duyusu",
+      "Uyku süresi ve fiziksel dayanıklılık",
+    ],
+    explanation:
+      "Kaynakta, pop müzik dinlerken ve sessiz ortamda öğrenilen bilgiyi hatırlama ile okuduğunu anlama karşılaştırılır.",
+    hint: "Araştırma örneğinde ölçülen iki sonucu birlikte seç.",
+  },
 };
 
 const sourceEvidence = (
@@ -23276,14 +23513,14 @@ routeDrafts.push(
         ["FAST_ATTENTION", "RC_DETAIL"],
         "E-mürekkep ekranındaki yüklü pigmentlerin ve yansıyan ışığın işlevini ayırt eder.",
         "Sayfadaki elektrik yükleri",
-        "E-kitap okuyucularındaki elektronik mürekkep ekran, içinde siyah ve beyaz yüklü pigmentler bulunan küçük kapsüllerden oluşur. Elektrotlara elektrik alan uygulandığında pigmentlerin konumu değişir ve ekranda açık ya da koyu noktalar görünür. Bu ekran, LCD gibi kendi ışığını üretmek yerine çevredeki ışığı yansıtır. Görüntü değiştirilmese bile sayfada kalabildiğinden enerji tüketimi düşüktür; parlak ortam ışığında da okunabilir.",
+        "E-kitap okuyucularındaki elektronik mürekkep ekran, içinde siyah ve beyaz yüklü pigmentler bulunan küçük kapsüllerden oluşur. Yüzeydeki şeffaf elektrot eksi yüklendiğinde kapsüllerdeki artı yüklü beyaz pigmentler üste, elektrot artı yüklendiğinde eksi yüklü siyah pigmentler üste doğru hareket eder. Pigmentlerin bu konumu ekranda açık ya da koyu noktalar oluşturur. E-mürekkep kendi ışığını üretmek yerine çevredeki ışığı yansıtır. Görüntü değiştirilmese bile sayfada kalabildiğinden enerji tüketimi düşüktür; parlak ortam ışığında da okunabilir.",
         "E-kitap Okuyucularda Kullanılan Elektronik Mürekkepler Nasıl Çalışır?",
         "https://bilimgenc.tubitak.gov.tr/makale/e-kitap-okuyucularda-kullanilan-elektronik-murekkepler-nasil-calisir",
         [
-          "Kapsüllerde eksi yüklü siyah ve artı yüklü beyaz pigmentler bulunur; elektrik alan konumlarını değiştirir.",
+          "Kapsüllerde eksi yüklü siyah ve artı yüklü beyaz pigmentler bulunur; yüzeydeki eksi yüklü şeffaf elektrot beyaz pigmentleri üste çeker.",
           "E-mürekkep ışık yaymaz, ortam ışığını yansıtır; sabit görüntü enerji harcamadan kalabilir.",
         ],
-        "Özgün metin, pigmentlerin hareketini ekranın görünür ve düşük enerjili olma özellikleriyle ilişkilendirir.",
+        "Özgün metin, iki yük yönündeki pigment hareketini ve yansıyan ışığın ekrandaki rolünü kaynakta verilen çalışma ayrıntılarıyla açıklar.",
         [
           q(
             "a23-eink-1",
@@ -23488,14 +23725,14 @@ routeDrafts.push(
         ["RC_MAIN_IDEA", "RC_INFERENCE", "FAST_ATTENTION"],
         "Evet-hayır yanıtlarıyla olasılıkları daraltma ve logaritmik soru sayısı ilişkisini yorumlar.",
         "Az soruyla doğru seçeneği bulmak",
-        "Bir öğretmen notları açıklamadan, öğrencilerden hangi notun alındığını evet-hayır sorularıyla bulmalarını ister. Her soru olası yanıtları iki gruba ayırabildiğinde, iyi seçilmiş sorular kalan olasılıkları hızla daraltır. Bu arama sürecinde gerekli soru sayısı olasılıkların toplamından çok, ikiye bölme adımlarına bağlıdır; logaritma bu adımları hesaplamaya yardım eder. Denge gözetmeyen bir soru ise olasılıkların çoğunu elemeden bırakabilir.",
+        "Bir sınavdan sonra öğretmen notları açıklamaz; öğrenciler, aldıkları notu tahmin etmek için soru sorar ve öğretmen evet ya da hayır diye yanıt verir. Bilim Genç yazısı bu örnekte öğrencilerin notlarını bulmak için en az kaç soru sorabileceğini ele alır. Yazar, bu sayıyı matematiksel bir fonksiyon olan logaritmayı kullanarak hesaplar. Metin, her sorunun olasılıkları eşit iki gruba böldüğünü ileri sürmez; yalnızca evet-hayır yanıtlarıyla yürüyen bu arama sorusunu ve soru sayısının hesabını tanıtır.",
         "Arama Algoritması Nasıl Çalışır?",
         "https://bilimgenc.tubitak.gov.tr/makale/arama-algoritmasi-nasil-calisir",
         [
-          "Kaynakta öğretmenin notları açıklamadığı ve evet-hayır yanıtlarıyla tahmin oyunu kurduğu örnek verilir.",
-          "Soruların sayısını hesaplamak için logaritma kullanılır; yöntem olasılıkları adım adım daraltır.",
+          "Kaynakta öğretmenin notları açıklamadığı, öğrencilerin notu tahmin etmeye çalıştığı ve yanıtların evet-hayır olduğu örnek verilir.",
+          "Yazı, öğrencilerin notlarını bulmak için gereken en az soru sayısını logaritma kullanarak hesaplar.",
         ],
-        "Özgün metin, soru seçiminin olasılıkları nasıl azalttığını ve logaritmanın bu adımları saymadaki rolünü ölçer.",
+        "Özgün metin, kaynakta verilen tahmin sorusunu ve logaritmanın gereken en az soru sayısını bulmadaki rolünü ölçer.",
         [
           q(
             "a23-search-1",
@@ -24473,14 +24710,14 @@ routeDrafts.push(
         ["RC_COMPARE_CONTRAST", "RC_INFERENCE"],
         "Müzik etkisinin değişken olduğunu bulgular ve koşullarla birlikte yorumlar.",
         "Çalışırken müzik dinlemek",
-        "Çalışırken müzik dinlemenin bilişsel performansa etkisini araştıran çalışmalar aynı sonucu vermiyor. Bazı araştırmalarda müzik ruh hâlini iyileştirip kaygıyı azaltırken, yoğun dikkat isteyen işlerde performansı düşürebildiği görülüyor. Sonuç; müziğin türüne ve ses düzeyine, ayrıca dinleyenin özelliklerine ve yaşına bağlı olabilir. Bir çalışmada pop müzik eşliğinde öğrenilen bilgiyi hatırlama ve okuduğunu anlama, müziksiz ortamdaki sonuçlarla karşılaştırıldı; olumsuz etkinin bazı gruplarda daha belirgin olduğu bildirildi. Bu nedenle tek bir ortam herkese uygun diye genellenemez.",
+        "Çalışırken müzik dinlemenin bilişsel performansa etkisini araştıran çalışmalar aynı sonucu vermiyor: bazıları performans artışı, bazıları özellikle yoğun dikkat gerektiren işlerde olumsuz etki bildiriyor. Bu farklılık müziğin türü ve ses düzeyiyle, dinleyenin özellikleri ve yaşıyla ilişkili olabilir. Kaynakta aktarılan bir çalışmada pop müzik dinlerken ve sessiz ortamda öğrenilen bilgiyi hatırlama ile okuduğunu anlama karşılaştırıldı; içine kapanık katılımcıların olumsuz etkilenmesi dışa dönük katılımcılara göre daha belirgin bulundu. Kaynak, tek bir müzik koşulunun herkes için aynı sonucu vereceği genellemesini desteklemiyor.",
         "Çalışırken Müzik Dinlemek Dikkatimizi Dağıtır mı?",
-        "https://bilimgenc.tubitak.gov.tr/makale/calisirken-muzik-dinlemek-dikkatimizi-dagitirmi",
+        "https://bilimgenc.tubitak.gov.tr/makale/calisirken-muzik-dinlemek-dikkatimizi-dagitir-mi",
         [
           "Müzik etkisine ilişkin bilişsel performans araştırmaları farklı sonuçlar bildiriyor.",
-          "Etki müzik türü, ses düzeyi, kişinin özellikleri ve yaşına göre değişebilir; kaynak tek bir sonucu herkese genellemiyor.",
+          "Bir çalışmada pop müzik ve sessiz ortam koşulları, öğrenilen bilgiyi hatırlama ve okuduğunu anlama bakımından karşılaştırılmıştır; etki kişilik özelliklerine göre farklılaşmıştır.",
         ],
-        "Özgün metin, araştırma bulgularını koşullarla birlikte değerlendirerek kanıtın sınırını gözetmeyi ölçer.",
+        "Özgün metin, farklı araştırma sonuçlarını ve pop müzik çalışmasının ölçtüğü becerileri ayırır; bulguları herkese genellemez.",
         [
           q(
             "a24-music-1",

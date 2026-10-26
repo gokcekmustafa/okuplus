@@ -8,23 +8,36 @@ export type EducationV2P1ACycle5To8ReleaseDecision = {
 };
 
 export type EducationV2P1ACycle5To8GraphScope =
-  "CYCLE_5_ONLY" | "CYCLES_5_TO_8" | "CYCLES_9_TO_12" | "CYCLES_13_TO_16" | "CYCLES_17_TO_20";
+  | "CYCLE_5_ONLY"
+  | "CYCLES_5_TO_8"
+  | "CYCLES_9_TO_12"
+  | "CYCLES_13_TO_16"
+  | "CYCLES_17_TO_20"
+  | "CYCLES_21_TO_24";
 
 export function educationV2P1ACycle5To8ScopeSequences(
   scope: EducationV2P1ACycle5To8GraphScope,
-): readonly (5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20)[] {
+): readonly (
+  5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24
+)[] {
   if (scope === "CYCLE_5_ONLY") return [5];
   if (scope === "CYCLES_5_TO_8") return [5, 6, 7, 8];
   if (scope === "CYCLES_9_TO_12") return [9, 10, 11, 12];
   if (scope === "CYCLES_13_TO_16") return [13, 14, 15, 16];
-  return [17, 18, 19, 20];
+  if (scope === "CYCLES_17_TO_20") return [17, 18, 19, 20];
+  return [21, 22, 23, 24];
 }
 
 export function educationV2P1ACycle5To8ProductionApproval(
   scope: EducationV2P1ACycle5To8GraphScope,
   commit: string,
 ): string {
-  if (scope === "CYCLES_9_TO_12" || scope === "CYCLES_13_TO_16" || scope === "CYCLES_17_TO_20") {
+  if (
+    scope === "CYCLES_9_TO_12" ||
+    scope === "CYCLES_13_TO_16" ||
+    scope === "CYCLES_17_TO_20" ||
+    scope === "CYCLES_21_TO_24"
+  ) {
     throw new Error("Ayrı döngü aralıklarının onayı ayrı sürümlü release kimliği kullanmalıdır.");
   }
   const approvalScope = scope === "CYCLE_5_ONLY" ? "CYCLE_5" : "CYCLE_5_8";
