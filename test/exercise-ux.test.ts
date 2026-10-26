@@ -82,7 +82,185 @@ function harness() {
   return { context, get, run: (code: string) => runInContext(code, context) };
 }
 
+type SessionRenderFixture = {
+  id?: string;
+  studentId?: string;
+  templateVersionId?: string;
+  status?: string;
+  learningStepId?: string;
+  sessionType?: string;
+  assessmentId?: string | null;
+  scoreSummary?: { attempted?: number; totalQuestions?: number } | null;
+  templateVersion?: {
+    version?: number;
+    template?: { title?: string };
+    training?: { family?: string; rendererKey?: string };
+    contents?: Array<{ contentVersion?: { title?: string; body?: string } }>;
+  };
+};
+
+type SessionRenderElement = {
+  innerHTML: string;
+  textContent: string;
+  style: { display: string };
+  classList: { toggle(): void; add(): void; remove(): void };
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+  getAttribute(name: string): string | null;
+  parentElement: { setAttribute(): void };
+};
+
+function sessionRenderHarness(session: SessionRenderFixture, stepType = "PRACTICE") {
+  const elements = new Map<string, SessionRenderElement>();
+  const get = (id: string) => {
+    if (!elements.has(id)) {
+      const attributes = new Map<string, string>();
+      elements.set(id, {
+        innerHTML: "",
+        textContent: "",
+        style: { display: "" },
+        classList: { toggle() {}, add() {}, remove() {} },
+        setAttribute(name: string, value: string) {
+          attributes.set(name, value);
+        },
+        removeAttribute(name: string) {
+          attributes.delete(name);
+        },
+        getAttribute(name: string) {
+          return attributes.get(name) ?? null;
+        },
+        parentElement: { setAttribute() {} },
+      });
+    }
+    return elements.get(id);
+  };
+  const renderSession = source.slice(
+    source.indexOf("function renderExerciseSession()"),
+    source.indexOf("function isFastReadingExercise()"),
+  );
+  const context = createContext({
+    $: get,
+    isPlatformUser: false,
+    learningPathEntryMode: true,
+    activeLearningStepNode: {
+      id: "step-53",
+      type: stepType,
+      status: "active",
+      unitTitle: "Okuduğunu Anlama",
+      learningPathPosition: 53,
+      learningPathTotal: 132,
+    },
+    exerciseSession: session,
+    exerciseQuestions: [{ questionVersionId: "question-1" }],
+    currentExerciseQuestionIndex: 0,
+    dailyTrainingSummary: null,
+    dailyTrainingSessionId: null,
+    learningPathProgressLabel: (
+      node: { learningPathPosition?: number; learningPathTotal?: number } | null,
+    ) =>
+      node?.learningPathPosition
+        ? `${node.learningPathPosition} / ${node.learningPathTotal}`
+        : null,
+    learningPathExerciseContextLabel: (node: { unitTitle?: string } | null) =>
+      `${node?.unitTitle ?? ""} · Uygulama`,
+    escapeHtml: (value: unknown) => String(value ?? ""),
+    renderStudentReading(readingSession: SessionRenderFixture) {
+      get("student-reading-card").style.display = readingSession?.templateVersion?.contents?.length
+        ? "block"
+        : "none";
+    },
+    renderStudentTrainingInstructions(element: { style: { display: string } }) {
+      element.style.display = "block";
+    },
+    currentFastReadingMeasurement: () => null,
+    formatDateTime: () => "26 Ekim 2026",
+    renderExerciseResult() {},
+    renderLearningPathExerciseNavigation() {},
+    renderTrainingActivities() {},
+  });
+  runInContext(renderSession, context);
+  return {
+    get,
+    render: () => runInContext("renderExerciseSession()", context),
+  };
+}
+
 describe("exercise UX state from production frontend", () => {
+  it("keeps completed station results in focus instead of repeating the reading passage", () => {
+    const h = sessionRenderHarness({
+      id: "session-1",
+      studentId: "student-1",
+      templateVersionId: "template-version-1",
+      status: "COMPLETED",
+      learningStepId: "step-53",
+      scoreSummary: { attempted: 3, totalQuestions: 3 },
+      templateVersion: {
+        version: 1,
+        template: { title: "Metin kanıtını bul" },
+        training: { family: "DETAIL_EVIDENCE", rendererKey: "MULTIPLE_CHOICE" },
+        contents: [
+          { contentVersion: { title: "Metin", body: "Sonuçtan önce tekrarlanan metin." } },
+        ],
+      },
+    });
+
+    h.render();
+
+    expect(h.get("student-reading-card").style.display).toBe("none");
+    expect(h.get("exercise-training-instructions").style.display).toBe("none");
+    expect(h.get("exercise-questions-card").style.display).toBe("none");
+    expect(h.get("exercise-result-card").style.display).toBe("block");
+  });
+
+  it("keeps reading visible while an active session is being answered", () => {
+    const h = sessionRenderHarness({
+      id: "session-1",
+      studentId: "student-1",
+      templateVersionId: "template-version-1",
+      status: "IN_PROGRESS",
+      learningStepId: "step-53",
+      templateVersion: {
+        version: 1,
+        template: { title: "Metin kanıtını bul" },
+        training: { family: "DETAIL_EVIDENCE", rendererKey: "MULTIPLE_CHOICE" },
+        contents: [{ contentVersion: { title: "Metin", body: "Okunacak metin." } }],
+      },
+    });
+
+    h.render();
+
+    expect(h.get("student-reading-card").style.display).toBe("block");
+    expect(h.get("exercise-training-instructions").style.display).toBe("block");
+    expect(h.get("exercise-questions-card").style.display).toBe("block");
+    expect(h.get("exercise-result-card").style.display).toBe("none");
+  });
+
+  it("sets a visual station type for all supported learning-path activity modes", () => {
+    const types = ["TEACHING", "SMALL_STUDY", "PRACTICE", "REINFORCEMENT", "ASSESSMENT"];
+    for (const type of types) {
+      const h = sessionRenderHarness(
+        {
+          id: "session-1",
+          studentId: "student-1",
+          templateVersionId: "template-version-1",
+          status: "IN_PROGRESS",
+          sessionType: type === "ASSESSMENT" ? "ASSESSMENT" : "PRACTICE",
+          assessmentId: type === "ASSESSMENT" ? "assessment-1" : null,
+          learningStepId: "step-53",
+          templateVersion: {
+            version: 1,
+            template: { title: "Uygulama" },
+            training: { family: "DETAIL_EVIDENCE", rendererKey: "MULTIPLE_CHOICE" },
+            contents: [],
+          },
+        },
+        type,
+      );
+      h.render();
+      expect(h.get("exercise-learning-path-context").getAttribute("data-station-type")).toBe(type);
+    }
+  });
+
   it("does not label a null score as wrong or award invented GP", () => {
     const h = harness();
     h.run('showExerciseFeedback({ id: "a", isCorrect: null, rawScore: null })');
@@ -284,6 +462,9 @@ describe("exercise UX state from production frontend", () => {
     const html = h.get("exercise-result-body").innerHTML;
 
     expect(html).toContain("Değerlendirilen cevapların ortalaması");
+    expect(html).toContain('class="station-completion-mark"');
+    expect(html).toContain("Aktiviteyi tamamladın!");
+    expect(html).not.toContain("🎉");
     expect(html).toContain('class="exercise-result-details"');
     expect(html).toContain("<summary>Çalışma ayrıntıları</summary>");
     expect(html).toContain("Puanlanan cevap");
@@ -333,6 +514,8 @@ describe("exercise UX state from production frontend", () => {
     expect(index.indexOf('id="exercise-result-card"')).toBeLessThan(
       index.indexOf('id="exercise-learning-path-navigation"'),
     );
+    expect(index).toContain('class="exercise-result-kicker">ÇALIŞMA SONUCU</p>');
+    expect(index).toContain("Bu soruyu yanıtla");
     expect(styles).toContain(".learning-path-exercise-navigation [data-learning-path-next]");
   });
 

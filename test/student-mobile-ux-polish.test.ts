@@ -64,6 +64,26 @@ describe("student mobile UX polish", () => {
     expect(styles).toContain("max-width: 72ch");
   });
 
+  it("uses the V2 station hierarchy with readable prose, reachable answers and natural scrolling", () => {
+    const stationV2Start = designSystem.lastIndexOf("/* Station screens V2:");
+    const stationV2 = designSystem.slice(stationV2Start);
+
+    expect(stationV2Start).toBeGreaterThan(-1);
+    expect(stationV2).toContain("font-size: clamp(16px, 4.2vw, 18px)");
+    expect(stationV2).toContain("line-height: 1.72");
+    expect(stationV2).toContain("min-height: 56px");
+    expect(stationV2).toContain("overflow: visible");
+    expect(stationV2).toContain("@media (max-width: 720px)");
+    expect(stationV2).toContain('data-station-type="SMALL_STUDY"');
+    expect(stationV2).toContain('data-station-type="REINFORCEMENT"');
+    expect(stationV2).toContain('data-station-type="ASSESSMENT"');
+    expect(stationV2).not.toMatch(/overflow-y:\s*auto/u);
+    expect(index).toContain('id="exercise-result-card"');
+    expect(index).not.toContain('<h3 style="margin: 0 0 12px">Sonuç</h3>');
+    expect(index).toContain('class="exercise-result-kicker">ÇALIŞMA SONUCU</p>');
+    expect(app).toContain('class="station-completion-mark" aria-hidden="true">✓</span>');
+  });
+
   it("shows the active station title and a map focus control without changing station availability", () => {
     expect(app).toContain('class="learning-map-v6-current"');
     expect(app).toContain('class="learning-map-v6-title"');

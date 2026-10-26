@@ -37,11 +37,55 @@ describe("student lesson UI", () => {
     const html = h.get("lesson-detail").innerHTML;
     expect(html).not.toContain("ŞİMDİKİ DURAĞIN");
     expect(html).toContain("Dersi tamamla");
-    expect(html).toContain("Öğrenme Yolu · 7 / 22");
+    expect(html).toContain('aria-label="Öğrenme yolu ilerlemesi">7 / 22');
     expect(html).not.toContain("Sana uygun dersler");
     expect(html).toContain("data-learning-step-complete");
     expect(source).not.toContain('"/student/lessons"');
     expect(source).not.toContain("renderLessonList");
+  });
+
+  it("uses the V2 lesson hierarchy instead of nesting each teaching section in a card", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({title:'Kanıtı ayırt et',objective:'Cevabını metinden destekle.',explanation:'Metindeki ifadeyi bul.',workedExample:'Örneği incele.',guidedPractice:'Şimdi sen dene.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Okuduğunu Anlama',learningPathPosition:53,learningPathTotal:132})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+
+    expect(html).toContain('class="station-lesson-v2 station-lesson-v2--teaching"');
+    expect(html).toContain('class="station-lesson-meta"');
+    expect(html).toContain('class="station-lesson-section station-lesson-section--explanation"');
+    expect(html).toContain('class="station-lesson-section station-lesson-section--example"');
+    expect(html).toContain('class="station-lesson-section station-lesson-section--practice"');
+    expect(html.match(/<section\b/gu)).toHaveLength(3);
+    expect(html).toContain("Bu adımda");
+    expect(html).toContain("Dersi tamamla");
+  });
+
+  it("labels short study distinctly while preserving its lesson actions", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({title:'Kısa alıştırma',objective:'Önemli sözcükleri fark et.',explanation:'Anlatım.',workedExample:'Örnek.',guidedPractice:'Uygula.',completion:{completed:false}},{type:'SMALL_STUDY',unitTitle:'Hızlı Okuma'})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+
+    expect(html).toContain('class="station-lesson-v2 station-lesson-v2--small_study"');
+    expect(html).toContain("Kısa çalışma");
+    expect(html).toContain("Dersi tamamla");
+    expect(html).toContain("Yol haritasına dön");
+  });
+
+  it("keeps the lesson prose, objective and completion action in one scrollable document", () => {
+    const h = harness();
+    h.run(
+      `renderFocusedLesson({title:'Metindeki kanıt',objective:'Sorunu cevaplamak için metne dön.',explanation:'Önemli bilgiyi bul.',workedExample:'Cümleyi tekrar oku.',guidedPractice:'Cevabını seç.',completion:{completed:false}},{type:'TEACHING',unitTitle:'Okuduğunu Anlama'})`,
+    );
+    const html = h.get("lesson-detail").innerHTML;
+
+    expect(html).toContain("Sorunu cevaplamak için metne dön.");
+    expect(html).toContain("Önemli bilgiyi bul.");
+    expect(html).toContain("data-learning-step-complete");
+    expect(html).toContain("data-learning-step-back");
+    expect(html).not.toContain('class="card');
   });
 
   it("does not keep the prerequisite helper message in the focused lesson status", () => {

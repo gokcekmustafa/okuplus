@@ -4954,7 +4954,8 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
   const detail = $("lesson-detail");
   if (!detail) return;
   const completed = Boolean(lesson?.completion?.completed);
-  const stepTypeLabel = learningStep?.type === "SMALL_STUDY" ? "Küçük çalışma" : "Öğretim";
+  const lessonType = learningStep?.type === "SMALL_STUDY" ? "SMALL_STUDY" : "TEACHING";
+  const stepTypeLabel = lessonType === "SMALL_STUDY" ? "Kısa çalışma" : "Öğretim";
   const progressLabel = learningPathProgressLabel(learningStep);
   const navigation = normalizeLearningPathNavigation(serverNavigation, learningStep);
   const canNavigateAdjacentSteps =
@@ -4969,22 +4970,26 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
       : "";
   detail.innerHTML = lesson
     ? `
-    <div class="learning-path-step-context">
-      <span class="badge badge-info">${escapeHtml(stepTypeLabel)}</span>
-      <span class="muted">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
-      ${progressLabel ? `<span class="learning-path-step-progress" aria-label="Öğrenme yolu ilerlemesi">Öğrenme Yolu · ${escapeHtml(progressLabel)}</span>` : ""}
-    </div>
-    <h3>${escapeHtml(lesson.title)}</h3>
-    <p class="lesson-objective">${escapeHtml(lesson.objective)}</p>
-    <section><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
-    <section><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
-    <section><h4>Şimdi sen düşün</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
-    <div class="lesson-actions">
-      <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
-      ${completed ? '<span class="lesson-completed-state" role="status">✓ Bu adım tamamlandı</span>' : '<button type="button" class="btn btn-primary" data-learning-step-complete>Dersi tamamla <span aria-hidden="true">→</span></button>'}
-    </div>
-    <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
-    ${navigationMarkup}`
+    <article class="station-lesson-v2 station-lesson-v2--${lessonType.toLowerCase()}">
+      <header class="station-lesson-heading">
+        <div class="station-lesson-meta">
+          <span class="station-lesson-type">${escapeHtml(stepTypeLabel)}</span>
+          <span class="station-lesson-unit">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
+          ${progressLabel ? `<span class="learning-path-step-progress" aria-label="Öğrenme yolu ilerlemesi">${escapeHtml(progressLabel)}</span>` : ""}
+        </div>
+        <h3 class="station-lesson-title">${escapeHtml(lesson.title)}</h3>
+        <p class="lesson-objective"><span class="station-lesson-objective-label">Bu adımda</span>${escapeHtml(lesson.objective)}</p>
+      </header>
+      <section class="station-lesson-section station-lesson-section--explanation"><h4>Kısa anlatım</h4><p>${escapeHtml(lesson.explanation)}</p></section>
+      <section class="station-lesson-section station-lesson-section--example"><h4>Örnek</h4><p>${escapeHtml(lesson.workedExample)}</p></section>
+      <section class="station-lesson-section station-lesson-section--practice"><h4>Şimdi sen düşün</h4><p>${escapeHtml(lesson.guidedPractice)}</p></section>
+      <div class="lesson-actions station-lesson-actions">
+        ${completed ? '<span class="lesson-completed-state" role="status">✓ Bu adım tamamlandı</span>' : '<button type="button" class="btn btn-primary" data-learning-step-complete>Dersi tamamla <span aria-hidden="true">→</span></button>'}
+        <button type="button" class="btn btn-secondary" data-learning-step-back>Yol haritasına dön</button>
+      </div>
+      <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
+      ${navigationMarkup}
+    </article>`
     : '<p class="muted">Bu öğrenme adımı için yayınlanmış ders bulunamadı.</p>';
 }
 
@@ -14227,6 +14232,16 @@ function renderExerciseSession() {
   const learningPathProgress = learningPathProgressLabel(activeLearningStepNode);
   if (learningPathContext) {
     learningPathContext.classList.toggle("hidden", !inLearningPath);
+    const knownStepTypes = ["TEACHING", "SMALL_STUDY", "PRACTICE", "REINFORCEMENT", "ASSESSMENT"];
+    const rawStepType = String(activeLearningStepNode?.type || "").toUpperCase();
+    const visualStepType =
+      exerciseSession?.assessmentId || exerciseSession?.sessionType === "ASSESSMENT"
+        ? "ASSESSMENT"
+        : knownStepTypes.includes(rawStepType)
+          ? rawStepType
+          : "PRACTICE";
+    if (inLearningPath) learningPathContext.setAttribute("data-station-type", visualStepType);
+    else learningPathContext.removeAttribute("data-station-type");
     learningPathContext.innerHTML = inLearningPath
       ? `<span class="learning-path-exercise-label">${escapeHtml(learningPathExerciseContextLabel(activeLearningStepNode))}</span>${learningPathProgress ? `<strong class="learning-path-exercise-progress">${escapeHtml(learningPathProgress)}</strong>` : ""}`
       : "";
@@ -14255,8 +14270,15 @@ function renderExerciseSession() {
   const activities = $("training-activities-list");
   if (activities) activities.style.display = "none";
   renderStudentReading(exerciseSession);
+  const readingCard = $("student-reading-card");
+  const isCompletedStudentResult =
+    isPlatformUser === false &&
+    exerciseSession.status === "COMPLETED" &&
+    Boolean(exerciseSession.scoreSummary);
+  if (readingCard && isCompletedStudentResult) readingCard.style.display = "none";
   const instructionsEl = $("exercise-training-instructions");
   renderStudentTrainingInstructions(instructionsEl, exerciseSession);
+  if (instructionsEl && isCompletedStudentResult) instructionsEl.style.display = "none";
   if (info) info.style.display = "block";
   if (detail) {
     const s = exerciseSession;
@@ -14508,8 +14530,8 @@ function renderExerciseResult() {
         : "";
     if (isIndependentActivity) {
       body.innerHTML = `
-      <div class="completion-card">
-        <div aria-hidden="true" style="font-size:48px">🎉</div>
+      <div class="completion-card station-completion-card">
+        <span class="station-completion-mark" aria-hidden="true">✓</span>
         <h3 tabindex="-1" id="exercise-completion-title">Aktiviteyi tamamladın!</h3>
         <p>Çalışman antrenman geçmişine kaydedildi. İstersen aynı aktiviteyi tekrar oynayabilirsin.</p>
         ${completionScore}
@@ -14534,8 +14556,8 @@ function renderExerciseResult() {
       return;
     }
     body.innerHTML = `
-      <div class="completion-card">
-        <div aria-hidden="true" style="font-size:48px">🎉</div>
+      <div class="completion-card station-completion-card">
+        <span class="station-completion-mark" aria-hidden="true">✓</span>
         <h3 tabindex="-1" id="exercise-completion-title">${isReview ? "Tekrarını tamamladın." : isAssessment ? "Değerlendirmeyi tamamladın!" : "Alıştırmayı tamamladın!"}</h3>
         <p>${pending ? pending + " cevap için değerlendirme bekleniyor. Puan yalnızca değerlendirilen cevapları içerir." : isReview ? "Bu çalışma gelişimini pekiştirmek için kaydedildi." : isAssessment ? "Sonuçların öğrenme yolunu kişiselleştirmek için kaydedildi." : "Çalışman kaydedildi."}</p>
         <p class="exercise-completion-progress">${s.attempted ?? 0} / ${s.totalQuestions ?? 0} soru yanıtlandı.</p>
@@ -14711,7 +14733,7 @@ function renderExerciseQuestion() {
       const disclosureSuffix = String(q.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
       let html = "";
       if (isStudentLocal) {
-        html += `<div class="student-exercise-content"><p id="exercise-prompt" tabindex="-1" style="font-size:16px; line-height:1.7; margin:0">${escapeHtml(q.prompt ?? "—")}</p></div>`;
+        html += `<div class="student-exercise-content"><p id="exercise-prompt" class="exercise-question-prompt" tabindex="-1">${escapeHtml(q.prompt ?? "—")}</p></div>`;
         if (q.hint) {
           html += `<details class="exercise-hint" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-hint-${disclosureSuffix}">İpucunu göster</summary><p id="exercise-hint-${disclosureSuffix}">${escapeHtml(q.hint)}</p></details>`;
         }

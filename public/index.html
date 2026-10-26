@@ -5609,7 +5609,7 @@
                 class="learning-path-exercise-context hidden"
                 aria-live="polite"
               ></div>
-              <div style="display: flex; align-items: center; gap: 12px">
+              <div class="exercise-session-progress-row">
                 <button
                   id="exercise-back-btn"
                   type="button"
@@ -5618,12 +5618,13 @@
                 >
                   ←
                 </button>
-                <div style="flex: 1">
-                  <div style="display: flex; justify-content: space-between; font-size: 12px">
-                    <span id="exercise-progress-text" class="muted">Soru yükleniyor</span
-                    ><span id="exercise-gp" class="gamification-badge" style="font-size: 11px"
-                      >⭐ — GP</span
-                    >
+                <div class="exercise-session-progress-main">
+                  <div class="exercise-session-progress-meta">
+                    <span id="exercise-progress-text" class="muted">Soru yükleniyor</span>
+                    <div class="exercise-session-rewards">
+                      <span id="exercise-gp" class="gamification-badge">⭐ — GP</span>
+                      <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
+                    </div>
                   </div>
                   <div
                     class="progress-track"
@@ -5636,7 +5637,6 @@
                     <div id="exercise-progress-bar" class="progress-fill"></div>
                   </div>
                 </div>
-                <span id="exercise-streak" class="gamification-badge" title="Seri">🔥 —</span>
               </div>
             </div>
             <div
@@ -5785,18 +5785,10 @@
             </div>
 
             <div id="exercise-questions-card" class="card" style="padding: 16px; display: none">
-              <div
-                style="
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                  margin-bottom: 12px;
-                "
-              >
-                <h3 style="margin: 0">
-                  Sorular <span id="exercise-question-counter" class="muted"></span>
-                </h3>
-                <div style="display: flex; gap: 8px">
+              <div class="exercise-question-toolbar">
+                <h3>Bu soruyu yanıtla</h3>
+                <span id="exercise-question-counter" class="exercise-question-counter muted"></span>
+                <div class="exercise-question-navigation">
                   <button id="exercise-prev-question" type="button" class="btn btn-ghost btn-sm">
                     Önceki
                   </button>
@@ -5831,10 +5823,10 @@
 
             <div
               id="exercise-result-card"
-              class="card"
+              class="card station-result-panel"
               style="padding: 16px; margin-top: 16px; display: none"
             >
-              <h3 style="margin: 0 0 12px">Sonuç</h3>
+              <p class="exercise-result-kicker">ÇALIŞMA SONUCU</p>
               <div id="exercise-result-body" class="detail-grid"></div>
             </div>
             <nav
