@@ -1530,7 +1530,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     });
     expect(transition).toMatchObject({
       outcome: "ASSIGNED",
-      currentLearningPathId: PATH_IDS.cycle20,
+      currentLearningPathId: cycle20Fixture.enrollmentId,
       nextLearningPathId: PATH_IDS.cycle21,
       readiness: { status: "ASSIGNED", currentCycleCompleted: true, nextCycleAvailable: true },
     });
@@ -1551,6 +1551,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     });
     expect(replay).toMatchObject({
       outcome: "ALREADY_ASSIGNED",
+      currentLearningPathId: cycle20Fixture.enrollmentId,
       nextLearningPathId: PATH_IDS.cycle21,
       readiness: { status: "ALREADY_ASSIGNED" },
     });
