@@ -316,6 +316,29 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-attempt-feedback").innerHTML).not.toContain("100 GP");
   });
 
+  it("renders a single success title and keeps attempt points and score in one summary row", () => {
+    const h = harness();
+    h.context.exerciseGamification = {
+      recentPointEvents: [{ sourceType: "ATTEMPT", sourceId: "a", points: 7 }],
+    };
+    h.run(`showExerciseFeedback({
+      id: "a",
+      isCorrect: true,
+      rawScore: 1,
+      feedback: { message: "✓ Güzel yakaladın." },
+    })`);
+
+    const html = h.get("exercise-attempt-feedback").innerHTML;
+    const summary = html.match(/<div class="feedback-panel-summary">([\s\S]*?)<\/div>/)?.[1] ?? "";
+    expect((html.match(/Güzel yakaladın\./g) ?? []).length).toBe(1);
+    expect(summary).toContain("✓ Güzel yakaladın.");
+    expect(summary).toContain("+7 GP");
+    expect(summary).toContain("Puan: 1.00");
+    expect(summary).not.toContain("+10 GP");
+    expect(designSystem).toContain("@media (max-width: 360px)");
+    expect(designSystem).toContain("feedback-panel-summary > strong");
+  });
+
   it("uses the product's Turkish inline feedback contract", () => {
     const h = harness();
     h.run(

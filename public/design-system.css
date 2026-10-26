@@ -885,6 +885,26 @@ body {
 .app .feedback-panel > strong {
   font-size: 16px;
 }
+.app .feedback-panel-summary {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.app .feedback-panel-summary > strong {
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.3;
+}
+.app .feedback-panel-points,
+.app .feedback-panel-score {
+  flex: 0 0 auto;
+  font-size: 14px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .app .exercise-actions {
   margin-top: 14px;
 }
@@ -2624,6 +2644,56 @@ dialog::backdrop {
   background: var(--ui-success-soft);
   border: 2px solid var(--ui-success);
   color: var(--ui-success);
+  gap: 6px;
+  padding: 9px 12px !important;
+}
+.app.student-shell
+  #page-exercise
+  #exercise-attempt-feedback.feedback-panel.correct
+  .feedback-panel-summary {
+  gap: 3px 9px;
+}
+.app.student-shell
+  #page-exercise
+  #exercise-attempt-feedback.feedback-panel.correct
+  .feedback-panel-summary
+  > strong {
+  font-size: 13px;
+}
+.app.student-shell
+  #page-exercise
+  #exercise-attempt-feedback.feedback-panel.correct
+  .feedback-panel-points,
+.app.student-shell
+  #page-exercise
+  #exercise-attempt-feedback.feedback-panel.correct
+  .feedback-panel-score {
+  font-size: 12.5px;
+}
+@media (max-width: 360px) {
+  .app.student-shell
+    #page-exercise
+    #exercise-attempt-feedback.feedback-panel.correct
+    .feedback-panel-summary {
+    column-gap: 5px;
+  }
+  .app.student-shell
+    #page-exercise
+    #exercise-attempt-feedback.feedback-panel.correct
+    .feedback-panel-summary
+    > strong {
+    font-size: 12.5px;
+  }
+  .app.student-shell
+    #page-exercise
+    #exercise-attempt-feedback.feedback-panel.correct
+    .feedback-panel-points,
+  .app.student-shell
+    #page-exercise
+    #exercise-attempt-feedback.feedback-panel.correct
+    .feedback-panel-score {
+    font-size: 12px;
+  }
 }
 .app.student-shell #page-exercise #exercise-attempt-feedback.feedback-panel.retry {
   background: var(--ui-yellow-soft);

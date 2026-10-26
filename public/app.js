@@ -15055,11 +15055,13 @@ function showExerciseFeedback(data) {
       ? `<div>Doğru cevap: ${escapeHtml(exerciseAnswerLabel(data.correctAnswer, question))}</div>`
       : "";
   const feedbackText = exerciseFeedbackText(data.feedback);
+  const duplicateSuccessMessage =
+    data.isCorrect === true && /^(?:✓\s*)?Güzel yakaladın[.!]?$/iu.test(feedbackText.trim());
   const feedbackState = secondWrong ? "final-wrong" : firstWrong ? "retry" : "";
   el.className = `feedback-panel ${kind}${feedbackState ? ` ${feedbackState}` : ""}`;
   applyExerciseAnswerFeedback(data, question);
   const disclosureSuffix = String(data.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
-  el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${feedbackText ? `<div>${escapeHtml(feedbackText)}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
+  el.innerHTML = `<div class="feedback-panel-summary"><strong>${title}</strong><span id="exercise-feedback-gp" class="feedback-panel-points">${event ? `+${event.points} ${pointsLabel}` : ""}</span>${data.rawScore != null ? `<span class="feedback-panel-score">Puan: ${Number(data.rawScore).toFixed(2)}</span>` : ""}</div>${feedbackText && !duplicateSuccessMessage ? `<div>${escapeHtml(feedbackText)}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
   el.style.display = "block";
   uiMotion.enter(el, data.id);
