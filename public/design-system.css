@@ -832,10 +832,12 @@ body {
 .app.student-shell #page-exercise label.answer-card.correct {
   background: var(--ui-success-soft);
   border-color: var(--ui-success);
+  color: var(--ui-success);
 }
 .app.student-shell #page-exercise label.answer-card.wrong {
   background: var(--ui-danger-soft);
   border-color: var(--ui-danger);
+  color: var(--ui-danger);
 }
 .app.student-shell #page-exercise label.answer-card::after {
   display: grid;
@@ -858,11 +860,23 @@ body {
 }
 .app .feedback-panel.correct {
   background: var(--ui-success-soft);
-  border-color: var(--ui-success);
+  border: 2px solid var(--ui-success);
+  color: var(--ui-success);
 }
 .app .feedback-panel.wrong {
   background: var(--ui-yellow-soft);
-  border-color: color-mix(in srgb, var(--ui-yellow) 35%, transparent);
+  border: 2px solid var(--ui-yellow);
+  color: var(--ui-yellow);
+}
+.app .feedback-panel.retry {
+  background: var(--ui-yellow-soft);
+  border: 2px solid var(--ui-yellow);
+  color: var(--ui-yellow);
+}
+.app .feedback-panel.final-wrong {
+  background: var(--ui-danger-soft);
+  border: 2px solid var(--ui-danger);
+  color: var(--ui-danger);
 }
 .app .feedback-panel.pending {
   background: var(--ui-brand-soft);
@@ -2568,6 +2582,24 @@ dialog::backdrop {
   background: color-mix(in srgb, #2e5fc2 8%, var(--ui-surface));
   box-shadow: 0 0 0 2px color-mix(in srgb, #2e5fc2 12%, transparent);
 }
+.app.student-shell #page-exercise label.answer-card.selected.correct {
+  border-color: var(--ui-success);
+  background: var(--ui-success-soft);
+  color: var(--ui-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-success) 12%, transparent);
+}
+.app.student-shell #page-exercise label.answer-card.selected.wrong {
+  border-color: var(--ui-danger);
+  background: var(--ui-danger-soft);
+  color: var(--ui-danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-danger) 12%, transparent);
+}
+.app.student-shell #page-exercise label.answer-card.selected.correct::after {
+  color: var(--ui-success);
+}
+.app.student-shell #page-exercise label.answer-card.selected.wrong::after {
+  color: var(--ui-danger);
+}
 .app.student-shell .exercise-hint {
   border-radius: 12px;
   background: var(--ui-canvas);
@@ -2586,7 +2618,26 @@ dialog::backdrop {
 .app.student-shell #exercise-attempt-feedback {
   padding: 12px 14px !important;
   border-radius: 12px;
-  background: var(--ui-canvas);
+  background: transparent;
+}
+.app.student-shell #page-exercise #exercise-attempt-feedback.feedback-panel.correct {
+  background: var(--ui-success-soft);
+  border: 2px solid var(--ui-success);
+  color: var(--ui-success);
+}
+.app.student-shell #page-exercise #exercise-attempt-feedback.feedback-panel.retry {
+  background: var(--ui-yellow-soft);
+  border: 2px solid var(--ui-yellow);
+  color: var(--ui-yellow);
+}
+.app.student-shell #page-exercise #exercise-attempt-feedback.feedback-panel.final-wrong {
+  background: var(--ui-danger-soft);
+  border: 2px solid var(--ui-danger);
+  color: var(--ui-danger);
+}
+.app.student-shell #page-exercise #exercise-attempt-feedback.feedback-panel.pending {
+  background: var(--ui-brand-soft);
+  border-color: var(--ui-line);
 }
 .app.student-shell #page-exercise .exercise-actions {
   display: grid;

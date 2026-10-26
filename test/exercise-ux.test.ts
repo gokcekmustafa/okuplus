@@ -82,6 +82,25 @@ function harness() {
   return { context, get, run: (code: string) => runInContext(code, context) };
 }
 
+function answerCard(optionId: string) {
+  const classes = new Set<string>();
+  const input = { value: optionId };
+  return {
+    classes,
+    card: {
+      dataset: {} as Record<string, string>,
+      tabIndex: 0,
+      classList: {
+        add: (...names: string[]) => names.forEach((name) => classes.add(name)),
+        remove: (...names: string[]) => names.forEach((name) => classes.delete(name)),
+        toggle() {},
+      },
+      querySelector: () => input,
+      setAttribute() {},
+    },
+  };
+}
+
 type SessionRenderFixture = {
   id?: string;
   studentId?: string;
@@ -309,6 +328,98 @@ describe("exercise UX state from production frontend", () => {
     );
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Tekrar düşün.");
     expect(h.get("exercise-attempt-feedback").innerHTML).toContain("İpucu");
+  });
+
+  it("colors multiple-choice options only from the server's evaluated attempt", () => {
+    const h = harness();
+    const correct = answerCard("option-a");
+    const wrong = answerCard("option-b");
+    const currentQuestion = h.get("exercise-current-question");
+    currentQuestion.dataset = { questionVersionId: "q1" };
+    currentQuestion.querySelectorAll = (selector: string) =>
+      selector === "label.answer-card" ? [correct.card, wrong.card] : [];
+    h.context.exerciseQuestions = [
+      {
+        questionVersionId: "q1",
+        type: "MULTIPLE_CHOICE",
+        options: [
+          { id: "option-a", text: "Doğru seçenek" },
+          { id: "option-b", text: "Yanlış seçenek" },
+        ],
+      },
+    ];
+
+    h.run(
+      'applyExerciseAnswerFeedback({ questionVersionId: "q1", answer: ["option-b"], isCorrect: null }, exerciseQuestions[0])',
+    );
+    h.run(
+      'applyExerciseAnswerFeedback({ questionVersionId: "q1", answer: ["option-b"] }, exerciseQuestions[0])',
+    );
+    expect(correct.classes.has("correct")).toBe(false);
+    expect(wrong.classes.has("wrong")).toBe(false);
+
+    h.run(
+      'showExerciseFeedback({ id: "attempt-correct", questionVersionId: "q1", answer: ["option-a"], isCorrect: true, rawScore: 1 })',
+    );
+    expect(correct.classes.has("correct")).toBe(true);
+    expect(wrong.classes.has("wrong")).toBe(false);
+
+    h.run(
+      'showExerciseFeedback({ id: "attempt-retry", questionVersionId: "q1", answer: ["option-b"], isCorrect: false, responseOrder: 1, rawScore: 0 })',
+    );
+    expect(wrong.classes.has("wrong")).toBe(true);
+    // The server withholds the key on the retryable first error.
+    expect(correct.classes.has("correct")).toBe(false);
+    expect(h.get("exercise-attempt-feedback").className).toContain("retry");
+
+    h.run(`showExerciseFeedback({
+      id: "attempt-final",
+      questionVersionId: "q1",
+      answer: ["option-b"],
+      isCorrect: false,
+      responseOrder: 2,
+      rawScore: 0,
+      correctAnswer: { type: "MULTIPLE_CHOICE", correctOptionIds: ["option-a"] },
+    })`);
+    expect(wrong.classes.has("wrong")).toBe(true);
+    expect(correct.classes.has("correct")).toBe(true);
+    expect(h.get("exercise-attempt-feedback").className).toContain("final-wrong");
+    expect(h.get("exercise-attempt-feedback").innerHTML).toContain("Bu defa olmadı.");
+  });
+
+  it("clears answer colors when a new question is rendered and when retrying", () => {
+    const h = harness();
+    const correct = answerCard("option-a");
+    const wrong = answerCard("option-b");
+    const currentQuestion = h.get("exercise-current-question");
+    currentQuestion.querySelectorAll = (selector: string) =>
+      selector === "label.answer-card" ? [correct.card, wrong.card] : [];
+    correct.classes.add("correct");
+    wrong.classes.add("wrong");
+
+    h.run("clearExerciseAnswerFeedback()");
+
+    expect(correct.classes.has("correct")).toBe(false);
+    expect(wrong.classes.has("wrong")).toBe(false);
+    const renderStart = source.slice(
+      source.indexOf("function renderExerciseQuestion()"),
+      source.indexOf("function lockExerciseInputs("),
+    );
+    expect(renderStart).toContain("clearExerciseAnswerFeedback();");
+    expect(renderStart).toContain('if (feedbackEl) feedbackEl.style.display = "none";');
+  });
+
+  it("keeps answer and feedback states strongly contrasted in both themes", () => {
+    expect(designSystem).toContain(".app .feedback-panel.correct");
+    expect(designSystem).toContain("color: var(--ui-success);");
+    expect(designSystem).toContain(".app .feedback-panel.retry");
+    expect(designSystem).toContain(".app .feedback-panel.final-wrong");
+    expect(designSystem).toContain("color: var(--ui-danger);");
+    expect(designSystem).toContain("label.answer-card.correct");
+    expect(designSystem).toContain("label.answer-card.wrong");
+    expect(designSystem).toContain("#exercise-attempt-feedback.feedback-panel.final-wrong");
+    expect(designSystem).toContain("label.answer-card.selected.wrong");
+    expect(designSystem).toContain(':root[data-theme="dark"]');
   });
 
   it("uses the updated failure copy and hides structured feedback internals", () => {

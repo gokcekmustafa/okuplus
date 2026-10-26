@@ -181,7 +181,8 @@ describe("student dashboard release 0.4", () => {
     expect(articleForNode(container, "unavailable")).toContain("kind-reinforcement");
     expect(articleForNode(container, "planned-authored")).toContain("Ortak Stratejiler");
     expect(articleForNode(container, "planned-graph")).toContain("Bütünleşik Uygulama");
-    expect(container.innerHTML).toContain("Beceri Değerlendirmesi");
+    expect(container.innerHTML).toContain("Beceri Değerlendirme");
+    expect(container.innerHTML).not.toContain("Beceri Değerlendirmesi");
     expect(styles).toContain("content-visibility: auto");
     expect(styles).toContain("contain-intrinsic-size: auto 142px");
     expect(styles).toContain(".learning-map-v6-step.kind-practice .learning-map-v6-kind");
@@ -338,7 +339,7 @@ describe("student dashboard release 0.4", () => {
       READING_COMPREHENSION: "Okuduğunu Anlama",
       COMMON_STRATEGIES: "Ortak Stratejiler",
       INTEGRATED_PRACTICE: "Bütünleşik Uygulama",
-      MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirmesi",
+      MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirme",
     };
     expect(station48Markup).toContain(
       `<span class="learning-map-v6-area">${categoryLabels[station48Category!]}</span>`,

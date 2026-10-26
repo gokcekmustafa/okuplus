@@ -3332,13 +3332,17 @@ function learningPathAreaLabel(area, fallback) {
         : fallback || "Öğrenme alanı";
 }
 
+function studentFacingLearningPathLabel(value) {
+  return String(value ?? "").replaceAll("Beceri Değerlendirmesi", "Beceri Değerlendirme");
+}
+
 function learningPathStationCategoryLabel(category, area, fallback) {
   var labels = {
     FAST_READING: "Hızlı Okuma",
     READING_COMPREHENSION: "Okuduğunu Anlama",
     COMMON_STRATEGIES: "Ortak Stratejiler",
     INTEGRATED_PRACTICE: "Bütünleşik Uygulama",
-    MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirmesi",
+    MULTI_SKILL_ASSESSMENT: "Beceri Değerlendirme",
   };
   return Object.prototype.hasOwnProperty.call(labels, category)
     ? labels[category]
@@ -3437,7 +3441,9 @@ function learningPathMapKind(node) {
 }
 
 function learningPathExerciseContextLabel(node) {
-  const area = node?.unitTitle || learningPathAreaLabel(node?.area || "COMMON");
+  const area = studentFacingLearningPathLabel(
+    node?.unitTitle || learningPathAreaLabel(node?.area || "COMMON"),
+  );
   const kind = learningPathMapKind(node).label;
   return `${area} · ${kind}`;
 }
@@ -3467,7 +3473,9 @@ function learningPathCourseModulesFromData(data) {
       return {
         key,
         number: index + 1,
-        title: path.title || learningPathAreaLabel(path.area, "Öğrenme bölümü"),
+        title: studentFacingLearningPathLabel(
+          path.title || learningPathAreaLabel(path.area, "Öğrenme bölümü"),
+        ),
         area: path.area || "COMMON",
         nodes,
         completed,
@@ -4974,7 +4982,7 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
       <header class="station-lesson-heading">
         <div class="station-lesson-meta">
           <span class="station-lesson-type">${escapeHtml(stepTypeLabel)}</span>
-          <span class="station-lesson-unit">${escapeHtml(learningStep?.unitTitle || "Öğrenme yolu")}</span>
+          <span class="station-lesson-unit">${escapeHtml(studentFacingLearningPathLabel(learningStep?.unitTitle || "Öğrenme yolu"))}</span>
           ${progressLabel ? `<span class="learning-path-step-progress" aria-label="Öğrenme yolu ilerlemesi">${escapeHtml(progressLabel)}</span>` : ""}
         </div>
         <h3 class="station-lesson-title">${escapeHtml(lesson.title)}</h3>
@@ -14684,6 +14692,7 @@ function renderExerciseQuestion() {
   const feedbackEl = $("exercise-attempt-feedback");
   const statusEl = $("exercise-attempt-status");
   if (!container) return;
+  clearExerciseAnswerFeedback();
   if (!exerciseQuestions.length) {
     container.innerHTML = '<p class="muted">Bu oturum için soru bulunmuyor.</p>';
     if (counter) counter.textContent = "";
@@ -14975,6 +14984,54 @@ function exerciseFeedbackText(feedback) {
   }
   return message;
 }
+
+function exerciseMultipleChoiceOptionIds(answer) {
+  if (Array.isArray(answer)) return answer.filter((value) => typeof value === "string");
+  if (!answer || typeof answer !== "object") return [];
+  if (Array.isArray(answer.correctOptionIds)) {
+    return answer.correctOptionIds.filter((value) => typeof value === "string");
+  }
+  if (Array.isArray(answer.answers)) {
+    return answer.answers.filter((value) => typeof value === "string");
+  }
+  return [];
+}
+
+function clearExerciseAnswerFeedback() {
+  $("exercise-current-question")
+    ?.querySelectorAll("label.answer-card")
+    .forEach((card) => card.classList.remove("correct", "wrong"));
+}
+
+function applyExerciseAnswerFeedback(data, question) {
+  clearExerciseAnswerFeedback();
+  const container = $("exercise-current-question");
+  if (
+    !container ||
+    !question ||
+    question.type !== "MULTIPLE_CHOICE" ||
+    typeof data.isCorrect !== "boolean" ||
+    (container.dataset?.questionVersionId &&
+      container.dataset.questionVersionId !== data.questionVersionId)
+  )
+    return;
+
+  const selectedIds = new Set(exerciseMultipleChoiceOptionIds(data.answer));
+  const revealedAnswer = data.correctAnswer ?? data.revealedAnswer ?? data.feedback?.revealedAnswer;
+  const correctIds = new Set(exerciseMultipleChoiceOptionIds(revealedAnswer));
+  if (!selectedIds.size && data.isCorrect === false && !correctIds.size) return;
+
+  container.querySelectorAll("label.answer-card").forEach((card) => {
+    const optionId = card.querySelector("input")?.value;
+    if (!optionId) return;
+    if (correctIds.has(optionId) || (data.isCorrect === true && selectedIds.has(optionId))) {
+      card.classList.add("correct");
+    } else if (data.isCorrect === false && selectedIds.has(optionId)) {
+      card.classList.add("wrong");
+    }
+  });
+}
+
 function showExerciseFeedback(data) {
   const el = $("exercise-attempt-feedback");
   const question = exerciseQuestions.find((q) => q.questionVersionId === data.questionVersionId);
@@ -14998,7 +15055,9 @@ function showExerciseFeedback(data) {
       ? `<div>Doğru cevap: ${escapeHtml(exerciseAnswerLabel(data.correctAnswer, question))}</div>`
       : "";
   const feedbackText = exerciseFeedbackText(data.feedback);
-  el.className = "feedback-panel " + kind;
+  const feedbackState = secondWrong ? "final-wrong" : firstWrong ? "retry" : "";
+  el.className = `feedback-panel ${kind}${feedbackState ? ` ${feedbackState}` : ""}`;
+  applyExerciseAnswerFeedback(data, question);
   const disclosureSuffix = String(data.questionVersionId).replace(/[^a-zA-Z0-9_-]/g, "-");
   el.innerHTML = `<strong>${title}</strong><div id="exercise-feedback-gp">${event ? `+${event.points} ${pointsLabel}` : ""}</div>${data.rawScore != null ? `<div>Puan: ${Number(data.rawScore).toFixed(2)}</div>` : ""}${feedbackText ? `<div>${escapeHtml(feedbackText)}</div>` : ""}${correctAnswer}${question?.explanation ? `<details class="exercise-explanation" data-exercise-disclosure><summary data-exercise-disclosure-summary aria-controls="exercise-explanation-${disclosureSuffix}">Kısa açıklamayı göster</summary><p id="exercise-explanation-${disclosureSuffix}">${escapeHtml(question.explanation)}</p></details>` : ""}`;
   syncExerciseDisclosures(el);
@@ -15059,7 +15118,7 @@ async function handleExerciseSubmitAttempt() {
         else input.value = "";
       });
       container.querySelectorAll("label.answer-card").forEach((card) => {
-        card.classList.remove("selected");
+        card.classList.remove("selected", "correct", "wrong");
         card.setAttribute("aria-checked", "false");
         card.tabIndex = 0;
       });
