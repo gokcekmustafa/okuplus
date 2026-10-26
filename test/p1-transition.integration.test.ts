@@ -391,7 +391,7 @@ async function completeInitialCycle(
                   : fixture.actor.userId === ACTOR_IDS.cycle3
                     ? 1000
                     : fixture.actor.userId === ACTOR_IDS.cycle20
-                      ? 1200
+                      ? 1500
                       : 0;
   const uniqueFixtureOffset = fixtureOffset + testOffset;
   for (const [index, step] of steps.entries()) {

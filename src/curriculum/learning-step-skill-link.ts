@@ -22,11 +22,14 @@ export function resolveSeedLearningStepSkillId(input: {
  */
 const curriculumSkillToStoredSkills: Readonly<Record<string, readonly string[]>> = {
   FAST_SCAN: ["FAST_ATTENTION"],
+  FAST_SCANNING: ["FAST_ATTENTION"],
   RC_CLASSIFY: ["RC_DETAIL"],
   RC_CONTEXT_CLUES: ["RC_DETAIL"],
   RC_EXPLANATION: ["RC_INFERENCE"],
   RC_MODEL_LIMITS: ["RC_INFERENCE"],
   RC_RELATION: ["RC_INFERENCE"],
+  // Relating component roles within a described system uses the existing inference competency.
+  RC_SYSTEMS: ["RC_INFERENCE"],
   RC_SYNTHESIS: ["RC_INFERENCE"],
   RC_CONNECTOR: ["RC_DETAIL"],
   RC_STRUCTURE: ["RC_MAIN_IDEA"],

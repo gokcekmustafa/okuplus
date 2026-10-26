@@ -113,6 +113,8 @@ describe("learning-step skill links", () => {
 
   it("maps reviewed granular outcome codes to existing stored skills and leaves unknowns unresolved", () => {
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_RELATION")).toBe("RC_INFERENCE");
+    expect(mapCurriculumSkillCodeToStoredSkillCode("RC_SYSTEMS")).toBe("RC_INFERENCE");
+    expect(mapCurriculumSkillCodeToStoredSkillCode("FAST_SCANNING")).toBe("FAST_ATTENTION");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CONNECTOR")).toBe("RC_DETAIL");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_SYNTHESIS")).toBe("RC_INFERENCE");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_DATA_INTERPRETATION")).toBe("RC_DETAIL");
