@@ -21,6 +21,7 @@ const transitionStatus = section(
   "function setLearningPathTransitionStatus(",
   "async function reconcileP0ToP1(",
 );
+const navigationHelpers = section("function studentBottomNavigationTarget(", "function navigate(");
 const navigation = section("function navigate(", "globalThis.__OKUPRATIK_NATIVE_BACK_HANDLER__");
 const usable = section(
   "function isUsableLearningPathNode(",
@@ -140,7 +141,10 @@ function harness(stepId = "35") {
       if (target) target.disabled = busy;
     },
   });
-  runInContext(shared + startNode + usable + transitionStatus + navigation, context);
+  runInContext(
+    shared + startNode + usable + transitionStatus + navigationHelpers + navigation,
+    context,
+  );
   const actualStartLearningPathNode = runInContext("startLearningPathNode", context) as (
     ...args: unknown[]
   ) => Promise<void>;
@@ -172,6 +176,19 @@ function harness(stepId = "35") {
 }
 
 describe("guided station completion → map → motion → next server-unlocked station", () => {
+  it("navigates safely when optional bottom-navigation elements are absent", () => {
+    const h = harness();
+
+    expect(() => {
+      h.run("setStudentMoreMenuOpen(true)");
+      h.run("setStudentMoreMenuOpen(false, true)");
+      h.run('setStudentBottomNavigation("badges")');
+      h.run('navigate("badges")');
+    }).not.toThrow();
+    expect(h.context.currentPage).toBe("badges");
+    expect(h.context.learningPathNavigationRevision).toBe(1);
+  });
+
   it("binds station opening to an explicit click on its map button", () => {
     const node = nodes()[1]!;
     let clickHandler: ((event: unknown) => void) | undefined;
