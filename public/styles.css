@@ -8912,6 +8912,399 @@ textarea:focus-visible {
   }
 }
 
+/* Mobile-first student UX refinement: keep the existing visual language and
+   roadmap motion while improving reading, hierarchy, and navigation clarity. */
+#student-bottom-nav.student-bottom-nav {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+  height: auto;
+  min-height: 68px;
+  overflow: visible;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+}
+
+#student-bottom-nav .bottom-nav-item {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  gap: 3px;
+  padding: 5px 3px;
+  overflow: visible;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+#student-bottom-nav .bottom-nav-icon,
+#student-bottom-nav .bottom-nav-icon .ui-icon {
+  width: 21px;
+  height: 21px;
+}
+
+#student-bottom-nav .bottom-nav-label {
+  max-width: 100%;
+  overflow: visible;
+  font-size: 11.5px;
+  line-height: 1.15;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.student-shell .bottom-nav-more {
+  position: relative;
+  min-width: 0;
+}
+
+.student-shell .bottom-nav-more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  display: grid;
+  width: min(260px, calc(100vw - 24px));
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(21, 35, 61, 0.2);
+}
+
+.student-shell .bottom-nav-more-menu[hidden] {
+  display: none;
+}
+
+.student-shell .bottom-nav-more-link {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-shell .bottom-nav-more-link .ui-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.student-shell .bottom-nav-more-link:hover,
+.student-shell .bottom-nav-more-link.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.student-shell .bottom-nav-more-link:focus-visible,
+#student-bottom-nav .bottom-nav-item:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.student-shell #page-exercise:not(.hidden) #student-reading-body {
+  max-width: 68ch;
+  margin-inline: auto;
+  color: var(--student-ink, var(--text));
+  font-size: clamp(1rem, 4.2vw, 1.125rem);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.student-shell #page-exercise:not(.hidden) #student-reading-body p {
+  margin: 0 0 1rem;
+}
+
+.student-shell .lesson-layout.is-learning-path .lesson-detail > section p,
+.student-shell .lesson-layout.is-learning-path .lesson-objective {
+  max-width: 68ch;
+}
+
+.student-shell #page-exercise:not(.hidden) #exercise-current-question {
+  gap: 12px;
+}
+
+.student-shell #page-exercise:not(.hidden) #exercise-prompt {
+  max-width: 68ch;
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+.student-shell #page-exercise:not(.hidden) .answer-card {
+  min-height: 48px;
+  padding: 12px 14px;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.student-shell #page-exercise #student-exercise-header #exercise-gp,
+.student-shell #page-exercise #student-exercise-header #exercise-streak {
+  display: none !important;
+}
+
+.student-shell #learning-path-card .learning-map-v6-header {
+  align-items: flex-start;
+}
+
+.student-shell #learning-path-card .learning-map-v6-current {
+  display: grid;
+  min-width: 0;
+  max-width: min(48%, 320px);
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+}
+
+.student-shell #learning-path-card .learning-map-v6-current > span {
+  color: var(--student-muted, #68758b);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.student-shell #learning-path-card .learning-map-v6-current > strong {
+  color: var(--student-ink, #172e5c);
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.student-shell #learning-path-card .learning-map-v6-current .btn {
+  min-height: 44px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend {
+  gap: 8px 16px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .completed i {
+  background: #24805f;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .current i {
+  background: #7048e8;
+}
+
+.student-shell #learning-path-card .learning-map-v6-legend .locked i {
+  background: #9ba8b9;
+}
+
+.student-shell #learning-path-card .learning-map-v6-title {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--student-ink, #172e5c);
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.student-shell #learning-path-card .learning-map-v6-action {
+  max-width: 100%;
+  overflow: visible;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-copy {
+  max-width: 190px;
+}
+
+.student-shell .training-activity-meta {
+  align-items: center;
+}
+
+.student-shell .training-activity-details {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.student-shell .training-activity-details > summary,
+.student-shell .exercise-result-details > summary {
+  min-height: 44px;
+  padding: 11px 2px;
+  color: var(--student-blue, var(--primary));
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.student-shell .training-activity-result-details {
+  color: var(--student-muted);
+  font-size: 13px;
+}
+
+.student-shell .completion-card .exercise-completion-progress {
+  color: var(--student-muted);
+  font-size: 14px;
+}
+
+.student-shell .exercise-completion-score {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #d8def2;
+  border-radius: 14px;
+  background: #f7f8ff;
+  color: var(--student-ink, #172e5c);
+  font-size: 14px;
+}
+
+.student-shell .exercise-completion-score strong {
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.student-shell .exercise-result-details {
+  margin-top: 10px;
+  padding-inline: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.student-shell .exercise-result-details[open] {
+  padding-bottom: 10px;
+}
+
+.student-shell #page-exercise .completion-card .training-home-actions .btn {
+  min-height: 48px;
+}
+
+:root[data-theme="dark"] .student-shell .exercise-completion-score {
+  border-color: #3b4b67;
+  background: #202c40;
+  color: var(--student-ink);
+}
+
+@media (min-width: 721px) {
+  .student-shell #page-exercise:not(.hidden) #student-reading-body,
+  .student-shell .lesson-layout.is-learning-path .lesson-detail {
+    max-width: 72ch;
+    margin-inline: auto;
+  }
+
+  #student-bottom-nav .bottom-nav-more-menu {
+    right: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .student-shell #learning-path-card .learning-map-v6-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-current {
+    max-width: none;
+    justify-items: end;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-current .btn {
+    width: 100%;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #student-reading-card {
+    padding: 14px;
+  }
+
+  .student-shell #page-exercise:not(.hidden) #exercise-questions-card {
+    padding: 14px;
+  }
+
+  .student-shell .training-activity-card-head {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .student-shell .training-activity-status {
+    max-width: 42%;
+  }
+}
+
+@media (max-width: 380px) {
+  #student-bottom-nav .bottom-nav-item {
+    padding-inline: 1px;
+  }
+
+  #student-bottom-nav .bottom-nav-label {
+    font-size: 10.5px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-current {
+    width: 100%;
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-current > strong {
+    font-size: 15px;
+  }
+
+  .student-shell #learning-path-card .learning-map-v6-step.is-current .learning-map-v6-copy {
+    max-width: 126px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-stage {
+    gap: 4px;
+    margin-top: 8px;
+    margin-bottom: 10px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-art-window {
+    inset: 2px 30% 7px 2%;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-phone-frame {
+    right: 2%;
+    width: 110px;
+    height: 226px;
+    transform: scale(0.72) rotate(2deg);
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-header {
+    margin-bottom: 6px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-header > p:last-child {
+    margin-top: 8px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-trust-row {
+    margin-top: 6px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-intro-note {
+    display: none;
+  }
+}
+
 .student-shell #learning-path-transition-status:not(.hidden) {
   position: fixed;
   top: calc(76px + env(safe-area-inset-top));
@@ -10336,5 +10729,73 @@ textarea:focus-visible {
   .detail-section-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+/* These final rules intentionally override legacy compact-phone typography. */
+.student-shell #page-exercise:not(.hidden) #student-reading-body {
+  max-width: 68ch;
+  margin-inline: auto;
+  font-size: clamp(1rem, 4.2vw, 1.125rem);
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.student-shell #page-exercise:not(.hidden) #exercise-prompt {
+  max-width: 68ch;
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+.student-shell #page-exercise:not(.hidden) .answer-card {
+  min-height: 48px;
+  padding: 11px 13px;
+  font-size: 1rem;
+  line-height: 1.42;
+}
+
+@media (min-width: 721px) {
+  .student-shell #page-exercise:not(.hidden) #student-reading-body,
+  .student-shell .lesson-layout.is-learning-path .lesson-detail {
+    max-width: 72ch;
+  }
+}
+
+@media (max-width: 380px) {
+  .student-shell #page-exercise:not(.hidden) .answer-card {
+    font-size: 0.96rem;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-stage {
+    gap: 4px;
+    margin-top: 8px;
+    margin-bottom: 10px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-art-window {
+    inset: 2px 30% 7px 2%;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-phone-frame {
+    right: 2%;
+    width: 110px;
+    height: 226px;
+    transform: scale(0.72) rotate(2deg);
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-header {
+    margin-bottom: 6px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-header > p:last-child {
+    margin-top: 8px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-trust-row {
+    margin-top: 6px;
+  }
+
+  .guest-shell:not(.guest-diagnostic-mode) .guest-landing-copy .guest-intro-note {
+    display: none;
   }
 }

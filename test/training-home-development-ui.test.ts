@@ -90,6 +90,11 @@ describe("training home and development UI", () => {
     expect(index).toContain('data-bottom-page="assignments"');
     expect(index).toContain('data-bottom-page="assessments"');
     expect(index).toContain('data-bottom-page="badges"');
+    expect(index).toContain('id="student-bottom-nav-more"');
+    expect(index).toContain('aria-controls="student-bottom-nav-more"');
+    expect(index).toContain('aria-expanded="false"');
+    expect(app).toContain("function studentBottomNavigationTarget(page, isLearningPathExercise)");
+    expect(app).toContain("setStudentBottomNavigation(page)");
     expect(index).not.toContain('id="student-more-toggle"');
     expect(app).toContain('item.classList.toggle("hidden", isPlatform)');
     expect(app).toContain("function setUserMenuOpen(open)");
@@ -125,7 +130,9 @@ describe("training home and development UI", () => {
     expect(app).toContain("learning-map-v6-legend");
     expect(app).not.toContain('"Şimdi: " + currentArea');
     expect(app).not.toContain("Durağa dokun ve devam et.");
-    expect(app).not.toContain('class="current"');
+    expect(app).toContain(
+      '<span class="current"><i aria-hidden="true"></i>Şimdiki istasyon</span>',
+    );
     expect(index).not.toContain('id="logout-btn"');
     expect(index).toContain('data-user-menu-action="logout"');
     expect(index).toContain('id="user-name"');

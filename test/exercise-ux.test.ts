@@ -266,6 +266,31 @@ describe("exercise UX state from production frontend", () => {
     expect(h.get("exercise-result-body").innerHTML).toContain("Öğrenme Yoluna Dön");
   });
 
+  it("keeps secondary independent-training results collapsed and labels scored answers accurately", () => {
+    const h = harness();
+    h.context.exerciseMode = "activity";
+    h.context.exerciseSession = {
+      id: "training-session",
+      status: "COMPLETED",
+      scoreSummary: {
+        totalQuestions: 3,
+        attempted: 3,
+        scoredCount: 2,
+        totalRawScore: 1.5,
+        averageScore: 0.75,
+      },
+    };
+    h.run("renderExerciseResult()");
+    const html = h.get("exercise-result-body").innerHTML;
+
+    expect(html).toContain("Değerlendirilen cevapların ortalaması");
+    expect(html).toContain('class="exercise-result-details"');
+    expect(html).toContain("<summary>Çalışma ayrıntıları</summary>");
+    expect(html).toContain("Puanlanan cevap");
+    expect(html).not.toContain("Doğru cevap");
+    expect(html).not.toMatch(/<details[^>]*\bopen\b/u);
+  });
+
   it("reconciles with server attempts without leaking a different attempt's score", () => {
     const h = harness();
     h.context.exerciseAttempts.set("q1", { id: "old", isCorrect: true, rawScore: 1 });

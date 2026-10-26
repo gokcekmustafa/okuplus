@@ -62,7 +62,7 @@ describe("student dashboard release 0.4", () => {
   });
 
   it("renders only completed and active ready stations as clickable", () => {
-    const container = { innerHTML: "", querySelectorAll: () => [] };
+    const container = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] };
     const context = createContext({
       $: (id: string) => (id === "learning-path" ? container : { textContent: "0" }),
       escapeHtml: (value: unknown) => String(value).replaceAll("<", "&lt;"),
@@ -91,7 +91,13 @@ describe("student dashboard release 0.4", () => {
         path: { area: "READING_COMPREHENSION" },
         nodes: [
           { id: "completed", status: "completed", type: "TEACHING", availability: "READY" },
-          { id: "current", status: "active", type: "ASSESSMENT", availability: "READY" },
+          {
+            id: "current",
+            status: "active",
+            type: "ASSESSMENT",
+            availability: "READY",
+            label: "Ana düşünceyi bul",
+          },
           {
             id: "future",
             status: "locked",
@@ -152,6 +158,9 @@ describe("student dashboard release 0.4", () => {
     expect(button("completed")).not.toContain(" disabled");
     expect(button("current")).toContain('aria-current="step"');
     expect(button("current")).not.toContain(" disabled");
+    expect(container.innerHTML).toContain('class="learning-map-v6-current"');
+    expect(container.innerHTML).toContain("Ana düşünceyi bul");
+    expect(container.innerHTML).toContain("data-learning-map-current");
     expect(button("future")).toContain(" disabled");
     expect(button("unavailable")).toContain(" disabled");
     expect(button("planned-authored")).toContain(" disabled");
@@ -159,8 +168,8 @@ describe("student dashboard release 0.4", () => {
     expect(button("planned-graph")).toContain(" disabled");
     expect(container.innerHTML).toContain("Kilitli");
     expect(container.innerHTML).toContain("İçerik hazırlanıyor");
-    expect(container.innerHTML).toContain("İçerik planlanıyor");
-    expect(container.innerHTML).toContain("Yayın grafiği hazırlanıyor");
+    expect(container.innerHTML).toContain("Bu durak henüz hazır değil");
+    expect(container.innerHTML).not.toContain("Yayın grafiği hazırlanıyor");
     expect(container.innerHTML).toContain("Duyuruda gereken bilgiyi hızlı bul");
     const futureMarkup = articleForNode(container, "future");
     expect(futureMarkup).toContain("area-fast");

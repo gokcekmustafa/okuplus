@@ -2163,3 +2163,12 @@ dialog::backdrop {
     scroll-behavior: auto !important;
   }
 }
+
+@media (max-width: 380px) {
+  .guest-shell:not(.guest-diagnostic-mode) .guest-hero-art {
+    height: 180px;
+    min-height: 180px;
+    max-height: 180px;
+    overflow: hidden;
+  }
+}

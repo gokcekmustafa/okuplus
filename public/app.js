@@ -3712,8 +3712,21 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
   var route = learningPathRouteGeometry(entries.length);
   var streak = String($("topbar-streak")?.textContent || "—").trim() || "—";
   var levelLabel = currentLevel?.name || "Seviye belirlenmedi";
+  var currentTitle = String(
+    currentNode?.label || currentNode?.title || currentNode?.name || "",
+  ).trim();
+  var currentPositionLabel =
+    currentNode?.status === "active" ? "Şimdiki istasyon" : "Son tamamladığın istasyon";
   var heading =
-    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">ÖĞRENME YOLU</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div></header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
+    '<header class="learning-map-v6-header"><div><p class="learning-map-v6-kicker">ÖĞRENME YOLU</p><h4>Öğrenme yolu</h4><p>Bir sonraki durak seni bekliyor.</p></div>' +
+    (currentNode
+      ? '<div class="learning-map-v6-current"><span>' +
+        escapeHtml(currentPositionLabel) +
+        "</span><strong>" +
+        escapeHtml(currentTitle || "Aktif istasyon") +
+        '</strong><button type="button" class="btn btn-secondary btn-sm" data-learning-map-current>İstasyona git</button></div>'
+      : "") +
+    '</header><div class="learning-map-v6-summary"><span class="learning-map-v6-level"><strong>' +
     escapeHtml(levelLabel) +
     "</strong><small>Seviye</small></span><span><strong>🔥 " +
     escapeHtml(streak) +
@@ -3725,21 +3738,21 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
     escapeHtml(String(progress.total || 0)) +
     ' durak</small></span><span class="learning-map-v6-progress" aria-hidden="true"><i style="width:' +
     escapeHtml(String(percent)) +
-    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="İstasyon kategorileri ve durumlar"><span class="fast"><i aria-hidden="true"></i>Hızlı Okuma</span><span class="comprehension"><i aria-hidden="true"></i>Okuduğunu Anlama</span><span class="strategies"><i aria-hidden="true"></i>Ortak Stratejiler</span><span class="integrated"><i aria-hidden="true"></i>Bütünleşik Uygulama</span><span class="assessment"><i aria-hidden="true"></i>Beceri Değerlendirmesi</span><span class="locked"><i aria-hidden="true"></i>Kilitli</span><span class="preparing"><i aria-hidden="true"></i>İçerik hazırlanıyor</span><span class="graph"><i aria-hidden="true"></i>Yayın grafiği hazırlanıyor</span></div>';
+    '%"></i></span></div><div class="learning-map-v6-legend" aria-label="İstasyon durumları"><span class="completed"><i aria-hidden="true"></i>Tamamlandı</span><span class="current"><i aria-hidden="true"></i>Şimdiki istasyon</span><span class="locked"><i aria-hidden="true"></i>Henüz açık değil</span></div>';
   var nodeMarkup = entries
     .map(function (entry, index) {
       var node = nodes[index];
       var visualStatus = learningPathVisualStatus(node.status);
       var kind =
         node.planningStatus === "CONTENT_NOT_AUTHORED"
-          ? { className: "planned", label: "Henüz tasarlanmadı", icon: "•" }
+          ? { className: "planned", label: "İçerik hazırlanıyor", icon: "•" }
           : learningPathMapKind(node);
       var label = node.label || node.code || "Öğrenme adımı";
       var statusLabel =
         node.planningStatus === "CONTENT_NOT_AUTHORED"
-          ? "İçerik planlanıyor"
+          ? "Bu durak henüz hazır değil"
           : node.planningStatus === "GRAPH_NOT_AVAILABLE"
-            ? "Yayın grafiği hazırlanıyor"
+            ? "Bu durak henüz hazır değil"
             : node.availability === "UNAVAILABLE"
               ? "İçerik hazırlanıyor"
               : learningPathStatusLabel(visualStatus);
@@ -3809,7 +3822,11 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
         escapeHtml(String(stepNumber)) +
         '</span></span></span></span><span class="learning-map-v6-copy"><span class="learning-map-v6-area">' +
         escapeHtml(areaLabel) +
-        '</span><strong class="learning-map-v6-kind">' +
+        "</span>" +
+        (isCurrent && currentTitle
+          ? '<strong class="learning-map-v6-title">' + escapeHtml(currentTitle) + "</strong>"
+          : "") +
+        '<strong class="learning-map-v6-kind">' +
         escapeHtml(kind.label) +
         "</strong>" +
         (isCurrent && visualStatus !== "completed"
@@ -3838,6 +3855,13 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
     nodeMarkup +
     "</div></div>";
 
+  container.querySelector?.("[data-learning-map-current]")?.addEventListener("click", () => {
+    const activeStep = container.querySelector(".learning-map-v6-step.is-current");
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    activeStep?.scrollIntoView?.({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+  });
   bindLearningPathMapNodeClicks(container, nodes);
   const continuation = transition?.continuation || learningPathContinuation;
   const returnPosition = transition?.returnPosition || learningPathReturnPosition;
@@ -4260,7 +4284,7 @@ async function loadTrainingActivities() {
   trainingActivitiesStateMessage = "Kısa antrenmanlar yükleniyor…";
   renderTrainingActivities();
   const status = $("exercise-load-status");
-  if (status) status.textContent = "Aktiviteler hazırlanıyor…";
+  if (status) status.textContent = "";
   try {
     const data = await parseResponse(
       await authenticatedFetch("/student/training/activities", {
@@ -4271,7 +4295,6 @@ async function loadTrainingActivities() {
     trainingActivitiesState = "ready";
     trainingActivitiesStateMessage = "";
     renderTrainingActivities();
-    if (status) status.textContent = "";
   } catch (error) {
     trainingActivities = [];
     trainingActivitiesState = "error";
@@ -4280,7 +4303,6 @@ async function loadTrainingActivities() {
       "Antrenman aktiviteleri yüklenemedi. Bağlantını kontrol edip tekrar dene.",
     );
     renderTrainingActivities();
-    if (status) status.textContent = trainingActivitiesStateMessage;
     throw error;
   } finally {
     trainingActivityLoading = false;
@@ -4410,10 +4432,13 @@ function renderTrainingActivities() {
           <span class="training-activity-status ${completed ? "is-completed" : inProgress ? "is-progress" : "is-new"}">${statusLabel}</span>
         </div>
         <p id="${escapeHtml(activityDescriptionId)}">${escapeHtml(activity.description || "Kısa bir okuma çalışması.")}</p>
-        <div class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></div>
-        ${packageTrack}
-        <p class="training-activity-package-hint">${escapeHtml(packageHint)}</p>
-        <div class="training-activity-meta"><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span>${resultDetails ? `<span>${escapeHtml(resultDetails)}</span>` : ""}</div>
+        <div class="training-activity-meta"><span class="training-activity-skill"><span>Beceri</span><strong>${escapeHtml(skillLabel)}</strong></span><span>${escapeHtml(activity.durationLabel || "Kısa çalışma")}</span></div>
+        <details class="training-activity-details">
+          <summary>İlerleme ve paketler</summary>
+          ${packageTrack}
+          <p class="training-activity-package-hint">${escapeHtml(packageHint)}</p>
+          ${resultDetails ? `<p class="training-activity-result-details">${escapeHtml(resultDetails)}</p>` : ""}
+        </details>
         <button type="button" class="btn ${completed || inProgress ? "btn-secondary" : "btn-primary"}" data-training-activity-start="${escapeHtml(activity.id)}" data-training-activity-session="${escapeHtml(resumeSessionId)}" data-training-action-label="${escapeHtml(actionLabel)}" aria-describedby="${escapeHtml(activityDescriptionId)}" ${available ? "" : "disabled"}>${available ? actionLabel : "Şu anda hazır değil"}</button>
       </article>`;
     })
@@ -5644,6 +5669,48 @@ function canAccessPage(page) {
   return false;
 }
 
+function studentBottomNavigationTarget(page, isLearningPathExercise) {
+  if (
+    page === "dashboard" ||
+    page === "lessons" ||
+    (page === "exercise" && isLearningPathExercise)
+  ) {
+    return "dashboard";
+  }
+  if (["assignments", "assessments", "badges"].includes(page)) return "more";
+  return page;
+}
+
+function setStudentMoreMenuOpen(open, returnFocus = false) {
+  const toggle = $("student-bottom-nav-more-toggle");
+  const menu = $("student-bottom-nav-more");
+  if (!toggle || !menu) return;
+  menu.hidden = !open;
+  toggle.setAttribute("aria-expanded", String(open));
+  if (returnFocus) toggle.focus();
+}
+
+function setStudentBottomNavigation(page) {
+  const activeTarget = studentBottomNavigationTarget(
+    page,
+    isPlatformUser === false && learningPathEntryMode,
+  );
+  for (const item of document.querySelectorAll("#student-bottom-nav .bottom-nav-item")) {
+    const active = item.hasAttribute("data-bottom-page-more-toggle")
+      ? activeTarget === "more"
+      : item.dataset.bottomPage === activeTarget;
+    item.classList.toggle("active", active);
+    item.toggleAttribute("aria-current", active);
+    if (active) item.setAttribute("aria-current", "page");
+  }
+  for (const item of document.querySelectorAll("#student-bottom-nav-more [data-bottom-page]")) {
+    const active = item.dataset.bottomPage === page;
+    item.classList.toggle("active", active);
+    item.toggleAttribute("aria-current", active);
+    if (active) item.setAttribute("aria-current", "page");
+  }
+}
+
 function navigate(
   page,
   { continuation = null, learningPathReturnPosition: returnPosition = null } = {},
@@ -5668,6 +5735,7 @@ function navigate(
   currentPage = page;
 
   setUserMenuOpen(false);
+  setStudentMoreMenuOpen(false);
   for (const name of PAGES) {
     $("page-" + name)?.classList.toggle("hidden", name !== page);
   }
@@ -5677,12 +5745,7 @@ function navigate(
     item.toggleAttribute("aria-current", active);
     if (active) item.setAttribute("aria-current", "page");
   }
-  for (const item of document.querySelectorAll(".bottom-nav-item")) {
-    const active = (item.dataset.bottomPage || item.dataset.page) === page;
-    item.classList.toggle("active", active);
-    item.toggleAttribute("aria-current", active);
-    if (active) item.setAttribute("aria-current", "page");
-  }
+  setStudentBottomNavigation(page);
   if (page === "dashboard") {
     if (learningPathReturnPosition) restoreLearningPathVisualPosition(learningPathReturnPosition);
     if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
@@ -6443,11 +6506,30 @@ function navigateFromMenu(page) {
 for (const item of document.querySelectorAll(".nav-item")) {
   item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }
-for (const item of document.querySelectorAll(".bottom-nav-item")) {
+for (const item of document.querySelectorAll(
+  ".bottom-nav-item[data-bottom-page]:not([data-bottom-page-more-toggle])",
+)) {
   item.addEventListener("click", () =>
     navigateFromMenu(item.dataset.bottomPage || item.dataset.page),
   );
 }
+$("student-bottom-nav-more-toggle")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const menu = $("student-bottom-nav-more");
+  setStudentMoreMenuOpen(Boolean(menu?.hidden));
+});
+for (const item of document.querySelectorAll("#student-bottom-nav-more [data-bottom-page]")) {
+  item.addEventListener("click", () => navigateFromMenu(item.dataset.bottomPage));
+}
+document.addEventListener("click", (event) => {
+  const nav = $("student-bottom-nav");
+  if (nav && !nav.contains(event.target)) setStudentMoreMenuOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  const menu = $("student-bottom-nav-more");
+  if (menu && !menu.hidden) setStudentMoreMenuOpen(false, true);
+});
 for (const item of document.querySelectorAll("[data-page].dashboard-link-card")) {
   item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }
@@ -13988,13 +14070,16 @@ async function loadExercisePage() {
   } catch (error) {
     const activityListError =
       !dailyTrainingSessionId && !exerciseSession && trainingActivitiesState === "error";
-    $("exercise-load-status").textContent = activityListError
-      ? trainingActivitiesStateMessage
-      : dailyTrainingSessionId
+    if (activityListError) {
+      $("exercise-load-status").textContent = "";
+      retryButton.classList.add("hidden");
+    } else {
+      $("exercise-load-status").textContent = dailyTrainingSessionId
         ? formatDailyTrainingError(error)
         : "Alıştırma yüklenemedi. Bağlantını kontrol edip tekrar dene.";
-    retryButton.textContent = activityListError ? "Aktiviteleri yeniden yükle" : "Tekrar dene";
-    retryButton.classList.remove("hidden");
+      retryButton.textContent = "Tekrar dene";
+      retryButton.classList.remove("hidden");
+    }
   } finally {
     exerciseLoading = false;
     if (exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
@@ -14415,18 +14500,28 @@ function renderExerciseResult() {
           : `Etkin okuma süresi kaydedildi; anlama doğruluğu %${Math.round((fastReading.comprehensionAccuracy ?? 0) * 100)} olduğu için hız göstergesi sunulmuyor.`
       : "";
     const g = exerciseGamification;
+    const hasScoredResult = Number(s.scoredCount) > 0 && typeof s.averageScore === "number";
+    const completionScore = hasScoredResult
+      ? `<p class="exercise-completion-score"><span>Değerlendirilen cevapların ortalaması</span><strong>%${Math.round(s.averageScore * 100)}</strong></p>`
+      : pending
+        ? '<p class="exercise-completion-score">Yanıtların değerlendirmesi sürüyor.</p>'
+        : "";
     if (isIndependentActivity) {
       body.innerHTML = `
       <div class="completion-card">
         <div aria-hidden="true" style="font-size:48px">🎉</div>
         <h3 tabindex="-1" id="exercise-completion-title">Aktiviteyi tamamladın!</h3>
         <p>Çalışman antrenman geçmişine kaydedildi. İstersen aynı aktiviteyi tekrar oynayabilirsin.</p>
-        <dl class="exercise-result-stats">
-          <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
-          <div><dt>Doğru cevap</dt><dd>${s.scoredCount == null ? "—" : s.scoredCount}</dd></div>
-          <div><dt>Ortalama</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
-          ${fastReadingResult ? `<div class="exercise-result-wide"><dt>Okuma ve anlama</dt><dd>${escapeHtml(fastReadingResult)}</dd></div>` : ""}
-        </dl>
+        ${completionScore}
+        <details class="exercise-result-details">
+          <summary>Çalışma ayrıntıları</summary>
+          <dl class="exercise-result-stats">
+            <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
+            <div><dt>Puanlanan cevap</dt><dd>${s.scoredCount == null ? "—" : s.scoredCount}</dd></div>
+            <div><dt>Ortalama puan</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
+            ${fastReadingResult ? `<div class="exercise-result-wide"><dt>Okuma ve anlama</dt><dd>${escapeHtml(fastReadingResult)}</dd></div>` : ""}
+          </dl>
+        </details>
         <div class="training-home-actions">
           <button id="exercise-replay" type="button" class="btn btn-secondary">Tekrar oyna</button>
           <button id="exercise-return-path" type="button" class="btn btn-primary">Antrenmanlara dön</button>
@@ -14443,17 +14538,21 @@ function renderExerciseResult() {
         <div aria-hidden="true" style="font-size:48px">🎉</div>
         <h3 tabindex="-1" id="exercise-completion-title">${isReview ? "Tekrarını tamamladın." : isAssessment ? "Değerlendirmeyi tamamladın!" : "Alıştırmayı tamamladın!"}</h3>
         <p>${pending ? pending + " cevap için değerlendirme bekleniyor. Puan yalnızca değerlendirilen cevapları içerir." : isReview ? "Bu çalışma gelişimini pekiştirmek için kaydedildi." : isAssessment ? "Sonuçların öğrenme yolunu kişiselleştirmek için kaydedildi." : "Çalışman kaydedildi."}</p>
-        <dl class="exercise-result-stats">
-          <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
-          <div><dt>Cevaplanan</dt><dd>${s.attempted ?? "—"}</dd></div>
-          <div><dt>Puanlanan</dt><dd>${s.scoredCount ?? "—"}</dd></div>
-          <div><dt>Bekleyen</dt><dd>${pending}</dd></div>
-          <div><dt>Toplam puan</dt><dd>${s.totalRawScore ?? "—"}</dd></div>
-          <div><dt>Ortalama</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
-          <div><dt>${pointsLabel}</dt><dd>${g ? g.totalPoints : "—"}</dd></div>
-          <div><dt>Günlük seri</dt><dd>${g ? g.currentDays : "—"}</dd></div>
-        </dl>
-        <p>Cevaplama ilerlemesi: ${s.attempted ?? 0} / ${s.totalQuestions ?? 0}</p>
+        <p class="exercise-completion-progress">${s.attempted ?? 0} / ${s.totalQuestions ?? 0} soru yanıtlandı.</p>
+        ${completionScore}
+        <details class="exercise-result-details">
+          <summary>Çalışma ayrıntıları</summary>
+          <dl class="exercise-result-stats">
+            <div><dt>Toplam soru</dt><dd>${s.totalQuestions ?? "—"}</dd></div>
+            <div><dt>Cevaplanan</dt><dd>${s.attempted ?? "—"}</dd></div>
+            <div><dt>Puanlanan</dt><dd>${s.scoredCount ?? "—"}</dd></div>
+            <div><dt>Bekleyen</dt><dd>${pending}</dd></div>
+            <div><dt>Toplam puan</dt><dd>${s.totalRawScore ?? "—"}</dd></div>
+            <div><dt>Ortalama puan</dt><dd>${s.averageScore == null ? "—" : Math.round(s.averageScore * 100) + "%"}</dd></div>
+            <div><dt>${pointsLabel}</dt><dd>${g ? g.totalPoints : "—"}</dd></div>
+            <div><dt>Günlük seri</dt><dd>${g ? g.currentDays : "—"}</dd></div>
+          </dl>
+        </details>
         <div class="training-home-actions">
           ${hasBottomLearningPathNavigation ? '<p class="muted">Öğrenme yolu gezinmesi aşağıda.</p>' : nextLearningStep ? '<button id="exercise-next-step" type="button" class="btn btn-primary"><span class="btn-label">Sonraki</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>' : '<button id="exercise-return-path" type="button" class="btn btn-primary">Öğrenme Yoluna Dön</button>'}
         </div>

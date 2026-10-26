@@ -192,9 +192,8 @@
               <p class="guest-eyebrow">HIZLI OKUMA + OKUDUĞUNU ANLAMA</p>
               <h1><span>Daha hızlı oku</span><strong>daha iyi anla</strong></h1>
               <p>
-                Okuma maceran burada başlıyor. Ana fikri daha hızlı yakala ve metindeki önemli
-                ipuçlarını daha iyi anla. Kısa tanı, sana uygun başlangıç noktasını birlikte
-                bulmamıza yardımcı olur.
+                Kısa tanı, okuma ve anlama için sana uygun başlangıç noktasını bulmamıza yardımcı
+                olur.
               </p>
               <div class="guest-trust-row" aria-label="Tanı bilgileri">
                 <span>8 kısa soru</span>
@@ -6476,23 +6475,12 @@
             type="button"
             class="bottom-nav-item"
             data-bottom-page="dashboard"
-            aria-label="Ana Sayfa"
+            aria-label="Yolum"
           >
             <span class="bottom-nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#home"></use></svg></span
-            ><span class="bottom-nav-label">Ana Sayfa</span>
-          </button>
-          <button
-            type="button"
-            class="bottom-nav-item"
-            data-bottom-page="progress"
-            aria-label="Gelişimim"
-          >
-            <span class="bottom-nav-icon" aria-hidden="true"
-              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#chart"></use></svg></span
-            ><span class="bottom-nav-label">Gelişimim</span>
+                <use href="/assets/ui-icons.svg#compass"></use></svg></span
+            ><span class="bottom-nav-label">Yolum</span>
           </button>
           <button
             type="button"
@@ -6508,36 +6496,51 @@
           <button
             type="button"
             class="bottom-nav-item"
-            data-bottom-page="assignments"
-            aria-label="Ödevler"
+            data-bottom-page="progress"
+            aria-label="Gelişimim"
           >
             <span class="bottom-nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#clipboard"></use></svg></span
-            ><span class="bottom-nav-label">Ödevler</span>
+                <use href="/assets/ui-icons.svg#chart"></use></svg></span
+            ><span class="bottom-nav-label">Gelişimim</span>
           </button>
-          <button
-            type="button"
-            class="bottom-nav-item"
-            data-bottom-page="assessments"
-            aria-label="Ölçme ve değerlendirme"
-          >
-            <span class="bottom-nav-icon" aria-hidden="true"
-              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#assessment"></use></svg></span
-            ><span class="bottom-nav-label">Ölçme</span>
-          </button>
-          <button
-            type="button"
-            class="bottom-nav-item"
-            data-bottom-page="badges"
-            aria-label="Rozetler ve kupalar"
-          >
-            <span class="bottom-nav-icon" aria-hidden="true"
-              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#medal"></use></svg></span
-            ><span class="bottom-nav-label">Rozetler</span>
-          </button>
+          <div class="bottom-nav-more">
+            <div id="student-bottom-nav-more" class="bottom-nav-more-menu" hidden>
+              <button type="button" class="bottom-nav-more-link" data-bottom-page="assignments">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <use href="/assets/ui-icons.svg#clipboard"></use>
+                </svg>
+                <span>Ödevler</span>
+              </button>
+              <button type="button" class="bottom-nav-more-link" data-bottom-page="assessments">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <use href="/assets/ui-icons.svg#assessment"></use>
+                </svg>
+                <span>Ölçme ve değerlendirme</span>
+              </button>
+              <button type="button" class="bottom-nav-more-link" data-bottom-page="badges">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <use href="/assets/ui-icons.svg#medal"></use>
+                </svg>
+                <span>Rozetler</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="bottom-nav-item"
+              id="student-bottom-nav-more-toggle"
+              data-bottom-page="more"
+              data-bottom-page-more-toggle
+              aria-label="Diğer"
+              aria-controls="student-bottom-nav-more"
+              aria-expanded="false"
+            >
+              <span class="bottom-nav-icon" aria-hidden="true"
+                ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <use href="/assets/ui-icons.svg#grid"></use></svg></span
+              ><span class="bottom-nav-label">Diğer</span>
+            </button>
+          </div>
         </nav>
       </div>
     </div>
