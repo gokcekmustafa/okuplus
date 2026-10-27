@@ -148,6 +148,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       } else if (draft.routeFamily === "A" && draft.sequence >= 21 && draft.sequence <= 24) {
         expect(routeCycle.publicationApproved()).toBe(true);
         expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+      } else if (draft.routeFamily === "A" && draft.sequence >= 25 && draft.sequence <= 28) {
+        expect(routeCycle.publicationApproved()).toBe(true);
+        expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
       } else {
         expect(routeCycle.publicationApproved()).toBe(false);
       }
@@ -255,12 +258,12 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       expect(result.categoryTargetGaps.READING_COMPREHENSION).toBeGreaterThan(0);
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
       expect(result.authoredStationCount).toBe(routeFamily === "A" ? 220 : 205);
-      expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 120 : 5);
+      expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 140 : 5);
       expect(result.remainingAuthoredStations).toBe(0);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
         Math.max(result.targetStationCount, result.authoredStationCount),
       );
-      expect(result.sourceVerifiedDraftStationCount).toBe(routeFamily === "A" ? 90 : 185);
+      expect(result.sourceVerifiedDraftStationCount).toBe(routeFamily === "A" ? 70 : 185);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
       expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 210 : 190);

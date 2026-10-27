@@ -13,7 +13,8 @@ export type EducationV2P1ACycle5To8SeedRequest = {
     | "CYCLES_9_TO_12"
     | "CYCLES_13_TO_16"
     | "CYCLES_17_TO_20"
-    | "CYCLES_21_TO_24";
+    | "CYCLES_21_TO_24"
+    | "CYCLES_25_TO_28";
   productionApproval: string | undefined;
   expectedProductionApproval: string;
   protectedProductionWorkflow: boolean;
@@ -38,7 +39,9 @@ export function isEducationV2P1ACycle5To8SeedRequestAuthorized(
             ? "CYCLES_13_TO_16"
             : request.graphScope === "CYCLES_17_TO_20"
               ? "CYCLES_17_TO_20"
-              : "CYCLES_21_TO_24";
+              : request.graphScope === "CYCLES_21_TO_24"
+                ? "CYCLES_21_TO_24"
+                : "CYCLES_25_TO_28";
   if (request.operation === "PLAN_ONLY") {
     return request.dryRun && request.confirmation === `PLAN_EDUCATION_V2_P1_A_${scope}`;
   }

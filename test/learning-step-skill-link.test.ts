@@ -118,6 +118,7 @@ describe("learning-step skill links", () => {
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CONNECTOR")).toBe("RC_DETAIL");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_SYNTHESIS")).toBe("RC_INFERENCE");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_DATA_INTERPRETATION")).toBe("RC_DETAIL");
+    expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CLASSIFICATION")).toBe("RC_DETAIL");
     expect(
       mapCurriculumSkillCodesToStoredSkillCodes(["RC_RELATION", "RC_CONNECTOR", "RC_RELATION"]),
     ).toEqual({ storedSkillCodes: ["RC_INFERENCE", "RC_DETAIL"], unmappedSkillCodes: [] });
