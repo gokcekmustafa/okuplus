@@ -24,6 +24,7 @@ const curriculumSkillToStoredSkills: Readonly<Record<string, readonly string[]>>
   FAST_SCAN: ["FAST_ATTENTION"],
   FAST_SCANNING: ["FAST_ATTENTION"],
   RC_CLASSIFY: ["RC_DETAIL"],
+  RC_CLASSIFICATION: ["RC_DETAIL"],
   RC_CONTEXT_CLUES: ["RC_DETAIL"],
   RC_EXPLANATION: ["RC_INFERENCE"],
   RC_MODEL_LIMITS: ["RC_INFERENCE"],
