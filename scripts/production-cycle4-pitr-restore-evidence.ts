@@ -63,6 +63,9 @@ export type Cycle4PitrFailureRecord = {
   endpoint: string | null;
   httpStatus: number | null;
   reason: string;
+  apiErrorCode?: string | null;
+  apiErrorMessage?: string | null;
+  requestId?: string | null;
 };
 type NeonBranch = {
   id: string;
@@ -411,8 +414,66 @@ export function cycle4PitrHttpFailure(
   stage: string,
   endpoint: string,
   httpStatus: number,
+  diagnosticBody: unknown = null,
+  requestId: unknown = null,
 ): Cycle4PitrSafeError {
-  return safeError(stage, `Neon Management API returned HTTP ${httpStatus}`, endpoint, httpStatus);
+  const base = safeError(
+    stage,
+    `Neon Management API returned HTTP ${httpStatus}`,
+    endpoint,
+    httpStatus,
+  ).failure;
+  const diagnostics = sanitizeCycle4PitrApiError(diagnosticBody, requestId);
+  return new Cycle4PitrSafeError({ ...base, ...diagnostics });
+}
+
+function safeNeonDiagnosticText(value: unknown, maximumLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const whitespaceNormalized = value.replace(/\s+/gu, " ");
+  const printable = Array.from(whitespaceNormalized)
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint >= 0x20 && !(codePoint >= 0x7f && codePoint <= 0x9f);
+    })
+    .join("");
+  const sanitized = printable
+    .replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/giu, "[connection redacted]")
+    .replace(/https?:\/\/[^\s"'<>]+/giu, "[URL redacted]")
+    .replace(/\bbearer\s+[A-Za-z0-9._~+/-]+=*/giu, "Bearer [redacted]")
+    .replace(
+      /\b(password|secret|token|api[_-]?key|authorization)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/giu,
+      "$1=[redacted]",
+    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, "[email redacted]")
+    .trim()
+    .slice(0, maximumLength);
+  return sanitized || null;
+}
+
+/** Keep only bounded, non-secret Neon error fields for failure evidence. */
+export function sanitizeCycle4PitrApiError(
+  body: unknown,
+  requestId: unknown,
+): Pick<Cycle4PitrFailureRecord, "apiErrorCode" | "apiErrorMessage" | "requestId"> {
+  const bodyRecord = isRecord(body) ? body : {};
+  const nestedError = isRecord(bodyRecord.error) ? bodyRecord.error : {};
+  const codeValue =
+    bodyRecord.code ?? bodyRecord.error_code ?? bodyRecord.errorCode ?? nestedError.code;
+  const messageValue =
+    bodyRecord.message ??
+    bodyRecord.error_description ??
+    bodyRecord.detail ??
+    (typeof bodyRecord.error === "string" ? bodyRecord.error : nestedError.message);
+  const rawCode = safeNeonDiagnosticText(codeValue, 96);
+  const rawRequestId = safeNeonDiagnosticText(requestId, 128);
+  return {
+    apiErrorCode: rawCode && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,95}$/u.test(rawCode) ? rawCode : null,
+    apiErrorMessage: safeNeonDiagnosticText(messageValue, 240),
+    requestId:
+      rawRequestId && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(rawRequestId)
+        ? rawRequestId
+        : null,
+  };
 }
 
 async function neonRequest<T>(
@@ -444,7 +505,15 @@ async function neonRequest<T>(
   }
   lastNeonResponse = { endpoint, httpStatus: response.status };
   if (!response.ok) {
-    throw cycle4PitrHttpFailure(stage, endpoint, response.status);
+    const body = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    const requestId =
+      response.headers.get("x-neon-request-id") ??
+      response.headers.get("x-request-id") ??
+      response.headers.get("request-id");
+    throw cycle4PitrHttpFailure(stage, endpoint, response.status, body, requestId);
   }
   try {
     return (await response.json()) as T;

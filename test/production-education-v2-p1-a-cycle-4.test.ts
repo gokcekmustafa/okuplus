@@ -29,6 +29,7 @@ import {
   cycle4PitrFailureRecord,
   cycle4PitrHttpFailure,
   cycle4PitrOptionalEndpointId,
+  sanitizeCycle4PitrApiError,
   cycle4PitrTimestamp,
   cycle4PitrTimestampMatches,
   isCycle4PitrEvidenceValid,
@@ -254,19 +255,45 @@ describe("P1-A Cycle 4 authored program", () => {
     );
   });
 
-  it("records sanitized PITR API failure stage, endpoint, and HTTP status", () => {
+  it("records sanitized PITR API failure details without credentials or personal data", () => {
     const endpoint = cycle4PitrCompareSchemaEndpoint(CYCLE4_PITR_PROJECT_ID, "br-target-1");
     const failure = cycle4PitrFailureRecord(
-      cycle4PitrHttpFailure("schema comparison", endpoint, 500),
+      cycle4PitrHttpFailure(
+        "PITR branch",
+        endpoint,
+        422,
+        {
+          code: "branch_name_conflict",
+          message:
+            "Branch rejected at https://console.neon.tech/private?token=hidden; postgresql://user:secret@example.test/db; owner@example.test",
+        },
+        "neon-req-123",
+      ),
       "fallback",
     );
     expect(failure).toEqual({
-      stage: "schema comparison",
+      stage: "PITR branch",
       endpoint,
-      httpStatus: 500,
-      reason: "Neon Management API returned HTTP 500",
+      httpStatus: 422,
+      reason: "Neon Management API returned HTTP 422",
+      apiErrorCode: "branch_name_conflict",
+      apiErrorMessage: "Branch rejected at [URL redacted] [connection redacted] [email redacted]",
+      requestId: "neon-req-123",
     });
     expect(JSON.stringify(failure)).not.toMatch(/https?:|Bearer|password|secret|postgresql:/iu);
+  });
+
+  it("drops malformed Neon diagnostic codes and request IDs", () => {
+    expect(
+      sanitizeCycle4PitrApiError(
+        { code: "invalid code with spaces", message: "Invalid branch request" },
+        "request id with spaces",
+      ),
+    ).toEqual({
+      apiErrorCode: null,
+      apiErrorMessage: "Invalid branch request",
+      requestId: null,
+    });
   });
 
   it("accepts only complete, read-only PITR evidence bound to this workflow attempt", () => {
