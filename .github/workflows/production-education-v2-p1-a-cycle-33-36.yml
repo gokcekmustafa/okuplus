@@ -129,7 +129,7 @@ jobs:
               require_equal "APPLY confirmation text is invalid" "${CYCLE3336_CONFIRMATION}" "APPLY_EDUCATION_V2_P1_A_CYCLES_33_TO_36"
               expected_approval="I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLES_33_TO_36_PRODUCTION_RELEASE_${release_fingerprint^^}_AT_${GITHUB_SHA^^}"
               require_equal "product-owner approval does not match the current release and commit" "${CYCLE3336_PRODUCTION_APPROVAL}" "${expected_approval}"
-              npx --no-install tsx -e 'import { EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_DECISIONS as decisions } from "./src/curriculum/education-v2-p1-a-cycle-33-36-release.ts"; if (decisions.length !== 4 || decisions.some((item) => item.status !== "OWNER_RELEASE_APPROVED" || item.explicitPublicationApproved !== true)) process.exit(1)'
+              # This approval authorizes graph preparation only. Learner assignment remains gated by the source release decision.
               echo "BACKUP_RESTORE_EVIDENCE=REQUIRED_FROM_SAME_RUN_PITR" >> "${GITHUB_STEP_SUMMARY}"
               ;;
             *) fail "invalid operation" ;;

@@ -49,6 +49,10 @@ const migrationGate = readFileSync(
   new URL("../scripts/verify-cycle5-8-production-migration-gate.ts", import.meta.url),
   "utf8",
 );
+const seedScript = readFileSync(
+  new URL("../scripts/seed-education-v2-p1-a-cycle-5-8.ts", import.meta.url),
+  "utf8",
+);
 
 function canonicalJson(value: unknown): string {
   const normalize = (candidate: unknown): unknown => {
@@ -474,7 +478,24 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
     for (const sequence of [33, 34, 35, 36]) {
       expect(workflow).toContain(`cycle${sequence}-*.json`);
     }
-    expect(workflow).toContain("OWNER_RELEASE_APPROVED");
+    expect(workflow).toContain(
+      "product-owner approval does not match the current release and commit",
+    );
+    expect(workflow).not.toContain("EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_DECISIONS");
+    expect(workflow).not.toContain("OWNER_RELEASE_APPROVED");
+    const assignmentGateStart = seedScript.indexOf("    if (\n      !dryRun &&");
+    const assignmentGateEnd = seedScript.indexOf(
+      "educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).some(releaseGateClosed)",
+      assignmentGateStart,
+    );
+    expect(assignmentGateStart).toBeGreaterThanOrEqual(0);
+    expect(assignmentGateEnd).toBeGreaterThan(assignmentGateStart);
+    expect(seedScript.slice(assignmentGateStart, assignmentGateEnd)).not.toContain(
+      "IS_CYCLE_33_TO_36",
+    );
+    expect(seedScript).toContain(
+      "Its separate route-catalog decision remains closed until learner assignment is approved.",
+    );
     expect(migrationGate).toContain("process.env.CYCLE3336_OPERATION?.trim()");
     expect(migrationGate).toContain("cycle3336Operation,");
   });

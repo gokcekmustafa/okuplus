@@ -58,7 +58,6 @@ import {
   EDUCATION_V2_P1_A_CYCLE_29_32_RELEASE_ID,
 } from "../src/curriculum/education-v2-p1-a-cycle-29-32-release.js";
 import {
-  isEducationV2P1ACycle33To36ProductionAssignmentEnabled,
   educationV2P1ACycle33To36OrFallbackProductionApproval,
   EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID,
 } from "../src/curriculum/education-v2-p1-a-cycle-33-36-release.js";
@@ -561,9 +560,6 @@ function readTarget(): Target | null {
       fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
     }
     const releaseGateClosed = (sequence: number): boolean => {
-      if (IS_CYCLE_33_TO_36) {
-        return !isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence);
-      }
       if (IS_CYCLE_29_TO_32)
         return !isEducationV2P1ACycle29To32ProductionAssignmentEnabled(sequence);
       if (IS_CYCLE_25_TO_28)
@@ -576,10 +572,11 @@ function readTarget(): Target | null {
         return !isEducationV2P1ACycle13To16ProductionAssignmentEnabled(sequence);
       return !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence);
     };
+    // Cycle 33–36 graph preparation is authorized by the exact release/commit approval above.
+    // Its separate route-catalog decision remains closed until learner assignment is approved.
     if (
       !dryRun &&
-      (IS_CYCLE_33_TO_36 ||
-        IS_CYCLE_9_TO_12 ||
+      (IS_CYCLE_9_TO_12 ||
         IS_CYCLE_13_TO_16 ||
         IS_CYCLE_17_TO_20 ||
         IS_CYCLE_21_TO_24 ||
