@@ -719,7 +719,7 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
     };
     const evidence = {
       status: "PASS",
-      schemaVersion: 7,
+      schemaVersion: 8,
       pitrScope: "cycle17-20",
       graphScope: "CYCLES_17_TO_20",
       projectId: CYCLE4_PITR_PROJECT_ID,
@@ -743,12 +743,14 @@ describe("P1-A source-verified Cycles 17–20 package", () => {
       },
       targetBranch: {
         id: targetBranchId,
+        name: "okupratik-cycle17-20-pitr-12345-attempt-1",
         projectId: CYCLE4_PITR_PROJECT_ID,
         parentId: CYCLE4_PITR_SOURCE_BRANCH_ID,
         parentTimestamp,
         default: false,
         state: "ready",
         annotationMatchesRun: true,
+        annotationMatchesRunAttempt: true,
         endpointBranchId: targetBranchId,
         endpointId: "ep-isolated-test",
         endpointType: "read_write",
