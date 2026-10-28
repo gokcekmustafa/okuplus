@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   const cycle1720Operation = process.env.CYCLE1720_OPERATION?.trim();
   const cycle2124Operation = process.env.CYCLE2124_OPERATION?.trim();
   const cycle2528Operation = process.env.CYCLE2528_OPERATION?.trim();
+  const cycle2932Operation = process.env.CYCLE2932_OPERATION?.trim();
   if (
     [
       cycle58Operation,
@@ -30,12 +31,14 @@ async function main(): Promise<void> {
       cycle1720Operation,
       cycle2124Operation,
       cycle2528Operation,
+      cycle2932Operation,
     ].filter(Boolean).length > 1
   ) {
     throw new Error("only one protected curriculum operation may be selected");
   }
   const operation =
     cycle2124Operation ||
+    cycle2932Operation ||
     cycle2528Operation ||
     cycle1720Operation ||
     cycle1316Operation ||

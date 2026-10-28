@@ -14,7 +14,8 @@ export type EducationV2P1ACycle5To8SeedRequest = {
     | "CYCLES_13_TO_16"
     | "CYCLES_17_TO_20"
     | "CYCLES_21_TO_24"
-    | "CYCLES_25_TO_28";
+    | "CYCLES_25_TO_28"
+    | "CYCLES_29_TO_32";
   productionApproval: string | undefined;
   expectedProductionApproval: string;
   protectedProductionWorkflow: boolean;
@@ -28,6 +29,20 @@ export type EducationV2P1ACycle5To8SeedRequest = {
 export function isEducationV2P1ACycle5To8SeedRequestAuthorized(
   request: EducationV2P1ACycle5To8SeedRequest,
 ): boolean {
+  if (
+    ![
+      "CYCLE_5_ONLY",
+      "CYCLES_5_TO_8",
+      "CYCLES_9_TO_12",
+      "CYCLES_13_TO_16",
+      "CYCLES_17_TO_20",
+      "CYCLES_21_TO_24",
+      "CYCLES_25_TO_28",
+      "CYCLES_29_TO_32",
+    ].includes(request.graphScope)
+  ) {
+    return false;
+  }
   const scope =
     request.graphScope === "CYCLE_5_ONLY"
       ? "CYCLE_5"
@@ -41,7 +56,9 @@ export function isEducationV2P1ACycle5To8SeedRequestAuthorized(
               ? "CYCLES_17_TO_20"
               : request.graphScope === "CYCLES_21_TO_24"
                 ? "CYCLES_21_TO_24"
-                : "CYCLES_25_TO_28";
+                : request.graphScope === "CYCLES_25_TO_28"
+                  ? "CYCLES_25_TO_28"
+                  : "CYCLES_29_TO_32";
   if (request.operation === "PLAN_ONLY") {
     return request.dryRun && request.confirmation === `PLAN_EDUCATION_V2_P1_A_${scope}`;
   }

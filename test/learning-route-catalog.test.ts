@@ -298,8 +298,8 @@ describe("versioned learning routes", () => {
       {
         route: "A",
         authored: 220,
-        releaseApprovedSource: 140,
-        sourceVerifiedDraft: 70,
+        releaseApprovedSource: 160,
+        sourceVerifiedDraft: 50,
         sourceQualified: 210,
         reviewRequired: 10,
         sourceRemaining: 0,
@@ -515,16 +515,22 @@ describe("versioned learning routes", () => {
     expect(a[27]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(a[27]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[27]!.pathCode)).toBe(a[28]);
-    expect(a[28]!.publicationApproved()).toBe(false);
+    expect(a[28]!.publicationApproved()).toBe(true);
+    expect(a[28]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    expect(a[28]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(a[28]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[28]!.pathCode)).toBe(a[29]);
-    expect(a[29]!.publicationApproved()).toBe(false);
+    expect(a[29]!.publicationApproved()).toBe(true);
+    expect(a[29]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    expect(a[29]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(a[29]!.manifest.steps).toHaveLength(5);
     expect(nextLearningRouteCycle(a[29]!.pathCode)).toBe(a[30]);
-    expect(a[30]!.publicationApproved()).toBe(false);
-    expect(a[30]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
+    expect(a[30]!.publicationApproved()).toBe(true);
+    expect(a[30]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    expect(a[30]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[30]!.pathCode)).toBe(a[31]);
-    expect(a[31]!.publicationApproved()).toBe(false);
+    expect(a[31]!.publicationApproved()).toBe(true);
+    expect(a[31]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[31]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(nextLearningRouteCycle(a[31]!.pathCode)).toBe(a[32]);
     expect(a[32]!.publicationApproved()).toBe(false);
@@ -533,14 +539,15 @@ describe("versioned learning routes", () => {
     expect(a[33]!.publicationApproved()).toBe(false);
     expect(a[33]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 28);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 32);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
           (a[index]!.sequence >= 13 && a[index]!.sequence < 16) ||
           (a[index]!.sequence >= 17 && a[index]!.sequence < 20) ||
           (a[index]!.sequence >= 21 && a[index]!.sequence < 24) ||
-          (a[index]!.sequence >= 25 && a[index]!.sequence < 28)
+          (a[index]!.sequence >= 25 && a[index]!.sequence < 28) ||
+          (a[index]!.sequence >= 29 && a[index]!.sequence < 32)
           ? "ASSIGN_NEXT"
           : "REVIEW_REQUIRED",
       );

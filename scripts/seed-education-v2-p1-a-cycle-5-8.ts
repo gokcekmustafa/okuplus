@@ -53,6 +53,11 @@ import {
   EDUCATION_V2_P1_A_CYCLE_25_28_RELEASE_ID,
 } from "../src/curriculum/education-v2-p1-a-cycle-25-28-release.js";
 import {
+  isEducationV2P1ACycle29To32ProductionAssignmentEnabled,
+  educationV2P1ACycle29To32ProductionApproval,
+  EDUCATION_V2_P1_A_CYCLE_29_32_RELEASE_ID,
+} from "../src/curriculum/education-v2-p1-a-cycle-29-32-release.js";
+import {
   educationV2P1ACycle5To8AnswerKey,
   getEducationV2P1ACycle,
   p1ACycle5To8AssessmentId,
@@ -81,16 +86,19 @@ import {
   isCycle17To20PitrEvidenceValid,
   isCycle21To24PitrEvidenceValid,
   isCycle25To28PitrEvidenceValid,
+  isCycle29To32PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
   type Cycle9To12PitrEvidenceExpectation,
   type Cycle13To16PitrEvidenceExpectation,
   type Cycle17To20PitrEvidenceExpectation,
   type Cycle21To24PitrEvidenceExpectation,
   type Cycle25To28PitrEvidenceExpectation,
+  type Cycle29To32PitrEvidenceExpectation,
 } from "./production-cycle4-pitr-restore-evidence.js";
 
 const ACTIVE_SEQUENCE = Number(
-  process.env.CYCLE2528_SEQUENCE ??
+  process.env.CYCLE2932_SEQUENCE ??
+    process.env.CYCLE2528_SEQUENCE ??
     process.env.CYCLE2124_SEQUENCE ??
     process.env.CYCLE1720_SEQUENCE ??
     process.env.CYCLE1316_SEQUENCE ??
@@ -100,10 +108,11 @@ const ACTIVE_SEQUENCE = Number(
 );
 if (
   ![
-    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+    30, 31, 32,
   ].includes(ACTIVE_SEQUENCE)
 ) {
-  throw new Error("Döngü sıra numarası 5–28 aralığında olmalı");
+  throw new Error("Döngü sıra numarası 5–32 aralığında olmalı");
 }
 const ACTIVE_CYCLE = getEducationV2P1ACycle(ACTIVE_SEQUENCE);
 if (!ACTIVE_CYCLE) throw new Error(`Cycle ${ACTIVE_SEQUENCE} programı bulunamadı`);
@@ -125,6 +134,7 @@ const activeQuestionVersionId = (exerciseKey: string, questionKey: string) =>
 const activeAssessmentId = (key: string) => p1ACycle5To8AssessmentId(ACTIVE_SEQUENCE, key);
 
 const rawGraphScope =
+  process.env.CYCLE2932_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE2528_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE2124_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE1720_GRAPH_SCOPE?.trim() ??
@@ -141,7 +151,9 @@ const rawGraphScope =
           ? "CYCLES_17_TO_20"
           : ACTIVE_SEQUENCE <= 24
             ? "CYCLES_21_TO_24"
-            : "CYCLES_25_TO_28");
+            : ACTIVE_SEQUENCE <= 28
+              ? "CYCLES_25_TO_28"
+              : "CYCLES_29_TO_32");
 if (
   rawGraphScope !== "CYCLE_5_ONLY" &&
   rawGraphScope !== "CYCLES_5_TO_8" &&
@@ -149,7 +161,8 @@ if (
   rawGraphScope !== "CYCLES_13_TO_16" &&
   rawGraphScope !== "CYCLES_17_TO_20" &&
   rawGraphScope !== "CYCLES_21_TO_24" &&
-  rawGraphScope !== "CYCLES_25_TO_28"
+  rawGraphScope !== "CYCLES_25_TO_28" &&
+  rawGraphScope !== "CYCLES_29_TO_32"
 ) {
   throw new Error("Cycle grafik kapsamı geçersiz");
 }
@@ -159,98 +172,115 @@ const IS_CYCLE_13_TO_16 = ACTIVE_GRAPH_SCOPE === "CYCLES_13_TO_16";
 const IS_CYCLE_17_TO_20 = ACTIVE_GRAPH_SCOPE === "CYCLES_17_TO_20";
 const IS_CYCLE_21_TO_24 = ACTIVE_GRAPH_SCOPE === "CYCLES_21_TO_24";
 const IS_CYCLE_25_TO_28 = ACTIVE_GRAPH_SCOPE === "CYCLES_25_TO_28";
-const ACTIVE_OPERATION_ENV = IS_CYCLE_25_TO_28
-  ? "CYCLE2528_OPERATION"
-  : IS_CYCLE_21_TO_24
-    ? "CYCLE2124_OPERATION"
-    : IS_CYCLE_17_TO_20
-      ? "CYCLE1720_OPERATION"
-      : IS_CYCLE_13_TO_16
-        ? "CYCLE1316_OPERATION"
-        : IS_CYCLE_9_TO_12
-          ? "CYCLE912_OPERATION"
-          : "CYCLE58_OPERATION";
-const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_25_TO_28
-  ? "CYCLE2528_CONFIRMATION"
-  : IS_CYCLE_21_TO_24
-    ? "CYCLE2124_CONFIRMATION"
-    : IS_CYCLE_17_TO_20
-      ? "CYCLE1720_CONFIRMATION"
-      : IS_CYCLE_13_TO_16
-        ? "CYCLE1316_CONFIRMATION"
-        : IS_CYCLE_9_TO_12
-          ? "CYCLE912_CONFIRMATION"
-          : "CYCLE58_CONFIRMATION";
-const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_25_TO_28
-  ? "CYCLE2528_RELEASE_ID"
-  : IS_CYCLE_21_TO_24
-    ? "CYCLE2124_RELEASE_ID"
-    : IS_CYCLE_17_TO_20
-      ? "CYCLE1720_RELEASE_ID"
-      : IS_CYCLE_13_TO_16
-        ? "CYCLE1316_RELEASE_ID"
-        : IS_CYCLE_9_TO_12
-          ? "CYCLE912_RELEASE_ID"
-          : "CYCLE58_RELEASE_ID";
-const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_25_TO_28
-  ? "CYCLE2528_RELEASE_COMMIT"
-  : IS_CYCLE_21_TO_24
-    ? "CYCLE2124_RELEASE_COMMIT"
-    : IS_CYCLE_17_TO_20
-      ? "CYCLE1720_RELEASE_COMMIT"
-      : IS_CYCLE_13_TO_16
-        ? "CYCLE1316_RELEASE_COMMIT"
-        : IS_CYCLE_9_TO_12
-          ? "CYCLE912_RELEASE_COMMIT"
-          : "CYCLE58_RELEASE_COMMIT";
-const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_25_TO_28
-  ? "Manual Education V2 P1-A Cycles 25–28 production provision"
-  : IS_CYCLE_21_TO_24
-    ? "Manual Education V2 P1-A Cycles 21–24 production provision"
-    : IS_CYCLE_17_TO_20
-      ? "Manual Education V2 P1-A Cycles 17–20 production provision"
-      : IS_CYCLE_13_TO_16
-        ? "Manual Education V2 P1-A Cycles 13–16 production provision"
-        : IS_CYCLE_9_TO_12
-          ? "Manual Education V2 P1-A Cycles 9–12 production provision"
-          : "Manual Education V2 P1-A Cycles 5–8 production provision";
-const ACTIVE_SCOPE_LABEL = IS_CYCLE_25_TO_28
-  ? "Cycle 25–28"
-  : IS_CYCLE_21_TO_24
-    ? "Cycle 21–24"
-    : IS_CYCLE_17_TO_20
-      ? "Cycle 17–20"
-      : IS_CYCLE_13_TO_16
-        ? "Cycle 13–16"
-        : IS_CYCLE_9_TO_12
-          ? "Cycle 9–12"
-          : "Cycle 5–8";
+const IS_CYCLE_29_TO_32 = ACTIVE_GRAPH_SCOPE === "CYCLES_29_TO_32";
+const ACTIVE_OPERATION_ENV = IS_CYCLE_29_TO_32
+  ? "CYCLE2932_OPERATION"
+  : IS_CYCLE_25_TO_28
+    ? "CYCLE2528_OPERATION"
+    : IS_CYCLE_21_TO_24
+      ? "CYCLE2124_OPERATION"
+      : IS_CYCLE_17_TO_20
+        ? "CYCLE1720_OPERATION"
+        : IS_CYCLE_13_TO_16
+          ? "CYCLE1316_OPERATION"
+          : IS_CYCLE_9_TO_12
+            ? "CYCLE912_OPERATION"
+            : "CYCLE58_OPERATION";
+const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_29_TO_32
+  ? "CYCLE2932_CONFIRMATION"
+  : IS_CYCLE_25_TO_28
+    ? "CYCLE2528_CONFIRMATION"
+    : IS_CYCLE_21_TO_24
+      ? "CYCLE2124_CONFIRMATION"
+      : IS_CYCLE_17_TO_20
+        ? "CYCLE1720_CONFIRMATION"
+        : IS_CYCLE_13_TO_16
+          ? "CYCLE1316_CONFIRMATION"
+          : IS_CYCLE_9_TO_12
+            ? "CYCLE912_CONFIRMATION"
+            : "CYCLE58_CONFIRMATION";
+const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_29_TO_32
+  ? "CYCLE2932_RELEASE_ID"
+  : IS_CYCLE_25_TO_28
+    ? "CYCLE2528_RELEASE_ID"
+    : IS_CYCLE_21_TO_24
+      ? "CYCLE2124_RELEASE_ID"
+      : IS_CYCLE_17_TO_20
+        ? "CYCLE1720_RELEASE_ID"
+        : IS_CYCLE_13_TO_16
+          ? "CYCLE1316_RELEASE_ID"
+          : IS_CYCLE_9_TO_12
+            ? "CYCLE912_RELEASE_ID"
+            : "CYCLE58_RELEASE_ID";
+const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_29_TO_32
+  ? "CYCLE2932_RELEASE_COMMIT"
+  : IS_CYCLE_25_TO_28
+    ? "CYCLE2528_RELEASE_COMMIT"
+    : IS_CYCLE_21_TO_24
+      ? "CYCLE2124_RELEASE_COMMIT"
+      : IS_CYCLE_17_TO_20
+        ? "CYCLE1720_RELEASE_COMMIT"
+        : IS_CYCLE_13_TO_16
+          ? "CYCLE1316_RELEASE_COMMIT"
+          : IS_CYCLE_9_TO_12
+            ? "CYCLE912_RELEASE_COMMIT"
+            : "CYCLE58_RELEASE_COMMIT";
+const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_29_TO_32
+  ? "Manual Education V2 P1-A Cycles 29–32 production provision"
+  : IS_CYCLE_25_TO_28
+    ? "Manual Education V2 P1-A Cycles 25–28 production provision"
+    : IS_CYCLE_21_TO_24
+      ? "Manual Education V2 P1-A Cycles 21–24 production provision"
+      : IS_CYCLE_17_TO_20
+        ? "Manual Education V2 P1-A Cycles 17–20 production provision"
+        : IS_CYCLE_13_TO_16
+          ? "Manual Education V2 P1-A Cycles 13–16 production provision"
+          : IS_CYCLE_9_TO_12
+            ? "Manual Education V2 P1-A Cycles 9–12 production provision"
+            : "Manual Education V2 P1-A Cycles 5–8 production provision";
+const ACTIVE_SCOPE_LABEL = IS_CYCLE_29_TO_32
+  ? "Cycle 29–32"
+  : IS_CYCLE_25_TO_28
+    ? "Cycle 25–28"
+    : IS_CYCLE_21_TO_24
+      ? "Cycle 21–24"
+      : IS_CYCLE_17_TO_20
+        ? "Cycle 17–20"
+        : IS_CYCLE_13_TO_16
+          ? "Cycle 13–16"
+          : IS_CYCLE_9_TO_12
+            ? "Cycle 9–12"
+            : "Cycle 5–8";
 const ACTIVE_SOURCE_RELEASE_COMMIT = process.env.GITHUB_SHA?.trim().toLowerCase() ?? "";
-const ACTIVE_RELEASE_ID = IS_CYCLE_25_TO_28
-  ? EDUCATION_V2_P1_A_CYCLE_25_28_RELEASE_ID
-  : IS_CYCLE_21_TO_24
-    ? EDUCATION_V2_P1_A_CYCLE_21_24_RELEASE_ID
-    : IS_CYCLE_17_TO_20
-      ? EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_ID
-      : IS_CYCLE_13_TO_16
-        ? EDUCATION_V2_P1_A_CYCLE_13_16_RELEASE_ID
-        : IS_CYCLE_9_TO_12
-          ? EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID
-          : EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID;
-const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_25_TO_28
-  ? educationV2P1ACycle25To28ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-  : IS_CYCLE_21_TO_24
-    ? educationV2P1ACycle21To24ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-    : IS_CYCLE_17_TO_20
-      ? educationV2P1ACycle17To20ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-      : IS_CYCLE_13_TO_16
-        ? educationV2P1ACycle13To16ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-        : IS_CYCLE_9_TO_12
-          ? educationV2P1ACycle9To12ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-          : educationV2P1ACycle5To8ProductionApproval(
-              ACTIVE_GRAPH_SCOPE,
-              ACTIVE_SOURCE_RELEASE_COMMIT,
-            );
+const ACTIVE_RELEASE_ID = IS_CYCLE_29_TO_32
+  ? EDUCATION_V2_P1_A_CYCLE_29_32_RELEASE_ID
+  : IS_CYCLE_25_TO_28
+    ? EDUCATION_V2_P1_A_CYCLE_25_28_RELEASE_ID
+    : IS_CYCLE_21_TO_24
+      ? EDUCATION_V2_P1_A_CYCLE_21_24_RELEASE_ID
+      : IS_CYCLE_17_TO_20
+        ? EDUCATION_V2_P1_A_CYCLE_17_20_RELEASE_ID
+        : IS_CYCLE_13_TO_16
+          ? EDUCATION_V2_P1_A_CYCLE_13_16_RELEASE_ID
+          : IS_CYCLE_9_TO_12
+            ? EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID
+            : EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID;
+const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_29_TO_32
+  ? educationV2P1ACycle29To32ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+  : IS_CYCLE_25_TO_28
+    ? educationV2P1ACycle25To28ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+    : IS_CYCLE_21_TO_24
+      ? educationV2P1ACycle21To24ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+      : IS_CYCLE_17_TO_20
+        ? educationV2P1ACycle17To20ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+        : IS_CYCLE_13_TO_16
+          ? educationV2P1ACycle13To16ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+          : IS_CYCLE_9_TO_12
+            ? educationV2P1ACycle9To12ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+            : educationV2P1ACycle5To8ProductionApproval(
+                ACTIVE_GRAPH_SCOPE,
+                ACTIVE_SOURCE_RELEASE_COMMIT,
+              );
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -260,17 +290,19 @@ if ([...args].some((arg) => arg !== "--apply" && arg !== "--dry-run")) {
 if (args.has("--apply") && args.has("--dry-run")) {
   throw new Error("--apply ve --dry-run birlikte kullanılamaz");
 }
-const ENVIRONMENT_SUFFIX = IS_CYCLE_25_TO_28
-  ? "25_28"
-  : IS_CYCLE_21_TO_24
-    ? "21_24"
-    : IS_CYCLE_17_TO_20
-      ? "17_20"
-      : IS_CYCLE_13_TO_16
-        ? "13_16"
-        : IS_CYCLE_9_TO_12
-          ? "9_12"
-          : "5_8";
+const ENVIRONMENT_SUFFIX = IS_CYCLE_29_TO_32
+  ? "29_32"
+  : IS_CYCLE_25_TO_28
+    ? "25_28"
+    : IS_CYCLE_21_TO_24
+      ? "21_24"
+      : IS_CYCLE_17_TO_20
+        ? "17_20"
+        : IS_CYCLE_13_TO_16
+          ? "13_16"
+          : IS_CYCLE_9_TO_12
+            ? "9_12"
+            : "5_8";
 const ENVIRONMENT_PREFIX = `EDUCATION_V2_P1_A_CYCLE_${ENVIRONMENT_SUFFIX}`;
 const TARGET_ENV = `${ENVIRONMENT_PREFIX}_ENVIRONMENT`;
 const DATABASE_ENV = `${ENVIRONMENT_PREFIX}_DATABASE_URL`;
@@ -281,17 +313,19 @@ const PRODUCTION_RELEASE_ID_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_ID`;
 const PRODUCTION_RELEASE_COMMIT_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_COMMIT`;
 const PRODUCTION_APPROVAL_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_APPROVAL`;
 const APPROVED_FINGERPRINT_ENV = `${ENVIRONMENT_PREFIX}_APPROVED_TARGET_FINGERPRINT`;
-const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_25_TO_28
-  ? "CYCLE2528_PITR_EVIDENCE_PATH"
-  : IS_CYCLE_21_TO_24
-    ? "CYCLE2124_PITR_EVIDENCE_PATH"
-    : IS_CYCLE_13_TO_16
-      ? "CYCLE1316_PITR_EVIDENCE_PATH"
-      : IS_CYCLE_17_TO_20
-        ? "CYCLE1720_PITR_EVIDENCE_PATH"
-        : IS_CYCLE_9_TO_12
-          ? "CYCLE912_PITR_EVIDENCE_PATH"
-          : "CYCLE58_PITR_EVIDENCE_PATH";
+const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_29_TO_32
+  ? "CYCLE2932_PITR_EVIDENCE_PATH"
+  : IS_CYCLE_25_TO_28
+    ? "CYCLE2528_PITR_EVIDENCE_PATH"
+    : IS_CYCLE_21_TO_24
+      ? "CYCLE2124_PITR_EVIDENCE_PATH"
+      : IS_CYCLE_13_TO_16
+        ? "CYCLE1316_PITR_EVIDENCE_PATH"
+        : IS_CYCLE_17_TO_20
+          ? "CYCLE1720_PITR_EVIDENCE_PATH"
+          : IS_CYCLE_9_TO_12
+            ? "CYCLE912_PITR_EVIDENCE_PATH"
+            : "CYCLE58_PITR_EVIDENCE_PATH";
 const APPROVED_RELEASE_ID = ACTIVE_RELEASE_ID;
 const PRODUCTION_CONFIRMATION = ACTIVE_PRODUCTION_CONFIRMATION;
 type TargetEnvironment = "TEST" | "PRODUCTION";
@@ -342,41 +376,47 @@ function assertPitrRestoreEvidence(): void {
     role: required("PRODUCTION_DB_APPROVED_USER"),
     port: required("PRODUCTION_DB_APPROVED_PORT"),
   };
-  const valid = IS_CYCLE_25_TO_28
-    ? isCycle25To28PitrEvidenceValid(evidence, {
+  const valid = IS_CYCLE_29_TO_32
+    ? isCycle29To32PitrEvidenceValid(evidence, {
         ...expectedBase,
-        scope: "cycle25-28",
-        graphScope: "CYCLES_25_TO_28",
-      } satisfies Cycle25To28PitrEvidenceExpectation)
-    : IS_CYCLE_21_TO_24
-      ? isCycle21To24PitrEvidenceValid(evidence, {
+        scope: "cycle29-32",
+        graphScope: "CYCLES_29_TO_32",
+      } satisfies Cycle29To32PitrEvidenceExpectation)
+    : IS_CYCLE_25_TO_28
+      ? isCycle25To28PitrEvidenceValid(evidence, {
           ...expectedBase,
-          scope: "cycle21-24",
-          graphScope: "CYCLES_21_TO_24",
-        } satisfies Cycle21To24PitrEvidenceExpectation)
-      : IS_CYCLE_17_TO_20
-        ? isCycle17To20PitrEvidenceValid(evidence, {
+          scope: "cycle25-28",
+          graphScope: "CYCLES_25_TO_28",
+        } satisfies Cycle25To28PitrEvidenceExpectation)
+      : IS_CYCLE_21_TO_24
+        ? isCycle21To24PitrEvidenceValid(evidence, {
             ...expectedBase,
-            scope: "cycle17-20",
-            graphScope: "CYCLES_17_TO_20",
-          } satisfies Cycle17To20PitrEvidenceExpectation)
-        : IS_CYCLE_13_TO_16
-          ? isCycle13To16PitrEvidenceValid(evidence, {
+            scope: "cycle21-24",
+            graphScope: "CYCLES_21_TO_24",
+          } satisfies Cycle21To24PitrEvidenceExpectation)
+        : IS_CYCLE_17_TO_20
+          ? isCycle17To20PitrEvidenceValid(evidence, {
               ...expectedBase,
-              scope: "cycle13-16",
-              graphScope: "CYCLES_13_TO_16",
-            } satisfies Cycle13To16PitrEvidenceExpectation)
-          : IS_CYCLE_9_TO_12
-            ? isCycle9To12PitrEvidenceValid(evidence, {
+              scope: "cycle17-20",
+              graphScope: "CYCLES_17_TO_20",
+            } satisfies Cycle17To20PitrEvidenceExpectation)
+          : IS_CYCLE_13_TO_16
+            ? isCycle13To16PitrEvidenceValid(evidence, {
                 ...expectedBase,
-                scope: "cycle9-12",
-                graphScope: "CYCLES_9_TO_12",
-              } satisfies Cycle9To12PitrEvidenceExpectation)
-            : isCycle5To8PitrEvidenceValid(evidence, {
-                ...expectedBase,
-                scope: "cycle5-8",
-                graphScope: ACTIVE_GRAPH_SCOPE,
-              } satisfies Cycle5To8PitrEvidenceExpectation);
+                scope: "cycle13-16",
+                graphScope: "CYCLES_13_TO_16",
+              } satisfies Cycle13To16PitrEvidenceExpectation)
+            : IS_CYCLE_9_TO_12
+              ? isCycle9To12PitrEvidenceValid(evidence, {
+                  ...expectedBase,
+                  scope: "cycle9-12",
+                  graphScope: "CYCLES_9_TO_12",
+                } satisfies Cycle9To12PitrEvidenceExpectation)
+              : isCycle5To8PitrEvidenceValid(evidence, {
+                  ...expectedBase,
+                  scope: "cycle5-8",
+                  graphScope: ACTIVE_GRAPH_SCOPE,
+                } satisfies Cycle5To8PitrEvidenceExpectation);
   if (!valid) {
     fail("geçerli, başarılı ve aynı çalışmaya bağlı PITR geri yükleme kanıtı gerekli");
   }
@@ -478,17 +518,20 @@ function readTarget(): Target | null {
         IS_CYCLE_13_TO_16 ||
         IS_CYCLE_17_TO_20 ||
         IS_CYCLE_21_TO_24 ||
-        IS_CYCLE_25_TO_28) &&
+        IS_CYCLE_25_TO_28 ||
+        IS_CYCLE_29_TO_32) &&
       educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).some((sequence) =>
-        IS_CYCLE_25_TO_28
-          ? !isEducationV2P1ACycle25To28ProductionAssignmentEnabled(sequence)
-          : IS_CYCLE_21_TO_24
-            ? !isEducationV2P1ACycle21To24ProductionAssignmentEnabled(sequence)
-            : IS_CYCLE_17_TO_20
-              ? !isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence)
-              : IS_CYCLE_13_TO_16
-                ? !isEducationV2P1ACycle13To16ProductionAssignmentEnabled(sequence)
-                : !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence),
+        IS_CYCLE_29_TO_32
+          ? !isEducationV2P1ACycle29To32ProductionAssignmentEnabled(sequence)
+          : IS_CYCLE_25_TO_28
+            ? !isEducationV2P1ACycle25To28ProductionAssignmentEnabled(sequence)
+            : IS_CYCLE_21_TO_24
+              ? !isEducationV2P1ACycle21To24ProductionAssignmentEnabled(sequence)
+              : IS_CYCLE_17_TO_20
+                ? !isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence)
+                : IS_CYCLE_13_TO_16
+                  ? !isEducationV2P1ACycle13To16ProductionAssignmentEnabled(sequence)
+                  : !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence),
       )
     ) {
       fail(`${ACTIVE_SCOPE_LABEL} için açık ürün sahibi yayın kapısı etkin değil`);
