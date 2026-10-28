@@ -991,7 +991,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     // unit cannot make an otherwise complete visible cycle look incomplete.
     await prisma.learningUnit.create({
       data: {
-        id: id(1200),
+        id: id(10_000),
         pathId: PATH_IDS.initial,
         code: "LEGACY_DRAFT_UNIT",
         title: "Eski taslak ünite",
