@@ -42,6 +42,8 @@ const curriculumSkillToStoredSkills: Readonly<Record<string, readonly string[]>>
   RC_SEQUENCE: ["RC_DETAIL"],
   RC_VOCABULARY_CONTEXT: ["RC_DETAIL"],
   RC_DATA_INTERPRETATION: ["RC_DETAIL"],
+  // Method-reading outcomes locate explicit tools, measurements, and procedure steps; inferential conclusions remain separate source targets.
+  RC_METHOD: ["RC_DETAIL"],
   RC_LIMITS: ["RC_INFERENCE"],
 };
 
