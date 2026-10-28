@@ -504,7 +504,7 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
       "IS_CYCLE_33_TO_36",
     );
     expect(seedScript).toContain(
-      "Its separate route-catalog decision remains closed until learner assignment is approved.",
+      "Cycle-specific exact release/commit approval gates graph preparation; learner assignment remains gated by its explicit source decision.",
     );
     expect(migrationGate).toContain("process.env.CYCLE3336_OPERATION?.trim()");
     expect(migrationGate).toContain("cycle3336Operation,");
