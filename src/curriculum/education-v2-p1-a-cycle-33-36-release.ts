@@ -52,3 +52,11 @@ export function isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence:
 export function educationV2P1ACycle33To36ProductionApproval(commit: string): string {
   return `I_HAVE_REVIEWED_EDUCATION_V2_P1_A_CYCLES_33_TO_36_PRODUCTION_RELEASE_${EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT.toUpperCase()}_AT_${commit.toUpperCase()}`;
 }
+
+export function educationV2P1ACycle33To36OrFallbackProductionApproval(
+  isCycle33To36: boolean,
+  commit: string,
+  fallback: () => string,
+): string {
+  return isCycle33To36 ? educationV2P1ACycle33To36ProductionApproval(commit) : fallback();
+}

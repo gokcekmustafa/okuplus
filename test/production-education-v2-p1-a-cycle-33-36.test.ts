@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assessOptionLengthQuality } from "../src/curriculum/option-length-quality.js";
 import {
   EDUCATION_V2_P1_A_CYCLE_33_36,
@@ -16,9 +16,13 @@ import {
   EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT,
   EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID,
   educationV2P1ACycle33To36ProductionApproval,
+  educationV2P1ACycle33To36OrFallbackProductionApproval,
   isEducationV2P1ACycle33To36ProductionAssignmentEnabled,
 } from "../src/curriculum/education-v2-p1-a-cycle-33-36-release.js";
-import { educationV2P1ACycle5To8ScopeSequences } from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
+import {
+  educationV2P1ACycle5To8ProductionApproval,
+  educationV2P1ACycle5To8ScopeSequences,
+} from "../src/curriculum/education-v2-p1-a-cycle-5-8-release.js";
 import { isEducationV2P1ACycle5To8SeedRequestAuthorized } from "../src/curriculum/education-v2-p1-a-cycle-5-8-seed-policy.js";
 import {
   CYCLE4_PITR_EXPECTED_RETENTION_SECONDS,
@@ -221,6 +225,24 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
     for (const sequence of [33, 34, 35, 36]) {
       expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence)).toBe(false);
     }
+  });
+
+  it("selects the Cycle 33–36 approval without evaluating the rejecting legacy fallback", () => {
+    const commit = "a".repeat(40);
+    const legacyFallback = vi.fn(() =>
+      educationV2P1ACycle5To8ProductionApproval("CYCLES_33_TO_36", commit),
+    );
+
+    expect(
+      educationV2P1ACycle33To36OrFallbackProductionApproval(true, commit, legacyFallback),
+    ).toBe(educationV2P1ACycle33To36ProductionApproval(commit));
+    expect(legacyFallback).not.toHaveBeenCalled();
+
+    const existingScopeFallback = vi.fn(() => "legacy-scope-approval");
+    expect(
+      educationV2P1ACycle33To36OrFallbackProductionApproval(false, commit, existingScopeFallback),
+    ).toBe("legacy-scope-approval");
+    expect(existingScopeFallback).toHaveBeenCalledOnce();
   });
 
   it("authorizes only the exact read-only plan scope and rejects applying without release approval", () => {

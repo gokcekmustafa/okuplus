@@ -59,7 +59,7 @@ import {
 } from "../src/curriculum/education-v2-p1-a-cycle-29-32-release.js";
 import {
   isEducationV2P1ACycle33To36ProductionAssignmentEnabled,
-  educationV2P1ACycle33To36ProductionApproval,
+  educationV2P1ACycle33To36OrFallbackProductionApproval,
   EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID,
 } from "../src/curriculum/education-v2-p1-a-cycle-33-36-release.js";
 import {
@@ -295,25 +295,29 @@ const BASE_ACTIVE_RELEASE_ID = IS_CYCLE_29_TO_32
 const ACTIVE_RELEASE_ID = IS_CYCLE_33_TO_36
   ? EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID
   : BASE_ACTIVE_RELEASE_ID;
-const BASE_ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_29_TO_32
-  ? educationV2P1ACycle29To32ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-  : IS_CYCLE_25_TO_28
-    ? educationV2P1ACycle25To28ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-    : IS_CYCLE_21_TO_24
-      ? educationV2P1ACycle21To24ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-      : IS_CYCLE_17_TO_20
-        ? educationV2P1ACycle17To20ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-        : IS_CYCLE_13_TO_16
-          ? educationV2P1ACycle13To16ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-          : IS_CYCLE_9_TO_12
-            ? educationV2P1ACycle9To12ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-            : educationV2P1ACycle5To8ProductionApproval(
-                ACTIVE_GRAPH_SCOPE,
-                ACTIVE_SOURCE_RELEASE_COMMIT,
-              );
-const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_33_TO_36
-  ? educationV2P1ACycle33To36ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
-  : BASE_ACTIVE_PRODUCTION_CONFIRMATION;
+const BASE_ACTIVE_PRODUCTION_CONFIRMATION = (): string => {
+  if (IS_CYCLE_29_TO_32)
+    return educationV2P1ACycle29To32ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  if (IS_CYCLE_25_TO_28)
+    return educationV2P1ACycle25To28ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  if (IS_CYCLE_21_TO_24)
+    return educationV2P1ACycle21To24ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  if (IS_CYCLE_17_TO_20)
+    return educationV2P1ACycle17To20ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  if (IS_CYCLE_13_TO_16)
+    return educationV2P1ACycle13To16ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  if (IS_CYCLE_9_TO_12)
+    return educationV2P1ACycle9To12ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT);
+  return educationV2P1ACycle5To8ProductionApproval(
+    ACTIVE_GRAPH_SCOPE,
+    ACTIVE_SOURCE_RELEASE_COMMIT,
+  );
+};
+const ACTIVE_PRODUCTION_CONFIRMATION = educationV2P1ACycle33To36OrFallbackProductionApproval(
+  IS_CYCLE_33_TO_36,
+  ACTIVE_SOURCE_RELEASE_COMMIT,
+  BASE_ACTIVE_PRODUCTION_CONFIRMATION,
+);
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
