@@ -189,31 +189,36 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
     expect(assessmentVersions).toHaveLength(4);
   });
 
-  it("links after station 192 while keeping the new source release closed", () => {
+  it("links after station 192 and approves only the Cycle 33–36 source release", () => {
     const routes = LEARNING_ROUTE_CYCLES.filter((route) => route.routeFamily === "A");
     const p0Steps = buildEducationV2P0LearningCycleManifest().steps.length;
     const stepsBefore33 = routes
       .filter((route) => route.sequence < 33)
       .reduce((count, route) => count + route.manifest.steps.length, p0Steps);
     expect(stepsBefore33).toBe(192);
+    const cycle32 = learningRouteCycle("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_32_G8_12");
+    expect(cycle32?.publicationApproved()).toBe(true);
+    expect(nextLearningRouteCycle(cycle32!.pathCode)?.sequence).toBe(33);
 
     for (const cycle of EDUCATION_V2_P1_A_CYCLE_33_36) {
       const route = learningRouteCycle(cycle.program.path.code);
       expect(route?.programId).toBe(cycle.program.programId);
       expect(route?.manifest).toBe(cycle.manifest);
-      expect(route?.authoringStatus).toBe("DRAFT_NOT_RELEASED");
-      expect(route?.publicationApproved()).toBe(false);
+      expect(route?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+      expect(route?.publicationApproved()).toBe(true);
       expect(matchesLearningRouteGraph(graphFor(cycle.sequence))).toBe(true);
       expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(cycle.sequence + 1);
     }
+    expect(EDUCATION_V2_P1_A_CYCLE_33_36_SEQUENCES).toEqual([33, 34, 35, 36]);
+    expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(37)).toBe(false);
   });
 
-  it("uses a distinct canonical content fingerprint and keeps assignment disabled", () => {
+  it("uses a distinct canonical fingerprint and an explicit owner decision only for Cycles 33–36", () => {
     expect(EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_DECISIONS).toEqual(
       [33, 34, 35, 36].map((sequence) => ({
         sequence,
-        status: "OWNER_RELEASE_REQUIRED",
-        explicitPublicationApproved: false,
+        status: "OWNER_RELEASE_APPROVED",
+        explicitPublicationApproved: true,
       })),
     );
     expect(EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT).toMatch(/^[a-f0-9]{64}$/u);
@@ -227,8 +232,10 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
       EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT.toUpperCase(),
     );
     for (const sequence of [33, 34, 35, 36]) {
-      expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence)).toBe(false);
+      expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence)).toBe(true);
     }
+    expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(32)).toBe(false);
+    expect(isEducationV2P1ACycle33To36ProductionAssignmentEnabled(37)).toBe(false);
   });
 
   it("selects the Cycle 33–36 approval without evaluating the rejecting legacy fallback", () => {
@@ -249,7 +256,7 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
     expect(existingScopeFallback).toHaveBeenCalledOnce();
   });
 
-  it("authorizes only the exact read-only plan scope and rejects applying without release approval", () => {
+  it("authorizes the exact plan scope and requires the release-bound owner approval for APPLY", () => {
     expect(educationV2P1ACycle5To8ScopeSequences("CYCLES_33_TO_36")).toEqual([33, 34, 35, 36]);
     const request = {
       dryRun: true,
@@ -284,7 +291,10 @@ describe("P1-A Cycles 33–36 (stations 193–212)", () => {
         (decision) =>
           decision.status === "OWNER_RELEASE_APPROVED" && decision.explicitPublicationApproved,
       ),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_DECISIONS.map((decision) => decision.sequence),
+    ).toEqual([33, 34, 35, 36]);
   });
 
   it("validates that every PLAN_ONLY report is no-write and matches its exact cycle package", () => {

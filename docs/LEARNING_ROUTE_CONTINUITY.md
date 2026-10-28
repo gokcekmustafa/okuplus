@@ -1,5 +1,23 @@
 # Öğrenme rotalarının devamlılığı
 
+## 28 Ekim 2026 — Cycle 33–36 yayın kararı
+
+Ürün sahibi, P1-A Cycle 33–36'nın (193–212. istasyonlar) öğrencilere
+açılmasını 28 Ekim 2026'da onayladı. Kaynak yayın kararı yalnızca 33, 34, 35
+ve 36. döngüleri kapsar; 37. ve sonraki döngüleri açmaz. Bu güncelleme kaynak
+kararını ve rota kataloğu görünürlüğünü eşler; yeni seed, migration veya üretim
+veritabanı yazması içermez.
+
+Cycle 33–36 üretim grafikleri daha önce korumalı yayın çalışması
+[#40701193032](https://github.com/gokcekmustafa/okuplus/actions/runs/40701193032)
+ile oluşturulmuş ve sonrasında `EXISTING` durumu ile grafik bütünlüğü, içerik,
+alıştırma, soru ve değerlendirme bağlantıları doğrulanmıştır. Kaynak onayı ve grafiğin
+varlığı geçiş servisinin ön koşullarıdır; Cycle 32'si tamamlanmış uygun bir
+öğrenci için 33. döngü ataması ancak güncel çalışma zamanı kodu bu iki koşulu
+da doğruladığında yapılır. Atama istasyonu otomatik açmaz; öğrenci 193. istasyona
+haritadan kendisi girer. Gerçek üretim öğrenci hesabıyla geçiş bu kod tesliminin
+kapsamında doğrulanmış sayılmaz.
+
 Öğrencinin ilk P1 rotasını mevcut ölçüm sözleşmesi seçer. İlk atama yalnızca
 `learning-route-catalog.ts` içindeki birinci döngülere yapılır. Daha sonraki
 döngüler aynı aile ve kapsam içindeki açık `nextPathCode` bağlantısını izler;
@@ -10,16 +28,17 @@ Her kaynak kaydı sürümü, üniteleri, değişken uzunluktaki istasyon dizisin
 yayın izni ve gerçek PUBLISHED veritabanı grafiği birlikte gereklidir. Veritabanı
 kayıtlarının yayımlanmış olması kaynak yayın izninin yerine geçmez.
 
-P1-A Cycle 4 ve Cycle 5 için ürün sahibi yayın izni verilmiştir. Cycle 4'ün
-beş istasyonu ve Cycle 5'in 53–57. istasyonları özgün OkuPratik içeriğidir;
-dış kaynakla doğrulanmış gibi sayılmaz. Cycle 5'in kaynak/provenance durumu
-`ORIGINAL_AUTHORING` ve `REVIEW_REQUIRED` olarak korunur. Kaynak onayı yalnızca
-katalog kapısını açar: ilgili döngünün eksiksiz ve manifestle aynı
-`PUBLISHED` veritabanı grafiği doğrulanana kadar istasyon açılamaz ve geçiş
-servisi atama yapmamalıdır. Cycle 4 dışındaki sonraki genişleme döngüleri
-(Cycle 6–8 dâhil) ayrıca yayın onayı bekler.
+Cycle 4'ün beş istasyonu ve Cycle 5'in 53–57. istasyonları özgün OkuPratik
+içeriğidir; dış kaynakla doğrulanmış gibi sayılmaz. Cycle 5'in
+kaynak/provenance durumu `ORIGINAL_AUTHORING` ve `REVIEW_REQUIRED` olarak
+korunur. Bu tarihsel içerik/provenance bilgisi sonraki ürün sahibi yayın
+kararlarını veya üretimde doğrulanmış grafikleri değiştirmez. Her döngü için
+öğrenci geçişi hem açık kaynak yayın kararını hem de manifestle aynı, eksiksiz
+`PUBLISHED` grafiği gerektirir.
 
-## Gerçek içerik kapsamı
+## 18 Ekim 2026 tarihli QA anlık görüntüsü (tarihsel; güncel canlı durum değildir)
+
+### Gerçek içerik kapsamı — 18 Ekim 2026 anlık görüntüsü
 
 | Rota      | Hazırlanmış toplam | Kaynakta yayın onaylı (üretim ayrı) | Kaynak kanıtlı taslak | Kaynak nitelikli toplam | Kaynak incelemesi gereken | 200 kaynaklı hedefe kalan | Tüm taslaklar dahil kalan | Son aday döngü |
 | --------- | -----------------: | ----------------------------------: | --------------------: | ----------------------: | ------------------------: | ------------------------: | ------------------------: | -------------- |
@@ -35,15 +54,13 @@ taslaklar birlikte) kaynak nitelikli sayılır. 55 taslak istasyon için kaynak
 incelemesi/kanıtı eksiktir. Bu nedenle 800 kaynak nitelikli istasyon hedefine
 180 istasyon kalır; tüm yazılmış taslakları sayan salt authored açığı 125'tir.
 İki sayı birbirinin yerine kullanılmamalıdır.
-Bu sayımlar kaynak manifesti/katalog kapsamıdır, üretimde yayımlanmış grafik
-sayısı değildir. A Cycle 6–8, Cycle 13–34 ve B/C/D Cycle 3–33 zincirleri
-`DRAFT_NOT_RELEASED` ve yayına kapalıdır. Cycle 5 kaynakta yayın onaylıdır,
-ancak son doğrulanmış planında grafiği üretimde `MISSING` ve öğrenci ataması
-yoktur. Cycle 4'ün 48–52 grafiği mevcut üretim rotasında yer alır; bu çalışma
-onu veya geçmiş öğrenci ilerlemesini değiştirmez.
+Bu sayımlar ve hemen önceki paragraftaki yayın/graph notları 18 Ekim 2026 QA
+anlık görüntüsünü anlatır; güncel katalog veya canlı üretim durumu olarak
+kullanılmamalıdır. Üretim grafiği durumu her zaman tarihli korumalı denetim
+kanıtıyla doğrulanır.
 
-18 Ekim tablosu tarihli QA anlık görüntüsüdür. 24 Ekim 2026'da Cycle 5 ve
-Cycle 9–12 için kaynakta ürün sahibi yayın izni kaydedilmiştir. Bu kararlar
+24 Ekim 2026'da Cycle 5 ve Cycle 9–12 için kaynakta ürün sahibi yayın izni
+kaydedilmiştir. Bu kararlar
 kaynak/provenance durumunu değiştirmez ve ilgili grafiklerin üretimde bulunduğunu
 kanıtlamaz. Cycle 9–12 (73–92. istasyonlar) kararı yalnızca kaynak yayın kapısını açar;
 üretim grafiğinin varlığını kanıtlamaz. Grafikler doğrulanana kadar bu adımlar

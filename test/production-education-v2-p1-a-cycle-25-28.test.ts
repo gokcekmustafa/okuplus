@@ -457,7 +457,7 @@ describe("P1-A Cycles 25–28 (stations 153–172)", () => {
     expect(answerPositions.every((count) => count >= 13 && count <= 17)).toBe(true);
   });
 
-  it("links the exact 153–172 graph after Cycle 24 and keeps Cycle 33 unreleased", () => {
+  it("links the exact 153–172 graph after Cycle 24 and recognizes the later Cycle 33 approval", () => {
     const prior = learningRouteCycle("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_24_G8_12");
     expect(prior).toBeDefined();
     expect(nextLearningRouteCycle(prior!.pathCode)?.sequence).toBe(25);
@@ -480,7 +480,8 @@ describe("P1-A Cycles 25–28 (stations 153–172)", () => {
     const cycle33 = LEARNING_ROUTE_CYCLES.find(
       (route) => route.routeFamily === "A" && route.sequence === 33,
     );
-    expect(cycle33?.publicationApproved()).toBe(false);
+    expect(cycle33?.publicationApproved()).toBe(true);
+    expect(cycle33?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
   });
 
   it("uses a separate content-addressed release and enables only Cycles 25–28", () => {

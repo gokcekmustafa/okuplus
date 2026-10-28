@@ -298,8 +298,8 @@ describe("versioned learning routes", () => {
       {
         route: "A",
         authored: 220,
-        releaseApprovedSource: 160,
-        sourceVerifiedDraft: 50,
+        releaseApprovedSource: 180,
+        sourceVerifiedDraft: 30,
         sourceQualified: 210,
         reviewRequired: 10,
         sourceRemaining: 0,
@@ -533,13 +533,21 @@ describe("versioned learning routes", () => {
     expect(a[31]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[31]!.manifest.completion.nextCycle).toBe("REVIEW_REQUIRED");
     expect(nextLearningRouteCycle(a[31]!.pathCode)).toBe(a[32]);
-    expect(a[32]!.publicationApproved()).toBe(false);
+    expect(a[32]!.publicationApproved()).toBe(true);
+    expect(a[32]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[32]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
     expect(nextLearningRouteCycle(a[32]!.pathCode)).toBe(a[33]);
-    expect(a[33]!.publicationApproved()).toBe(false);
+    expect(a[33]!.publicationApproved()).toBe(true);
+    expect(a[33]!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     expect(a[33]!.manifest.completion.nextCycle).toBe("ASSIGN_NEXT");
+    for (const cycle of a.slice(34, 36)) {
+      expect(cycle.publicationApproved()).toBe(true);
+      expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    }
+    expect(a[36]!.publicationApproved()).toBe(false);
+    expect(a[36]!.authoringStatus).toBe("DRAFT_NOT_RELEASED");
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 32);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 36);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||

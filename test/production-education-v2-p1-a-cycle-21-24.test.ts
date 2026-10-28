@@ -438,7 +438,7 @@ describe("P1-A Cycles 21–24 (stations 133–152)", () => {
     expect(answerPositions.every((count) => count >= 14 && count <= 16)).toBe(true);
   });
 
-  it("links cycles 21–24 to the exact 133–152 route graph and leaves Cycle 33 locked", () => {
+  it("links cycles 21–24 to the exact 133–152 route graph and recognizes the later Cycle 33 approval", () => {
     const prior = learningRouteCycle("EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_20_G8_12");
     expect(prior).toBeDefined();
     expect(nextLearningRouteCycle(prior!.pathCode)?.sequence).toBe(21);
@@ -456,7 +456,8 @@ describe("P1-A Cycles 21–24 (stations 133–152)", () => {
       (route) => route.routeFamily === "A" && route.sequence === 33,
     );
     expect(cycle33).toBeDefined();
-    expect(cycle33!.publicationApproved()).toBe(false);
+    expect(cycle33!.publicationApproved()).toBe(true);
+    expect(cycle33!.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
   });
 
   it("uses a distinct immutable release identity and explicit owner decision for only Cycles 21–24", () => {

@@ -32,12 +32,12 @@ export const EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT = createHash("sha
   .digest("hex");
 export const EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID = `OKU-EDUCATION-V2-P1-A-CYCLE-33-36@v1:${EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_FINGERPRINT}`;
 
-/** Keep student assignment closed until the owner explicitly approves this release. */
+/** Only the explicitly approved Cycle 33–36 decisions enable student assignment. */
 export const EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_DECISIONS: readonly EducationV2P1ACycle33To36ReleaseDecision[] =
   EDUCATION_V2_P1_A_CYCLE_33_36_SEQUENCES.map((sequence) => ({
     sequence,
-    status: "OWNER_RELEASE_REQUIRED",
-    explicitPublicationApproved: false,
+    status: "OWNER_RELEASE_APPROVED",
+    explicitPublicationApproved: true,
   }));
 
 export function isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence: number): boolean {

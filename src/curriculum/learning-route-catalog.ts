@@ -343,7 +343,9 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
       title: preparedA33To36.program.path.title,
       units: preparedA33To36.program.path.units,
       manifest: preparedA33To36.manifest,
-      authoringStatus: "DRAFT_NOT_RELEASED" as const,
+      authoringStatus: publicationApproved()
+        ? ("OWNER_RELEASE_APPROVED" as const)
+        : ("DRAFT_NOT_RELEASED" as const),
       publicationApproved,
     };
   }
