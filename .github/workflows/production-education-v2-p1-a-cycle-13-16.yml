@@ -199,6 +199,24 @@ jobs:
           npx --no-install tsx scripts/verify-cycle13-16-pitr-evidence.ts
           echo "PITR_RESTORE_EVIDENCE=PASS" >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Store Cycle 13–16 PITR evidence before cleanup
+        id: store-pitr-evidence
+        if: ${{ inputs.operation == 'APPLY' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitr-evidence-cycle13-16-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CYCLE_PITR_EVIDENCE_PATH }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Delete only this run's verified Cycle 13–16 PITR branch
+        if: ${{ inputs.operation == 'APPLY' && steps.store-pitr-evidence.outcome == 'success' }}
+        env:
+          NEON_MANAGEMENT_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PITR_EVIDENCE_ARTIFACT_URL: ${{ steps.store-pitr-evidence.outputs.artifact-url }}
+        shell: bash
+        run: npx --no-install tsx scripts/verified-cycle-pitr-branch-cleanup.ts
+
       - name: Apply only missing Cycle 13–16 graphs
         if: ${{ inputs.operation == 'APPLY' }}
         shell: bash

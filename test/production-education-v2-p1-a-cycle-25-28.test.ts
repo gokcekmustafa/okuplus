@@ -597,7 +597,7 @@ describe("P1-A Cycles 25–28 (stations 153–172)", () => {
     };
     const evidence = {
       status: "PASS",
-      schemaVersion: 9,
+      schemaVersion: 10,
       pitrScope: "cycle25-28",
       graphScope: "CYCLES_25_TO_28",
       projectId: CYCLE4_PITR_PROJECT_ID,
@@ -621,12 +621,14 @@ describe("P1-A Cycles 25–28 (stations 153–172)", () => {
       },
       targetBranch: {
         id: targetBranchId,
+        name: "okupratik-cycle25-28-pitr-12345-attempt-1",
         projectId: CYCLE4_PITR_PROJECT_ID,
         parentId: CYCLE4_PITR_SOURCE_BRANCH_ID,
         parentTimestamp,
         default: false,
         state: "ready",
         annotationMatchesRun: true,
+        annotationMatchesRunAttempt: true,
         endpointBranchId: targetBranchId,
         endpointId: "ep-isolated-test",
         endpointType: "read_write",

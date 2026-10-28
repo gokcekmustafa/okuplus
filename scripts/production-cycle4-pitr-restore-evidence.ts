@@ -62,6 +62,14 @@ export type Cycle29To32PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation &
   scope: "cycle29-32";
   graphScope: "CYCLES_29_TO_32";
 };
+export type CyclePitrCleanupScope =
+  | "cycle5-8"
+  | "cycle9-12"
+  | "cycle13-16"
+  | "cycle17-20"
+  | "cycle21-24"
+  | "cycle25-28"
+  | "cycle29-32";
 export type Cycle4PitrFailureRecord = {
   stage: string;
   endpoint: string | null;
@@ -133,6 +141,17 @@ export function cycle4PitrCompareSchemaEndpoint(projectId: string, branchId: str
   return `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/compare_schema`;
 }
 
+export function cyclePitrTemporaryBranchName(
+  scope: CyclePitrCleanupScope,
+  runId: string,
+  runAttempt: string,
+): string {
+  if (!/^\d+$/u.test(runId) || !/^[1-9]\d*$/u.test(runAttempt)) {
+    throw new Error("invalid workflow run identity for PITR branch name");
+  }
+  return `okupratik-${scope}-pitr-${runId}-attempt-${runAttempt}`;
+}
+
 export function cycle4PitrCompareSchemaRequest(input: {
   projectId: string;
   targetBranchId: string;
@@ -186,7 +205,7 @@ export function isCycle5To8PitrEvidenceValid(
   expected: Cycle5To8PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle5-8", 4) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle5-8", 5) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -197,7 +216,7 @@ export function isCycle9To12PitrEvidenceValid(
   expected: Cycle9To12PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle9-12", 5) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle9-12", 6) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -208,7 +227,7 @@ export function isCycle13To16PitrEvidenceValid(
   expected: Cycle13To16PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle13-16", 6) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle13-16", 7) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -219,7 +238,7 @@ export function isCycle17To20PitrEvidenceValid(
   expected: Cycle17To20PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle17-20", 7) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle17-20", 8) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -230,7 +249,7 @@ export function isCycle21To24PitrEvidenceValid(
   expected: Cycle21To24PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle21-24", 8) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle21-24", 9) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -241,7 +260,7 @@ export function isCycle25To28PitrEvidenceValid(
   expected: Cycle25To28PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle25-28", 9) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle25-28", 10) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -252,7 +271,7 @@ export function isCycle29To32PitrEvidenceValid(
   expected: Cycle29To32PitrEvidenceExpectation,
 ): boolean {
   return (
-    isPitrEvidenceValidForScope(value, expected, "cycle29-32", 10) &&
+    isPitrEvidenceValidForScope(value, expected, "cycle29-32", 11) &&
     isRecord(value) &&
     value.graphScope === expected.graphScope
   );
@@ -270,7 +289,7 @@ function isPitrEvidenceValidForScope(
     | "cycle21-24"
     | "cycle25-28"
     | "cycle29-32",
-  schemaVersion: 2 | 4 | 5 | 6 | 7 | 8 | 9 | 10,
+  schemaVersion: 2 | 5 | 6 | 7 | 8 | 9 | 10 | 11,
 ): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
@@ -324,6 +343,10 @@ function isPitrEvidenceValidForScope(
     targetRecord.default === false &&
     targetRecord.state === "ready" &&
     targetRecord.annotationMatchesRun === true &&
+    (scope === "cycle4" ||
+      (targetRecord.name ===
+        cyclePitrTemporaryBranchName(scope, expected.runId, expected.runAttempt) &&
+        targetRecord.annotationMatchesRunAttempt === true)) &&
     targetRecord.endpointBranchId === targetRecord.id &&
     typeof targetRecord.endpointId === "string" &&
     targetRecord.endpointType === "read_write" &&
@@ -885,18 +908,18 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       pitrScope === "cycle4"
         ? 2
         : pitrScope === "cycle5-8"
-          ? 4
+          ? 5
           : pitrScope === "cycle9-12"
-            ? 5
+            ? 6
             : pitrScope === "cycle13-16"
-              ? 6
+              ? 7
               : pitrScope === "cycle17-20"
-                ? 7
+                ? 8
                 : pitrScope === "cycle21-24"
-                  ? 8
+                  ? 9
                   : pitrScope === "cycle25-28"
-                    ? 9
-                    : 10,
+                    ? 10
+                    : 11,
     pitrScope,
     ...(pitrScope !== "cycle4" ? { graphScope } : {}),
     status: "FAIL",
@@ -1078,7 +1101,10 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     };
 
     stage = "PITR branch";
-    const targetName = `okupratik-${pitrScope}-pitr-${run.runId}`;
+    const targetName =
+      pitrScope === "cycle4"
+        ? `okupratik-${pitrScope}-pitr-${run.runId}`
+        : cyclePitrTemporaryBranchName(pitrScope as CyclePitrCleanupScope, run.runId, run.attempt);
     const branchesPayload = record(
       await neonRequest<unknown>(
         apiKey,
@@ -1135,6 +1161,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
           annotation_value: {
             purpose: `${pitrScope}-pitr-restore-validation`,
             github_run_id: run.runId,
+            ...(pitrScope !== "cycle4" ? { github_run_attempt: run.attempt } : {}),
             github_sha: run.sha,
           },
         },
@@ -1206,6 +1233,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     if (
       annotationValue.purpose !== `${pitrScope}-pitr-restore-validation` ||
       annotationValue.github_run_id !== run.runId ||
+      (pitrScope !== "cycle4" && annotationValue.github_run_attempt !== run.attempt) ||
       annotationValue.github_sha !== run.sha
     ) {
       throw responseShapeError(
@@ -1250,6 +1278,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       endpointType: endpoint.type,
       endpointState: endpoint.current_state,
       annotationMatchesRun: true,
+      ...(pitrScope !== "cycle4" ? { annotationMatchesRunAttempt: true } : {}),
       isolatedFromProduction: target.id !== source.id && target.default === false,
     };
 

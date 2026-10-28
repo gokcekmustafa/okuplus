@@ -24,6 +24,7 @@ import {
   CYCLE4_PITR_PROJECT_ID,
   CYCLE4_PITR_REQUIRED_TABLES,
   CYCLE4_PITR_SOURCE_BRANCH_ID,
+  cyclePitrTemporaryBranchName,
   cycle4PitrCompareSchemaEndpoint,
   cycle4PitrCompareSchemaRequest,
   cycle4PitrFailureRecord,
@@ -402,7 +403,17 @@ describe("P1-A Cycle 4 authored program", () => {
     expect(isCycle4PitrEvidenceValid(legacyCycle4Evidence, expected)).toBe(true);
     expect(
       isCycle5To8PitrEvidenceValid(
-        { ...evidence, schemaVersion: 4, pitrScope: "cycle5-8", graphScope: "CYCLE_5_ONLY" },
+        {
+          ...evidence,
+          schemaVersion: 5,
+          pitrScope: "cycle5-8",
+          graphScope: "CYCLE_5_ONLY",
+          targetBranch: {
+            ...evidence.targetBranch,
+            name: cyclePitrTemporaryBranchName("cycle5-8", expected.runId, expected.runAttempt),
+            annotationMatchesRunAttempt: true,
+          },
+        },
         { ...expected, scope: "cycle5-8", graphScope: "CYCLE_5_ONLY" },
       ),
     ).toBe(true);
