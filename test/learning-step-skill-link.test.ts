@@ -3,6 +3,11 @@ import {
   EDUCATION_V2_P1_A_CYCLE_5_8,
   EDUCATION_V2_P1_A_CYCLE_9_12,
   EDUCATION_V2_P1_A_CYCLE_13_16,
+  EDUCATION_V2_P1_A_CYCLE_17_20,
+  EDUCATION_V2_P1_A_CYCLE_21_24,
+  EDUCATION_V2_P1_A_CYCLE_25_28,
+  EDUCATION_V2_P1_A_CYCLE_29_32,
+  EDUCATION_V2_P1_A_CYCLE_33_36,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
 import {
   buildSeedLearningSkillContext,
@@ -119,6 +124,7 @@ describe("learning-step skill links", () => {
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_SYNTHESIS")).toBe("RC_INFERENCE");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_DATA_INTERPRETATION")).toBe("RC_DETAIL");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CLASSIFICATION")).toBe("RC_DETAIL");
+    expect(mapCurriculumSkillCodeToStoredSkillCode("RC_METHOD")).toBe("RC_DETAIL");
     expect(
       mapCurriculumSkillCodesToStoredSkillCodes(["RC_RELATION", "RC_CONNECTOR", "RC_RELATION"]),
     ).toEqual({ storedSkillCodes: ["RC_INFERENCE", "RC_DETAIL"], unmappedSkillCodes: [] });
@@ -131,12 +137,50 @@ describe("learning-step skill links", () => {
     expect(singleStoredSkillCodeForOutcome(["RC_CLAIM_EVIDENCE"])).toBeNull();
   });
 
-  it("covers the authored A-route skill vocabulary through Cycle 16 without inventing mappings", () => {
+  it("maps method-reading without collapsing its other source targets", () => {
+    const methodOutcome = {
+      key: "cycle34-current-survey",
+      targetSkillCodes: ["RC_SEQUENCE", "RC_DETAIL", "RC_METHOD", "RC_INFERENCE"],
+    };
+    expect(mapCurriculumSkillCodesToStoredSkillCodes(methodOutcome.targetSkillCodes)).toEqual({
+      storedSkillCodes: ["RC_DETAIL", "RC_INFERENCE"],
+      unmappedSkillCodes: [],
+    });
+    expect(singleStoredSkillCodeForOutcome(["RC_METHOD"])).toBe("RC_DETAIL");
+    expect(
+      buildSeedLearningSkillContext({
+        outcomes: [{ key: methodOutcome.key, targetSkillCodes: ["RC_METHOD"] }],
+        steps: [{ key: "step", learningOutcomeKeys: [methodOutcome.key], contentKey: "passage" }],
+        skillIdByCode: new Map([["RC_DETAIL", "skill-detail"]]),
+        exerciseContentKeyByKey: new Map(),
+        assessmentExerciseKeyByKey: new Map(),
+      }).skillIdsByContentKey,
+    ).toEqual(new Map([["passage", ["skill-detail"]]]));
+    expect(
+      mapCurriculumSkillCodesToStoredSkillCodes(["RC_METHOD", "RC_UNREVIEWED_TARGET"]),
+    ).toEqual({ storedSkillCodes: ["RC_DETAIL"], unmappedSkillCodes: ["RC_UNREVIEWED_TARGET"] });
+  });
+
+  it("covers the authored A-route skill vocabulary through Cycle 36 without inventing mappings", () => {
     const cycles = [
       ...EDUCATION_V2_P1_A_CYCLE_5_8,
       ...EDUCATION_V2_P1_A_CYCLE_9_12,
       ...EDUCATION_V2_P1_A_CYCLE_13_16,
+      ...EDUCATION_V2_P1_A_CYCLE_17_20,
+      ...EDUCATION_V2_P1_A_CYCLE_21_24,
+      ...EDUCATION_V2_P1_A_CYCLE_25_28,
+      ...EDUCATION_V2_P1_A_CYCLE_29_32,
+      ...EDUCATION_V2_P1_A_CYCLE_33_36,
     ];
+    const cycle34Survey = EDUCATION_V2_P1_A_CYCLE_33_36.find(
+      (cycle) => cycle.sequence === 34,
+    )?.sourceCycle.sourceStations.find((station) =>
+      station.key.includes("A34_COMMON_CURRENT_SURVEY"),
+    );
+    expect(cycle34Survey?.skillCodes).toEqual(["RC_SEQUENCE", "RC_DETAIL", "RC_METHOD"]);
+    expect(cycle34Survey?.outcome).toBe(
+      "Akıntı ölçümünde ses dalgası, yansıyan parçacık ve veri çözümleme adımlarını sıralar.",
+    );
     const sourceSkillCodes = [
       ...new Set(
         cycles.flatMap((cycle) =>
