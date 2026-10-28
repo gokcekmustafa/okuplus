@@ -66,6 +66,10 @@ export type Cycle33To36PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation &
   scope: "cycle33-36";
   graphScope: "CYCLES_33_TO_36";
 };
+export type Cycle37To40PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & {
+  scope: "cycle37-40";
+  graphScope: "CYCLES_37_TO_40";
+};
 export type CyclePitrCleanupScope =
   | "cycle5-8"
   | "cycle9-12"
@@ -74,7 +78,8 @@ export type CyclePitrCleanupScope =
   | "cycle21-24"
   | "cycle25-28"
   | "cycle29-32"
-  | "cycle33-36";
+  | "cycle33-36"
+  | "cycle37-40";
 export type Cycle4PitrFailureRecord = {
   stage: string;
   endpoint: string | null;
@@ -293,6 +298,17 @@ export function isCycle33To36PitrEvidenceValid(
   );
 }
 
+export function isCycle37To40PitrEvidenceValid(
+  value: unknown,
+  expected: Cycle37To40PitrEvidenceExpectation,
+): boolean {
+  return (
+    isPitrEvidenceValidForScope(value, expected, "cycle37-40", 13) &&
+    isRecord(value) &&
+    value.graphScope === expected.graphScope
+  );
+}
+
 function isPitrEvidenceValidForScope(
   value: unknown,
   expected: Cycle4PitrEvidenceExpectation,
@@ -305,8 +321,9 @@ function isPitrEvidenceValidForScope(
     | "cycle21-24"
     | "cycle25-28"
     | "cycle29-32"
-    | "cycle33-36",
-  schemaVersion: 2 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12,
+    | "cycle33-36"
+    | "cycle37-40",
+  schemaVersion: 2 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13,
 ): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
@@ -870,12 +887,14 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     pitrScope !== "cycle21-24" &&
     pitrScope !== "cycle25-28" &&
     pitrScope !== "cycle29-32" &&
-    pitrScope !== "cycle33-36"
+    pitrScope !== "cycle33-36" &&
+    pitrScope !== "cycle37-40"
   ) {
     throw safeError("preflight", "unsupported PITR scope");
   }
   const graphScope =
     process.env.CYCLE3336_GRAPH_SCOPE?.trim() ??
+    process.env.CYCLE3740_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE2932_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE2528_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE2124_GRAPH_SCOPE?.trim() ??
@@ -907,6 +926,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
   if (pitrScope === "cycle33-36" && graphScope !== "CYCLES_33_TO_36") {
     throw safeError("preflight", "unsupported Cycle 33–36 graph scope");
   }
+  if (pitrScope === "cycle37-40" && graphScope !== "CYCLES_37_TO_40") {
+    throw safeError("preflight", "unsupported Cycle 37–40 graph scope");
+  }
   const evidencePath =
     process.env.CYCLE_PITR_EVIDENCE_PATH?.trim() ||
     (pitrScope === "cycle4"
@@ -925,7 +947,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                   ? process.env.CYCLE2528_PITR_EVIDENCE_PATH?.trim()
                   : pitrScope === "cycle29-32"
                     ? process.env.CYCLE2932_PITR_EVIDENCE_PATH?.trim()
-                    : process.env.CYCLE3336_PITR_EVIDENCE_PATH?.trim());
+                    : pitrScope === "cycle33-36"
+                      ? process.env.CYCLE3336_PITR_EVIDENCE_PATH?.trim()
+                      : process.env.CYCLE3740_PITR_EVIDENCE_PATH?.trim());
   if (!evidencePath) throw safeError("evidence output", "PITR evidence path is required");
   const evidence: JsonRecord = {
     schemaVersion:
@@ -945,7 +969,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                     ? 10
                     : pitrScope === "cycle29-32"
                       ? 11
-                      : 12,
+                      : pitrScope === "cycle33-36"
+                        ? 12
+                        : 13,
     pitrScope,
     ...(pitrScope !== "cycle4" ? { graphScope } : {}),
     status: "FAIL",
@@ -976,6 +1002,7 @@ async function runPitrEvidence(): Promise<JsonRecord> {
         process.env.CYCLE2124_OPERATION ??
         process.env.CYCLE2932_OPERATION ??
         process.env.CYCLE3336_OPERATION ??
+        process.env.CYCLE3740_OPERATION ??
         process.env.CYCLE2528_OPERATION) !== "APPLY"
     ) {
       throw safeError(stage, "protected manual master APPLY workflow gate did not match");
@@ -1005,7 +1032,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                       ? "EDUCATION_V2_P1_A_CYCLE_25_28_PRODUCTION_DATABASE_URL"
                       : pitrScope === "cycle29-32"
                         ? "EDUCATION_V2_P1_A_CYCLE_29_32_PRODUCTION_DATABASE_URL"
-                        : "EDUCATION_V2_P1_A_CYCLE_33_36_PRODUCTION_DATABASE_URL"
+                        : pitrScope === "cycle33-36"
+                          ? "EDUCATION_V2_P1_A_CYCLE_33_36_PRODUCTION_DATABASE_URL"
+                          : "EDUCATION_V2_P1_A_CYCLE_37_40_PRODUCTION_DATABASE_URL"
       ]?.trim();
     const approvedFingerprint =
       process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT?.trim().toLowerCase();

@@ -11,6 +11,7 @@ import {
   isCycle25To28PitrEvidenceValid,
   isCycle29To32PitrEvidenceValid,
   isCycle33To36PitrEvidenceValid,
+  isCycle37To40PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
   type Cycle9To12PitrEvidenceExpectation,
   type Cycle13To16PitrEvidenceExpectation,
@@ -19,6 +20,7 @@ import {
   type Cycle25To28PitrEvidenceExpectation,
   type Cycle29To32PitrEvidenceExpectation,
   type Cycle33To36PitrEvidenceExpectation,
+  type Cycle37To40PitrEvidenceExpectation,
   type CyclePitrCleanupScope,
 } from "./production-cycle4-pitr-restore-evidence.js";
 
@@ -81,6 +83,13 @@ const scopeDetails = {
     graphScopeVariable: "CYCLE3336_GRAPH_SCOPE",
     evidencePathVariable: "CYCLE3336_PITR_EVIDENCE_PATH",
   },
+  "cycle37-40": {
+    graphScope: ["CYCLES_37_TO_40"],
+    workflow: "Manual Education V2 P1-A Cycles 37–40 production provision",
+    operationVariable: "CYCLE3740_OPERATION",
+    graphScopeVariable: "CYCLE3740_GRAPH_SCOPE",
+    evidencePathVariable: "CYCLE3740_PITR_EVIDENCE_PATH",
+  },
 } as const satisfies Record<
   CyclePitrCleanupScope,
   {
@@ -104,7 +113,8 @@ export type CyclePitrCleanupExpectation =
   | (Cycle21To24PitrEvidenceExpectation & PitrCleanupStorageExpectation)
   | (Cycle25To28PitrEvidenceExpectation & PitrCleanupStorageExpectation)
   | (Cycle29To32PitrEvidenceExpectation & PitrCleanupStorageExpectation)
-  | (Cycle33To36PitrEvidenceExpectation & PitrCleanupStorageExpectation);
+  | (Cycle33To36PitrEvidenceExpectation & PitrCleanupStorageExpectation)
+  | (Cycle37To40PitrEvidenceExpectation & PitrCleanupStorageExpectation);
 
 type CleanupIdentity = Pick<
   CyclePitrCleanupExpectation,
@@ -133,6 +143,8 @@ function createCleanupExpectation(
       return { ...identity, scope, graphScope: "CYCLES_29_TO_32" };
     case "cycle33-36":
       return { ...identity, scope, graphScope: "CYCLES_33_TO_36" };
+    case "cycle37-40":
+      return { ...identity, scope, graphScope: "CYCLES_37_TO_40" };
   }
 }
 
@@ -256,6 +268,8 @@ function evidencePassesScopeValidator(
       return isCycle29To32PitrEvidenceValid(evidence, expected);
     case "cycle33-36":
       return isCycle33To36PitrEvidenceValid(evidence, expected);
+    case "cycle37-40":
+      return isCycle37To40PitrEvidenceValid(evidence, expected);
   }
 }
 

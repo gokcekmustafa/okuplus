@@ -298,8 +298,8 @@ describe("versioned learning routes", () => {
       {
         route: "A",
         authored: 220,
-        releaseApprovedSource: 180,
-        sourceVerifiedDraft: 30,
+        releaseApprovedSource: 200,
+        sourceVerifiedDraft: 10,
         sourceQualified: 210,
         reviewRequired: 10,
         sourceRemaining: 0,
@@ -544,10 +544,14 @@ describe("versioned learning routes", () => {
       expect(cycle.publicationApproved()).toBe(true);
       expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     }
-    expect(a[36]!.publicationApproved()).toBe(false);
-    expect(a[36]!.authoringStatus).toBe("DRAFT_NOT_RELEASED");
+    for (const cycle of a.slice(36, 40)) {
+      expect(cycle.publicationApproved()).toBe(true);
+      expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    }
+    expect(a[40]!.publicationApproved()).toBe(false);
+    expect(a[40]!.authoringStatus).toBe("DRAFT_NOT_RELEASED");
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 36);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 40);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
@@ -556,7 +560,8 @@ describe("versioned learning routes", () => {
           (a[index]!.sequence >= 21 && a[index]!.sequence < 24) ||
           (a[index]!.sequence >= 25 && a[index]!.sequence < 28) ||
           (a[index]!.sequence >= 29 && a[index]!.sequence < 32) ||
-          (a[index]!.sequence >= 33 && a[index]!.sequence < 36)
+          (a[index]!.sequence >= 33 && a[index]!.sequence < 36) ||
+          (a[index]!.sequence >= 37 && a[index]!.sequence < 40)
           ? "ASSIGN_NEXT"
           : "REVIEW_REQUIRED",
       );

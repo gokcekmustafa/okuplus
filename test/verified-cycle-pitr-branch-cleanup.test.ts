@@ -237,6 +237,9 @@ describe("verified PITR temporary-branch cleanup", () => {
     expect(cyclePitrTemporaryBranchName("cycle33-36", runId, runAttempt)).toBe(
       `okupratik-cycle33-36-pitr-${runId}-attempt-${runAttempt}`,
     );
+    expect(cyclePitrTemporaryBranchName("cycle37-40", runId, runAttempt)).toBe(
+      `okupratik-cycle37-40-pitr-${runId}-attempt-${runAttempt}`,
+    );
     expect(isPitrEvidenceArtifactUrlValid(expected.artifactUrl, repository, runId)).toBe(true);
     expect(isPitrEvidenceArtifactUrlValid(expected.artifactUrl, repository, "99999")).toBe(false);
     expect(
