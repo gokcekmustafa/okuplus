@@ -58,6 +58,11 @@ import {
   EDUCATION_V2_P1_A_CYCLE_29_32_RELEASE_ID,
 } from "../src/curriculum/education-v2-p1-a-cycle-29-32-release.js";
 import {
+  isEducationV2P1ACycle33To36ProductionAssignmentEnabled,
+  educationV2P1ACycle33To36ProductionApproval,
+  EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID,
+} from "../src/curriculum/education-v2-p1-a-cycle-33-36-release.js";
+import {
   educationV2P1ACycle5To8AnswerKey,
   getEducationV2P1ACycle,
   p1ACycle5To8AssessmentId,
@@ -87,6 +92,7 @@ import {
   isCycle21To24PitrEvidenceValid,
   isCycle25To28PitrEvidenceValid,
   isCycle29To32PitrEvidenceValid,
+  isCycle33To36PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
   type Cycle9To12PitrEvidenceExpectation,
   type Cycle13To16PitrEvidenceExpectation,
@@ -94,10 +100,12 @@ import {
   type Cycle21To24PitrEvidenceExpectation,
   type Cycle25To28PitrEvidenceExpectation,
   type Cycle29To32PitrEvidenceExpectation,
+  type Cycle33To36PitrEvidenceExpectation,
 } from "./production-cycle4-pitr-restore-evidence.js";
 
 const ACTIVE_SEQUENCE = Number(
-  process.env.CYCLE2932_SEQUENCE ??
+  process.env.CYCLE3336_SEQUENCE ??
+    process.env.CYCLE2932_SEQUENCE ??
     process.env.CYCLE2528_SEQUENCE ??
     process.env.CYCLE2124_SEQUENCE ??
     process.env.CYCLE1720_SEQUENCE ??
@@ -109,10 +117,10 @@ const ACTIVE_SEQUENCE = Number(
 if (
   ![
     5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-    30, 31, 32,
+    30, 31, 32, 33, 34, 35, 36,
   ].includes(ACTIVE_SEQUENCE)
 ) {
-  throw new Error("Döngü sıra numarası 5–32 aralığında olmalı");
+  throw new Error("Döngü sıra numarası 5–36 aralığında olmalı");
 }
 const ACTIVE_CYCLE = getEducationV2P1ACycle(ACTIVE_SEQUENCE);
 if (!ACTIVE_CYCLE) throw new Error(`Cycle ${ACTIVE_SEQUENCE} programı bulunamadı`);
@@ -134,6 +142,7 @@ const activeQuestionVersionId = (exerciseKey: string, questionKey: string) =>
 const activeAssessmentId = (key: string) => p1ACycle5To8AssessmentId(ACTIVE_SEQUENCE, key);
 
 const rawGraphScope =
+  process.env.CYCLE3336_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE2932_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE2528_GRAPH_SCOPE?.trim() ??
   process.env.CYCLE2124_GRAPH_SCOPE?.trim() ??
@@ -153,7 +162,9 @@ const rawGraphScope =
             ? "CYCLES_21_TO_24"
             : ACTIVE_SEQUENCE <= 28
               ? "CYCLES_25_TO_28"
-              : "CYCLES_29_TO_32");
+              : ACTIVE_SEQUENCE <= 32
+                ? "CYCLES_29_TO_32"
+                : "CYCLES_33_TO_36");
 if (
   rawGraphScope !== "CYCLE_5_ONLY" &&
   rawGraphScope !== "CYCLES_5_TO_8" &&
@@ -162,7 +173,8 @@ if (
   rawGraphScope !== "CYCLES_17_TO_20" &&
   rawGraphScope !== "CYCLES_21_TO_24" &&
   rawGraphScope !== "CYCLES_25_TO_28" &&
-  rawGraphScope !== "CYCLES_29_TO_32"
+  rawGraphScope !== "CYCLES_29_TO_32" &&
+  rawGraphScope !== "CYCLES_33_TO_36"
 ) {
   throw new Error("Cycle grafik kapsamı geçersiz");
 }
@@ -173,7 +185,8 @@ const IS_CYCLE_17_TO_20 = ACTIVE_GRAPH_SCOPE === "CYCLES_17_TO_20";
 const IS_CYCLE_21_TO_24 = ACTIVE_GRAPH_SCOPE === "CYCLES_21_TO_24";
 const IS_CYCLE_25_TO_28 = ACTIVE_GRAPH_SCOPE === "CYCLES_25_TO_28";
 const IS_CYCLE_29_TO_32 = ACTIVE_GRAPH_SCOPE === "CYCLES_29_TO_32";
-const ACTIVE_OPERATION_ENV = IS_CYCLE_29_TO_32
+const IS_CYCLE_33_TO_36 = ACTIVE_GRAPH_SCOPE === "CYCLES_33_TO_36";
+const BASE_ACTIVE_OPERATION_ENV = IS_CYCLE_29_TO_32
   ? "CYCLE2932_OPERATION"
   : IS_CYCLE_25_TO_28
     ? "CYCLE2528_OPERATION"
@@ -186,7 +199,8 @@ const ACTIVE_OPERATION_ENV = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "CYCLE912_OPERATION"
             : "CYCLE58_OPERATION";
-const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_29_TO_32
+const ACTIVE_OPERATION_ENV = IS_CYCLE_33_TO_36 ? "CYCLE3336_OPERATION" : BASE_ACTIVE_OPERATION_ENV;
+const BASE_ACTIVE_CONFIRMATION_ENV = IS_CYCLE_29_TO_32
   ? "CYCLE2932_CONFIRMATION"
   : IS_CYCLE_25_TO_28
     ? "CYCLE2528_CONFIRMATION"
@@ -199,7 +213,10 @@ const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "CYCLE912_CONFIRMATION"
             : "CYCLE58_CONFIRMATION";
-const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_29_TO_32
+const ACTIVE_CONFIRMATION_ENV = IS_CYCLE_33_TO_36
+  ? "CYCLE3336_CONFIRMATION"
+  : BASE_ACTIVE_CONFIRMATION_ENV;
+const BASE_ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_29_TO_32
   ? "CYCLE2932_RELEASE_ID"
   : IS_CYCLE_25_TO_28
     ? "CYCLE2528_RELEASE_ID"
@@ -212,7 +229,10 @@ const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "CYCLE912_RELEASE_ID"
             : "CYCLE58_RELEASE_ID";
-const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_29_TO_32
+const ACTIVE_RELEASE_INPUT_ID_ENV = IS_CYCLE_33_TO_36
+  ? "CYCLE3336_RELEASE_ID"
+  : BASE_ACTIVE_RELEASE_INPUT_ID_ENV;
+const BASE_ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_29_TO_32
   ? "CYCLE2932_RELEASE_COMMIT"
   : IS_CYCLE_25_TO_28
     ? "CYCLE2528_RELEASE_COMMIT"
@@ -225,7 +245,10 @@ const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "CYCLE912_RELEASE_COMMIT"
             : "CYCLE58_RELEASE_COMMIT";
-const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_29_TO_32
+const ACTIVE_RELEASE_INPUT_COMMIT_ENV = IS_CYCLE_33_TO_36
+  ? "CYCLE3336_RELEASE_COMMIT"
+  : BASE_ACTIVE_RELEASE_INPUT_COMMIT_ENV;
+const BASE_ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_29_TO_32
   ? "Manual Education V2 P1-A Cycles 29–32 production provision"
   : IS_CYCLE_25_TO_28
     ? "Manual Education V2 P1-A Cycles 25–28 production provision"
@@ -238,7 +261,10 @@ const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "Manual Education V2 P1-A Cycles 9–12 production provision"
             : "Manual Education V2 P1-A Cycles 5–8 production provision";
-const ACTIVE_SCOPE_LABEL = IS_CYCLE_29_TO_32
+const ACTIVE_PRODUCTION_WORKFLOW = IS_CYCLE_33_TO_36
+  ? "Manual Education V2 P1-A Cycles 33–36 production provision"
+  : BASE_ACTIVE_PRODUCTION_WORKFLOW;
+const BASE_ACTIVE_SCOPE_LABEL = IS_CYCLE_29_TO_32
   ? "Cycle 29–32"
   : IS_CYCLE_25_TO_28
     ? "Cycle 25–28"
@@ -251,8 +277,9 @@ const ACTIVE_SCOPE_LABEL = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "Cycle 9–12"
             : "Cycle 5–8";
+const ACTIVE_SCOPE_LABEL = IS_CYCLE_33_TO_36 ? "Cycle 33–36" : BASE_ACTIVE_SCOPE_LABEL;
 const ACTIVE_SOURCE_RELEASE_COMMIT = process.env.GITHUB_SHA?.trim().toLowerCase() ?? "";
-const ACTIVE_RELEASE_ID = IS_CYCLE_29_TO_32
+const BASE_ACTIVE_RELEASE_ID = IS_CYCLE_29_TO_32
   ? EDUCATION_V2_P1_A_CYCLE_29_32_RELEASE_ID
   : IS_CYCLE_25_TO_28
     ? EDUCATION_V2_P1_A_CYCLE_25_28_RELEASE_ID
@@ -265,7 +292,10 @@ const ACTIVE_RELEASE_ID = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? EDUCATION_V2_P1_A_CYCLE_9_12_RELEASE_ID
             : EDUCATION_V2_P1_A_CYCLE_5_8_RELEASE_ID;
-const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_29_TO_32
+const ACTIVE_RELEASE_ID = IS_CYCLE_33_TO_36
+  ? EDUCATION_V2_P1_A_CYCLE_33_36_RELEASE_ID
+  : BASE_ACTIVE_RELEASE_ID;
+const BASE_ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_29_TO_32
   ? educationV2P1ACycle29To32ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
   : IS_CYCLE_25_TO_28
     ? educationV2P1ACycle25To28ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
@@ -281,6 +311,9 @@ const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_29_TO_32
                 ACTIVE_GRAPH_SCOPE,
                 ACTIVE_SOURCE_RELEASE_COMMIT,
               );
+const ACTIVE_PRODUCTION_CONFIRMATION = IS_CYCLE_33_TO_36
+  ? educationV2P1ACycle33To36ProductionApproval(ACTIVE_SOURCE_RELEASE_COMMIT)
+  : BASE_ACTIVE_PRODUCTION_CONFIRMATION;
 
 const args = new Set(process.argv.slice(2));
 const dryRun = !args.has("--apply") || args.has("--dry-run");
@@ -290,7 +323,7 @@ if ([...args].some((arg) => arg !== "--apply" && arg !== "--dry-run")) {
 if (args.has("--apply") && args.has("--dry-run")) {
   throw new Error("--apply ve --dry-run birlikte kullanılamaz");
 }
-const ENVIRONMENT_SUFFIX = IS_CYCLE_29_TO_32
+const BASE_ENVIRONMENT_SUFFIX = IS_CYCLE_29_TO_32
   ? "29_32"
   : IS_CYCLE_25_TO_28
     ? "25_28"
@@ -303,6 +336,7 @@ const ENVIRONMENT_SUFFIX = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "9_12"
             : "5_8";
+const ENVIRONMENT_SUFFIX = IS_CYCLE_33_TO_36 ? "33_36" : BASE_ENVIRONMENT_SUFFIX;
 const ENVIRONMENT_PREFIX = `EDUCATION_V2_P1_A_CYCLE_${ENVIRONMENT_SUFFIX}`;
 const TARGET_ENV = `${ENVIRONMENT_PREFIX}_ENVIRONMENT`;
 const DATABASE_ENV = `${ENVIRONMENT_PREFIX}_DATABASE_URL`;
@@ -313,7 +347,7 @@ const PRODUCTION_RELEASE_ID_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_ID`;
 const PRODUCTION_RELEASE_COMMIT_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_RELEASE_COMMIT`;
 const PRODUCTION_APPROVAL_ENV = `${ENVIRONMENT_PREFIX}_PRODUCTION_APPROVAL`;
 const APPROVED_FINGERPRINT_ENV = `${ENVIRONMENT_PREFIX}_APPROVED_TARGET_FINGERPRINT`;
-const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_29_TO_32
+const BASE_PITR_EVIDENCE_PATH_ENV = IS_CYCLE_29_TO_32
   ? "CYCLE2932_PITR_EVIDENCE_PATH"
   : IS_CYCLE_25_TO_28
     ? "CYCLE2528_PITR_EVIDENCE_PATH"
@@ -326,6 +360,9 @@ const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_29_TO_32
           : IS_CYCLE_9_TO_12
             ? "CYCLE912_PITR_EVIDENCE_PATH"
             : "CYCLE58_PITR_EVIDENCE_PATH";
+const PITR_EVIDENCE_PATH_ENV = IS_CYCLE_33_TO_36
+  ? "CYCLE3336_PITR_EVIDENCE_PATH"
+  : BASE_PITR_EVIDENCE_PATH_ENV;
 const APPROVED_RELEASE_ID = ACTIVE_RELEASE_ID;
 const PRODUCTION_CONFIRMATION = ACTIVE_PRODUCTION_CONFIRMATION;
 type TargetEnvironment = "TEST" | "PRODUCTION";
@@ -376,7 +413,7 @@ function assertPitrRestoreEvidence(): void {
     role: required("PRODUCTION_DB_APPROVED_USER"),
     port: required("PRODUCTION_DB_APPROVED_PORT"),
   };
-  const valid = IS_CYCLE_29_TO_32
+  const baseValid = IS_CYCLE_29_TO_32
     ? isCycle29To32PitrEvidenceValid(evidence, {
         ...expectedBase,
         scope: "cycle29-32",
@@ -417,6 +454,13 @@ function assertPitrRestoreEvidence(): void {
                   scope: "cycle5-8",
                   graphScope: ACTIVE_GRAPH_SCOPE,
                 } satisfies Cycle5To8PitrEvidenceExpectation);
+  const valid = IS_CYCLE_33_TO_36
+    ? isCycle33To36PitrEvidenceValid(evidence, {
+        ...expectedBase,
+        scope: "cycle33-36",
+        graphScope: "CYCLES_33_TO_36",
+      } satisfies Cycle33To36PitrEvidenceExpectation)
+    : baseValid;
   if (!valid) {
     fail("geçerli, başarılı ve aynı çalışmaya bağlı PITR geri yükleme kanıtı gerekli");
   }
@@ -512,27 +556,32 @@ function readTarget(): Target | null {
     if (!educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).includes(ACTIVE_SEQUENCE)) {
       fail(`Cycle ${ACTIVE_SEQUENCE} istenen grafik kapsamına dahil değil`);
     }
+    const releaseGateClosed = (sequence: number): boolean => {
+      if (IS_CYCLE_33_TO_36) {
+        return !isEducationV2P1ACycle33To36ProductionAssignmentEnabled(sequence);
+      }
+      if (IS_CYCLE_29_TO_32)
+        return !isEducationV2P1ACycle29To32ProductionAssignmentEnabled(sequence);
+      if (IS_CYCLE_25_TO_28)
+        return !isEducationV2P1ACycle25To28ProductionAssignmentEnabled(sequence);
+      if (IS_CYCLE_21_TO_24)
+        return !isEducationV2P1ACycle21To24ProductionAssignmentEnabled(sequence);
+      if (IS_CYCLE_17_TO_20)
+        return !isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence);
+      if (IS_CYCLE_13_TO_16)
+        return !isEducationV2P1ACycle13To16ProductionAssignmentEnabled(sequence);
+      return !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence);
+    };
     if (
       !dryRun &&
-      (IS_CYCLE_9_TO_12 ||
+      (IS_CYCLE_33_TO_36 ||
+        IS_CYCLE_9_TO_12 ||
         IS_CYCLE_13_TO_16 ||
         IS_CYCLE_17_TO_20 ||
         IS_CYCLE_21_TO_24 ||
         IS_CYCLE_25_TO_28 ||
         IS_CYCLE_29_TO_32) &&
-      educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).some((sequence) =>
-        IS_CYCLE_29_TO_32
-          ? !isEducationV2P1ACycle29To32ProductionAssignmentEnabled(sequence)
-          : IS_CYCLE_25_TO_28
-            ? !isEducationV2P1ACycle25To28ProductionAssignmentEnabled(sequence)
-            : IS_CYCLE_21_TO_24
-              ? !isEducationV2P1ACycle21To24ProductionAssignmentEnabled(sequence)
-              : IS_CYCLE_17_TO_20
-                ? !isEducationV2P1ACycle17To20ProductionAssignmentEnabled(sequence)
-                : IS_CYCLE_13_TO_16
-                  ? !isEducationV2P1ACycle13To16ProductionAssignmentEnabled(sequence)
-                  : !isEducationV2P1ACycle9To12ProductionAssignmentEnabled(sequence),
-      )
+      educationV2P1ACycle5To8ScopeSequences(ACTIVE_GRAPH_SCOPE).some(releaseGateClosed)
     ) {
       fail(`${ACTIVE_SCOPE_LABEL} için açık ürün sahibi yayın kapısı etkin değil`);
     }
