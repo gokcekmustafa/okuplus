@@ -216,7 +216,7 @@ describe("P1-A Cycles 49–52 (stations 273–292)", () => {
       expect(route?.publicationApproved()).toBe(true);
       expect(matchesLearningRouteGraph(graphFor(cycle.sequence))).toBe(true);
       expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(
-        cycle.sequence < 52 ? cycle.sequence + 1 : undefined,
+        cycle.sequence < 52 ? cycle.sequence + 1 : 53,
       );
     }
     expect(EDUCATION_V2_P1_A_CYCLE_49_52_SEQUENCES).toEqual([49, 50, 51, 52]);

@@ -290,7 +290,9 @@ describe("student dashboard release 0.4", () => {
       return container.innerHTML.slice(buttonStart, buttonEnd + 1);
     };
     expect(visibleCount).toBe(47);
-    expect(container.innerHTML.match(/data-station-number="/gu)).toHaveLength(300);
+    expect(container.innerHTML.match(/data-station-number="/gu)).toHaveLength(
+      visibleCount + plannedNodes.length,
+    );
     expect(nodeAtStation(1)).toContain('data-node-id="p0-step-1"');
     expect(nodeAtStation(22)).toContain('data-node-id="p0-step-22"');
     expect(nodeAtStation(23)).toContain('data-node-id="cycle-1-step-1"');
@@ -301,7 +303,8 @@ describe("student dashboard release 0.4", () => {
       expect(nodeAtStation(station)).not.toContain("cycle-3-step");
     }
     expect(nodeAtStation(47)).toContain("completed");
-    expect(container.innerHTML).toContain("İçerik hazırlanıyor");
+    expect(nodeAtStation(293)).toContain('data-node-id="planned:A:53:1"');
+    expect(nodeAtStation(293)).toContain("Arktik deniz buzunun mevsim takvimini bul");
 
     const cycle4 = LEARNING_ROUTE_CYCLES.find(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence === 4,

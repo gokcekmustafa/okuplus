@@ -48,7 +48,7 @@ function graph(cycle: LearningRouteCycle) {
 }
 
 describe("versioned learning routes", () => {
-  it("projects a 300-station roadmap without exposing draft learning content or unlocking it", () => {
+  it("projects all authored positions and the configured roadmap minimum without unlocking them", () => {
     const cycle3 = LEARNING_ROUTE_CYCLES.find(
       (cycle) => cycle.routeFamily === "A" && cycle.sequence === 3,
     )!;
@@ -60,7 +60,12 @@ describe("versioned learning routes", () => {
       visibleStationCount: 47,
     });
 
-    expect(47 + nodes.length).toBe(LEARNING_ROUTE_VISIBLE_STATION_TARGET);
+    const authoredFutureStationCount = LEARNING_ROUTE_CYCLES.filter(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence > 3,
+    ).reduce((count, cycle) => count + cycle.manifest.steps.length, 0);
+    expect(47 + nodes.length).toBe(
+      Math.max(LEARNING_ROUTE_VISIBLE_STATION_TARGET, 47 + authoredFutureStationCount),
+    );
     expect(nodes[0]).toMatchObject({
       learningPathCode: cycle4.pathCode,
       cycleSequence: 4,
@@ -72,7 +77,7 @@ describe("versioned learning routes", () => {
     expect(cycle4.publicationApproved()).toBe(true);
     expect(nodes.every((node) => node.status === "locked" && !node.isCurrent)).toBe(true);
     expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
-    expect(nodes.some((node) => node.planningStatus === "CONTENT_NOT_AUTHORED")).toBe(true);
+    expect(nodes.some((node) => node.planningStatus === "CONTENT_NOT_AUTHORED")).toBe(false);
     expect(
       nodes.some(
         (node) =>
@@ -82,6 +87,11 @@ describe("versioned learning routes", () => {
       ),
     ).toBe(true);
     expect(nodes.some((node) => node.planningStatus === "AUTHORED_UNRELEASED")).toBe(false);
+    expect(nodes.find((node) => node.cycleSequence === 53 && node.stepOrder === 1)).toMatchObject({
+      status: "locked",
+      availability: "UNAVAILABLE",
+      planningStatus: "GRAPH_NOT_AVAILABLE",
+    });
     expect(
       nodes.some(
         (node) =>
@@ -217,7 +227,15 @@ describe("versioned learning routes", () => {
     });
 
     expect(visibleStationCount).toBe(47);
-    expect(visibleStationCount + plannedNodes.length).toBe(LEARNING_ROUTE_VISIBLE_STATION_TARGET);
+    const authoredFutureStationCount = LEARNING_ROUTE_CYCLES.filter(
+      (cycle) => cycle.routeFamily === "A" && cycle.sequence > cycles.at(-1)!.sequence,
+    ).reduce((count, cycle) => count + cycle.manifest.steps.length, 0);
+    expect(visibleStationCount + plannedNodes.length).toBe(
+      Math.max(
+        LEARNING_ROUTE_VISIBLE_STATION_TARGET,
+        visibleStationCount + authoredFutureStationCount,
+      ),
+    );
     expect(plannedNodes[0]).toMatchObject({ cycleSequence: 4, stepOrder: 1 });
   });
 
@@ -305,23 +323,23 @@ describe("versioned learning routes", () => {
     ).toEqual([
       {
         route: "A",
-        authored: 270,
-        releaseApprovedSource: 260,
+        authored: 290,
+        releaseApprovedSource: 280,
         sourceVerifiedDraft: 0,
-        sourceQualified: 260,
+        sourceQualified: 280,
         reviewRequired: 10,
         sourceRemaining: 0,
         categoryDistribution: "INCOMPLETE",
         categoryCounts: {
-          FAST_READING: 50,
-          READING_COMPREHENSION: 52,
-          COMMON_STRATEGIES: 47,
-          INTEGRATED_PRACTICE: 48,
-          MULTI_SKILL_ASSESSMENT: 48,
+          FAST_READING: 54,
+          READING_COMPREHENSION: 56,
+          COMMON_STRATEGIES: 51,
+          INTEGRATED_PRACTICE: 52,
+          MULTI_SKILL_ASSESSMENT: 52,
         },
         categoryTargetGaps: {
-          FAST_READING: 10,
-          READING_COMPREHENSION: 28,
+          FAST_READING: 6,
+          READING_COMPREHENSION: 24,
           COMMON_STRATEGIES: 0,
           INTEGRATED_PRACTICE: 0,
           MULTI_SKILL_ASSESSMENT: 0,
@@ -329,9 +347,9 @@ describe("versioned learning routes", () => {
         categoryTargetExcesses: {
           FAST_READING: 0,
           READING_COMPREHENSION: 0,
-          COMMON_STRATEGIES: 27,
-          INTEGRATED_PRACTICE: 23,
-          MULTI_SKILL_ASSESSMENT: 33,
+          COMMON_STRATEGIES: 31,
+          INTEGRATED_PRACTICE: 27,
+          MULTI_SKILL_ASSESSMENT: 37,
         },
         unclassified: 25,
         productionGraph: "NOT_VERIFIED",
@@ -564,8 +582,12 @@ describe("versioned learning routes", () => {
       expect(cycle.publicationApproved()).toBe(true);
       expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     }
+    for (const cycle of a.slice(52, 56)) {
+      expect(cycle.publicationApproved()).toBe(true);
+      expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+    }
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 52);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 56);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
@@ -578,7 +600,8 @@ describe("versioned learning routes", () => {
           (a[index]!.sequence >= 37 && a[index]!.sequence < 40) ||
           (a[index]!.sequence >= 41 && a[index]!.sequence < 44) ||
           (a[index]!.sequence >= 45 && a[index]!.sequence < 48) ||
-          (a[index]!.sequence >= 49 && a[index]!.sequence < 52)
+          (a[index]!.sequence >= 49 && a[index]!.sequence < 52) ||
+          (a[index]!.sequence >= 53 && a[index]!.sequence < 56)
           ? "ASSIGN_NEXT"
           : "REVIEW_REQUIRED",
       );
