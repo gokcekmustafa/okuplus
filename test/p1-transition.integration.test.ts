@@ -2203,9 +2203,9 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await expect(
       assertLearningContentAccessible(cycle52Fixture.actor, station293.contentVersionId!),
     ).resolves.toBeUndefined();
-    expect(station293.exerciseTemplateVersionId).toBeTruthy();
+    expect(station293.templateVersionId).toBeTruthy();
     await expect(
-      assertLearningTemplateAccessible(cycle52Fixture.actor, station293.exerciseTemplateVersionId!),
+      assertLearningTemplateAccessible(cycle52Fixture.actor, station293.templateVersionId!),
     ).resolves.toMatchObject({ id: station293.id, status: "active", availability: "READY" });
 
     const replay = await reconcileP1ToNextCycle(cycle52Fixture.actor, {
