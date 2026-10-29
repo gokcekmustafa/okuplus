@@ -238,3 +238,16 @@ provenance durumu korunur ve dış kaynak doğrulaması olarak sunulmaz. Korumal
 başına grafiği oluşturmaz: üretim planı, hedef fingerprint'i ve migration policy
 geçmeden grafiğin varlığı `NOT_VERIFIED` kalır; bu kod değişikliği öğrenci
 ataması veya ilerleme kaydı yazmaz.
+
+## 2026-10-29 — Cycle 41–44 hazırlığı
+
+Cycle 37–40'ın 213–232 istasyonlarını oluşturan korumalı üretim uygulaması
+önceki çalıştırmada başarıyla tamamlanmıştır; bu nedenle Cycle 40'ın 228–232
+istasyonları bu görevde yeniden yazılmayacaktır. Cycle 41–44 için 233–252
+aralığında beşer adımlı, içerik/alıştırma/soru/değerlendirme bağlantıları ve
+önceki rota devamlılığı olan kaynak paketleri hazırlanmıştır. 41–44'e özel
+değişmez release kimliği, açık ürün sahibi kararı ve aynı çalıştırma PITR
+kanıtını zorunlu tutan ayrı korumalı workflow eklenmiştir. Üretim grafikleri
+yalnızca ilgili güncel `PLAN_ONLY` ve güvenlik kapıları başarılı olduktan sonra
+bu workflow üzerinden oluşturulabilir; kaynak kararı tek başına canlı grafiğin
+varlığını veya gerçek öğrenci erişimini kanıtlamaz.

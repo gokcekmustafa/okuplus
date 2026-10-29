@@ -240,6 +240,9 @@ describe("verified PITR temporary-branch cleanup", () => {
     expect(cyclePitrTemporaryBranchName("cycle37-40", runId, runAttempt)).toBe(
       `okupratik-cycle37-40-pitr-${runId}-attempt-${runAttempt}`,
     );
+    expect(cyclePitrTemporaryBranchName("cycle41-44", runId, runAttempt)).toBe(
+      `okupratik-cycle41-44-pitr-${runId}-attempt-${runAttempt}`,
+    );
     expect(isPitrEvidenceArtifactUrlValid(expected.artifactUrl, repository, runId)).toBe(true);
     expect(isPitrEvidenceArtifactUrlValid(expected.artifactUrl, repository, "99999")).toBe(false);
     expect(
@@ -393,7 +396,7 @@ describe("verified PITR temporary-branch cleanup", () => {
     expect(calls).toEqual(["GET", "GET", "DELETE"]);
   });
 
-  it("keeps all eight protected workflows read-only in PLAN_ONLY and orders artifact, delete, then APPLY", () => {
+  it("keeps protected workflows read-only in PLAN_ONLY and orders artifact, delete, then APPLY", () => {
     const workflows = [
       ["5-8", "Enforce Cycle 5–8 PITR evidence", "Apply only selected Cycle 5–8 graph scope"],
       ["9-12", "Enforce same-run Cycle 9–12 PITR evidence", "Apply only missing Cycle 9–12 graphs"],
@@ -426,6 +429,16 @@ describe("verified PITR temporary-branch cleanup", () => {
         "33-36",
         "Enforce same-run Cycle 33–36 PITR evidence",
         "Apply only missing Cycle 33–36 graphs",
+      ],
+      [
+        "37-40",
+        "Enforce same-run Cycle 37–40 PITR evidence",
+        "Apply only missing Cycle 37–40 graphs",
+      ],
+      [
+        "41-44",
+        "Enforce same-run Cycle 41–44 PITR evidence",
+        "Apply only missing Cycle 41–44 graphs",
       ],
     ] as const;
     for (const [group, verifyName, applyName] of workflows) {

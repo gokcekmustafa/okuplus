@@ -71,6 +71,8 @@ const PATH_IDS = {
   cycle33: id(33),
   cycle36: id(36),
   cycle37: id(37),
+  cycle40: id(40),
+  cycle41: id(41),
 };
 const ACTOR_EMAILS = [
   "p1-transition-1@example.test",
@@ -86,6 +88,7 @@ const ACTOR_EMAILS = [
   "p1-transition-11@example.test",
   "p1-transition-12@example.test",
   "p1-transition-13@example.test",
+  "p1-transition-14@example.test",
 ];
 const ACTOR_IDS = {
   complete: id(10),
@@ -101,6 +104,7 @@ const ACTOR_IDS = {
   cycle28: id(23),
   cycle32: id(24),
   cycle36: id(25),
+  cycle40: id(26),
 };
 const TENANT_IDS = {
   complete: "",
@@ -116,6 +120,7 @@ const TENANT_IDS = {
   cycle28: "",
   cycle32: "",
   cycle36: "",
+  cycle40: "",
 };
 
 type ActorFixture = {
@@ -413,7 +418,9 @@ async function completeInitialCycle(
                           ? 5000
                           : fixture.actor.userId === ACTOR_IDS.cycle36
                             ? 7000
-                            : 0;
+                            : fixture.actor.userId === ACTOR_IDS.cycle40
+                              ? 9000
+                              : 0;
   const uniqueFixtureOffset = fixtureOffset + testOffset;
   for (const [index, step] of steps.entries()) {
     if (step.type !== "ASSESSMENT") {
@@ -480,6 +487,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
   let cycle28Fixture: ActorFixture;
   let cycle32Fixture: ActorFixture;
   let cycle36Fixture: ActorFixture;
+  let cycle40Fixture: ActorFixture;
   let blockedNextEnrollmentId = "";
 
   beforeAll(async () => {
@@ -509,6 +517,8 @@ describe.sequential("P1 learning cycle transition integration", () => {
     const cycle33 = getEducationV2P1ACycle(33)!;
     const cycle36 = getEducationV2P1ACycle(36)!;
     const cycle37 = getEducationV2P1ACycle(37)!;
+    const cycle40 = getEducationV2P1ACycle(40)!;
+    const cycle41 = getEducationV2P1ACycle(41)!;
     await createPath(PATH_IDS.cycle20, cycle20.program.programId, cycle20.program);
     await createPath(PATH_IDS.cycle21, cycle21.program.programId, cycle21.program);
     await createPath(PATH_IDS.cycle28, cycle28.program.programId, cycle28.program);
@@ -517,6 +527,8 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await createPath(PATH_IDS.cycle33, cycle33.program.programId, cycle33.program);
     await createPath(PATH_IDS.cycle36, cycle36.program.programId, cycle36.program);
     await createPath(PATH_IDS.cycle37, cycle37.program.programId, cycle37.program);
+    await createPath(PATH_IDS.cycle40, cycle40.program.programId, cycle40.program);
+    await createPath(PATH_IDS.cycle41, cycle41.program.programId, cycle41.program);
     completeFixture = await createActor(ACTOR_IDS.complete, ACTOR_EMAILS[0]!, "complete");
     incompleteFixture = await createActor(ACTOR_IDS.incomplete, ACTOR_EMAILS[1]!, "incomplete");
     unavailableFixture = await createActor(ACTOR_IDS.unavailable, ACTOR_EMAILS[2]!, "unavailable");
@@ -550,6 +562,12 @@ describe.sequential("P1 learning cycle transition integration", () => {
       "cycle36",
       PATH_IDS.cycle36,
     );
+    cycle40Fixture = await createActor(
+      ACTOR_IDS.cycle40,
+      ACTOR_EMAILS[13]!,
+      "cycle40",
+      PATH_IDS.cycle40,
+    );
     await completeInitialCycle(completeFixture, true);
     await completeInitialCycle(incompleteFixture, false);
     await completeInitialCycle(unavailableFixture, true);
@@ -574,6 +592,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await completeInitialCycle(cycle28Fixture, true, PATH_IDS.cycle28, 1);
     await completeInitialCycle(cycle32Fixture, true, PATH_IDS.cycle32);
     await completeInitialCycle(cycle36Fixture, true, PATH_IDS.cycle36);
+    await completeInitialCycle(cycle40Fixture, true, PATH_IDS.cycle40);
     await prisma.studentLearningPath.create({
       data: {
         tenantId: cycle2Fixture.actor.tenantId,
@@ -1841,6 +1860,78 @@ describe.sequential("P1 learning cycle transition integration", () => {
     expect(
       await prisma.assessmentResult.findMany({
         where: { tenantId: cycle36Fixture.actor.tenantId, studentId: cycle36Fixture.actor.userId },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(beforeResults);
+  });
+
+  it("assigns Cycle 41 after completed station 232 with station 233 active and no history changes", async () => {
+    const beforeProgress = await prisma.studentLearningStepProgress.findMany({
+      where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
+      orderBy: { id: "asc" },
+    });
+    const beforeResults = await prisma.assessmentResult.findMany({
+      where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
+      orderBy: { id: "asc" },
+    });
+    const beforeSessions = await prisma.exerciseSession.count({
+      where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
+    });
+    const completedPath = await getStudentLearningPath(cycle40Fixture.actor);
+    expect(
+      completedPath?.paths
+        .find((path) => path.path.cycleSequence === 40)
+        ?.nodes.every((node) => node.status === "completed"),
+    ).toBe(true);
+
+    const transition = await reconcileP1ToNextCycle(cycle40Fixture.actor, {
+      p1LearningPathId: cycle40Fixture.enrollmentId,
+    });
+    expect(transition).toMatchObject({
+      outcome: "ASSIGNED",
+      currentLearningPathId: cycle40Fixture.enrollmentId,
+      nextLearningPathId: PATH_IDS.cycle41,
+      readiness: { status: "ASSIGNED", currentCycleCompleted: true, nextCycleAvailable: true },
+    });
+
+    const after = await getStudentLearningPath(cycle40Fixture.actor);
+    const station233Path = after?.paths.find((path) => path.path.cycleSequence === 41);
+    expect(station233Path?.nodes).toHaveLength(5);
+    expect(station233Path?.nodes[0]).toMatchObject({ status: "active", availability: "READY" });
+    expect(station233Path?.nodes.slice(1).every((node) => node.status === "locked")).toBe(true);
+
+    const replay = await reconcileP1ToNextCycle(cycle40Fixture.actor, {
+      p1LearningPathId: cycle40Fixture.enrollmentId,
+    });
+    expect(replay).toMatchObject({
+      outcome: "ALREADY_ASSIGNED",
+      currentLearningPathId: cycle40Fixture.enrollmentId,
+      nextLearningPathId: PATH_IDS.cycle41,
+      readiness: { status: "ALREADY_ASSIGNED" },
+    });
+    expect(
+      await prisma.studentLearningPath.count({
+        where: {
+          tenantId: cycle40Fixture.actor.tenantId,
+          studentId: cycle40Fixture.actor.userId,
+          learningPathId: PATH_IDS.cycle41,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.exerciseSession.count({
+        where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
+      }),
+    ).toBe(beforeSessions);
+    expect(
+      await prisma.studentLearningStepProgress.findMany({
+        where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(beforeProgress);
+    expect(
+      await prisma.assessmentResult.findMany({
+        where: { tenantId: cycle40Fixture.actor.tenantId, studentId: cycle40Fixture.actor.userId },
         orderBy: { id: "asc" },
       }),
     ).toEqual(beforeResults);
