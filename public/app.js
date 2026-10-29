@@ -1329,6 +1329,10 @@ async function logout(refreshToken, tenantId) {
  */
 async function restoreSession() {
   const { accessToken, refreshToken, tenantId } = getStoredTokens();
+  if (!nativeMobileRuntime) {
+    localStorage.removeItem(STORAGE_KEYS.accessToken);
+    localStorage.removeItem(STORAGE_KEYS.refreshToken);
+  }
   if (!accessToken) {
     if (!refreshToken && !hasBrowserCookie("__Host-oku_csrf")) {
       if (new URLSearchParams(window.location.search).get("auth") === "google-error") {
