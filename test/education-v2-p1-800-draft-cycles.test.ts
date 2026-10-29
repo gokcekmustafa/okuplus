@@ -17,7 +17,7 @@ import {
 
 describe("800-istasyon müfredat genişleme adayları", () => {
   it("adds fully authored, skill-tagged five-station source cycles without release approval", () => {
-    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(158);
+    expect(EDUCATION_V2_P1_800_DRAFT_CYCLES).toHaveLength(162);
     for (const draft of EDUCATION_V2_P1_800_DRAFT_CYCLES) {
       expect(draft.authoringStatus).toBe("DRAFT_NOT_RELEASED");
       expect(draft.publicationApproved()).toBe(false);
@@ -163,6 +163,9 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       } else if (draft.routeFamily === "A" && draft.sequence >= 41 && draft.sequence <= 44) {
         expect(routeCycle.publicationApproved()).toBe(true);
         expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
+      } else if (draft.routeFamily === "A" && draft.sequence >= 45 && draft.sequence <= 48) {
+        expect(routeCycle.publicationApproved()).toBe(true);
+        expect(routeCycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
       } else {
         expect(routeCycle.publicationApproved()).toBe(false);
       }
@@ -269,8 +272,8 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       expect(result.categoryTargetGaps.FAST_READING).toBeGreaterThan(0);
       expect(result.categoryTargetGaps.READING_COMPREHENSION).toBeGreaterThan(0);
       expect(result.unclassifiedStationCount).toBeGreaterThan(0);
-      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 230 : 205);
-      expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 220 : 5);
+      expect(result.authoredStationCount).toBe(routeFamily === "A" ? 250 : 205);
+      expect(result.releasedSourceStationCount).toBe(routeFamily === "A" ? 240 : 5);
       expect(result.remainingAuthoredStations).toBe(0);
       expect(result.authoredStationCount + result.remainingAuthoredStations).toBe(
         Math.max(result.targetStationCount, result.authoredStationCount),
@@ -278,7 +281,7 @@ describe("800-istasyon müfredat genişleme adayları", () => {
       expect(result.sourceVerifiedDraftStationCount).toBe(routeFamily === "A" ? 0 : 185);
       const sourceQualifiedCount =
         result.releasedSourceStationCount + result.sourceVerifiedDraftStationCount;
-      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 220 : 190);
+      expect(sourceQualifiedCount).toBe(routeFamily === "A" ? 240 : 190);
       expect(result.sourceQualifiedRemainingStations).toBe(routeFamily === "A" ? 0 : 10);
       expect(result.authoredSourceReviewRequiredStationCount).toBe(routeFamily === "A" ? 10 : 15);
       expect(result.productionGraph).toBe("NOT_VERIFIED");

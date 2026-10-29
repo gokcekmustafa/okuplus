@@ -74,6 +74,10 @@ export type Cycle41To44PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation &
   scope: "cycle41-44";
   graphScope: "CYCLES_41_TO_44";
 };
+export type Cycle45To48PitrEvidenceExpectation = Cycle4PitrEvidenceExpectation & {
+  scope: "cycle45-48";
+  graphScope: "CYCLES_45_TO_48";
+};
 export type CyclePitrCleanupScope =
   | "cycle5-8"
   | "cycle9-12"
@@ -84,7 +88,8 @@ export type CyclePitrCleanupScope =
   | "cycle29-32"
   | "cycle33-36"
   | "cycle37-40"
-  | "cycle41-44";
+  | "cycle41-44"
+  | "cycle45-48";
 export type Cycle4PitrFailureRecord = {
   stage: string;
   endpoint: string | null;
@@ -325,6 +330,17 @@ export function isCycle41To44PitrEvidenceValid(
   );
 }
 
+export function isCycle45To48PitrEvidenceValid(
+  value: unknown,
+  expected: Cycle45To48PitrEvidenceExpectation,
+): boolean {
+  return (
+    isPitrEvidenceValidForScope(value, expected, "cycle45-48", 15) &&
+    isRecord(value) &&
+    value.graphScope === expected.graphScope
+  );
+}
+
 function isPitrEvidenceValidForScope(
   value: unknown,
   expected: Cycle4PitrEvidenceExpectation,
@@ -339,8 +355,9 @@ function isPitrEvidenceValidForScope(
     | "cycle29-32"
     | "cycle33-36"
     | "cycle37-40"
-    | "cycle41-44",
-  schemaVersion: 2 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14,
+    | "cycle41-44"
+    | "cycle45-48",
+  schemaVersion: 2 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15,
 ): boolean {
   if (!isRecord(value)) return false;
   const source = value.sourceBranch;
@@ -906,11 +923,13 @@ async function runPitrEvidence(): Promise<JsonRecord> {
     pitrScope !== "cycle29-32" &&
     pitrScope !== "cycle33-36" &&
     pitrScope !== "cycle37-40" &&
-    pitrScope !== "cycle41-44"
+    pitrScope !== "cycle41-44" &&
+    pitrScope !== "cycle45-48"
   ) {
     throw safeError("preflight", "unsupported PITR scope");
   }
   const graphScope =
+    process.env.CYCLE4548_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE3336_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE4144_GRAPH_SCOPE?.trim() ??
     process.env.CYCLE3740_GRAPH_SCOPE?.trim() ??
@@ -951,6 +970,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
   if (pitrScope === "cycle41-44" && graphScope !== "CYCLES_41_TO_44") {
     throw safeError("preflight", "unsupported Cycle 41–44 graph scope");
   }
+  if (pitrScope === "cycle45-48" && graphScope !== "CYCLES_45_TO_48") {
+    throw safeError("preflight", "unsupported Cycle 45–48 graph scope");
+  }
   const evidencePath =
     process.env.CYCLE_PITR_EVIDENCE_PATH?.trim() ||
     (pitrScope === "cycle4"
@@ -973,7 +995,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                       ? process.env.CYCLE3336_PITR_EVIDENCE_PATH?.trim()
                       : pitrScope === "cycle37-40"
                         ? process.env.CYCLE3740_PITR_EVIDENCE_PATH?.trim()
-                        : process.env.CYCLE4144_PITR_EVIDENCE_PATH?.trim());
+                        : pitrScope === "cycle41-44"
+                          ? process.env.CYCLE4144_PITR_EVIDENCE_PATH?.trim()
+                          : process.env.CYCLE4548_PITR_EVIDENCE_PATH?.trim());
   if (!evidencePath) throw safeError("evidence output", "PITR evidence path is required");
   const evidence: JsonRecord = {
     schemaVersion:
@@ -997,7 +1021,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                         ? 12
                         : pitrScope === "cycle37-40"
                           ? 13
-                          : 14,
+                          : pitrScope === "cycle41-44"
+                            ? 14
+                            : 15,
     pitrScope,
     ...(pitrScope !== "cycle4" ? { graphScope } : {}),
     status: "FAIL",
@@ -1020,7 +1046,8 @@ async function runPitrEvidence(): Promise<JsonRecord> {
       process.env.GITHUB_REF !== "refs/heads/master" ||
       process.env.APP_ENV !== "production" ||
       process.env.DB_FINGERPRINT_ENVIRONMENT !== "PRODUCTION" ||
-      (process.env.CYCLE4_OPERATION ??
+      (process.env.CYCLE4548_OPERATION ??
+        process.env.CYCLE4_OPERATION ??
         process.env.CYCLE58_OPERATION ??
         process.env.CYCLE912_OPERATION ??
         process.env.CYCLE1316_OPERATION ??
@@ -1063,7 +1090,9 @@ async function runPitrEvidence(): Promise<JsonRecord> {
                           ? "EDUCATION_V2_P1_A_CYCLE_33_36_PRODUCTION_DATABASE_URL"
                           : pitrScope === "cycle37-40"
                             ? "EDUCATION_V2_P1_A_CYCLE_37_40_PRODUCTION_DATABASE_URL"
-                            : "EDUCATION_V2_P1_A_CYCLE_41_44_PRODUCTION_DATABASE_URL"
+                            : pitrScope === "cycle41-44"
+                              ? "EDUCATION_V2_P1_A_CYCLE_41_44_PRODUCTION_DATABASE_URL"
+                              : "EDUCATION_V2_P1_A_CYCLE_45_48_PRODUCTION_DATABASE_URL"
       ]?.trim();
     const approvedFingerprint =
       process.env.PRODUCTION_DB_APPROVED_TARGET_FINGERPRINT?.trim().toLowerCase();

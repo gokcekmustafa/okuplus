@@ -77,7 +77,7 @@ describe("versioned learning routes", () => {
       nodes.some(
         (node) =>
           node.cycleSequence >= 41 &&
-          node.cycleSequence <= 44 &&
+          node.cycleSequence <= 48 &&
           node.planningStatus === "GRAPH_NOT_AVAILABLE",
       ),
     ).toBe(true);
@@ -305,23 +305,23 @@ describe("versioned learning routes", () => {
     ).toEqual([
       {
         route: "A",
-        authored: 230,
-        releaseApprovedSource: 220,
+        authored: 250,
+        releaseApprovedSource: 240,
         sourceVerifiedDraft: 0,
-        sourceQualified: 220,
+        sourceQualified: 240,
         reviewRequired: 10,
         sourceRemaining: 0,
         categoryDistribution: "INCOMPLETE",
         categoryCounts: {
-          FAST_READING: 42,
-          READING_COMPREHENSION: 44,
-          COMMON_STRATEGIES: 39,
-          INTEGRATED_PRACTICE: 40,
-          MULTI_SKILL_ASSESSMENT: 40,
+          FAST_READING: 46,
+          READING_COMPREHENSION: 48,
+          COMMON_STRATEGIES: 43,
+          INTEGRATED_PRACTICE: 44,
+          MULTI_SKILL_ASSESSMENT: 44,
         },
         categoryTargetGaps: {
-          FAST_READING: 18,
-          READING_COMPREHENSION: 36,
+          FAST_READING: 14,
+          READING_COMPREHENSION: 32,
           COMMON_STRATEGIES: 0,
           INTEGRATED_PRACTICE: 0,
           MULTI_SKILL_ASSESSMENT: 0,
@@ -329,9 +329,9 @@ describe("versioned learning routes", () => {
         categoryTargetExcesses: {
           FAST_READING: 0,
           READING_COMPREHENSION: 0,
-          COMMON_STRATEGIES: 19,
-          INTEGRATED_PRACTICE: 15,
-          MULTI_SKILL_ASSESSMENT: 25,
+          COMMON_STRATEGIES: 23,
+          INTEGRATED_PRACTICE: 19,
+          MULTI_SKILL_ASSESSMENT: 29,
         },
         unclassified: 25,
         productionGraph: "NOT_VERIFIED",
@@ -556,12 +556,12 @@ describe("versioned learning routes", () => {
       expect(cycle.publicationApproved()).toBe(true);
       expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     }
-    for (const cycle of a.slice(40, 44)) {
+    for (const cycle of a.slice(40, 48)) {
       expect(cycle.publicationApproved()).toBe(true);
       expect(cycle.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
     }
     for (let index = 8; index < a.length; index += 1) {
-      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 44);
+      expect(a[index]!.publicationApproved()).toBe(a[index]!.sequence <= 48);
       expect(a[index]!.manifest.steps).toHaveLength(5);
       expect(a[index]!.manifest.completion.nextCycle).toBe(
         (a[index]!.sequence >= 9 && a[index]!.sequence < 12) ||
@@ -572,7 +572,8 @@ describe("versioned learning routes", () => {
           (a[index]!.sequence >= 29 && a[index]!.sequence < 32) ||
           (a[index]!.sequence >= 33 && a[index]!.sequence < 36) ||
           (a[index]!.sequence >= 37 && a[index]!.sequence < 40) ||
-          (a[index]!.sequence >= 41 && a[index]!.sequence < 44)
+          (a[index]!.sequence >= 41 && a[index]!.sequence < 44) ||
+          (a[index]!.sequence >= 45 && a[index]!.sequence < 48)
           ? "ASSIGN_NEXT"
           : "REVIEW_REQUIRED",
       );
