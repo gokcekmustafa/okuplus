@@ -446,6 +446,8 @@ async function setStoredSession(data) {
     return;
   }
   if (tenantId) localStorage.setItem(STORAGE_KEYS.tenantId, tenantId);
+  localStorage.removeItem(STORAGE_KEYS.accessToken);
+  localStorage.removeItem(STORAGE_KEYS.refreshToken);
 }
 
 function clearStoredSession() {

@@ -51,8 +51,8 @@ function harness(
       nativeMobileRuntime
         ? { ...nativeSession }
         : {
-            accessToken: values.get("oku.accessToken") ?? null,
-            refreshToken: values.get("oku.refreshToken") ?? null,
+            accessToken: null,
+            refreshToken: null,
             tenantId: values.get("oku.tenantId") ?? null,
           },
     setStoredSession: async (data: {
@@ -123,14 +123,10 @@ describe("student authenticated API session recovery", () => {
     expect(result.status).toBe(200);
     expect(h.refreshCalls).toBe(1);
     expect(h.loginCalls).toBe(0);
-    expect(h.accessToken()).toBe("fresh-access");
+    expect(h.accessToken()).toBe("expired-access");
     expect(calls).toHaveLength(2);
-    expect((calls[0].options.headers as Record<string, string>).authorization).toBe(
-      "Bearer expired-access",
-    );
-    expect((calls[1].options.headers as Record<string, string>).authorization).toBe(
-      "Bearer fresh-access",
-    );
+    expect((calls[0].options.headers as Record<string, string>).authorization).toBeUndefined();
+    expect((calls[1].options.headers as Record<string, string>).authorization).toBeUndefined();
   });
 
   it("shares one refresh request across concurrent expired API calls", async () => {
