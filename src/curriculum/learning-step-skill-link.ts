@@ -39,6 +39,8 @@ const curriculumSkillToStoredSkills: Readonly<Record<string, readonly string[]>>
   RC_CLAIM_EVIDENCE: ["RC_DETAIL", "RC_INFERENCE"],
   RC_CAUSE_EFFECT: ["RC_INFERENCE"],
   RC_COMPARE_CONTRAST: ["RC_INFERENCE"],
+  // Comparing distinct representations to judge a relationship uses the existing inference competency.
+  RC_COMPARISON: ["RC_INFERENCE"],
   RC_SEQUENCE: ["RC_DETAIL"],
   RC_VOCABULARY_CONTEXT: ["RC_DETAIL"],
   RC_DATA_INTERPRETATION: ["RC_DETAIL"],

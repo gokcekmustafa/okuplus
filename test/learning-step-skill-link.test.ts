@@ -8,6 +8,8 @@ import {
   EDUCATION_V2_P1_A_CYCLE_25_28,
   EDUCATION_V2_P1_A_CYCLE_29_32,
   EDUCATION_V2_P1_A_CYCLE_33_36,
+  EDUCATION_V2_P1_A_CYCLE_37_40,
+  EDUCATION_V2_P1_A_CYCLE_41_44,
 } from "../src/curriculum/education-v2-p1-a-cycle-5-8-program.js";
 import {
   buildSeedLearningSkillContext,
@@ -125,6 +127,7 @@ describe("learning-step skill links", () => {
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_DATA_INTERPRETATION")).toBe("RC_DETAIL");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_CLASSIFICATION")).toBe("RC_DETAIL");
     expect(mapCurriculumSkillCodeToStoredSkillCode("RC_METHOD")).toBe("RC_DETAIL");
+    expect(mapCurriculumSkillCodeToStoredSkillCode("RC_COMPARISON")).toBe("RC_INFERENCE");
     expect(
       mapCurriculumSkillCodesToStoredSkillCodes(["RC_RELATION", "RC_CONNECTOR", "RC_RELATION"]),
     ).toEqual({ storedSkillCodes: ["RC_INFERENCE", "RC_DETAIL"], unmappedSkillCodes: [] });
@@ -161,7 +164,7 @@ describe("learning-step skill links", () => {
     ).toEqual({ storedSkillCodes: ["RC_DETAIL"], unmappedSkillCodes: ["RC_UNREVIEWED_TARGET"] });
   });
 
-  it("covers the authored A-route skill vocabulary through Cycle 36 without inventing mappings", () => {
+  it("covers the authored A-route skill vocabulary through Cycle 44 without inventing mappings", () => {
     const cycles = [
       ...EDUCATION_V2_P1_A_CYCLE_5_8,
       ...EDUCATION_V2_P1_A_CYCLE_9_12,
@@ -171,6 +174,8 @@ describe("learning-step skill links", () => {
       ...EDUCATION_V2_P1_A_CYCLE_25_28,
       ...EDUCATION_V2_P1_A_CYCLE_29_32,
       ...EDUCATION_V2_P1_A_CYCLE_33_36,
+      ...EDUCATION_V2_P1_A_CYCLE_37_40,
+      ...EDUCATION_V2_P1_A_CYCLE_41_44,
     ];
     const cycle34Survey = EDUCATION_V2_P1_A_CYCLE_33_36.find(
       (cycle) => cycle.sequence === 34,
@@ -181,6 +186,13 @@ describe("learning-step skill links", () => {
     expect(cycle34Survey?.outcome).toBe(
       "Akıntı ölçümünde ses dalgası, yansıyan parçacık ve veri çözümleme adımlarını sıralar.",
     );
+    const cycle41Maps = EDUCATION_V2_P1_A_CYCLE_41_44.find(
+      (cycle) => cycle.sequence === 41,
+    )?.sourceCycle.sourceStations.find((station) =>
+      station.key.includes("A41_COMPREHENSION_NYC_MAPS"),
+    );
+    expect(cycle41Maps?.skillCodes).toContain("RC_COMPARISON");
+    expect(cycle41Maps?.outcome).toMatch(/haritalarını karşılaştırır/u);
     const sourceSkillCodes = [
       ...new Set(
         cycles.flatMap((cycle) =>
