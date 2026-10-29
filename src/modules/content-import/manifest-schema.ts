@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const EXTERNAL_KEY_PATTERN = /^[a-z0-9][a-z0-9._-]{0,119}$/;
 const OPTION_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/;

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Sınıf yönetimi Zod şemaları (yalnızca SUPER_ADMIN).

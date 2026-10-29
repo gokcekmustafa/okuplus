@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const entitlementPlanSchema = z.enum(["PLAN_FREE", "PLAN_PREMIUM"]);
 const entitlementScopeSchema = z.enum(["PERSONAL", "ORGANIZATION"]);

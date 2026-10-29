@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { isApiError } from "../lib/errors.js";
 import { fail } from "../lib/response.js";
 import { setNoStore } from "../modules/auth/cookies.js";
-import { ZodError } from "zod";
+import { ZodError } from "zod/v3";
 
 function requestPath(url: string): string {
   return url.split("?", 1)[0] ?? url;

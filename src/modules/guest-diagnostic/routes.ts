@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Prisma } from "@prisma/client";
-import { z } from "zod";
+import { z } from "zod/v3";
 
 import type { Env } from "../../config/env.js";
 import { getAllowedOrigins } from "../../config/allowed-origins.js";

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Ödev yönetimi Zod şemaları (SUPER_ADMIN).

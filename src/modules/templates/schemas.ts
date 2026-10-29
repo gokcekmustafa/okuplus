@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const templateTypeSchema = z.enum(["COMPREHENSION", "FLUENCY", "INFERENCE", "VOCABULARY", "MIXED"]);
 const templateStatusSchema = z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]);

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Proficiency placement için kullanılan beceri kapsamı.

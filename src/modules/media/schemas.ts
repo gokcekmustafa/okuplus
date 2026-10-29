@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const mediaTypeSchema = z.enum(["IMAGE", "AUDIO", "VIDEO", "DOCUMENT"]);
 const mediaRoleSchema = z.enum(["MAIN", "OPTION", "EXPLANATION", "HINT"]);

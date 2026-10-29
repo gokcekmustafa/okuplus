@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
 import { ok } from "../../lib/response.js";
 import { requireAuth } from "../../middleware/authenticate.js";

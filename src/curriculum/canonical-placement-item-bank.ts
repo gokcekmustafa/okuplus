@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 import { PROFICIENCY_SKILL_CODES, type ProficiencySkillCode } from "./proficiency-levels.js";
 
 export const CANONICAL_PLACEMENT_ITEM_BANK_MANIFEST_ID = "OKU-CANONICAL-PLACEMENT-ITEM-BANK-V1";

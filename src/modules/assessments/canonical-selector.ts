@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { CANONICAL_PLACEMENT_ASSESSMENT_MANIFEST } from "../../curriculum/canonical-placement-assessment.js";
 import { conflictError } from "../../lib/errors.js";
 import { buildPublishedPlacementAssessmentWhere } from "../onboarding/placement-visibility.js";

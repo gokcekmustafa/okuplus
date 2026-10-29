@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const APP_ENV_VALUES = ["development", "test", "staging", "production"] as const;
 const VERCEL_ENV_VALUES = ["development", "preview", "production"] as const;

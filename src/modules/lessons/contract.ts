@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const LESSON_METADATA_TYPE = "LEARNING_LESSON" as const;
 const LEGACY_P1_A_PROGRAM_ID = "OKU-EDUCATION-V2-P1-A-MEANING-STRUCTURE" as const;

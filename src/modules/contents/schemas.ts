@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * İçerik Yönetimi Zod şemaları (SUPER_ADMIN + CONTENT_EDITOR).
