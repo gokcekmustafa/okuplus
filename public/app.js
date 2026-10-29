@@ -281,8 +281,8 @@ const PREMIUM_LIMIT_FEATURES = new Set(["PRACTICE", "PRACTICE_QUESTION"]);
 function getStoredTokens() {
   if (nativeMobileRuntime) return { ...nativeSession };
   return {
-    accessToken: localStorage.getItem(STORAGE_KEYS.accessToken),
-    refreshToken: localStorage.getItem(STORAGE_KEYS.refreshToken),
+    accessToken: null,
+    refreshToken: null,
     tenantId: localStorage.getItem(STORAGE_KEYS.tenantId),
   };
 }
@@ -426,26 +426,26 @@ function hideCelebration() {
 }
 
 async function setStoredSession(data) {
+  const tenantId = data?.tenantContext?.tenantId ?? data?.user?.tenantContext?.tenantId ?? "";
   if (nativeMobileRuntime) {
     if (typeof secureStoragePlugin?.setItem !== "function") {
       throw Object.assign(new Error("Native secure storage is unavailable"), {
         code: "SECURE_STORAGE_UNAVAILABLE",
       });
     }
+    const tokens = data?.tokens ?? {};
     const session = {
-      accessToken: data.tokens.accessToken,
-      refreshToken: data.tokens.refreshToken,
-      tenantId: data.tenantContext?.tenantId ?? "",
+      accessToken: typeof tokens.accessToken === "string" ? tokens.accessToken : null,
+      refreshToken: typeof tokens.refreshToken === "string" ? tokens.refreshToken : null,
+      tenantId,
     };
     await secureStoragePlugin.setItem(SECURE_SESSION_KEY, JSON.stringify(session));
-    nativeSession.accessToken = data.tokens.accessToken;
-    nativeSession.refreshToken = data.tokens.refreshToken;
-    nativeSession.tenantId = data.tenantContext?.tenantId ?? "";
+    nativeSession.accessToken = session.accessToken;
+    nativeSession.refreshToken = session.refreshToken;
+    nativeSession.tenantId = tenantId;
     return;
   }
-  localStorage.setItem(STORAGE_KEYS.accessToken, data.tokens.accessToken);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, data.tokens.refreshToken);
-  localStorage.setItem(STORAGE_KEYS.tenantId, data.tenantContext?.tenantId ?? "");
+  if (tenantId) localStorage.setItem(STORAGE_KEYS.tenantId, tenantId);
 }
 
 function clearStoredSession() {
@@ -1035,7 +1035,12 @@ async function login(email, password) {
   const res = await fetch("/auth/login", {
     method: "POST",
     credentials: "include",
-    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
+    headers: {
+      "content-type": "application/json",
+      ...(nativeMobileRuntime
+        ? {}
+        : { "x-auth-transport": "cookie", "x-auth-response": "cookie-only" }),
+    },
     body: JSON.stringify({ email, password }),
   });
   return parseResponse(res);
@@ -1045,7 +1050,12 @@ async function signup(displayName, email, password, phone) {
   const res = await fetch("/auth/signup", {
     method: "POST",
     credentials: "include",
-    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
+    headers: {
+      "content-type": "application/json",
+      ...(nativeMobileRuntime
+        ? {}
+        : { "x-auth-transport": "cookie", "x-auth-response": "cookie-only" }),
+    },
     body: JSON.stringify({
       displayName,
       email,
@@ -1060,7 +1070,12 @@ async function socialLogin(provider, idToken, nonce, displayName) {
   const res = await fetch(`/auth/social/${provider}`, {
     method: "POST",
     credentials: "include",
-    headers: { "content-type": "application/json", "x-auth-transport": "cookie" },
+    headers: {
+      "content-type": "application/json",
+      ...(nativeMobileRuntime
+        ? {}
+        : { "x-auth-transport": "cookie", "x-auth-response": "cookie-only" }),
+    },
     body: JSON.stringify({
       idToken,
       nonce,
@@ -1201,9 +1216,11 @@ async function refreshTokens(refreshToken, tenantId) {
     headers: {
       ...authHeaders(null, tenantId),
       ...csrfHeaders(),
-      "x-auth-transport": "cookie",
+      ...(nativeMobileRuntime
+        ? { "x-auth-transport": "cookie" }
+        : { "x-auth-transport": "cookie", "x-auth-response": "cookie-only" }),
     },
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify(nativeMobileRuntime ? { refreshToken } : {}),
   });
   return parseResponse(res);
 }
@@ -1229,11 +1246,14 @@ async function refreshStoredTokens(refreshToken, tenantId) {
       .then(async (tokens) => {
         if (nativeMobileRuntime) {
           await setStoredSession({ tokens, tenantContext: { tenantId: tenantId ?? "" } });
-        } else {
-          localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
-          localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+          return {
+            accessToken: tokens?.accessToken ?? null,
+            refreshToken: tokens?.refreshToken ?? null,
+            tenantId: tenantId ?? "",
+          };
         }
-        return tokens;
+        localStorage.setItem(STORAGE_KEYS.tenantId, tenantId ?? "");
+        return { accessToken: null, refreshToken: null, tenantId: tenantId ?? "" };
       })
       .finally(() => {
         authRefreshPromise = null;
@@ -1271,7 +1291,7 @@ async function authenticatedFetch(path, options = {}) {
   try {
     const tokens = await refreshStoredTokens(initialTokens.refreshToken, initialTokens.tenantId);
     return request({
-      accessToken: tokens.accessToken,
+      accessToken: nativeMobileRuntime ? tokens.accessToken : null,
       tenantId: initialTokens.tenantId,
     });
   } catch {
@@ -1288,9 +1308,11 @@ async function logout(refreshToken, tenantId) {
     headers: {
       ...authHeaders(null, tenantId),
       ...csrfHeaders(),
-      "x-auth-transport": "cookie",
+      ...(nativeMobileRuntime
+        ? { "x-auth-transport": "cookie" }
+        : { "x-auth-transport": "cookie", "x-auth-response": "cookie-only" }),
     },
-    body: JSON.stringify({ refreshToken }),
+    body: JSON.stringify(nativeMobileRuntime ? { refreshToken } : {}),
   });
   return parseResponse(res);
 }
