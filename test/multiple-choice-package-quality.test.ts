@@ -232,12 +232,12 @@ describe("multiple-choice package quality", () => {
         ),
       ).size,
     );
-    expect(unique).toHaveLength(2679);
+    expect(unique).toHaveLength(2739);
     const allVersions = unique.flatMap((item) => item.versions);
-    expect(allVersions).toHaveLength(2830);
+    expect(allVersions).toHaveLength(2890);
     expect(
       allVersions.filter((version) => typeof version.sourceVersionId === "string"),
-    ).toHaveLength(2803);
+    ).toHaveLength(2863);
     expect(
       MULTIPLE_CHOICE_SOURCE_PACKAGES.reduce(
         (total, source) => total + source.questions.length,

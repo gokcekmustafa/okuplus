@@ -20,7 +20,8 @@ export type EducationV2P1ACycle5To8GraphScope =
   | "CYCLES_37_TO_40"
   | "CYCLES_41_TO_44"
   | "CYCLES_45_TO_48"
-  | "CYCLES_49_TO_52";
+  | "CYCLES_49_TO_52"
+  | "CYCLES_53_TO_56";
 
 export function educationV2P1ACycle5To8ScopeSequences(
   scope: EducationV2P1ACycle5To8GraphScope,
@@ -73,6 +74,10 @@ export function educationV2P1ACycle5To8ScopeSequences(
   | 50
   | 51
   | 52
+  | 53
+  | 54
+  | 55
+  | 56
 )[] {
   if (scope === "CYCLE_5_ONLY") return [5];
   if (scope === "CYCLES_5_TO_8") return [5, 6, 7, 8];
@@ -87,6 +92,7 @@ export function educationV2P1ACycle5To8ScopeSequences(
   if (scope === "CYCLES_41_TO_44") return [41, 42, 43, 44];
   if (scope === "CYCLES_45_TO_48") return [45, 46, 47, 48];
   if (scope === "CYCLES_49_TO_52") return [49, 50, 51, 52];
+  if (scope === "CYCLES_53_TO_56") return [53, 54, 55, 56];
   throw new Error("Geçersiz eğitim grafiği kapsamı");
 }
 
@@ -105,7 +111,8 @@ export function educationV2P1ACycle5To8ProductionApproval(
     scope === "CYCLES_37_TO_40" ||
     scope === "CYCLES_41_TO_44" ||
     scope === "CYCLES_45_TO_48" ||
-    scope === "CYCLES_49_TO_52"
+    scope === "CYCLES_49_TO_52" ||
+    scope === "CYCLES_53_TO_56"
   ) {
     throw new Error("Ayrı döngü aralıklarının onayı ayrı sürümlü release kimliği kullanmalıdır.");
   }

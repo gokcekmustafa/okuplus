@@ -5,6 +5,7 @@ import {
 } from "./learning-cycle-manifest.js";
 import type { LearningRouteCycle } from "./learning-route-catalog.js";
 import { EDUCATION_V2_P1_A_CYCLE_49_52_SOURCE_DATA } from "./education-v2-p1-a-cycle-49-52-source-data.js";
+import { EDUCATION_V2_P1_A_CYCLE_53_56_SOURCE_DATA } from "./education-v2-p1-a-cycle-53-56-source-data.js";
 
 export const EDUCATION_V2_P1_800_TARGET_PER_ROUTE = 200;
 
@@ -23,6 +24,7 @@ export type EducationV2P1ExpansionDifficulty = "FOUNDATION" | "INTERMEDIATE" | "
 export type EducationV2P1ExpansionSourceEvidence = {
   title: string;
   url: string;
+  additionalSources?: readonly { title: string; url: string }[];
   checkedOn: string;
   verifiedFacts: readonly string[];
   contentRelation: string;
@@ -642,9 +644,11 @@ const sourceEvidence = (
   verifiedFacts: readonly string[],
   contentRelation: string,
   checkedOn = "2026-10-17",
+  additionalSources?: readonly { title: string; url: string }[],
 ): EducationV2P1ExpansionSourceEvidence => ({
   title,
   url,
+  ...(additionalSources?.length ? { additionalSources } : {}),
   checkedOn,
   verifiedFacts,
   contentRelation,
@@ -2215,6 +2219,7 @@ const sourcedStation = (
   contentRelation: string,
   questions: [DraftQuestion, DraftQuestion, DraftQuestion],
   checkedOn = "2026-10-17",
+  additionalSources?: readonly { title: string; url: string }[],
 ): DraftStation => {
   const evidence = sourceEvidence(
     sourceTitle,
@@ -2222,6 +2227,7 @@ const sourcedStation = (
     verifiedFacts,
     contentRelation,
     checkedOn,
+    additionalSources,
   );
   return station(
     key,
@@ -44200,6 +44206,43 @@ routeDrafts.push(
           ),
         ) as [DraftQuestion, DraftQuestion, DraftQuestion],
         "2026-10-29",
+      ),
+    ) as RouteDraft["stations"],
+  })),
+);
+
+routeDrafts.push(
+  ...EDUCATION_V2_P1_A_CYCLE_53_56_SOURCE_DATA.map((cycle) => ({
+    routeFamily: "A" as const,
+    priorSequence: cycle.sequence - 1,
+    priorPathCode: `EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_${cycle.sequence - 1}_G8_12`,
+    nextSequence: cycle.sequence,
+    positionOffset: cycle.sequence % 4,
+    stations: cycle.stations.map((draft) =>
+      sourcedStation(
+        draft.key,
+        draft.title,
+        draft.category as EducationV2P1ExpansionCategory,
+        [...draft.skillCodes],
+        draft.outcome,
+        draft.textTitle,
+        draft.text,
+        draft.sourceTitle,
+        draft.sourceUrl,
+        draft.verifiedFacts,
+        draft.contentRelation,
+        draft.questions.map((question) =>
+          q(
+            question.key,
+            question.prompt,
+            question.correct,
+            [...question.distractors] as [string, string, string],
+            question.explanation,
+            question.hint,
+          ),
+        ) as [DraftQuestion, DraftQuestion, DraftQuestion],
+        "2026-10-29",
+        "additionalSources" in draft ? draft.additionalSources : undefined,
       ),
     ) as RouteDraft["stations"],
   })),

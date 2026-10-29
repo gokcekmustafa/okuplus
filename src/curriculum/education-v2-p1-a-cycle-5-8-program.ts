@@ -530,6 +530,12 @@ export const EDUCATION_V2_P1_A_CYCLE_49_52: EducationV2P1ACycleProgram<
   (typeof EDUCATION_V2_P1_A_CYCLE_49_52_SEQUENCES)[number]
 >[] = EDUCATION_V2_P1_A_CYCLE_49_52_SEQUENCES.map((sequence) => buildCycle(sequence, 52));
 
+/** Source-verified, versioned A-route package following the 292 released stations. */
+export const EDUCATION_V2_P1_A_CYCLE_53_56_SEQUENCES = [53, 54, 55, 56] as const;
+export const EDUCATION_V2_P1_A_CYCLE_53_56: EducationV2P1ACycleProgram<
+  (typeof EDUCATION_V2_P1_A_CYCLE_53_56_SEQUENCES)[number]
+>[] = EDUCATION_V2_P1_A_CYCLE_53_56_SEQUENCES.map((sequence) => buildCycle(sequence, 56));
+
 export function getEducationV2P1ACycle(sequence: number): EducationV2P1ACycleProgram | undefined {
   return [
     ...EDUCATION_V2_P1_A_CYCLE_5_8,
@@ -544,6 +550,7 @@ export function getEducationV2P1ACycle(sequence: number): EducationV2P1ACyclePro
     ...EDUCATION_V2_P1_A_CYCLE_41_44,
     ...EDUCATION_V2_P1_A_CYCLE_45_48,
     ...EDUCATION_V2_P1_A_CYCLE_49_52,
+    ...EDUCATION_V2_P1_A_CYCLE_53_56,
   ].find((cycle) => cycle.sequence === sequence);
 }
 
