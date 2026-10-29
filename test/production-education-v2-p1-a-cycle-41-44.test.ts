@@ -197,7 +197,7 @@ describe("P1-A Cycles 41–44 (stations 233–252)", () => {
     ).toBeLessThanOrEqual(2);
   });
 
-  it("links after station 232 and approves only the Cycle 41–44 source release", () => {
+  it("links through Cycle 45 without widening the Cycle 41–44 source release", () => {
     const routes = LEARNING_ROUTE_CYCLES.filter((route) => route.routeFamily === "A");
     const p0Steps = buildEducationV2P0LearningCycleManifest().steps.length;
     const stepsBefore41 = routes
@@ -221,9 +221,7 @@ describe("P1-A Cycles 41–44 (stations 233–252)", () => {
       expect(route?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
       expect(route?.publicationApproved()).toBe(true);
       expect(matchesLearningRouteGraph(graphFor(cycle.sequence))).toBe(true);
-      expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(
-        cycle.sequence < 44 ? cycle.sequence + 1 : undefined,
-      );
+      expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(cycle.sequence + 1);
     }
     expect(EDUCATION_V2_P1_A_CYCLE_41_44_SEQUENCES).toEqual([41, 42, 43, 44]);
     expect(isEducationV2P1ACycle41To44ProductionAssignmentEnabled(45)).toBe(false);
