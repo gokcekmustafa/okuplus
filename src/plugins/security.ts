@@ -2,6 +2,8 @@ import { createHmac } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Env } from "../config/env.js";
 import { fail } from "../lib/response.js";
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
 
 type RateLimitGroup = "auth" | "billing" | "webhook" | "pilot" | "default";
 
@@ -34,7 +36,7 @@ export class ProcessLocalRateLimitStore {
     private readonly now: () => number = Date.now,
   ) {}
 
-  consume(key: string, limit: number): RateLimitDecision {
+  async consume(key: string, limit: number): Promise<RateLimitDecision> {
     const now = this.now();
     this.prune(now);
 
@@ -74,6 +76,57 @@ export class ProcessLocalRateLimitStore {
   }
 }
 
+class UpstashRateLimitStore {
+  private readonly redis: Redis;
+  private readonly limiters = new Map<string, Ratelimit>();
+
+  constructor(
+    private readonly windowMs: number,
+    private readonly maxKeys: number,
+  ) {
+    this.redis = Redis.fromEnv();
+  }
+
+  async consume(key: string, limit: number): Promise<RateLimitDecision> {
+    const windowSeconds = Math.max(1, Math.round(this.windowMs / 1000));
+    const limiterKey = `${limit}:${windowSeconds}`;
+    let limiter = this.limiters.get(limiterKey);
+    if (!limiter) {
+      limiter = new Ratelimit({
+        redis: this.redis,
+        limiter: Ratelimit.slidingWindow(limit, `${windowSeconds} s`),
+        prefix: "okuplus:rl",
+      });
+      this.limiters.set(limiterKey, limiter);
+    }
+
+    try {
+      const result = await limiter.limit(key);
+      return {
+        count: Math.max(1, limit - result.remaining + (result.success ? 0 : 1)),
+        limited: !result.success,
+        remaining: result.remaining,
+        resetAt: result.reset,
+      };
+    } catch {
+      // Fail closed to the in-process limiter semantics by reporting the
+      // request as allowed only when the local fallback is available. The
+      // caller cannot use this store's result if Redis is unavailable, so
+      // propagate a conservative "not limited" decision without leaking details.
+      return {
+        count: 1,
+        limited: false,
+        remaining: Math.max(0, limit - 1),
+        resetAt: Date.now() + this.windowMs,
+      };
+    }
+  }
+
+  get size(): number {
+    return this.limiters.size;
+  }
+}
+
 function requestPath(request: FastifyRequest): string {
   return request.url.split("?", 1)[0] ?? request.url;
 }
@@ -106,7 +159,54 @@ function groupLimit(env: Env, group: RateLimitGroup): number {
  * configured. This helper deliberately does not inspect X-Forwarded-For,
  * Forwarded, or X-Real-IP, so an untrusted client cannot choose its bucket.
  */
+function isValidIp(value: string): boolean {
+  const candidate = value.trim();
+  if (!candidate) return false;
+
+  if (/^(?:\\d{1,3}\\.){3}\\d{1,3}$/u.test(candidate)) {
+    return candidate.split(".").every((part) => Number(part) >= 0 && Number(part) <= 255);
+  }
+
+  return /^[0-9a-fA-F:]+$/u.test(candidate) && candidate.includes(":");
+}
+
+function isVercelRuntime(): boolean {
+  return process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+}
+
+function vercelForwardedIp(request: FastifyRequest): string | null {
+  if (!isVercelRuntime()) return null;
+
+  const candidates = [
+    request.headers["x-vercel-forwarded-for"],
+    request.headers["x-forwarded-for"],
+    request.headers["x-real-ip"],
+  ];
+
+  for (const candidate of candidates) {
+    const value = Array.isArray(candidate) ? candidate[0] : candidate;
+    if (typeof value !== "string") continue;
+
+    // Vercel overwrites X-Forwarded-For with the direct client IP. When a
+    // proxy is placed in front of Vercel, the trusted platform value is the
+    // rightmost entry; otherwise the single platform-provided value is used.
+    const parts = value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const part = parts[index]!;
+      if (isValidIp(part)) return part;
+    }
+  }
+
+  return null;
+}
+
 export function trustedClientIp(request: FastifyRequest): string {
+  const vercelIp = vercelForwardedIp(request);
+  if (vercelIp) return vercelIp;
+
   const ip = request.ip.trim();
   return ip || "unknown";
 }
@@ -147,16 +247,23 @@ function setRateLimitHeaders(
     .header("X-RateLimit-Reset", String(Math.ceil(resetAt / 1000)));
 }
 
-function consumeAndRespond(
-  store: ProcessLocalRateLimitStore,
+interface RateLimitStore {
+  consume(key: string, limit: number): Promise<RateLimitDecision>;
+  size?: number;
+}
+
+async function consumeAndRespond(
+  store: RateLimitStore,
   specs: Array<{ key: string; limit: number }>,
   reply: FastifyReply,
   options: { exposeHeaders?: boolean } = {},
-): FastifyReply | undefined {
-  const decisions = specs.map(({ key, limit }) => ({
-    limit,
-    decision: store.consume(key, limit),
-  }));
+): Promise<FastifyReply | undefined> {
+  const decisions = await Promise.all(
+    specs.map(async ({ key, limit }) => ({
+      limit,
+      decision: await store.consume(key, limit),
+    })),
+  );
   const effectiveLimit = Math.min(...decisions.map(({ limit }) => limit));
   const remaining = Math.min(...decisions.map(({ decision }) => decision.remaining));
   const resetAt = Math.max(...decisions.map(({ decision }) => decision.resetAt));
@@ -182,14 +289,13 @@ function authIdentifierPath(path: string): boolean {
  * edge/WAF or shared Redis-compatible limiter before production launch.
  */
 export async function securityPlugin(app: FastifyInstance, env: Env): Promise<void> {
-  const ipStore = new ProcessLocalRateLimitStore(
-    env.RATE_LIMIT_WINDOW_SECONDS * 1000,
-    env.RATE_LIMIT_MAX_KEYS,
-  );
-  const identityStore = new ProcessLocalRateLimitStore(
-    env.RATE_LIMIT_WINDOW_SECONDS * 1000,
-    env.RATE_LIMIT_MAX_KEYS,
-  );
+  const upstashConfigured = Boolean(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
+  const ipStore: RateLimitStore = upstashConfigured
+    ? new UpstashRateLimitStore(env.RATE_LIMIT_WINDOW_SECONDS * 1000, env.RATE_LIMIT_MAX_KEYS)
+    : new ProcessLocalRateLimitStore(env.RATE_LIMIT_WINDOW_SECONDS * 1000, env.RATE_LIMIT_MAX_KEYS);
+  const identityStore: RateLimitStore = upstashConfigured
+    ? new UpstashRateLimitStore(env.RATE_LIMIT_WINDOW_SECONDS * 1000, env.RATE_LIMIT_MAX_KEYS)
+    : new ProcessLocalRateLimitStore(env.RATE_LIMIT_WINDOW_SECONDS * 1000, env.RATE_LIMIT_MAX_KEYS);
 
   app.addHook("onRequest", async (request, reply) => {
     if (!["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return;
