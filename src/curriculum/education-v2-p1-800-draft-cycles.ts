@@ -4,6 +4,7 @@ import {
   type LearningCycleManifest,
 } from "./learning-cycle-manifest.js";
 import type { LearningRouteCycle } from "./learning-route-catalog.js";
+import { EDUCATION_V2_P1_A_CYCLE_49_52_SOURCE_DATA } from "./education-v2-p1-a-cycle-49-52-source-data.js";
 
 export const EDUCATION_V2_P1_800_TARGET_PER_ROUTE = 200;
 
@@ -44166,6 +44167,42 @@ routeDrafts.push(
       ),
     ],
   },
+);
+
+routeDrafts.push(
+  ...EDUCATION_V2_P1_A_CYCLE_49_52_SOURCE_DATA.map((cycle) => ({
+    routeFamily: "A" as const,
+    priorSequence: cycle.sequence - 1,
+    priorPathCode: `EDUCATION_V2_P1_A_MEANING_STRUCTURE_CYCLE_${cycle.sequence - 1}_G8_12`,
+    nextSequence: cycle.sequence,
+    positionOffset: cycle.sequence % 4,
+    stations: cycle.stations.map((draft) =>
+      sourcedStation(
+        draft.key,
+        draft.title,
+        draft.category as EducationV2P1ExpansionCategory,
+        [...draft.skillCodes],
+        draft.outcome,
+        draft.textTitle,
+        draft.text,
+        draft.sourceTitle,
+        draft.sourceUrl,
+        draft.verifiedFacts,
+        draft.contentRelation,
+        draft.questions.map((question) =>
+          q(
+            question.key,
+            question.prompt,
+            question.correct,
+            [...question.distractors] as [string, string, string],
+            question.explanation,
+            question.hint,
+          ),
+        ) as [DraftQuestion, DraftQuestion, DraftQuestion],
+        "2026-10-29",
+      ),
+    ) as RouteDraft["stations"],
+  })),
 );
 
 const unlinkedDraftCycles = routeDrafts.map(buildDraftCycle);

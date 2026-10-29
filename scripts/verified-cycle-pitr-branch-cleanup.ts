@@ -14,6 +14,7 @@ import {
   isCycle37To40PitrEvidenceValid,
   isCycle41To44PitrEvidenceValid,
   isCycle45To48PitrEvidenceValid,
+  isCycle49To52PitrEvidenceValid,
   type Cycle5To8PitrEvidenceExpectation,
   type Cycle9To12PitrEvidenceExpectation,
   type Cycle13To16PitrEvidenceExpectation,
@@ -25,6 +26,7 @@ import {
   type Cycle37To40PitrEvidenceExpectation,
   type Cycle41To44PitrEvidenceExpectation,
   type Cycle45To48PitrEvidenceExpectation,
+  type Cycle49To52PitrEvidenceExpectation,
   type CyclePitrCleanupScope,
 } from "./production-cycle4-pitr-restore-evidence.js";
 
@@ -108,6 +110,13 @@ const scopeDetails = {
     graphScopeVariable: "CYCLE4548_GRAPH_SCOPE",
     evidencePathVariable: "CYCLE4548_PITR_EVIDENCE_PATH",
   },
+  "cycle49-52": {
+    graphScope: ["CYCLES_49_TO_52"],
+    workflow: "Manual Education V2 P1-A Cycles 49–52 production provision",
+    operationVariable: "CYCLE4952_OPERATION",
+    graphScopeVariable: "CYCLE4952_GRAPH_SCOPE",
+    evidencePathVariable: "CYCLE4952_PITR_EVIDENCE_PATH",
+  },
 } as const satisfies Record<
   CyclePitrCleanupScope,
   {
@@ -134,7 +143,8 @@ export type CyclePitrCleanupExpectation =
   | (Cycle33To36PitrEvidenceExpectation & PitrCleanupStorageExpectation)
   | (Cycle37To40PitrEvidenceExpectation & PitrCleanupStorageExpectation)
   | (Cycle41To44PitrEvidenceExpectation & PitrCleanupStorageExpectation)
-  | (Cycle45To48PitrEvidenceExpectation & PitrCleanupStorageExpectation);
+  | (Cycle45To48PitrEvidenceExpectation & PitrCleanupStorageExpectation)
+  | (Cycle49To52PitrEvidenceExpectation & PitrCleanupStorageExpectation);
 
 type CleanupIdentity = Pick<
   CyclePitrCleanupExpectation,
@@ -169,6 +179,8 @@ function createCleanupExpectation(
       return { ...identity, scope, graphScope: "CYCLES_41_TO_44" };
     case "cycle45-48":
       return { ...identity, scope, graphScope: "CYCLES_45_TO_48" };
+    case "cycle49-52":
+      return { ...identity, scope, graphScope: "CYCLES_49_TO_52" };
   }
 }
 
@@ -298,6 +310,8 @@ function evidencePassesScopeValidator(
       return isCycle41To44PitrEvidenceValid(evidence, expected);
     case "cycle45-48":
       return isCycle45To48PitrEvidenceValid(evidence, expected);
+    case "cycle49-52":
+      return isCycle49To52PitrEvidenceValid(evidence, expected);
   }
 }
 

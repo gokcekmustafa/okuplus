@@ -33,6 +33,7 @@ import {
   EDUCATION_V2_P1_A_CYCLE_37_40,
   EDUCATION_V2_P1_A_CYCLE_41_44,
   EDUCATION_V2_P1_A_CYCLE_45_48,
+  EDUCATION_V2_P1_A_CYCLE_49_52,
 } from "./education-v2-p1-a-cycle-5-8-program.js";
 import { isEducationV2P1ACycle5To8ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-5-8-release.js";
 import { isEducationV2P1ACycle9To12ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-9-12-release.js";
@@ -45,6 +46,7 @@ import { isEducationV2P1ACycle33To36ProductionAssignmentEnabled } from "./educat
 import { isEducationV2P1ACycle37To40ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-37-40-release.js";
 import { isEducationV2P1ACycle41To44ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-41-44-release.js";
 import { isEducationV2P1ACycle45To48ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-45-48-release.js";
+import { isEducationV2P1ACycle49To52ProductionAssignmentEnabled } from "./education-v2-p1-a-cycle-49-52-release.js";
 import { EDUCATION_V2_P1_BCD_PROGRAMS } from "./education-v2-p1-bcd-program.js";
 import {
   EDUCATION_V2_P1_800_CATEGORY_TARGETS,
@@ -424,6 +426,29 @@ const expansionRouteCycles = EDUCATION_V2_P1_800_DRAFT_CYCLES.map((cycle) => {
       publicationApproved,
     };
   }
+  const preparedA49To52 = EDUCATION_V2_P1_A_CYCLE_49_52.find(
+    (candidate) => candidate.sequence === cycle.sequence,
+  );
+  if (cycle.routeFamily === "A" && preparedA49To52) {
+    const publicationApproved = () =>
+      isEducationV2P1ACycle49To52ProductionAssignmentEnabled(preparedA49To52.sequence);
+    return {
+      ...cycle,
+      pathCode: preparedA49To52.program.path.code,
+      programId: preparedA49To52.program.programId,
+      version: preparedA49To52.manifest.cycleVersion,
+      sequence: preparedA49To52.manifest.sequence,
+      routeFamily: "A" as const,
+      scopeCode: "G8_12",
+      title: preparedA49To52.program.path.title,
+      units: preparedA49To52.program.path.units,
+      manifest: preparedA49To52.manifest,
+      authoringStatus: publicationApproved()
+        ? ("OWNER_RELEASE_APPROVED" as const)
+        : ("DRAFT_NOT_RELEASED" as const),
+      publicationApproved,
+    };
+  }
   return cycle;
 });
 
@@ -468,6 +493,7 @@ const authoredSkillPrograms: readonly AuthoredSkillProgram[] = [
   ...EDUCATION_V2_P1_A_CYCLE_37_40.map(({ program }) => program),
   ...EDUCATION_V2_P1_A_CYCLE_41_44.map(({ program }) => program),
   ...EDUCATION_V2_P1_A_CYCLE_45_48.map(({ program }) => program),
+  ...EDUCATION_V2_P1_A_CYCLE_49_52.map(({ program }) => program),
   ...EDUCATION_V2_P1_BCD_PROGRAMS,
 ];
 
