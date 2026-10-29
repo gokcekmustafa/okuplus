@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isIP } from "node:net";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Env } from "../config/env.js";
 import { fail } from "../lib/response.js";
@@ -79,12 +80,14 @@ export class ProcessLocalRateLimitStore {
 class UpstashRateLimitStore {
   private readonly redis: Redis;
   private readonly limiters = new Map<string, Ratelimit>();
+  private readonly fallback: ProcessLocalRateLimitStore;
 
   constructor(
     private readonly windowMs: number,
     private readonly maxKeys: number,
   ) {
     this.redis = Redis.fromEnv();
+    this.fallback = new ProcessLocalRateLimitStore(windowMs, maxKeys);
   }
 
   async consume(key: string, limit: number): Promise<RateLimitDecision> {
@@ -109,16 +112,11 @@ class UpstashRateLimitStore {
         resetAt: result.reset,
       };
     } catch {
-      // Fail closed to the in-process limiter semantics by reporting the
-      // request as allowed only when the local fallback is available. The
-      // caller cannot use this store's result if Redis is unavailable, so
-      // propagate a conservative "not limited" decision without leaking details.
-      return {
-        count: 1,
-        limited: false,
-        remaining: Math.max(0, limit - 1),
-        resetAt: Date.now() + this.windowMs,
-      };
+      // Redis is unavailable or rejected the request. Fall back to the local
+      // process store so the configured limit is still enforced for this
+      // instance. This is not a distributed decision, but it prevents an
+      // outage from disabling protection entirely.
+      return this.fallback.consume(key, limit);
     }
   }
 
@@ -160,14 +158,7 @@ function groupLimit(env: Env, group: RateLimitGroup): number {
  * Forwarded, or X-Real-IP, so an untrusted client cannot choose its bucket.
  */
 function isValidIp(value: string): boolean {
-  const candidate = value.trim();
-  if (!candidate) return false;
-
-  if (/^(?:\\d{1,3}\\.){3}\\d{1,3}$/u.test(candidate)) {
-    return candidate.split(".").every((part) => Number(part) >= 0 && Number(part) <= 255);
-  }
-
-  return /^[0-9a-fA-F:]+$/u.test(candidate) && candidate.includes(":");
+  return isIP(value.trim()) !== 0;
 }
 
 function isVercelRuntime(): boolean {
@@ -177,28 +168,22 @@ function isVercelRuntime(): boolean {
 function vercelForwardedIp(request: FastifyRequest): string | null {
   if (!isVercelRuntime()) return null;
 
-  const candidates = [
-    request.headers["x-vercel-forwarded-for"],
-    request.headers["x-forwarded-for"],
-    request.headers["x-real-ip"],
-  ];
+  // Only the platform-provided header is trusted. Generic forwarded headers
+  // remain attacker-controlled outside the Vercel runtime and are ignored.
+  const value = request.headers["x-vercel-forwarded-for"];
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string") return null;
 
-  for (const candidate of candidates) {
-    const value = Array.isArray(candidate) ? candidate[0] : candidate;
-    if (typeof value !== "string") continue;
-
-    // Vercel overwrites X-Forwarded-For with the direct client IP. When a
-    // proxy is placed in front of Vercel, the trusted platform value is the
-    // rightmost entry; otherwise the single platform-provided value is used.
-    const parts = value
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-    for (let index = parts.length - 1; index >= 0; index -= 1) {
-      const part = parts[index]!;
-      if (isValidIp(part)) return part;
-    }
+  const parts = raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]!;
+    if (isValidIp(part)) return part;
   }
+
+  return null;
 
   return null;
 }
