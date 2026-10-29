@@ -26,6 +26,7 @@ import {
   getStudentLearningPath,
   assertLearningStepAccessible,
   assertLearningContentAccessible,
+  assertLearningTemplateAccessible,
   completeLearningStepForSession,
 } from "../src/modules/learning-path/service.js";
 import { learningRouteCycle } from "../src/curriculum/learning-route-catalog.js";
@@ -2192,9 +2193,20 @@ describe.sequential("P1 learning cycle transition integration", () => {
     await expect(
       assertLearningStepAccessible(cycle52Fixture.actor, station293.id),
     ).resolves.toMatchObject({ id: station293.id, status: "active", availability: "READY" });
+    expect(station293.contentVersionId).toBeTruthy();
+    const station293Content = await prisma.contentVersion.findUnique({
+      where: { id: station293.contentVersionId! },
+      select: { status: true, body: true, publishedAt: true },
+    });
+    expect(station293Content).toMatchObject({ status: "PUBLISHED" });
+    expect(station293Content?.body.trim().length).toBeGreaterThan(0);
     await expect(
       assertLearningContentAccessible(cycle52Fixture.actor, station293.contentVersionId!),
-    ).resolves.toBeTruthy();
+    ).resolves.toBeUndefined();
+    expect(station293.exerciseTemplateVersionId).toBeTruthy();
+    await expect(
+      assertLearningTemplateAccessible(cycle52Fixture.actor, station293.exerciseTemplateVersionId!),
+    ).resolves.toMatchObject({ id: station293.id, status: "active", availability: "READY" });
 
     const replay = await reconcileP1ToNextCycle(cycle52Fixture.actor, {
       p1LearningPathId: cycle52Fixture.enrollmentId,
