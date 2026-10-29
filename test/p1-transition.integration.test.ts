@@ -2070,7 +2070,7 @@ describe.sequential("P1 learning cycle transition integration", () => {
     const completedPath = await getStudentLearningPath(cycle48Fixture.actor);
     expect(
       completedPath?.paths
-        .find((path) => path.path.cycleSequence === 44)
+        .find((path) => path.path.cycleSequence === 48)
         ?.nodes.every((node) => node.status === "completed"),
     ).toBe(true);
 

@@ -227,9 +227,7 @@ describe("P1-A Cycles 45–48 (stations 253–272)", () => {
       expect(route?.authoringStatus).toBe("OWNER_RELEASE_APPROVED");
       expect(route?.publicationApproved()).toBe(true);
       expect(matchesLearningRouteGraph(graphFor(cycle.sequence))).toBe(true);
-      expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(
-        cycle.sequence < 48 ? cycle.sequence + 1 : undefined,
-      );
+      expect(nextLearningRouteCycle(cycle.program.path.code)?.sequence).toBe(cycle.sequence + 1);
     }
     expect(EDUCATION_V2_P1_A_CYCLE_45_48_SEQUENCES).toEqual([45, 46, 47, 48]);
     expect(isEducationV2P1ACycle45To48ProductionAssignmentEnabled(44)).toBe(false);
