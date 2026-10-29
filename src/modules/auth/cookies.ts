@@ -7,6 +7,13 @@ export const REFRESH_COOKIE_NAME = "__Secure-oku_refresh";
 export const CSRF_COOKIE_NAME = "__Host-oku_csrf";
 export const AUTH_TRANSPORT_HEADER = "x-auth-transport";
 export const COOKIE_AUTH_TRANSPORT = "cookie";
+export const AUTH_RESPONSE_HEADER = "x-auth-response";
+export const COOKIE_ONLY_RESPONSE = "cookie-only";
+
+export function isCookieOnlyResponseRequested(request: FastifyRequest): boolean {
+  const value = request.headers[AUTH_RESPONSE_HEADER];
+  return typeof value === "string" && value.trim().toLowerCase() === COOKIE_ONLY_RESPONSE;
+}
 
 type CookieOptions = {
   httpOnly?: boolean;

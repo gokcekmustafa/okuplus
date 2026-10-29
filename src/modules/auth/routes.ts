@@ -14,6 +14,7 @@ import { requireAuth } from "../../middleware/authenticate.js";
 import {
   clearAuthCookies,
   getCookie,
+  isCookieOnlyResponseRequested,
   isCookieTransportRequested,
   REFRESH_COOKIE_NAME,
   resolveRefreshToken,
@@ -158,9 +159,20 @@ export async function authRoutes(
     statusCode = 200,
   ) {
     setNoStore(reply);
-    if (cookieAuthEnabled && isCookieTransportRequested(request)) {
+    const cookieTransport = cookieAuthEnabled && isCookieTransportRequested(request);
+    if (cookieTransport) {
       setAuthCookies(reply, session.tokens, createCsrfToken(csrfSecret));
     }
+
+    if (cookieTransport && isCookieOnlyResponseRequested(request)) {
+      return reply.code(statusCode).send(
+        ok({
+          user: session.user,
+          tenantContext: session.tenantContext,
+        }),
+      );
+    }
+
     return reply.code(statusCode).send(ok(session));
   }
 
@@ -203,12 +215,16 @@ export async function authRoutes(
       setNoStore(reply);
       const refreshToken = resolveRefreshToken(request, request.body?.refreshToken);
       const tokens = await authProvider.refreshSession(refreshToken);
-      if (
+      const refreshCookieTransport =
         cookieAuthEnabled &&
         (isCookieTransportRequested(request) ||
-          getCookie(request, REFRESH_COOKIE_NAME) !== undefined)
-      ) {
+          getCookie(request, REFRESH_COOKIE_NAME) !== undefined);
+      if (refreshCookieTransport) {
         setAuthCookies(reply, tokens, createCsrfToken(csrfSecret));
+      }
+
+      if (refreshCookieTransport && isCookieOnlyResponseRequested(request)) {
+        return reply.send(ok({ refreshed: true }));
       }
       return reply.send(ok(tokens));
     },
