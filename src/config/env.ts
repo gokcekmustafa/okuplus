@@ -322,6 +322,7 @@ export function parseEnv(raw: RawEnv): Env {
   if (result.data.NODE_ENV === "test") {
     return {
       ...result.data,
+      ...(raw.RATE_LIMIT_MAX === undefined ? { RATE_LIMIT_MAX: 10000 } : {}),
       ...(raw.RATE_LIMIT_AUTH_MAX === undefined ? { RATE_LIMIT_AUTH_MAX: 1000 } : {}),
       ...(raw.RATE_LIMIT_AUTH_IDENTIFIER_MAX === undefined
         ? { RATE_LIMIT_AUTH_IDENTIFIER_MAX: 1000 }
