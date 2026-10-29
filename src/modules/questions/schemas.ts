@@ -118,7 +118,11 @@ const optionsArraySchema = z
 // MULTIPLE_CHOICE correctAnswer şeması
 const multipleChoiceCorrectSchema = z.object({
   type: z.literal("MULTIPLE_CHOICE"),
-  correctOptionIds: z.array(z.string().trim().min(1)).min(1, "En az bir doğru seçenek gerekli").max(20, "En fazla 20 doğru seçenek olabilir"),  allowMultiple: z.boolean(),
+  correctOptionIds: z
+    .array(z.string().trim().min(1))
+    .min(1, "En az bir doğru seçenek gerekli")
+    .max(20, "En fazla 20 doğru seçenek olabilir"),
+  allowMultiple: z.boolean(),
   partialCredit: z.boolean(),
 });
 
@@ -132,7 +136,11 @@ const trueFalseCorrectSchema = z.object({
 const openEndedCorrectSchema = z.object({
   type: z.literal("OPEN_ENDED"),
   expectedAnswer: z.string().trim().min(1, "Beklenen cevap gerekli"),
-  acceptableVariants: z.array(z.string().trim().min(1)).max(50, "En fazla 50 kabul edilebilir varyant olabilir").optional(),  rubric: z
+  acceptableVariants: z
+    .array(z.string().trim().min(1))
+    .max(50, "En fazla 50 kabul edilebilir varyant olabilir")
+    .optional(),
+  rubric: z
     .array(
       z.object({
         criteria: z.string().trim().min(1),
