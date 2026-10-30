@@ -33,6 +33,125 @@ export interface PersonalContext {
   studentProfileId: string;
 }
 
+export type PersonalContextRecoveryResult =
+  | { status: "RESTORED"; tenantId: string }
+  | { status: "NOT_APPLICABLE" }
+  | { status: "AMBIGUOUS" }
+  | { status: "DELETION_REQUEST_OPEN" };
+
+const OPEN_ACCOUNT_DELETION_STATUSES = [
+  "RECEIVED",
+  "IDENTITY_REQUIRED",
+  "AUTHORITY_REVIEW",
+  "SCOPE_REVIEW",
+  "PROCESSING",
+  "RETRYABLE_FAILURE",
+] as const;
+
+/**
+ * Login sonrasında yalnızca kullanıcıya ait olduğu kanıtlanan, soft-delete
+ * edilmiş bireysel alanı aynı kimlikle geri açar. Üyelik/profil/ilerleme
+ * taşınmaz veya yeniden oluşturulmaz. Paylaşılan ya da belirsiz alanlar kapalı
+ * kalır.
+ */
+export async function restoreDeletedPersonalContextInTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  requestedTenantId?: string | null,
+): Promise<PersonalContextRecoveryResult> {
+  await tx.$queryRaw`
+    SELECT 1::int AS acquired
+    FROM pg_advisory_xact_lock(hashtextextended(${`personal-context:${userId}`}, 0))
+  `;
+
+  const user = await tx.user.findFirst({
+    where: { id: userId, status: "ACTIVE", deletedAt: null, platformRole: null },
+    select: { id: true },
+  });
+  if (!user) return { status: "NOT_APPLICABLE" };
+
+  const candidates = await tx.tenant.findMany({
+    where: {
+      type: "INDIVIDUAL",
+      status: "ACTIVE",
+      deletedAt: { not: null },
+      ...(requestedTenantId ? { id: requestedTenantId } : {}),
+      memberships: { some: { userId, role: "STUDENT" } },
+    },
+    select: { id: true, deletedAt: true },
+  });
+  if (candidates.length === 0) return { status: "NOT_APPLICABLE" };
+  if (candidates.length !== 1) return { status: "AMBIGUOUS" };
+
+  const tenant = candidates[0]!;
+  const [memberships, profiles, deletionTable] = await Promise.all([
+    tx.membership.findMany({
+      where: { tenantId: tenant.id },
+      select: { userId: true, role: true, status: true, deletedAt: true },
+    }),
+    tx.studentProfile.findMany({
+      where: { tenantId: tenant.id },
+      select: { studentId: true },
+    }),
+    tx.$queryRaw<Array<{ relationName: string | null }>>`
+      SELECT to_regclass('public."AccountDeletionRequest"')::text AS "relationName"
+    `,
+  ]);
+
+  if (
+    memberships.length !== 1 ||
+    memberships[0]?.userId !== userId ||
+    memberships[0]?.role !== "STUDENT" ||
+    memberships[0]?.status !== "ACTIVE" ||
+    memberships[0]?.deletedAt !== null ||
+    profiles.length !== 1 ||
+    profiles[0]?.studentId !== userId
+  ) {
+    return { status: "AMBIGUOUS" };
+  }
+
+  if (deletionTable[0]?.relationName) {
+    const openRequest = await tx.accountDeletionRequest.findFirst({
+      where: { userId, status: { in: [...OPEN_ACCOUNT_DELETION_STATUSES] } },
+      select: { id: true },
+    });
+    if (openRequest) return { status: "DELETION_REQUEST_OPEN" };
+  }
+
+  const restoredAt = new Date();
+  await tx.tenant.update({ where: { id: tenant.id }, data: { deletedAt: null } });
+  await tx.auditLog.create({
+    data: {
+      tenantId: tenant.id,
+      actorUserId: userId,
+      action: "UPDATE",
+      entityType: "PERSONAL_CONTEXT_RECOVERY",
+      entityId: tenant.id,
+      before: {
+        deletedAt: tenant.deletedAt?.toISOString() ?? null,
+        evidence: "SINGLE_ACTIVE_STUDENT_MEMBERSHIP_AND_PROFILE",
+      },
+      after: { deletedAt: null, restoredAt: restoredAt.toISOString() },
+    },
+  });
+
+  return { status: "RESTORED", tenantId: tenant.id };
+}
+
+export function personalContextRecoveryError(
+  reason: "AMBIGUOUS" | "DELETION_REQUEST_OPEN" | "CHECK_FAILED" | "RECOVERY_DISABLED",
+) {
+  const message =
+    reason === "DELETION_REQUEST_OPEN"
+      ? "Açık hesap silme talebiniz nedeniyle kişisel alanınız otomatik açılamadı. Destek ekibiyle iletişime geçin."
+      : reason === "RECOVERY_DISABLED"
+        ? "Hesabınıza bağlı etkin bir çalışma alanı bulunamadı. Kişisel alan kurtarma işlemi henüz etkin değil; destek ekibiyle iletişime geçin."
+        : "Hesabınıza bağlı kişisel alan güvenle doğrulanamadı. Öğrenme kayıtlarınız korunuyor; destek ekibiyle iletişime geçin.";
+  return new ApiError("ACCOUNT_CONTEXT_REPAIR_REQUIRED", message, 409, {
+    reasonCode: `PERSONAL_CONTEXT_${reason}`,
+  });
+}
+
 /**
  * Mevcut kullanıcı için personal context'i atomik ve idempotent kurar.
  */

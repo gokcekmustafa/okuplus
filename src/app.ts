@@ -81,6 +81,7 @@ export async function buildApp(
     jwtSecret: env.JWT_SECRET,
     accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
     refreshTtlSeconds: env.JWT_REFRESH_TTL_SECONDS,
+    personalContextRecoveryEnabled: env.PERSONAL_CONTEXT_RECOVERY_ENABLED === "on",
   });
   const socialTokenVerifier =
     options.socialTokenVerifier ??

@@ -1,8 +1,9 @@
 import { Prisma, type Membership, type TenantType, type User } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { conflictError, notFoundError } from "../../lib/errors.js";
+import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
 import { ScryptPasswordHasher } from "../auth/index.js";
 import { entitlementPlanFeatureLabels } from "../entitlements/service.js";
+import { provisionPersonalContextInTransaction } from "../tenant/personal-service.js";
 import {
   adminEntitlementStatus,
   entitlementForAccountContext,
@@ -41,6 +42,7 @@ const USER_LIST_SELECT = {
     select: {
       role: true,
       status: true,
+      deletedAt: true,
       tenant: { select: { id: true, name: true, type: true, status: true, deletedAt: true } },
     },
   },
@@ -75,6 +77,14 @@ export interface UserListItem {
   updatedAt: Date;
   membershipCount: number;
   accountContexts: UserAccountContext[];
+  unlinkedPackageRights: Array<{
+    id: string;
+    plan: string;
+    source: string;
+    status: "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE" | "INVALID";
+    tenantName: string;
+    tenantType: TenantType;
+  }>;
   roleConnections: Array<{
     role: Membership["role"];
     status: Membership["status"];
@@ -104,6 +114,7 @@ export interface UserDetail {
   entitlements: UserEntitlementSummary[];
   billingSubscriptions: UserBillingSubscriptionSummary[];
   billingPayments: UserBillingPaymentSummary[];
+  activity: UserActivitySummary[];
 }
 
 export interface UserAdminReadActor {
@@ -117,7 +128,7 @@ export interface UserAccountContext {
   tenantType: TenantType;
   tenantStatus: string;
   tenantDeleted: boolean;
-  memberships: Array<{ role: Membership["role"]; status: Membership["status"] }>;
+  memberships: Array<{ role: Membership["role"]; status: Membership["status"]; deleted: boolean }>;
   packageRight: {
     id: string | null;
     plan: string;
@@ -175,6 +186,7 @@ export interface UserEntitlementSummary {
   effectiveAt: Date;
   expiresAt: Date | null;
   createdAt: Date;
+  updatedAt: Date;
   adminStatus: ReturnType<typeof adminEntitlementStatus>;
   features: string[];
 }
@@ -202,6 +214,12 @@ export interface UserBillingPaymentSummary {
   createdAt: Date;
 }
 
+export interface UserActivitySummary {
+  action: string;
+  entityType: string;
+  createdAt: Date;
+}
+
 export interface MembershipSummary {
   id: string;
   tenantId: string;
@@ -210,6 +228,7 @@ export interface MembershipSummary {
   tenantStatus: string;
   role: Membership["role"];
   status: Membership["status"];
+  deleted: boolean;
   startedAt: Date | null;
   endedAt: Date | null;
   createdAt: Date;
@@ -223,35 +242,52 @@ export interface UserListResult {
 }
 
 export async function listUsers(query: ListUsersQuery): Promise<UserListResult> {
-  const { search, status, tenantType, membershipStatus, page, pageSize } = query;
+  const { search, status, tenantType, membershipStatus, segment, page, pageSize } = query;
 
-  const where: Prisma.UserWhereInput = {
-    deletedAt: null,
-    ...(status ? { status } : {}),
-    ...(search
-      ? {
-          OR: [
-            { displayName: { contains: search, mode: "insensitive" } },
-            { email: { contains: search, mode: "insensitive" } },
-            {
-              memberships: {
-                some: { tenant: { name: { contains: search, mode: "insensitive" } } },
-              },
-            },
-          ],
-        }
-      : {}),
-    ...(tenantType || membershipStatus
-      ? {
-          memberships: {
-            some: {
-              ...(membershipStatus ? { status: membershipStatus } : {}),
-              ...(tenantType ? { tenant: { type: tenantType } } : {}),
-            },
-          },
-        }
-      : {}),
-  };
+  const filters: Prisma.UserWhereInput[] = [{ deletedAt: null }];
+  if (status) filters.push({ status });
+  if (search) {
+    filters.push({
+      OR: [
+        { displayName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { memberships: { some: { tenant: { name: { contains: search, mode: "insensitive" } } } } },
+      ],
+    });
+  }
+  if (tenantType || membershipStatus) {
+    filters.push({
+      memberships: {
+        some: {
+          ...(membershipStatus ? { status: membershipStatus } : {}),
+          ...(tenantType ? { tenant: { type: tenantType } } : {}),
+        },
+      },
+    });
+  }
+  if (segment === "PLATFORM") filters.push({ platformRole: { not: null } });
+  if (segment === "INDIVIDUAL") {
+    filters.push({ platformRole: null, memberships: { some: { tenant: { type: "INDIVIDUAL" } } } });
+  }
+  if (segment === "ORGANIZATION") {
+    filters.push({
+      platformRole: null,
+      memberships: { some: { tenant: { type: "ORGANIZATION" } } },
+    });
+  }
+  if (segment === "UNLINKED") {
+    filters.push({
+      platformRole: null,
+      memberships: {
+        none: {
+          status: "ACTIVE",
+          deletedAt: null,
+          tenant: { status: "ACTIVE", deletedAt: null },
+        },
+      },
+    });
+  }
+  const where: Prisma.UserWhereInput = { AND: filters };
 
   const [rows, total] = await Promise.all([
     prisma.user.findMany({
@@ -273,10 +309,24 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
   return {
     items: rows.map(({ _count, memberships, ...u }) => {
       const accountContexts = toAccountContexts(u.id, memberships, entitlementRows, now);
+      const linkedEntitlementIds = new Set(
+        accountContexts.map((context) => context.packageRight.id).filter(Boolean),
+      );
+      const unlinkedPackageRights = entitlementRows
+        .filter((item) => item.userId === u.id && !linkedEntitlementIds.has(item.id))
+        .map((item) => ({
+          id: item.id,
+          plan: item.plan,
+          source: item.source,
+          status: adminEntitlementStatus(item, now),
+          tenantName: item.tenant.name,
+          tenantType: item.tenant.type,
+        }));
       return {
         ...u,
         membershipCount: _count.memberships,
         accountContexts,
+        unlinkedPackageRights,
         roleConnections: memberships.map((membership) => ({
           role: membership.role,
           status: membership.status,
@@ -315,6 +365,8 @@ async function findAccountEntitlements(userIds: string[], tenantIds: string[]) {
       effectiveAt: true,
       expiresAt: true,
       createdAt: true,
+      updatedAt: true,
+      tenant: { select: { name: true, type: true } },
     },
     orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
   });
@@ -325,7 +377,11 @@ function toAccountContext(
     tenantName: string;
     tenantStatus: string;
     tenantDeleted: boolean;
-    memberships: Array<{ role: Membership["role"]; status: Membership["status"] }>;
+    memberships: Array<{
+      role: Membership["role"];
+      status: Membership["status"];
+      deleted: boolean;
+    }>;
   },
   entitlementRows: AdminEntitlementRecord[],
   now: Date,
@@ -365,6 +421,7 @@ function toAccountContexts(
   rows: Array<{
     role: Membership["role"];
     status: Membership["status"];
+    deletedAt: Date | null;
     tenant: {
       id: string;
       name: string;
@@ -380,7 +437,11 @@ function toAccountContexts(
   for (const row of rows) {
     const current = contexts.get(row.tenant.id);
     if (current) {
-      current.memberships.push({ role: row.role, status: row.status });
+      current.memberships.push({
+        role: row.role,
+        status: row.status,
+        deleted: row.deletedAt !== null,
+      });
       continue;
     }
     contexts.set(row.tenant.id, {
@@ -390,7 +451,7 @@ function toAccountContexts(
       tenantType: row.tenant.type,
       tenantStatus: row.tenant.status,
       tenantDeleted: row.tenant.deletedAt !== null,
-      memberships: [{ role: row.role, status: row.status }],
+      memberships: [{ role: row.role, status: row.status, deleted: row.deletedAt !== null }],
     });
   }
   return [...contexts.values()]
@@ -420,6 +481,7 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       id: true,
       role: true,
       status: true,
+      deletedAt: true,
       startedAt: true,
       endedAt: true,
       createdAt: true,
@@ -496,6 +558,7 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
         effectiveAt: true,
         expiresAt: true,
         createdAt: true,
+        updatedAt: true,
         tenant: { select: { name: true, type: true } },
       },
       orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
@@ -540,6 +603,18 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       )
     : [[], []];
 
+  const activityEntityIds = [
+    id,
+    ...memberships.map((membership) => membership.id),
+    ...entitlements.map((item) => item.id),
+  ];
+  const activity = await prisma.auditLog.findMany({
+    where: { entityId: { in: activityEntityIds } },
+    select: { action: true, entityType: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
   const now = new Date();
   return {
     ...user,
@@ -550,8 +625,10 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       tenantName: tenant.deletedAt ? `${tenant.name} (silindi)` : tenant.name,
       tenantType: tenant.type,
       tenantStatus: tenant.status,
+      tenantDeleted: tenant.deletedAt !== null,
       role: m.role,
       status: m.status,
+      deleted: m.deletedAt !== null,
       startedAt: m.startedAt,
       endedAt: m.endedAt,
       createdAt: m.createdAt,
@@ -599,6 +676,7 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       effectiveAt: item.effectiveAt,
       expiresAt: item.expiresAt,
       createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
       adminStatus: adminEntitlementStatus(item, now),
       features: entitlementPlanFeatureLabels(item.plan),
     })),
@@ -623,6 +701,7 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       occurredAt: item.occurredAt,
       createdAt: item.createdAt,
     })),
+    activity,
   };
 }
 
@@ -633,20 +712,55 @@ export async function createUser(
   const passwordHash = await hasher.hash(input.password);
 
   try {
-    const created = await prisma.user.create({
-      data: {
-        displayName: input.displayName,
-        email: input.email,
-        ...(input.phone !== undefined && input.phone !== null ? { phone: input.phone } : {}),
-        ...(input.birthYear !== undefined && input.birthYear !== null
-          ? { birthYear: input.birthYear }
-          : {}),
-        ...(input.status ? { status: input.status } : {}),
-        passwordHash,
-      },
-      select: USER_DETAIL_SELECT,
+    const userId = await prisma.$transaction(async (tx) => {
+      const status = input.status ?? "ACTIVE";
+      if (input.accountType === "INDIVIDUAL" && status !== "ACTIVE") {
+        throw validationError("Bireysel hesap için etkin hesap durumu seçilmelidir");
+      }
+
+      let organizationTenant: { id: string; type: TenantType } | null = null;
+      if (input.accountType === "ORGANIZATION") {
+        organizationTenant = await tx.tenant.findFirst({
+          where: { id: input.tenantId, type: "ORGANIZATION", status: "ACTIVE", deletedAt: null },
+          select: { id: true, type: true },
+        });
+        if (!organizationTenant || !input.membershipRole) {
+          throw validationError("Etkin bir kurum ve kullanıcı rolü seçilmelidir");
+        }
+      }
+
+      const created = await tx.user.create({
+        data: {
+          displayName: input.displayName,
+          email: input.email,
+          ...(input.phone !== undefined && input.phone !== null ? { phone: input.phone } : {}),
+          ...(input.birthYear !== undefined && input.birthYear !== null
+            ? { birthYear: input.birthYear }
+            : {}),
+          status,
+          passwordHash,
+        },
+        select: { id: true },
+      });
+
+      if (input.accountType === "INDIVIDUAL") {
+        await provisionPersonalContextInTransaction(tx, created.id);
+      } else {
+        const tenantId = organizationTenant!.id;
+        await tx.membership.create({
+          data: {
+            tenantId,
+            userId: created.id,
+            role: input.membershipRole!,
+            status: status === "ACTIVE" ? "ACTIVE" : status === "INVITED" ? "PENDING" : "INACTIVE",
+            startedAt: status === "ACTIVE" ? new Date() : null,
+          },
+        });
+      }
+
+      return created.id;
     });
-    return await getUser(created.id, actor);
+    return await getUser(userId, actor);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw conflictError(uniqueViolationMessage());

@@ -94,6 +94,9 @@ const envSchema = z.object({
   // Temporary, authenticated production target diagnostic. Keep disabled by
   // default and remove after the Vercel/GitHub target comparison is complete.
   PRODUCTION_IDENTITY_DIAGNOSTIC_ENABLED: z.enum(["off", "on"]).default("off"),
+  // Restoring a soft-deleted personal workspace is a production data write.
+  // It remains disabled until backup/rollback evidence has been verified.
+  PERSONAL_CONTEXT_RECOVERY_ENABLED: z.enum(["off", "on"]).default("off"),
   GOOGLE_OIDC_CLIENT_IDS: z.string().default(""),
   GOOGLE_OIDC_WEB_CLIENT_ID: z.string().trim().default(""),
   GOOGLE_OIDC_CLIENT_SECRET: z.string().trim().default(""),

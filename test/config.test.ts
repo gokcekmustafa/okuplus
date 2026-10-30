@@ -12,6 +12,16 @@ describe("config/env", () => {
     expect(env.PORT).toBe(3000);
     expect(env.HOST).toBe("0.0.0.0");
     expect(env.CORS_ORIGIN).toBe("");
+    expect(env.PERSONAL_CONTEXT_RECOVERY_ENABLED).toBe("off");
+  });
+
+  it("kişisel alan kurtarması açık yedekleme kanıtı olmadan varsayılan kapalı kalır", () => {
+    expect(parseEnv(base).PERSONAL_CONTEXT_RECOVERY_ENABLED).toBe("off");
+    expect(
+      parseEnv({ ...base, PERSONAL_CONTEXT_RECOVERY_ENABLED: "on" })
+        .PERSONAL_CONTEXT_RECOVERY_ENABLED,
+    ).toBe("on");
+    expect(() => parseEnv({ ...base, PERSONAL_CONTEXT_RECOVERY_ENABLED: "yes" })).toThrow();
   });
 
   it("açıkça verilen değerleri korur", () => {

@@ -15,6 +15,9 @@ const EMAIL_B = "stage8a-individual-b@example.com";
 const ROLLBACK_EMAIL = "stage8a-rollback@example.com";
 const ADMIN_EMAIL = "stage8a-admin@example.com";
 const ADMIN_ID = "8a000000-0000-7000-8000-000000000001";
+const RECOVERY_EMAIL = "stage8a-recovery@example.com";
+const RECOVERY_USER_ID = "8a000000-0000-7000-8000-000000000002";
+const RECOVERY_TENANT_ID = "8a000000-0000-7000-8000-0000000000a2";
 const ORG_ID = "8a000000-0000-7000-8000-0000000000a1";
 const CONTENT_ID = "8a000000-0000-7000-8000-0000000000b1";
 const CONTENT_VERSION_ID = "8a000000-0000-7000-8000-0000000000b2";
@@ -25,6 +28,7 @@ const TEMPLATE_VERSION_ID = "8a000000-0000-7000-8000-0000000000d2";
 const SKILL_ID = "8a000000-0000-7000-8000-0000000000e1";
 
 let app: FastifyInstance;
+let recoveryApp: FastifyInstance | null = null;
 let userAId = "";
 let userBId = "";
 let tenantAId = "";
@@ -36,9 +40,9 @@ let attemptId = "";
 let createdBadgeId: string | null = null;
 
 async function cleanup(): Promise<void> {
-  const emails = [EMAIL_A, EMAIL_B, ROLLBACK_EMAIL, ADMIN_EMAIL];
+  const emails = [EMAIL_A, EMAIL_B, ROLLBACK_EMAIL, ADMIN_EMAIL, RECOVERY_EMAIL];
   const users = await prisma.user.findMany({
-    where: { OR: [{ email: { in: emails } }, { id: ADMIN_ID }] },
+    where: { OR: [{ email: { in: emails } }, { id: { in: [ADMIN_ID, RECOVERY_USER_ID] } }] },
     select: { id: true },
   });
   const userIds = users.map((user) => user.id);
@@ -48,6 +52,7 @@ async function cleanup(): Promise<void> {
   });
   const tenantIds = [
     ORG_ID,
+    RECOVERY_TENANT_ID,
     ...memberships.map((membership) => membership.tenantId),
     tenantAId,
     tenantBId,
@@ -78,6 +83,8 @@ async function cleanup(): Promise<void> {
   await prisma.studentProfile.deleteMany({
     where: { OR: [{ studentId: { in: userIds } }, { tenantId: { in: tenantIds } }] },
   });
+  await prisma.accountDeletionRequest.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: [...userIds, ...tenantIds] } } });
   await prisma.membership.deleteMany({
     where: { OR: [{ userId: { in: userIds } }, { tenantId: ORG_ID }] },
   });
@@ -238,6 +245,7 @@ describe.sequential("individual account foundation", () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    if (recoveryApp) await recoveryApp.close();
     await cleanup();
     await prisma.$disconnect();
   });
@@ -592,5 +600,107 @@ describe.sequential("individual account foundation", () => {
       tenantId: tenantAId,
       sessionId,
     });
+  });
+
+  it("deleted personal context recovery stays disabled by default and restores the same context without changing progress when enabled", async () => {
+    const passwordHash = await new ScryptPasswordHasher().hash(PASSWORD);
+    await prisma.user.create({
+      data: {
+        id: RECOVERY_USER_ID,
+        email: RECOVERY_EMAIL,
+        displayName: "Kurtarma sınaması",
+        passwordHash,
+      },
+    });
+    await prisma.tenant.create({
+      data: {
+        id: RECOVERY_TENANT_ID,
+        type: "INDIVIDUAL",
+        name: "Kişisel",
+        deletedAt: new Date("2026-10-20T00:00:00.000Z"),
+      },
+    });
+    const membership = await prisma.membership.create({
+      data: {
+        tenantId: RECOVERY_TENANT_ID,
+        userId: RECOVERY_USER_ID,
+        role: "STUDENT",
+        status: "ACTIVE",
+      },
+    });
+    const profile = await prisma.studentProfile.create({
+      data: { tenantId: RECOVERY_TENANT_ID, studentId: RECOVERY_USER_ID },
+    });
+    const progress = await prisma.studentProgress.create({
+      data: {
+        tenantId: RECOVERY_TENANT_ID,
+        studentId: RECOVERY_USER_ID,
+        skillId: SKILL_ID,
+        periodStart: new Date("2026-10-01T00:00:00.000Z"),
+        periodEnd: new Date("2026-10-31T23:59:59.999Z"),
+        sessionCount: 2,
+        attemptCount: 4,
+        correctCount: 3,
+      },
+    });
+
+    const blocked = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: RECOVERY_EMAIL, password: PASSWORD },
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error.code).toBe("ACCOUNT_CONTEXT_REPAIR_REQUIRED");
+    expect(
+      (await prisma.tenant.findUniqueOrThrow({ where: { id: RECOVERY_TENANT_ID } })).deletedAt,
+    ).not.toBeNull();
+
+    recoveryApp = await buildApp(loadEnv({ PERSONAL_CONTEXT_RECOVERY_ENABLED: "on" }));
+    await recoveryApp.ready();
+    const restored = await recoveryApp.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: { email: RECOVERY_EMAIL, password: PASSWORD },
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().data.tenantContext).toMatchObject({
+      userId: RECOVERY_USER_ID,
+      tenantId: RECOVERY_TENANT_ID,
+      tenantType: "INDIVIDUAL",
+    });
+    expect(
+      await prisma.tenant.findUniqueOrThrow({ where: { id: RECOVERY_TENANT_ID } }),
+    ).toMatchObject({ deletedAt: null });
+    expect(
+      await prisma.membership.findMany({
+        where: { tenantId: RECOVERY_TENANT_ID, userId: RECOVERY_USER_ID },
+      }),
+    ).toMatchObject([
+      expect.objectContaining({ id: membership.id, deletedAt: null, status: "ACTIVE" }),
+    ]);
+    expect(
+      await prisma.studentProfile.findUniqueOrThrow({ where: { id: profile.id } }),
+    ).toMatchObject({
+      id: profile.id,
+      tenantId: RECOVERY_TENANT_ID,
+      studentId: RECOVERY_USER_ID,
+    });
+    expect(
+      await prisma.studentProgress.findUniqueOrThrow({ where: { id: progress.id } }),
+    ).toMatchObject({
+      id: progress.id,
+      tenantId: RECOVERY_TENANT_ID,
+      studentId: RECOVERY_USER_ID,
+      attemptCount: 4,
+      correctCount: 3,
+    });
+    expect(
+      await prisma.tenant.count({ where: { memberships: { some: { userId: RECOVERY_USER_ID } } } }),
+    ).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { entityType: "PERSONAL_CONTEXT_RECOVERY", entityId: RECOVERY_TENANT_ID },
+      }),
+    ).toBe(1);
   });
 });

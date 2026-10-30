@@ -13,7 +13,16 @@ import { rejectNationalIdPayload, turkishPhoneSchema } from "../../lib/person-da
 
 const userStatusSchema = z.enum(["ACTIVE", "INVITED", "SUSPENDED", "CLOSED"]);
 const tenantTypeSchema = z.enum(["INDIVIDUAL", "ORGANIZATION"]);
+const userAccountSegmentSchema = z.enum(["INDIVIDUAL", "ORGANIZATION", "PLATFORM", "UNLINKED"]);
 const membershipStatusSchema = z.enum(["PENDING", "ACTIVE", "INACTIVE", "REMOVED"]);
+const membershipRoleSchema = z.enum([
+  "OWNER",
+  "ORG_ADMIN",
+  "BRANCH_MANAGER",
+  "TEACHER",
+  "STUDENT",
+  "PARENT",
+]);
 
 const emailSchema = z
   .string()
@@ -38,17 +47,44 @@ const displayNameSchema = z
 
 /** Yeni kullanıcı oluşturma gövdesi. */
 export const createUserSchema = rejectNationalIdPayload(
-  z.object({
-    displayName: displayNameSchema,
-    email: emailSchema,
-    phone: turkishPhoneSchema,
-    birthYear: birthYearSchema,
-    status: userStatusSchema.optional(),
-    password: z
-      .string()
-      .min(8, "Parola en az 8 karakter olmalı")
-      .max(128, "Parola en fazla 128 karakter"),
-  }),
+  z
+    .object({
+      displayName: displayNameSchema,
+      email: emailSchema,
+      phone: turkishPhoneSchema,
+      birthYear: birthYearSchema,
+      status: userStatusSchema.optional(),
+      accountType: z.enum(["INDIVIDUAL", "ORGANIZATION"]),
+      tenantId: z.string().trim().min(1).optional(),
+      membershipRole: membershipRoleSchema.optional(),
+      password: z
+        .string()
+        .min(8, "Parola en az 8 karakter olmalı")
+        .max(128, "Parola en fazla 128 karakter"),
+    })
+    .superRefine((input, context) => {
+      if (input.accountType === "ORGANIZATION" && (!input.tenantId || !input.membershipRole)) {
+        context.addIssue({
+          code: "custom",
+          message: "Kurumsal hesap için kurum ve rol seçilmelidir",
+          path: ["tenantId"],
+        });
+      }
+      if (input.accountType === "INDIVIDUAL" && input.tenantId) {
+        context.addIssue({
+          code: "custom",
+          message: "Bireysel hesapta kurum seçimi kullanılmaz",
+          path: ["tenantId"],
+        });
+      }
+      if (input.accountType === "INDIVIDUAL" && input.status && input.status !== "ACTIVE") {
+        context.addIssue({
+          code: "custom",
+          message: "Bireysel alan yalnızca etkin hesap için kurulabilir",
+          path: ["status"],
+        });
+      }
+    }),
 );
 
 /** Kullanıcı güncelleme gövdesi (kısmi). */
@@ -75,18 +111,10 @@ export const listUsersQuerySchema = z.object({
   status: userStatusSchema.optional(),
   tenantType: tenantTypeSchema.optional(),
   membershipStatus: membershipStatusSchema.optional(),
+  segment: userAccountSegmentSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
-
-const membershipRoleSchema = z.enum([
-  "OWNER",
-  "ORG_ADMIN",
-  "BRANCH_MANAGER",
-  "TEACHER",
-  "STUDENT",
-  "PARENT",
-]);
 
 /** Tenant üyelerini listeleme sorgu parametreleri. */
 export const listMembershipsQuerySchema = z.object({

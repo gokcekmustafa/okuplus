@@ -12,6 +12,7 @@ const writeSchemas = [
       displayName: "Örnek kullanıcı",
       email: "user@example.test",
       password: "secure-password-123",
+      accountType: "INDIVIDUAL",
     },
   },
   {

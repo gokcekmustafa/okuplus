@@ -2003,27 +2003,60 @@
 
           <!-- Kullanıcılar -->
           <section id="page-users" class="page-view hidden">
-            <div class="page-head">
-              <h2>Kullanıcı Hesapları</h2>
-              <p class="muted">
-                Kullanıcıları, bağlı kişisel alanları ve kurum üyeliklerini tek yerden görüntüleyin.
-                Öğrenci ilerlemesi ayrı Öğrenci Analitiği alanındadır.
-              </p>
-            </div>
+            <div id="user-list-view" class="user-admin-list-view">
+              <div class="page-head user-admin-heading">
+                <div>
+                  <span class="eyebrow">HESAP YÖNETİMİ</span>
+                  <h2>Kullanıcılar</h2>
+                  <p class="muted">
+                    Kullanıcıları hesap bağlamlarına ve erişim haklarına göre yönetin.
+                  </p>
+                </div>
+                <button id="user-create-btn" type="button" class="btn btn-primary">
+                  ＋ Kullanıcı oluştur
+                </button>
+              </div>
 
-            <div class="tenant-toolbar">
-              <div class="tenant-filters">
-                <label class="field inline-field">
+              <div class="user-segment-tabs" role="tablist" aria-label="Kullanıcı grupları">
+                <button type="button" role="tab" aria-selected="true" data-user-segment="">
+                  Tümü
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-user-segment="ORGANIZATION"
+                >
+                  Kurumsal
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  data-user-segment="INDIVIDUAL"
+                >
+                  Bireysel
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-user-segment="PLATFORM">
+                  Platform
+                </button>
+                <button type="button" role="tab" aria-selected="false" data-user-segment="UNLINKED">
+                  Erişim yok
+                </button>
+              </div>
+
+              <div class="user-list-toolbar">
+                <label class="field inline-field user-search-field">
                   <span class="visually-hidden">Kullanıcı ara</span>
                   <input
                     id="user-search"
                     type="search"
-                    placeholder="Ad veya e-posta ara…"
+                    placeholder="Kullanıcı adı veya e-posta ile ara…"
                     autocomplete="off"
                   />
                 </label>
                 <label class="field inline-field">
-                  <span class="visually-hidden">Durum filtresi</span>
+                  <span class="visually-hidden">Kullanıcı durumu</span>
                   <select id="user-status-filter">
                     <option value="">Tüm durumlar</option>
                     <option value="ACTIVE">Aktif</option>
@@ -2033,197 +2066,55 @@
                   </select>
                 </label>
                 <label class="field inline-field">
-                  <span class="visually-hidden">Hesap bağlamı filtresi</span>
-                  <select id="user-tenant-type-filter">
-                    <option value="">Tüm hesap bağlamları</option>
-                    <option value="INDIVIDUAL">Bireysel</option>
-                    <option value="ORGANIZATION">Kurum</option>
-                  </select>
-                </label>
-                <label class="field inline-field">
-                  <span class="visually-hidden">Üyelik durumu filtresi</span>
+                  <span class="visually-hidden">Üyelik durumu</span>
                   <select id="user-membership-status-filter">
-                    <option value="">Tüm üyelik durumları</option>
-                    <option value="ACTIVE">Aktif üyelik</option>
-                    <option value="PENDING">Bekleyen üyelik</option>
-                    <option value="INACTIVE">Pasif üyelik</option>
-                    <option value="REMOVED">Kaldırılmış üyelik</option>
+                    <option value="">Tüm üyelikler</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="PENDING">Bekliyor</option>
+                    <option value="INACTIVE">Pasif</option>
+                    <option value="REMOVED">Kaldırıldı</option>
                   </select>
                 </label>
-              </div>
-              <button id="user-create-btn" type="button" class="btn btn-primary">
-                Yeni kullanıcı
-              </button>
-            </div>
-
-            <div id="user-error" class="error hidden" role="alert"></div>
-
-            <div class="card table-card">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Kullanıcı</th>
-                    <th>Hesap bağlamları ve paket</th>
-                    <th>Durum</th>
-                    <th>Erişim hakkı</th>
-                    <th class="text-right">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody id="user-list-body">
-                  <tr>
-                    <td colspan="5" class="empty-cell">Yükleniyor…</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="tenant-pagination">
-              <span id="user-page-info" class="muted">—</span>
-              <div class="pagination-actions">
-                <button id="user-prev-btn" type="button" class="btn btn-ghost btn-sm">
-                  Önceki
-                </button>
-                <button id="user-next-btn" type="button" class="btn btn-ghost btn-sm">
-                  Sonraki
+                <button type="button" id="user-filters-reset" class="btn btn-ghost">
+                  Filtreleri temizle
                 </button>
               </div>
-            </div>
+              <div id="user-error" class="error hidden" role="alert"></div>
 
-            <!-- Yeni / düzenle formu -->
-            <div id="user-form-modal" class="modal-backdrop hidden">
-              <div class="modal">
-                <div class="modal-head">
-                  <h3 id="user-form-title">Yeni kullanıcı</h3>
-                  <button
-                    id="user-form-close"
-                    type="button"
-                    class="btn btn-icon"
-                    aria-label="Kapat"
-                  >
-                    <span aria-hidden="true">✕</span>
-                  </button>
+              <div class="user-table-card">
+                <div class="table-wrap">
+                  <table class="data-table user-admin-table">
+                    <thead>
+                      <tr>
+                        <th>Kullanıcı</th>
+                        <th>Hesap türü</th>
+                        <th>Kurum / alan</th>
+                        <th>Paket</th>
+                        <th>Erişim</th>
+                        <th>Durum</th>
+                        <th>İşlemler</th>
+                      </tr>
+                    </thead>
+                    <tbody id="user-list-body">
+                      <tr>
+                        <td colspan="7" class="empty-cell">Yükleniyor…</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <form id="user-form" novalidate>
-                  <input type="hidden" id="user-form-id" />
-                  <label class="field">
-                    <span>Ad *</span>
-                    <input
-                      id="user-form-name"
-                      type="text"
-                      required
-                      maxlength="120"
-                      placeholder="Ad Soyad"
-                    />
-                  </label>
-                  <label class="field">
-                    <span>E-posta *</span>
-                    <input
-                      id="user-form-email"
-                      type="email"
-                      required
-                      maxlength="254"
-                      placeholder="ornek@example.com"
-                    />
-                  </label>
-                  <label class="field">
-                    <span>Telefon</span>
-                    <input
-                      id="user-form-phone"
-                      type="text"
-                      maxlength="30"
-                      placeholder="0 (5xx) xxx xx xx"
-                    />
-                  </label>
-                  <label class="field">
-                    <span>Doğum yılı</span>
-                    <input
-                      id="user-form-birthyear"
-                      type="number"
-                      min="1900"
-                      max="2026"
-                      placeholder="1998"
-                    />
-                  </label>
-                  <label class="field">
-                    <span>Durum *</span>
-                    <select id="user-form-status">
-                      <option value="ACTIVE">Aktif</option>
-                      <option value="INVITED">Davetli</option>
-                      <option value="SUSPENDED">Askıda</option>
-                      <option value="CLOSED">Kapatıldı</option>
-                    </select>
-                  </label>
-                  <label class="field" id="user-form-password-field">
-                    <span>Parola *</span>
-                    <input
-                      id="user-form-password"
-                      type="password"
-                      minlength="8"
-                      maxlength="128"
-                      autocomplete="new-password"
-                      placeholder="En az 8 karakter"
-                    />
-                  </label>
-                  <fieldset id="user-form-initial-membership" class="fieldset-group">
-                    <legend>Kurumsal üyelik (isteğe bağlı)</legend>
-                    <label class="field">
-                      <span>Kurum</span>
-                      <select id="user-form-tenant">
-                        <option value="">Kurum seçin…</option>
-                      </select>
-                    </label>
-                    <label class="field">
-                      <span>Rol</span>
-                      <select id="user-form-role">
-                        <option value="">Rol seçin…</option>
-                      </select>
-                    </label>
-                    <p class="muted field-hint">
-                      Kullanıcı hesabını kurum seçmeden oluşturabilirsiniz. Kurum ve rol seçerseniz
-                      üyelik de aynı akışta eklenir.
-                    </p>
-                  </fieldset>
-                  <p id="user-form-error" class="error hidden" role="alert"></p>
-                  <div class="modal-actions">
-                    <button id="user-form-cancel" type="button" class="btn btn-ghost">İptal</button>
-                    <button id="user-form-submit" type="submit" class="btn btn-primary">
-                      <span class="btn-label">Kaydet</span>
-                      <span class="btn-spinner hidden" aria-hidden="true"></span>
+                <div class="user-list-footer">
+                  <span id="user-page-info" class="muted">—</span>
+                  <div class="pagination-actions">
+                    <button id="user-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                      Önceki</button
+                    ><button id="user-next-btn" type="button" class="btn btn-ghost btn-sm">
+                      Sonraki
                     </button>
                   </div>
-                </form>
-              </div>
-            </div>
-
-            <!-- Kullanıcı çalışma alanı: masaüstünde sağ çekmece, mobilde tam ekran. -->
-            <div id="user-detail-modal" class="modal-backdrop user-detail-modal-backdrop hidden">
-              <div
-                class="modal modal-wide user-detail-modal-dialog user-detail-drawer admin-record-detail-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="user-detail-title"
-              >
-                <div class="modal-head">
-                  <div class="user-detail-heading">
-                    <h3 id="user-detail-title">Kullanıcı detayı</h3>
-                    <p id="user-detail-subtitle" class="muted">Hesap bağlamları ve erişim özeti</p>
-                  </div>
-                  <button
-                    id="user-detail-close"
-                    type="button"
-                    class="btn btn-icon"
-                    aria-label="Kapat"
-                  >
-                    <span aria-hidden="true">✕</span>
-                  </button>
-                </div>
-                <div id="user-detail-body" class="modal-body"></div>
-                <div class="modal-actions">
-                  <button id="user-detail-edit" type="button" class="btn btn-ghost">Düzenle</button>
-                  <button id="user-detail-delete" type="button" class="btn btn-danger">Sil</button>
                 </div>
               </div>
             </div>
+            <div id="user-management-subpage" class="user-management-subpage hidden"></div>
           </section>
 
           <!-- Öğrenciler -->

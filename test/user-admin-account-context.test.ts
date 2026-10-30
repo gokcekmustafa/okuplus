@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { entitlementPlanFeatureLabels } from "../src/modules/entitlements/service.js";
-import { listUsersQuerySchema } from "../src/modules/users/schemas.js";
+import { createUserSchema, listUsersQuerySchema } from "../src/modules/users/schemas.js";
 import {
   adminEntitlementStatus,
   entitlementForAccountContext,
@@ -122,5 +122,30 @@ describe("superadmin account-context package summaries", () => {
     ).toMatchObject({ tenantType: "INDIVIDUAL", membershipStatus: "ACTIVE", page: 1 });
     expect(() => listUsersQuerySchema.parse({ tenantType: "PERSONAL" })).toThrow();
     expect(() => listUsersQuerySchema.parse({ membershipStatus: "UNKNOWN" })).toThrow();
+    expect(listUsersQuerySchema.parse({ segment: "UNLINKED" }).segment).toBe("UNLINKED");
+    expect(() => listUsersQuerySchema.parse({ segment: "EVERYONE" })).toThrow();
+  });
+
+  it("allows individual account creation without an institution and requires a valid organization context", () => {
+    const common = {
+      displayName: "Örnek kullanıcı",
+      email: "user@example.test",
+      password: "secure-password-123",
+    };
+    expect(createUserSchema.parse({ ...common, accountType: "INDIVIDUAL" })).toMatchObject({
+      accountType: "INDIVIDUAL",
+    });
+    expect(() =>
+      createUserSchema.parse({ ...common, accountType: "INDIVIDUAL", tenantId: "tenant-id" }),
+    ).toThrow();
+    expect(() => createUserSchema.parse({ ...common, accountType: "ORGANIZATION" })).toThrow();
+    expect(
+      createUserSchema.parse({
+        ...common,
+        accountType: "ORGANIZATION",
+        tenantId: "tenant-id",
+        membershipRole: "STUDENT",
+      }).accountType,
+    ).toBe("ORGANIZATION");
   });
 });

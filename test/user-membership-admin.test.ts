@@ -38,12 +38,32 @@ const PERSONAL_ENTITLEMENT_ID = "99999998-0000-7000-8000-0000000000c3";
 const BILLING_CUSTOMER_ID = "99999998-0000-7000-8000-0000000000d1";
 const BILLING_SUBSCRIPTION_ID = "99999998-0000-7000-8000-0000000000d2";
 const BILLING_PAYMENT_ID = "99999998-0000-7000-8000-0000000000d3";
+const CREATED_ORG_USER_EMAIL = "admin-created-org-user@example.com";
+const CREATED_INDIVIDUAL_USER_EMAIL = "admin-created-individual-user@example.com";
+const SOFT_DELETED_CONTEXT_USER_ID = "99999998-0000-7000-8000-0000000000a5";
+const SOFT_DELETED_CONTEXT_TENANT_ID = "99999998-0000-7000-8000-0000000000b5";
+
+async function cleanupCreatedUser(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) return;
+  const memberships = await prisma.membership.findMany({
+    where: { userId: user.id },
+    select: { tenantId: true },
+  });
+  const tenantIds = memberships.map((membership) => membership.tenantId);
+  await prisma.studentProfile.deleteMany({ where: { studentId: user.id } });
+  await prisma.membership.deleteMany({ where: { userId: user.id } });
+  await prisma.tenant.deleteMany({ where: { id: { in: tenantIds }, type: "INDIVIDUAL" } });
+  await prisma.user.delete({ where: { id: user.id } });
+}
 
 describe("user + membership admin", () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
     await prisma.$connect();
+    await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
+    await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
 
     // Tekrar çalıştırmalarda kalıcı olabilecek veriyi temizle.
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
@@ -59,13 +79,27 @@ describe("user + membership admin", () => {
       },
     });
     await prisma.membership.deleteMany({
-      where: { OR: [{ userId: { in: [NORMAL_USER_ID, USER_A_ID] } }] },
+      where: {
+        OR: [{ userId: { in: [NORMAL_USER_ID, USER_A_ID, SOFT_DELETED_CONTEXT_USER_ID] } }],
+      },
     });
     await prisma.tenant.deleteMany({
-      where: { id: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+      where: {
+        id: {
+          in: [
+            ORG_TENANT,
+            ORG_TENANT_2,
+            INDIVIDUAL_TENANT,
+            INDIVIDUAL_TENANT_2,
+            SOFT_DELETED_CONTEXT_TENANT_ID,
+          ],
+        },
+      },
     });
     await prisma.user.deleteMany({
-      where: { id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID, USER_A_ID] } },
+      where: {
+        id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID, USER_A_ID, SOFT_DELETED_CONTEXT_USER_ID] },
+      },
     });
 
     const passwordHash = await hasher.hash(PASSWORD);
@@ -122,6 +156,8 @@ describe("user + membership admin", () => {
 
   afterAll(async () => {
     await app.close();
+    await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
+    await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
@@ -154,10 +190,12 @@ describe("user + membership admin", () => {
         OR: [
           { userId: NORMAL_USER_ID },
           { userId: USER_A_ID },
+          { userId: SOFT_DELETED_CONTEXT_USER_ID },
           { tenantId: ORG_TENANT },
           { tenantId: ORG_TENANT_2 },
           { tenantId: INDIVIDUAL_TENANT },
           { tenantId: INDIVIDUAL_TENANT_2 },
+          { tenantId: SOFT_DELETED_CONTEXT_TENANT_ID },
         ],
       },
     });
@@ -165,7 +203,9 @@ describe("user + membership admin", () => {
       where: { id: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
     });
     await prisma.user.deleteMany({
-      where: { id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID, USER_A_ID] } },
+      where: {
+        id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID, USER_A_ID, SOFT_DELETED_CONTEXT_USER_ID] },
+      },
     });
     await prisma.$disconnect();
   });
@@ -285,6 +325,85 @@ describe("user + membership admin", () => {
     expect(body.data.items.every((u: { status: string }) => u.status === "ACTIVE")).toBe(true);
   });
 
+  it("hesap segmentleri platform ile kişisel/kurum bağlantılarını ayrı filtreler", async () => {
+    await prisma.user.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_USER_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_USER_ID,
+        email: "soft-deleted-context-admin-test@example.com",
+        displayName: "Kapalı kişisel alan",
+        passwordHash: await hasher.hash(PASSWORD),
+      },
+      update: {},
+    });
+    await prisma.tenant.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_TENANT_ID,
+        type: "INDIVIDUAL",
+        name: "Kişisel",
+        deletedAt: new Date(),
+      },
+      update: { deletedAt: new Date() },
+    });
+    await prisma.membership.upsert({
+      where: { id: "99999998-0000-7000-8000-0000000000c5" },
+      create: {
+        id: "99999998-0000-7000-8000-0000000000c5",
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        userId: SOFT_DELETED_CONTEXT_USER_ID,
+        role: "STUDENT",
+        status: "ACTIVE",
+      },
+      update: { deletedAt: null, status: "ACTIVE" },
+    });
+
+    const platform = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=PLATFORM",
+      headers: await superAdminHeaders(),
+    });
+    expect(platform.statusCode).toBe(200);
+    expect(platform.json().data.items.length).toBeGreaterThan(0);
+    expect(
+      platform
+        .json()
+        .data.items.every((user: { platformRole: string | null }) => user.platformRole !== null),
+    ).toBe(true);
+
+    const unlinked = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=UNLINKED",
+      headers: await superAdminHeaders(),
+    });
+    expect(unlinked.statusCode).toBe(200);
+    expect(unlinked.json().data.items.some((user: { id: string }) => user.id === USER_A_ID)).toBe(
+      true,
+    );
+    const recoveryCandidate = unlinked
+      .json()
+      .data.items.find((user: { id: string }) => user.id === SOFT_DELETED_CONTEXT_USER_ID);
+    expect(recoveryCandidate.accountContexts[0]).toMatchObject({ tenantDeleted: true });
+    expect(recoveryCandidate.accountContexts[0].packageRight).toBeTruthy();
+    expect(
+      unlinked
+        .json()
+        .data.items.every((user: { platformRole: string | null }) => user.platformRole === null),
+    ).toBe(true);
+
+    const individual = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=INDIVIDUAL",
+      headers: await superAdminHeaders(),
+    });
+    expect(individual.statusCode).toBe(200);
+    expect(
+      individual
+        .json()
+        .data.items.some((user: { id: string }) => user.id === SOFT_DELETED_CONTEXT_USER_ID),
+    ).toBe(true);
+  });
+
   it("Sayfalama: page ve pageSize uygulanır", async () => {
     const res = await app.inject({
       method: "GET",
@@ -311,17 +430,21 @@ describe("user + membership admin", () => {
   // ---------- Kullanıcı oluşturma ----------
 
   it("Super Admin: kullanıcı oluşturur", async () => {
+    await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     const res = await app.inject({
       method: "POST",
       url: "/admin/users",
       headers: await superAdminHeaders(),
       payload: {
         displayName: "Yeni Kullanıcı",
-        email: "yeni-kullanici@example.com",
+        email: CREATED_ORG_USER_EMAIL,
         phone: "+905551112233",
         birthYear: 1995,
         status: "INVITED",
         password: "new-user-pass-123!",
+        accountType: "ORGANIZATION",
+        tenantId: ORG_TENANT,
+        membershipRole: "STUDENT",
       },
     });
 
@@ -329,14 +452,56 @@ describe("user + membership admin", () => {
     const body = res.json();
     expect(body.success).toBe(true);
     expect(body.data.displayName).toBe("Yeni Kullanıcı");
-    expect(body.data.email).toBe("yeni-kullanici@example.com");
+    expect(body.data.email).toBe(CREATED_ORG_USER_EMAIL);
     expect(body.data.phone).toBe("0 (555) 111 22 33");
     expect(body.data.birthYear).toBe(1995);
     expect(body.data.status).toBe("INVITED");
-    expect(body.data.memberships).toEqual([]);
+    expect(body.data.memberships).toHaveLength(1);
+    expect(body.data.memberships[0]).toMatchObject({
+      tenantId: ORG_TENANT,
+      role: "STUDENT",
+      status: "PENDING",
+    });
     expect(body.data.nationalId).toBeNull();
 
-    await prisma.user.deleteMany({ where: { email: "yeni-kullanici@example.com" } });
+    await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
+  });
+
+  it("bireysel kullanıcıyı kurum seçmeden oluşturur ve kişisel alanı tek işlemde kurar", async () => {
+    await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/users",
+      headers: await superAdminHeaders(),
+      payload: {
+        displayName: "Bireysel Kullanıcı",
+        email: CREATED_INDIVIDUAL_USER_EMAIL,
+        password: "individual-user-pass-123!",
+        accountType: "INDIVIDUAL",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json().data;
+    expect(body.status).toBe("ACTIVE");
+    expect(body.memberships).toHaveLength(1);
+    expect(body.memberships[0]).toMatchObject({
+      tenantType: "INDIVIDUAL",
+      role: "STUDENT",
+      status: "ACTIVE",
+    });
+    expect(body.accountContexts).toHaveLength(1);
+    expect(body.accountContexts[0]).toMatchObject({
+      tenantType: "INDIVIDUAL",
+      tenantName: "Kişisel",
+    });
+    expect(
+      await prisma.studentProfile.findUnique({
+        where: {
+          tenantId_studentId: { tenantId: body.memberships[0].tenantId, studentId: body.id },
+        },
+      }),
+    ).toBeTruthy();
+    await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
   });
 
   it("TCKN içeren eski kullanıcı oluşturma isteğini reddeder ve kullanıcı oluşturmaz", async () => {
@@ -367,6 +532,7 @@ describe("user + membership admin", () => {
         displayName: "Duplike",
         email: USER_A_EMAIL,
         password: "duplike-pass-123!",
+        accountType: "INDIVIDUAL",
       },
     });
 
@@ -383,6 +549,7 @@ describe("user + membership admin", () => {
         displayName: "Kısa Parola",
         email: "kisa-parola@example.com",
         password: "123",
+        accountType: "INDIVIDUAL",
       },
     });
 
@@ -399,6 +566,7 @@ describe("user + membership admin", () => {
         displayName: "   ",
         email: "bos-ad@example.com",
         password: "bos-ad-pass-123!",
+        accountType: "INDIVIDUAL",
       },
     });
 
@@ -414,6 +582,7 @@ describe("user + membership admin", () => {
         displayName: "Kötü E-posta",
         email: "adres-yok",
         password: "eposta-pass-123!",
+        accountType: "INDIVIDUAL",
       },
     });
 
@@ -723,6 +892,31 @@ describe("user + membership admin", () => {
     });
     expect(filtered.statusCode).toBe(200);
     expect(filtered.json().data.items.map((item: { id: string }) => item.id)).toContain(USER_A_ID);
+
+    const individualSegment = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=INDIVIDUAL",
+      headers: await superAdminHeaders(),
+    });
+    expect(individualSegment.statusCode).toBe(200);
+    expect(individualSegment.json().data.items.map((item: { id: string }) => item.id)).toContain(
+      USER_A_ID,
+    );
+    expect(
+      individualSegment
+        .json()
+        .data.items.every((item: { platformRole: string | null }) => item.platformRole === null),
+    ).toBe(true);
+
+    const organizationSegment = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=ORGANIZATION",
+      headers: await superAdminHeaders(),
+    });
+    expect(organizationSegment.statusCode).toBe(200);
+    expect(organizationSegment.json().data.items.map((item: { id: string }) => item.id)).toContain(
+      USER_A_ID,
+    );
 
     const res = await app.inject({
       method: "GET",

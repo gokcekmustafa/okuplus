@@ -19,7 +19,8 @@ describe("login UI behavior", () => {
     );
     expect(formatLoginError({ status: 404 })).toContain("Giriş hizmetine bağlanılamadı");
     expect(formatLoginError({ status: 503 })).toContain("geçici bir sorun");
-    expect(formatLoginError({ status: 403 })).toContain("güvenlik doğrulamasından");
+    expect(formatLoginError({ status: 403 })).toContain("çalışma alanı doğrulanamadı");
+    expect(formatLoginError({ status: 403 })).not.toContain("E-posta veya şifre yanlış");
     expect(formatLoginError({ status: 429 })).toContain("Çok fazla giriş denemesi");
     expect(formatLoginError({ code: "SECURE_STORAGE_UNAVAILABLE" })).toContain(
       "güvenli biçimde kaydedilemedi",

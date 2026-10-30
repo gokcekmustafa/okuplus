@@ -35,6 +35,14 @@ restore dalı, zaman damgası, gerçek provider proje/dal kimlikleri ve şema ka
 erişimi kısıtlı kanıt bağlantısı veya redakte edilmiş kayıt eklenmelidir. Dump, bağlantı bilgileri
 ve kişisel veriler rapora/loglara konmamalıdır.
 
+### Silinmiş kişisel alan kurtarma kapısı
+
+`PERSONAL_CONTEXT_RECOVERY_ENABLED` ayarı varsayılan olarak `off` kalır. Uygulama, bu ayar açık
+olmadıkça giriş sırasında silinmiş bir kişisel alanı yeniden etkinleştirmez. Ayar ancak gerçek
+production backup/restore kanıtı ve aynı veriye uygulanabilir geri alma adımı doğrulandıktan sonra
+yetkili deployment sahibi tarafından açılabilir. Belgedeki mevcut **PARTIAL / NO-GO** durumu
+nedeniyle bu kurtarma kapısı production için etkinleştirilmiş kabul edilmemelidir.
+
 ## Zorunlu politika alanları
 
 | Alan                  | Beklenen karar                                         | 8I-2 durumu                                                        |

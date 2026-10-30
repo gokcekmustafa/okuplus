@@ -3,6 +3,10 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import type { MembershipRole, Prisma, User } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { withTenantContext } from "../tenant/index.js";
+import {
+  personalContextRecoveryError,
+  restoreDeletedPersonalContextInTransaction,
+} from "../tenant/personal-service.js";
 import { forbiddenError, unauthorizedError, validationError } from "../../lib/errors.js";
 import type {
   AuthProvider,
@@ -46,6 +50,7 @@ export interface JwtAuthProviderOptions {
   jwtSecret: string;
   accessTtlSeconds: number;
   refreshTtlSeconds: number;
+  personalContextRecoveryEnabled?: boolean;
   passwordHasher?: PasswordHasher;
 }
 
@@ -58,12 +63,14 @@ export class JwtAuthProvider implements AuthProvider {
   private readonly secretKey: Uint8Array;
   private readonly accessTtlSeconds: number;
   private readonly refreshTtlSeconds: number;
+  private readonly personalContextRecoveryEnabled: boolean;
   private readonly hasher: PasswordHasher;
 
   constructor(options: JwtAuthProviderOptions) {
     this.secretKey = new TextEncoder().encode(options.jwtSecret);
     this.accessTtlSeconds = options.accessTtlSeconds;
     this.refreshTtlSeconds = options.refreshTtlSeconds;
+    this.personalContextRecoveryEnabled = options.personalContextRecoveryEnabled ?? false;
     this.hasher = options.passwordHasher ?? new ScryptPasswordHasher();
   }
 
@@ -317,30 +324,71 @@ export class JwtAuthProvider implements AuthProvider {
       return { userId: user.id, tenantId: null, platformRole: user.platformRole };
     }
 
-    const memberships = (await this.bootstrapLookup(async (tx) => {
-      return tx.membership.findMany({
-        where: {
-          userId: user.id,
-          status: "ACTIVE",
-          deletedAt: null,
-        },
-        select: {
-          tenantId: true,
-          role: true,
-          tenant: { select: { type: true, name: true, status: true, deletedAt: true } },
-        },
-      });
-    })) as MembershipRow[];
+    const loadMemberships = async (): Promise<MembershipRow[]> =>
+      (await this.bootstrapLookup(async (tx) => {
+        return tx.membership.findMany({
+          where: {
+            userId: user.id,
+            status: "ACTIVE",
+            deletedAt: null,
+          },
+          select: {
+            tenantId: true,
+            role: true,
+            tenant: { select: { type: true, name: true, status: true, deletedAt: true } },
+          },
+        });
+      })) as MembershipRow[];
 
-    const accessible = memberships.filter(
+    let memberships = await loadMemberships();
+
+    let accessible = memberships.filter(
       (m) => m.tenant.status === "ACTIVE" && m.tenant.deletedAt === null,
     );
+
+    const requestedTenantIsUnavailable =
+      Boolean(requestedTenantId) &&
+      !accessible.some((membership) => membership.tenantId === requestedTenantId);
+    if (accessible.length === 0 || requestedTenantIsUnavailable) {
+      if (accessible.length === 0 && !this.personalContextRecoveryEnabled) {
+        throw personalContextRecoveryError("RECOVERY_DISABLED");
+      }
+      if (this.personalContextRecoveryEnabled) {
+        let recovery: Awaited<ReturnType<typeof restoreDeletedPersonalContextInTransaction>>;
+        try {
+          recovery = await withTenantContext(
+            { userId: SYSTEM_USER_ID, tenantId: null, platformRole: "SUPER_ADMIN" },
+            (tx) =>
+              restoreDeletedPersonalContextInTransaction(
+                tx,
+                user.id,
+                requestedTenantIsUnavailable ? requestedTenantId : null,
+              ),
+          );
+        } catch {
+          throw personalContextRecoveryError("CHECK_FAILED");
+        }
+        if (recovery.status === "AMBIGUOUS") throw personalContextRecoveryError("AMBIGUOUS");
+        if (recovery.status === "DELETION_REQUEST_OPEN") {
+          throw personalContextRecoveryError("DELETION_REQUEST_OPEN");
+        }
+        if (recovery.status === "RESTORED") {
+          memberships = await loadMemberships();
+          accessible = memberships.filter(
+            (membership) =>
+              membership.tenant.status === "ACTIVE" && membership.tenant.deletedAt === null,
+          );
+        }
+      }
+    }
 
     let selectedTenantId: string;
     if (requestedTenantId) {
       const match = accessible.find((m) => m.tenantId === requestedTenantId);
       if (!match) {
-        throw forbiddenError("Bu tenant'a erişiminiz yok");
+        throw forbiddenError("Bu çalışma alanına erişiminiz yok", {
+          reasonCode: "TENANT_ACCESS_DENIED",
+        });
       }
       selectedTenantId = requestedTenantId;
     } else if (
@@ -354,9 +402,13 @@ export class JwtAuthProvider implements AuthProvider {
     } else if (accessible.length === 1) {
       selectedTenantId = accessible[0]!.tenantId;
     } else if (accessible.length === 0) {
-      throw forbiddenError("Aktif üyeliğiniz bulunmuyor");
+      throw forbiddenError("Hesabınıza bağlı etkin bir çalışma alanı bulunamadı.", {
+        reasonCode: "NO_ACTIVE_MEMBERSHIP",
+      });
     } else {
-      throw validationError("TenantId belirtilmelidir");
+      throw validationError("Bu hesapta birden fazla kurum var; giriş için kurum seçilmelidir.", {
+        reasonCode: "TENANT_SELECTION_REQUIRED",
+      });
     }
 
     const selected = accessible.find((membership) => membership.tenantId === selectedTenantId)!;

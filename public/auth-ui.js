@@ -1,15 +1,29 @@
 export function formatLoginError(error) {
   const status = Number.isInteger(error?.status) ? error.status : null;
   const code = typeof error?.code === "string" ? error.code : null;
+  const reasonCode =
+    typeof error?.details?.reasonCode === "string" ? error.details.reasonCode : null;
 
   if (status === 401 || code === "UNAUTHORIZED") {
     return "E-posta veya şifre yanlış. Bilgilerini kontrol edip tekrar dene.";
+  }
+  if (code === "ACCOUNT_CONTEXT_REPAIR_REQUIRED") {
+    return "Hesabına bağlı kişisel alan güvenle açılamadı. Öğrenme kayıtların korunuyor; destek ekibiyle iletişime geç.";
+  }
+  if (reasonCode === "NO_ACTIVE_MEMBERSHIP") {
+    return "Hesabına bağlı etkin bir çalışma alanı bulunamadı. Hesap desteğiyle iletişime geç.";
+  }
+  if (reasonCode === "TENANT_ACCESS_DENIED") {
+    return "Seçilen çalışma alanına erişimin yok. Giriş bilgilerini kontrol edip tekrar dene.";
+  }
+  if (reasonCode === "TENANT_SELECTION_REQUIRED") {
+    return "Bu hesap birden fazla kuruma bağlı. Kurum seçimi için kurum yöneticine başvur.";
   }
   if (status === 400 || code === "VALIDATION_ERROR") {
     return "Giriş bilgilerini kontrol edip tekrar dene.";
   }
   if (status === 403 || code === "FORBIDDEN") {
-    return "Giriş isteği güvenlik doğrulamasından geçemedi. Uygulamayı güncelle veya daha sonra tekrar dene.";
+    return "Hesabın için giriş çalışma alanı doğrulanamadı. Biraz sonra tekrar dene veya destekle iletişime geç.";
   }
   if (status === 429 || code === "RATE_LIMITED") {
     return "Çok fazla giriş denemesi yapıldı. Biraz bekleyip tekrar dene.";

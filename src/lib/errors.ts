@@ -5,6 +5,7 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "SERVICE_UNAVAILABLE"
+  | "ACCOUNT_CONTEXT_REPAIR_REQUIRED"
   | "INTERNAL_ERROR";
 
 export interface ApiErrorBody {
