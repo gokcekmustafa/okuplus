@@ -3947,9 +3947,10 @@ async function loadLearningPath() {
     !uiMotion.hasRoadmap(container, insightsIdentity)
   ) {
     const preserveCompletionPosition = returnPosition?.scope === scope;
-    container.innerHTML = preserveCompletionPosition
-      ? '<p class="muted" role="status">Tamamlanan istasyonun konumu korunuyor; sıradaki adım yenileniyor…</p>'
-      : '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
+    if (!preserveCompletionPosition) {
+      container.innerHTML =
+        '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
+    }
   }
   try {
     markLearningPathTiming("request-start", timingSequence);
