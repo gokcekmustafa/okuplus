@@ -517,9 +517,8 @@ describe("exercise UX state from production frontend", () => {
 
   it("encodes session and question identifiers before placing them in request paths", () => {
     expect(source).toContain("`/questions/${encodeURIComponent(questionVersionId)}/attempts`");
-    expect(source).toContain(
-      "`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/questions`",
-    );
+    expect(source).toContain("sessionId = exerciseSession?.id");
+    expect(source).toContain("`/exercise-sessions/${encodeURIComponent(sessionId)}/questions`");
     expect(source).toContain(
       "exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/complete`",
     );
@@ -921,7 +920,7 @@ describe("exercise UX state from production frontend", () => {
   });
 
   it("does not block a focused lesson on a supplementary path reload", () => {
-    const start = source.indexOf("async function loadFocusedLearningPathStep()");
+    const start = source.indexOf("async function loadFocusedLearningPathStep(");
     const end = source.indexOf("async function completeLearningPathTerminalStep()", start);
     const focusedLoader = source.slice(start, end);
     expect(focusedLoader.match(/await insightApi\("learning-path"\)/g) ?? []).toHaveLength(1);
