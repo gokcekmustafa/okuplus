@@ -5847,6 +5847,10 @@ function navigate(
     void loadExercisePage();
   } else if (page === "lessons") {
     if (isPlatformUser === false && learningPathEntryMode) {
+      const lessonDetail = $("lesson-detail");
+      if (lessonDetail) lessonDetail.innerHTML = "";
+      const lessonStatus = $("lessons-status");
+      if (lessonStatus) lessonStatus.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
       void loadFocusedLearningPathStep();
     } else {
       void loadLessons();
