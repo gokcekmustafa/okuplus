@@ -3228,6 +3228,12 @@ async function startLearningPathNode(
   activeLearningStepNode = node;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
+  const stationDetail = $("lesson-detail");
+  if (stationDetail) stationDetail.innerHTML = "";
+  const stationStatus = $("lessons-status");
+  if (stationStatus) stationStatus.textContent = "Sıradaki istasyon hazırlanıyor…";
+  const stationError = $("lessons-error");
+  stationError?.classList.add("hidden");
   learningPathEntryMode = true;
   // A Learning Path station must never inherit the independent Training
   // return target from a previous activity session.
@@ -3309,6 +3315,14 @@ async function startLearningPathNode(
     navigate("exercise");
   } catch (error) {
     setAsyncButtonState(button, false, "Başlatılıyor…");
+    const stationError = $("lessons-error");
+    if (stationError) {
+      stationError.textContent = formatStudentError(
+        error,
+        "Bu istasyon şu anda açılamadı. Lütfen tekrar dene.",
+      );
+      stationError.classList.remove("hidden");
+    }
     if (continuation) handleLearningPathStationStartFailure(continuation, error);
     else if (!isPremiumLimitError(error)) {
       alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
