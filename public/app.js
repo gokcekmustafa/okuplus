@@ -3203,6 +3203,47 @@ function startLearningPathNodeFromMap(node, button) {
   );
 }
 
+function ensureStationTransitionOverlay() {
+  const doc = typeof document === "undefined" ? null : document;
+  if (!doc || typeof doc.createElement !== "function") return null;
+  let overlay =
+    typeof doc.getElementById === "function"
+      ? doc.getElementById("station-transition-overlay")
+      : null;
+  if (overlay) return overlay;
+  overlay = doc.createElement("div");
+  overlay.id = "station-transition-overlay";
+  overlay.setAttribute("role", "status");
+  overlay.setAttribute("aria-live", "polite");
+  overlay.setAttribute("aria-busy", "true");
+  overlay.innerHTML =
+    '<div class="station-transition-card"><span class="btn-spinner" aria-hidden="true"></span><strong>Sıradaki istasyon hazırlanıyor…</strong></div>';
+  Object.assign(overlay.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "2147483647",
+    display: "none",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#f8fafc",
+    color: "#0f172a",
+  });
+  doc.body?.appendChild?.(overlay);
+  return overlay;
+}
+
+function showStationTransitionOverlay() {
+  const overlay = ensureStationTransitionOverlay();
+  if (!overlay) return;
+  overlay.style.display = "flex";
+  overlay.setAttribute("aria-busy", "true");
+}
+
+function hideStationTransitionOverlay() {
+  const overlay = document?.getElementById?.("station-transition-overlay");
+  if (overlay) overlay.style.display = "none";
+}
+
 async function startLearningPathNode(
   node,
   button,
@@ -3228,6 +3269,7 @@ async function startLearningPathNode(
   activeLearningStepNode = node;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
+  showStationTransitionOverlay();
   const stationDetail = $("lesson-detail");
   if (stationDetail) stationDetail.innerHTML = "";
   const stationLayout = $("lesson-layout");
@@ -3319,6 +3361,7 @@ async function startLearningPathNode(
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (error) {
+    hideStationTransitionOverlay();
     setAsyncButtonState(button, false, "Başlatılıyor…");
     const stationError = $("lessons-error");
     if (stationError) {
@@ -4288,6 +4331,7 @@ window.startTodayAssessment = async function (
     exerciseRequestedSessionId = data.sessionId;
     navigate("exercise");
   } catch (e) {
+    hideStationTransitionOverlay();
     if (continuation) handleLearningPathStationStartFailure(continuation, e);
     else if (!isPremiumLimitError(e))
       alert(formatStudentError(e, "Değerlendirme şu anda açılamadı."));
@@ -5097,6 +5141,7 @@ function learningPathStepApi(stepId, suffix, options) {
 }
 
 async function loadFocusedLearningPathStep() {
+  hideStationTransitionOverlay();
   const status = $("lessons-status");
   const error = $("lessons-error");
   const detail = $("lesson-detail");
@@ -5544,6 +5589,7 @@ async function navigateLearningPathAdjacent(direction) {
     learningPathEntryMode = true;
     await startLearningPathNode(targetWithProgress, null, currentStepId);
   } catch (error) {
+    hideStationTransitionOverlay();
     setAsyncButtonState(button, false, "Yükleniyor…");
     const status = $("lesson-detail-status");
     if (status) status.textContent = formatStudentError(error, "Sonraki adım açılamadı.");
@@ -5796,6 +5842,7 @@ function navigate(
   page,
   { continuation = null, learningPathReturnPosition: returnPosition = null } = {},
 ) {
+  hideStationTransitionOverlay();
   if (!PAGES.includes(page)) return;
   if (!canAccessPage(page)) {
     const fallback = roleHomePage();
@@ -14060,6 +14107,7 @@ async function navigateLearningPathExerciseAdjacent(direction) {
 }
 
 async function loadExercisePage() {
+  hideStationTransitionOverlay();
   if (exerciseLoading || exerciseBusy) return;
   exerciseLoading = true;
   hideExerciseError();
