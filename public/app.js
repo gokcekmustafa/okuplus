@@ -2962,19 +2962,22 @@ function restoreLearningPathVisualPosition(position) {
   const delta = rect.top - position.viewportTop;
   if (Math.abs(delta) <= 1) return true;
   const scrollingElement = document.scrollingElement || document.documentElement;
-  if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
-    scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
-    return true;
-  }
-  if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
-    const root = document.documentElement;
-    const previousBehavior = root?.style?.scrollBehavior;
+  const root = document.documentElement;
+  const previousBehavior = root?.style?.scrollBehavior;
+  let scrolled = false;
+  try {
     if (root?.style) root.style.scrollBehavior = "auto";
-    window.scrollTo(position.scrollX, (Number(window.scrollY) || position.scrollY) + delta);
+    if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
+      scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
+      scrolled = true;
+    } else if (typeof window !== "undefined" && typeof window.scrollTo === "function") {
+      window.scrollTo(position.scrollX, (Number(window.scrollY) || position.scrollY) + delta);
+      scrolled = true;
+    }
+  } finally {
     if (root?.style) root.style.scrollBehavior = previousBehavior || "";
-    return true;
   }
-  return false;
+  return scrolled;
 }
 
 const LEARNING_PATH_TIMING_PREFIX = "okupratik:learning-path-transition";

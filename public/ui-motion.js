@@ -116,16 +116,19 @@ export function createUiMotion(env = globalThis) {
 
   function scrollByInstantly(delta) {
     const scrollingElement = env.document?.scrollingElement || env.document?.documentElement;
-    if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
-      scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
-      return;
-    }
-    if (typeof env.scrollTo !== "function") return;
     const root = env.document?.documentElement;
     const previousBehavior = root?.style?.scrollBehavior;
-    if (root?.style) root.style.scrollBehavior = "auto";
-    env.scrollTo(env.scrollX || 0, (env.scrollY || 0) + delta);
-    if (root?.style) root.style.scrollBehavior = previousBehavior || "";
+    try {
+      if (root?.style) root.style.scrollBehavior = "auto";
+      if (scrollingElement && Number.isFinite(Number(scrollingElement.scrollTop))) {
+        scrollingElement.scrollTop = Number(scrollingElement.scrollTop) + delta;
+        return;
+      }
+      if (typeof env.scrollTo !== "function") return;
+      env.scrollTo(env.scrollX || 0, (env.scrollY || 0) + delta);
+    } finally {
+      if (root?.style) root.style.scrollBehavior = previousBehavior || "";
+    }
   }
 
   function alignStep(element, viewportTop = null) {
