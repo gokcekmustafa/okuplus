@@ -2,6 +2,13 @@ import { Prisma, type Membership, type TenantType, type User } from "@prisma/cli
 import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError } from "../../lib/errors.js";
 import { ScryptPasswordHasher } from "../auth/index.js";
+import { entitlementPlanFeatureLabels } from "../entitlements/service.js";
+import {
+  adminEntitlementStatus,
+  entitlementForAccountContext,
+  type AdminEntitlementRecord,
+} from "./account-context.js";
+import { withTenantContext } from "../tenant/context.js";
 import type {
   CreateUserInput,
   ListUsersQuery,
@@ -34,7 +41,7 @@ const USER_LIST_SELECT = {
     select: {
       role: true,
       status: true,
-      tenant: { select: { name: true, type: true } },
+      tenant: { select: { id: true, name: true, type: true, status: true, deletedAt: true } },
     },
   },
   _count: { select: { memberships: true } },
@@ -67,6 +74,7 @@ export interface UserListItem {
   createdAt: Date;
   updatedAt: Date;
   membershipCount: number;
+  accountContexts: UserAccountContext[];
   roleConnections: Array<{
     role: Membership["role"];
     status: Membership["status"];
@@ -89,10 +97,37 @@ export interface UserDetail {
   createdAt: Date;
   updatedAt: Date;
   memberships: MembershipSummary[];
+  accountContexts: UserAccountContext[];
   branches: UserBranchSummary[];
   classAssignments: UserClassAssignmentSummary[];
   enrollments: UserEnrollmentSummary[];
   entitlements: UserEntitlementSummary[];
+  billingSubscriptions: UserBillingSubscriptionSummary[];
+  billingPayments: UserBillingPaymentSummary[];
+}
+
+export interface UserAdminReadActor {
+  userId: string;
+  platformRole: "SUPER_ADMIN";
+}
+
+export interface UserAccountContext {
+  tenantId: string;
+  tenantName: string;
+  tenantType: TenantType;
+  tenantStatus: string;
+  tenantDeleted: boolean;
+  role: string;
+  membershipStatus: Membership["status"];
+  packageRight: {
+    id: string | null;
+    plan: string;
+    source: string;
+    status: "DEFAULT" | "ACTIVE" | "SCHEDULED" | "EXPIRED" | "INACTIVE" | "INVALID";
+    effectiveAt: Date | null;
+    expiresAt: Date | null;
+    features: string[];
+  };
 }
 
 export interface UserBranchSummary {
@@ -130,6 +165,7 @@ export interface UserEnrollmentSummary {
 
 export interface UserEntitlementSummary {
   id: string;
+  userId: string | null;
   tenantId: string;
   tenantName: string;
   tenantType: TenantType;
@@ -139,6 +175,32 @@ export interface UserEntitlementSummary {
   source: string;
   effectiveAt: Date;
   expiresAt: Date | null;
+  createdAt: Date;
+  adminStatus: ReturnType<typeof adminEntitlementStatus>;
+  features: string[];
+}
+
+export interface UserBillingSubscriptionSummary {
+  tenantId: string;
+  tenantName: string;
+  tenantType: TenantType;
+  status: string;
+  billingPeriod: string;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelRequestedAt: Date | null;
+  canceledAt: Date | null;
+  createdAt: Date;
+}
+
+export interface UserBillingPaymentSummary {
+  tenantId: string;
+  tenantName: string;
+  status: string;
+  amountMinor: number | null;
+  currency: string | null;
+  occurredAt: Date | null;
+  createdAt: Date;
 }
 
 export interface MembershipSummary {
@@ -162,7 +224,7 @@ export interface UserListResult {
 }
 
 export async function listUsers(query: ListUsersQuery): Promise<UserListResult> {
-  const { search, status, page, pageSize } = query;
+  const { search, status, tenantType, membershipStatus, page, pageSize } = query;
 
   const where: Prisma.UserWhereInput = {
     deletedAt: null,
@@ -172,7 +234,22 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
           OR: [
             { displayName: { contains: search, mode: "insensitive" } },
             { email: { contains: search, mode: "insensitive" } },
+            {
+              memberships: {
+                some: { tenant: { name: { contains: search, mode: "insensitive" } } },
+              },
+            },
           ],
+        }
+      : {}),
+    ...(tenantType || membershipStatus
+      ? {
+          memberships: {
+            some: {
+              ...(membershipStatus ? { status: membershipStatus } : {}),
+              ...(tenantType ? { tenant: { type: tenantType } } : {}),
+            },
+          },
         }
       : {}),
   };
@@ -188,24 +265,120 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
     prisma.user.count({ where }),
   ]);
 
+  const userIds = rows.map((row) => row.id);
+  const tenantIds = [
+    ...new Set(rows.flatMap((row) => row.memberships.map((item) => item.tenant.id))),
+  ];
+  const entitlementRows = await findAccountEntitlements(userIds, tenantIds);
+  const now = new Date();
   return {
-    items: rows.map(({ _count, memberships, ...u }) => ({
-      ...u,
-      membershipCount: _count.memberships,
-      roleConnections: memberships.map((membership) => ({
-        role: membership.role,
-        status: membership.status,
-        tenantName: membership.tenant.name,
-        tenantType: membership.tenant.type,
-      })),
-    })),
+    items: rows.map(({ _count, memberships, ...u }) => {
+      const accountContexts = memberships.map((membership) =>
+        toAccountContext(
+          {
+            userId: u.id,
+            tenantId: membership.tenant.id,
+            tenantName: membership.tenant.name,
+            tenantType: membership.tenant.type,
+            tenantStatus: membership.tenant.status,
+            tenantDeleted: membership.tenant.deletedAt !== null,
+            role: membership.role,
+            membershipStatus: membership.status,
+          },
+          entitlementRows,
+          now,
+        ),
+      );
+      return {
+        ...u,
+        membershipCount: _count.memberships,
+        accountContexts,
+        roleConnections: memberships.map((membership) => ({
+          role: membership.role,
+          status: membership.status,
+          tenantName: membership.tenant.deletedAt
+            ? `${membership.tenant.name} (silindi)`
+            : membership.tenant.name,
+          tenantType: membership.tenant.type,
+        })),
+      };
+    }),
     total,
     page,
     pageSize,
   };
 }
 
-export async function getUser(id: string): Promise<UserDetail> {
+async function findAccountEntitlements(userIds: string[], tenantIds: string[]) {
+  if (userIds.length === 0 && tenantIds.length === 0) return [];
+  return prisma.entitlement.findMany({
+    where: {
+      OR: [
+        ...(userIds.length ? [{ userId: { in: userIds }, scope: "PERSONAL" as const }] : []),
+        ...(tenantIds.length
+          ? [{ tenantId: { in: tenantIds }, scope: "ORGANIZATION" as const, userId: null }]
+          : []),
+      ],
+    },
+    select: {
+      id: true,
+      userId: true,
+      tenantId: true,
+      scope: true,
+      plan: true,
+      active: true,
+      source: true,
+      effectiveAt: true,
+      expiresAt: true,
+      createdAt: true,
+    },
+    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+  });
+}
+
+function toAccountContext(
+  context: Parameters<typeof entitlementForAccountContext>[1] & {
+    tenantName: string;
+    tenantStatus: string;
+    tenantDeleted: boolean;
+    role: string;
+    membershipStatus: Membership["status"];
+  },
+  entitlementRows: AdminEntitlementRecord[],
+  now: Date,
+): UserAccountContext {
+  const entitlement = entitlementForAccountContext(entitlementRows, context, now);
+  return {
+    tenantId: context.tenantId,
+    tenantName: context.tenantDeleted ? `${context.tenantName} (silindi)` : context.tenantName,
+    tenantType: context.tenantType,
+    tenantStatus: context.tenantStatus,
+    tenantDeleted: context.tenantDeleted,
+    role: context.role,
+    membershipStatus: context.membershipStatus,
+    packageRight: entitlement
+      ? {
+          id: entitlement.id,
+          plan: entitlement.plan,
+          source: entitlement.source,
+          status: entitlement.adminStatus,
+          effectiveAt: entitlement.effectiveAt,
+          expiresAt: entitlement.expiresAt,
+          features: entitlementPlanFeatureLabels(entitlement.plan),
+        }
+      : {
+          id: null,
+          plan: "PLAN_FREE",
+          source: "DEFAULT",
+          status: "DEFAULT",
+          effectiveAt: null,
+          expiresAt: null,
+          features: entitlementPlanFeatureLabels("PLAN_FREE"),
+        },
+  };
+}
+
+export async function getUser(id: string, actor: UserAdminReadActor): Promise<UserDetail> {
   const user = await prisma.user.findFirst({
     where: { id, deletedAt: null },
     select: USER_DETAIL_SELECT,
@@ -288,6 +461,7 @@ export async function getUser(id: string): Promise<UserDetail> {
       },
       select: {
         id: true,
+        userId: true,
         tenantId: true,
         scope: true,
         plan: true,
@@ -295,14 +469,68 @@ export async function getUser(id: string): Promise<UserDetail> {
         source: true,
         effectiveAt: true,
         expiresAt: true,
+        createdAt: true,
         tenant: { select: { name: true, type: true } },
       },
       orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
     }),
   ]);
 
+  const [billingSubscriptions, billingPayments] = tenantIds.length
+    ? await withTenantContext(
+        { userId: actor.userId, tenantId: null, platformRole: actor.platformRole },
+        async (tx) =>
+          Promise.all([
+            tx.billingSubscription.findMany({
+              where: { userId: id, tenantId: { in: tenantIds } },
+              select: {
+                tenantId: true,
+                status: true,
+                billingPeriod: true,
+                currentPeriodStart: true,
+                currentPeriodEnd: true,
+                cancelRequestedAt: true,
+                canceledAt: true,
+                createdAt: true,
+                tenant: { select: { name: true, type: true } },
+              },
+              orderBy: { createdAt: "desc" },
+            }),
+            tx.billingPayment.findMany({
+              where: { userId: id, tenantId: { in: tenantIds } },
+              select: {
+                tenantId: true,
+                status: true,
+                amountMinor: true,
+                currency: true,
+                occurredAt: true,
+                createdAt: true,
+                tenant: { select: { name: true } },
+              },
+              orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+              take: 10,
+            }),
+          ]),
+      )
+    : [[], []];
+
+  const now = new Date();
+  const accountMemberships = memberships.map(({ tenant, ...membership }) => ({
+    userId: id,
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+    tenantType: tenant.type,
+    tenantStatus: tenant.status,
+    tenantDeleted: tenant.deletedAt !== null,
+    role: membership.role,
+    membershipStatus: membership.status,
+  }));
+
   return {
     ...user,
+    accountContexts: accountMemberships.map((context) =>
+      toAccountContext(context, entitlements, now),
+    ),
     memberships: memberships.map(({ tenant, ...m }) => ({
       id: m.id,
       tenantId: tenant.id,
@@ -347,6 +575,7 @@ export async function getUser(id: string): Promise<UserDetail> {
     })),
     entitlements: entitlements.map((item) => ({
       id: item.id,
+      userId: item.userId,
       tenantId: item.tenantId,
       tenantName: item.tenant.name,
       tenantType: item.tenant.type,
@@ -356,11 +585,38 @@ export async function getUser(id: string): Promise<UserDetail> {
       source: item.source,
       effectiveAt: item.effectiveAt,
       expiresAt: item.expiresAt,
+      createdAt: item.createdAt,
+      adminStatus: adminEntitlementStatus(item, now),
+      features: entitlementPlanFeatureLabels(item.plan),
+    })),
+    billingSubscriptions: billingSubscriptions.map((item) => ({
+      tenantId: item.tenantId,
+      tenantName: item.tenant.name,
+      tenantType: item.tenant.type,
+      status: item.status,
+      billingPeriod: item.billingPeriod,
+      currentPeriodStart: item.currentPeriodStart,
+      currentPeriodEnd: item.currentPeriodEnd,
+      cancelRequestedAt: item.cancelRequestedAt,
+      canceledAt: item.canceledAt,
+      createdAt: item.createdAt,
+    })),
+    billingPayments: billingPayments.map((item) => ({
+      tenantId: item.tenantId,
+      tenantName: item.tenant.name,
+      status: item.status,
+      amountMinor: item.amountMinor,
+      currency: item.currency,
+      occurredAt: item.occurredAt,
+      createdAt: item.createdAt,
     })),
   };
 }
 
-export async function createUser(input: CreateUserInput): Promise<UserDetail> {
+export async function createUser(
+  input: CreateUserInput,
+  actor: UserAdminReadActor,
+): Promise<UserDetail> {
   const passwordHash = await hasher.hash(input.password);
 
   try {
@@ -377,7 +633,7 @@ export async function createUser(input: CreateUserInput): Promise<UserDetail> {
       },
       select: USER_DETAIL_SELECT,
     });
-    return toUserDetail(created, []);
+    return await getUser(created.id, actor);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw conflictError(uniqueViolationMessage());
@@ -386,7 +642,11 @@ export async function createUser(input: CreateUserInput): Promise<UserDetail> {
   }
 }
 
-export async function updateUser(id: string, input: UpdateUserInput): Promise<UserDetail> {
+export async function updateUser(
+  id: string,
+  input: UpdateUserInput,
+  actor: UserAdminReadActor,
+): Promise<UserDetail> {
   const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
   if (!existing) {
     throw notFoundError("Kullanıcı bulunamadı");
@@ -401,13 +661,12 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<Us
   };
 
   try {
-    const updated = await prisma.user.update({
+    await prisma.user.update({
       where: { id },
       data,
       select: USER_DETAIL_SELECT,
     });
-    const memberships = await findMembershipSummaries(id);
-    return toUserDetail(updated, memberships);
+    return await getUser(id, actor);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw conflictError(uniqueViolationMessage());
@@ -459,64 +718,6 @@ export async function resetUserPassword(
     });
   });
   return { id, updated: true };
-}
-
-// -------- membership yardımcıları --------
-
-async function findMembershipSummaries(userId: string): Promise<MembershipSummary[]> {
-  const memberships = await prisma.membership.findMany({
-    where: { userId },
-    select: {
-      id: true,
-      role: true,
-      status: true,
-      startedAt: true,
-      endedAt: true,
-      createdAt: true,
-      tenant: { select: { id: true, name: true, type: true, status: true, deletedAt: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return memberships.map(({ tenant, ...m }) => ({
-    id: m.id,
-    tenantId: tenant.id,
-    tenantName: tenant.deletedAt ? `${tenant.name} (silindi)` : tenant.name,
-    tenantType: tenant.type,
-    tenantStatus: tenant.status,
-    role: m.role,
-    status: m.status,
-    startedAt: m.startedAt,
-    endedAt: m.endedAt,
-    createdAt: m.createdAt,
-  }));
-}
-
-function toUserDetail(
-  user: {
-    id: string;
-    displayName: string;
-    email: string | null;
-    phone: string | null;
-    nationalId: string | null;
-    birthYear: number | null;
-    status: User["status"];
-    platformRole: User["platformRole"];
-    emailVerifiedAt: Date | null;
-    lastLoginAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-  },
-  memberships: MembershipSummary[],
-): UserDetail {
-  return {
-    ...user,
-    memberships,
-    branches: [],
-    classAssignments: [],
-    enrollments: [],
-    entitlements: [],
-  };
 }
 
 function isUniqueViolation(err: unknown): boolean {

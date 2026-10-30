@@ -50,6 +50,8 @@ describe("admin student workspace and question editing UI", () => {
         String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
       platformRoleLabel: () => "Platform yöneticisi",
       tenantTypeLabel: (type: string) => (type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"),
+      planLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Ücretli Paket" : "Ücretsiz Paket"),
+      entitlementSourceLabel: (source: string) => source,
     });
     const render = runInContext(
       `${functionSource("function renderUserRoleConnections(", "const INDIVIDUAL_ALLOWED_ROLES")}; renderUserRoleConnections`,
@@ -68,9 +70,49 @@ describe("admin student workspace and question editing UI", () => {
       ],
     });
     expect(html).toContain("Platform yöneticisi");
-    expect(html).toContain("Kurumsal · Öğrenci");
+    expect(html).toContain("Kurumsal");
+    expect(html).toContain("Öğrenci · Aktif");
     expect(html).toContain("&lt;Örnek Kurum&gt;");
     expect(html).not.toContain("<Örnek Kurum>");
+  });
+
+  it("shows every account context and its own package in the user list", () => {
+    const context = createContext({
+      MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", PARENT: "Veli" },
+      MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif", PENDING: "Beklemede" },
+      escapeHtml: (value: unknown) => String(value),
+      tenantTypeLabel: (type: string) => (type === "INDIVIDUAL" ? "Bireysel" : "Kurum"),
+      planLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Ücretli Paket" : "Ücretsiz Paket"),
+      entitlementSourceLabel: (source: string) => source,
+    });
+    const render = runInContext(
+      `${functionSource("function renderUserRoleConnections(", "const INDIVIDUAL_ALLOWED_ROLES")}; renderUserRoleConnections`,
+      context,
+    ) as (user: unknown) => string;
+
+    const html = render({
+      accountContexts: [
+        {
+          tenantName: "Kişisel alan",
+          tenantType: "INDIVIDUAL",
+          role: "STUDENT",
+          membershipStatus: "ACTIVE",
+          packageRight: { plan: "PLAN_PREMIUM", source: "ADMIN" },
+        },
+        {
+          tenantName: "Örnek Okul",
+          tenantType: "ORGANIZATION",
+          role: "PARENT",
+          membershipStatus: "PENDING",
+          packageRight: { plan: "PLAN_FREE", source: "DEFAULT" },
+        },
+      ],
+    });
+    expect(html).toContain("Kişisel alan");
+    expect(html).toContain("Örnek Okul");
+    expect(html).toContain("Ücretli Paket");
+    expect(html).toContain("Ücretsiz Paket");
+    expect(html).toContain("Beklemede");
   });
 
   it("opens the matching shared student profile from the analytics row", async () => {
@@ -425,6 +467,8 @@ describe("admin student workspace and question editing UI", () => {
       $: (id: string) => elements[id],
       escapeHtml: (value: unknown) => String(value),
       renderUserRoleConnections: () => "roller",
+      renderUserAccessSummary: () => "erişim",
+      userInitials: () => "ÖA",
       formatTurkishPhoneValue: (value: unknown) => String(value),
       userStatusBadge: () => "durum",
       Math,
@@ -482,6 +526,7 @@ describe("admin student workspace and question editing UI", () => {
     const elements = {
       "user-detail-modal": { classList: { remove() {} } },
       "user-detail-title": { textContent: "" },
+      "user-detail-subtitle": { textContent: "" },
       "user-detail-body": { innerHTML: "" },
     };
     const context = createContext({

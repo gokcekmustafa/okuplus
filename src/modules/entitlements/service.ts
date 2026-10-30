@@ -120,6 +120,37 @@ const PLAN_POLICIES: Record<EntitlementPlan, Record<EntitlementFeature, FeatureP
   },
 };
 
+/** Superadmin display labels derived from the same policy that grants access. */
+export function entitlementPlanFeatureLabels(plan: EntitlementPlan): string[] {
+  const featureLabels: Record<EntitlementFeature, string> = {
+    PRACTICE: "Alıştırma",
+    PRACTICE_QUESTION: "Soru",
+    REVIEW: "Tekrar",
+    LEARNING_PATH: "Öğrenme yolu",
+    ASSESSMENT: "Değerlendirme",
+    PROGRESS: "İlerleme kaydı",
+    GAMIFICATION: "Puan ve rozetler",
+    ADS_ENABLED: "Reklamlar",
+  };
+  return (Object.keys(PLAN_POLICIES[plan]) as EntitlementFeature[])
+    .filter((feature) => PLAN_POLICIES[plan][feature].allowed)
+    .filter((feature) => feature !== ENTITLEMENT_FEATURES.ADS_ENABLED)
+    .map((feature) => {
+      const policy = PLAN_POLICIES[plan][feature];
+      if (policy.dailyLimit !== null) {
+        return `Günde ${policy.dailyLimit} ${feature === ENTITLEMENT_FEATURES.PRACTICE ? "alıştırma" : "soru"}`;
+      }
+      if (
+        plan === "PLAN_PREMIUM" &&
+        (feature === ENTITLEMENT_FEATURES.PRACTICE ||
+          feature === ENTITLEMENT_FEATURES.PRACTICE_QUESTION)
+      ) {
+        return `Sınırsız ${feature === ENTITLEMENT_FEATURES.PRACTICE ? "alıştırma" : "soru"}`;
+      }
+      return featureLabels[feature];
+    });
+}
+
 const LIMITED_FEATURES = new Set<EntitlementFeature>([
   ENTITLEMENT_FEATURES.PRACTICE,
   ENTITLEMENT_FEATURES.PRACTICE_QUESTION,

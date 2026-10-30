@@ -2006,8 +2006,8 @@
             <div class="page-head">
               <h2>Kullanıcı Hesapları</h2>
               <p class="muted">
-                Hesapları, platform rollerini ve kurum üyeliklerini yönetin. Öğrenci ilerlemesi ayrı
-                Öğrenci Analitiği alanındadır.
+                Kullanıcıları, bağlı kişisel alanları ve kurum üyeliklerini tek yerden görüntüleyin.
+                Öğrenci ilerlemesi ayrı Öğrenci Analitiği alanındadır.
               </p>
             </div>
 
@@ -2032,6 +2032,24 @@
                     <option value="CLOSED">Kapatıldı</option>
                   </select>
                 </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Hesap bağlamı filtresi</span>
+                  <select id="user-tenant-type-filter">
+                    <option value="">Tüm hesap bağlamları</option>
+                    <option value="INDIVIDUAL">Bireysel</option>
+                    <option value="ORGANIZATION">Kurum</option>
+                  </select>
+                </label>
+                <label class="field inline-field">
+                  <span class="visually-hidden">Üyelik durumu filtresi</span>
+                  <select id="user-membership-status-filter">
+                    <option value="">Tüm üyelik durumları</option>
+                    <option value="ACTIVE">Aktif üyelik</option>
+                    <option value="PENDING">Bekleyen üyelik</option>
+                    <option value="INACTIVE">Pasif üyelik</option>
+                    <option value="REMOVED">Kaldırılmış üyelik</option>
+                  </select>
+                </label>
               </div>
               <button id="user-create-btn" type="button" class="btn btn-primary">
                 Yeni kullanıcı
@@ -2045,17 +2063,15 @@
                 <thead>
                   <tr>
                     <th>Kullanıcı</th>
-                    <th>Hesap ve roller</th>
-                    <th>Telefon</th>
-                    <th>Doğum Yılı</th>
+                    <th>Hesap bağlamları ve paket</th>
                     <th>Durum</th>
-                    <th>Üyelikler</th>
+                    <th>Erişim hakkı</th>
                     <th class="text-right">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody id="user-list-body">
                   <tr>
-                    <td colspan="7" class="empty-cell">Yükleniyor…</td>
+                    <td colspan="5" class="empty-cell">Yükleniyor…</td>
                   </tr>
                 </tbody>
               </table>
@@ -2149,7 +2165,7 @@
                     />
                   </label>
                   <fieldset id="user-form-initial-membership" class="fieldset-group">
-                    <legend>İlk kurum üyeliği</legend>
+                    <legend>Kurumsal üyelik (isteğe bağlı)</legend>
                     <label class="field">
                       <span>Kurum</span>
                       <select id="user-form-tenant">
@@ -2163,7 +2179,8 @@
                       </select>
                     </label>
                     <p class="muted field-hint">
-                      Kurum seçilirse kullanıcı oluşturulduğunda üyelik de eklenir.
+                      Kullanıcı hesabını kurum seçmeden oluşturabilirsiniz. Kurum ve rol seçerseniz
+                      üyelik de aynı akışta eklenir.
                     </p>
                   </fieldset>
                   <p id="user-form-error" class="error hidden" role="alert"></p>
@@ -2178,16 +2195,19 @@
               </div>
             </div>
 
-            <!-- Detay modalı (bilgi + üyelik yönetimi) -->
-            <div id="user-detail-modal" class="modal-backdrop hidden">
+            <!-- Kullanıcı çalışma alanı: masaüstünde sağ çekmece, mobilde tam ekran. -->
+            <div id="user-detail-modal" class="modal-backdrop user-detail-modal-backdrop hidden">
               <div
-                class="modal modal-wide user-detail-modal-dialog admin-record-detail-modal"
+                class="modal modal-wide user-detail-modal-dialog user-detail-drawer admin-record-detail-modal"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="user-detail-title"
               >
                 <div class="modal-head">
-                  <h3 id="user-detail-title">Kullanıcı detayı</h3>
+                  <div class="user-detail-heading">
+                    <h3 id="user-detail-title">Kullanıcı detayı</h3>
+                    <p id="user-detail-subtitle" class="muted">Hesap bağlamları ve erişim özeti</p>
+                  </div>
                   <button
                     id="user-detail-close"
                     type="button"

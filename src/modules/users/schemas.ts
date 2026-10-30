@@ -12,6 +12,8 @@ import { rejectNationalIdPayload, turkishPhoneSchema } from "../../lib/person-da
  */
 
 const userStatusSchema = z.enum(["ACTIVE", "INVITED", "SUSPENDED", "CLOSED"]);
+const tenantTypeSchema = z.enum(["INDIVIDUAL", "ORGANIZATION"]);
+const membershipStatusSchema = z.enum(["PENDING", "ACTIVE", "INACTIVE", "REMOVED"]);
 
 const emailSchema = z
   .string()
@@ -71,6 +73,8 @@ export const resetUserPasswordSchema = z.object({
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
   status: userStatusSchema.optional(),
+  tenantType: tenantTypeSchema.optional(),
+  membershipStatus: membershipStatusSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -83,8 +87,6 @@ const membershipRoleSchema = z.enum([
   "STUDENT",
   "PARENT",
 ]);
-
-const membershipStatusSchema = z.enum(["PENDING", "ACTIVE", "INACTIVE", "REMOVED"]);
 
 /** Tenant üyelerini listeleme sorgu parametreleri. */
 export const listMembershipsQuerySchema = z.object({

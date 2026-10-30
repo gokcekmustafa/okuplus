@@ -33,6 +33,11 @@ const ORG_TENANT = "99999998-0000-7000-8000-0000000000b1";
 const ORG_TENANT_2 = "99999998-0000-7000-8000-0000000000b2";
 const INDIVIDUAL_TENANT = "99999998-0000-7000-8000-0000000000b3";
 const INDIVIDUAL_TENANT_2 = "99999998-0000-7000-8000-0000000000b4";
+const ORG_ENTITLEMENT_ID = "99999998-0000-7000-8000-0000000000c2";
+const PERSONAL_ENTITLEMENT_ID = "99999998-0000-7000-8000-0000000000c3";
+const BILLING_CUSTOMER_ID = "99999998-0000-7000-8000-0000000000d1";
+const BILLING_SUBSCRIPTION_ID = "99999998-0000-7000-8000-0000000000d2";
+const BILLING_PAYMENT_ID = "99999998-0000-7000-8000-0000000000d3";
 
 describe("user + membership admin", () => {
   let app: FastifyInstance;
@@ -41,6 +46,18 @@ describe("user + membership admin", () => {
     await prisma.$connect();
 
     // Tekrar çalıştırmalarda kalıcı olabilecek veriyi temizle.
+    await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.entitlement.deleteMany({
+      where: {
+        OR: [
+          { id: { in: [ORG_ENTITLEMENT_ID, PERSONAL_ENTITLEMENT_ID] } },
+          { userId: USER_A_ID },
+          { tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+        ],
+      },
+    });
     await prisma.membership.deleteMany({
       where: { OR: [{ userId: { in: [NORMAL_USER_ID, USER_A_ID] } }] },
     });
@@ -105,6 +122,18 @@ describe("user + membership admin", () => {
 
   afterAll(async () => {
     await app.close();
+    await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.entitlement.deleteMany({
+      where: {
+        OR: [
+          { id: { in: [ORG_ENTITLEMENT_ID, PERSONAL_ENTITLEMENT_ID] } },
+          { userId: USER_A_ID },
+          { tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+        ],
+      },
+    });
     await prisma.studentBadge.deleteMany({
       where: {
         tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] },
@@ -618,6 +647,117 @@ describe("user + membership admin", () => {
     expect(res.json().data.tenantType).toBe("INDIVIDUAL");
     expect(res.json().data.role).toBe("STUDENT");
     individualMembershipId = res.json().data.id;
+  });
+
+  it("Super Admin: paket bağlamlarını ve ödeme aboneliğini ayrı, sağlayıcı sırları olmadan okur", async () => {
+    const effectiveAt = new Date("2026-10-01T00:00:00.000Z");
+    const periodStart = new Date("2026-10-01T00:00:00.000Z");
+    const periodEnd = new Date("2026-11-01T00:00:00.000Z");
+    await prisma.entitlement.createMany({
+      data: [
+        {
+          id: ORG_ENTITLEMENT_ID,
+          tenantId: ORG_TENANT,
+          scope: "ORGANIZATION",
+          plan: "PLAN_FREE",
+          active: true,
+          source: "ADMIN",
+          effectiveAt,
+        },
+        {
+          id: PERSONAL_ENTITLEMENT_ID,
+          userId: USER_A_ID,
+          tenantId: INDIVIDUAL_TENANT,
+          scope: "PERSONAL",
+          plan: "PLAN_PREMIUM",
+          active: true,
+          source: "ADMIN",
+          effectiveAt,
+          expiresAt: periodEnd,
+        },
+      ],
+    });
+    await prisma.billingCustomer.create({
+      data: {
+        id: BILLING_CUSTOMER_ID,
+        userId: USER_A_ID,
+        tenantId: INDIVIDUAL_TENANT,
+        scope: "PERSONAL",
+        providerCode: "test-fixture",
+      },
+    });
+    await prisma.billingSubscription.create({
+      data: {
+        id: BILLING_SUBSCRIPTION_ID,
+        customerId: BILLING_CUSTOMER_ID,
+        userId: USER_A_ID,
+        tenantId: INDIVIDUAL_TENANT,
+        providerCode: "test-fixture",
+        pricingPlanReference: "test-monthly",
+        billingPeriod: "MONTHLY",
+        status: "ACTIVE",
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+      },
+    });
+    await prisma.billingPayment.create({
+      data: {
+        id: BILLING_PAYMENT_ID,
+        customerId: BILLING_CUSTOMER_ID,
+        subscriptionId: BILLING_SUBSCRIPTION_ID,
+        userId: USER_A_ID,
+        tenantId: INDIVIDUAL_TENANT,
+        providerCode: "test-fixture",
+        providerOrderReference: "user-admin-read-fixture",
+        status: "SUCCEEDED",
+        amountMinor: 12900,
+        currency: "TRY",
+        occurredAt: periodStart,
+      },
+    });
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/admin/users?tenantType=INDIVIDUAL&membershipStatus=ACTIVE&search=Kullanıcı%20A",
+      headers: await superAdminHeaders(),
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().data.items.map((item: { id: string }) => item.id)).toContain(USER_A_ID);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/admin/users/${USER_A_ID}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const detail = res.json().data;
+    expect(detail.accountContexts).toHaveLength(3);
+    expect(
+      detail.accountContexts.find(
+        (context: { tenantId: string }) => context.tenantId === ORG_TENANT,
+      ).packageRight,
+    ).toMatchObject({ plan: "PLAN_FREE", source: "ADMIN", status: "ACTIVE" });
+    expect(
+      detail.accountContexts.find(
+        (context: { tenantId: string }) => context.tenantId === INDIVIDUAL_TENANT,
+      ).packageRight,
+    ).toMatchObject({ plan: "PLAN_PREMIUM", source: "ADMIN", status: "ACTIVE" });
+    expect(detail.billingSubscriptions).toHaveLength(1);
+    expect(detail.billingSubscriptions[0]).toMatchObject({
+      status: "ACTIVE",
+      billingPeriod: "MONTHLY",
+      currentPeriodStart: periodStart.toISOString(),
+      currentPeriodEnd: periodEnd.toISOString(),
+    });
+    expect(detail.billingPayments).toHaveLength(1);
+    expect(detail.billingPayments[0]).toMatchObject({
+      status: "SUCCEEDED",
+      amountMinor: 12900,
+      currency: "TRY",
+    });
+    expect(JSON.stringify(detail.billingSubscriptions)).not.toContain("providerSubscriptionId");
+    expect(JSON.stringify(detail.billingPayments)).not.toContain("providerPaymentId");
+    expect(JSON.stringify(detail.billingPayments)).not.toContain("providerOrderReference");
   });
 
   it("INDIVIDUAL üyelik rolü kurumsal role değiştirilemez: 400 döner", async () => {
