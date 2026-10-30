@@ -18,6 +18,7 @@ export async function corsPlugin(app: FastifyInstance, env: Env): Promise<void> 
       "authorization",
       "x-tenant-id",
       "x-auth-transport",
+      "x-auth-response",
       "x-csrf-token",
       "x-okupratik-guest-transport",
       "x-okupratik-guest-token",
