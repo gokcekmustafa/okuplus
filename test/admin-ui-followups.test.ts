@@ -78,13 +78,16 @@ describe("management UI follow-ups", () => {
       "pending.finally(() => setAnalyticsStudentButtonLoading(actionButton, false))",
     );
     expect(appJs).toContain('data-user-detail-id="${u.id}"');
-    expect(appJs).toContain("void openUserDetail(detailBtn.dataset.userDetailId)");
+    expect(appJs).toContain("void openUserDetail(target.dataset.userDetailId)");
+    const userClickHandler = appJs.slice(
+      appJs.indexOf("function setupUserEvents()"),
+      appJs.indexOf("// ---------- Öğrenci / sınıf kayıtları yönetimi ----------"),
+    );
+    expect(userClickHandler).toContain('target.matches("[data-user-detail-id]")');
+    expect(userClickHandler).toContain("void openUserDetail(target.dataset.userDetailId)");
     const userListRenderer = appJs.slice(
       appJs.indexOf("function renderUserList()"),
-      appJs.indexOf(
-        "function renderUserRoleConnections(",
-        appJs.indexOf("function renderUserList()"),
-      ),
+      appJs.indexOf("function renderUserAccountTypes(", appJs.indexOf("function renderUserList()")),
     );
     expect(userListRenderer).not.toContain("data-user-open-student");
     expect(appJs).toContain("options.analyticsData.student.profileId !== detail.id");
@@ -93,21 +96,24 @@ describe("management UI follow-ups", () => {
     );
     expect(appJs).toContain("analyticsStudentDetailRequest += 1;");
     expect(appJs).toContain("studentDetailCurrent = null;");
-    expect(appJs).toContain('data-user-open-student="${escapeHtml(u.id)}"');
+    const userGeneralTabRenderer = appJs.slice(
+      appJs.indexOf("function renderUserGeneralTab("),
+      appJs.indexOf("function renderUserOrganizationTab("),
+    );
+    expect(userGeneralTabRenderer).toContain("data-user-open-student=\"' +");
+    expect(userGeneralTabRenderer).toContain("escapeHtml(u.id)");
   });
 
   it("gives user detail headings opaque theme-aware surfaces with mobile sizing", () => {
-    expect(indexHtml).toContain("user-detail-modal-dialog");
-    expect(styles).toContain(".user-detail-modal-dialog .admin-detail-disclosure > summary");
-    expect(styles).toContain("background-color: var(--surface);");
-    expect(styles).toContain("background-color: var(--primary-soft);");
+    expect(indexHtml).toContain('id="user-management-subpage"');
+    expect(appJs).toContain('class="user-profile-workspace"');
+    expect(styles).toContain("#page-users .user-profile-workspace");
+    expect(styles).toContain("#page-users .user-profile-tabs");
+    expect(styles).toContain("background: var(--surface);");
+    expect(styles).toContain("var(--primary-soft, #eef5ff)");
     expect(styles).toContain("@media (max-width: 600px)");
-    expect(styles).toContain(".admin-record-detail-modal .modal-head");
-    expect(styles).toContain(".user-detail-modal-dialog option");
-    expect(styles).toContain(".admin-record-detail-modal {\n  display: flex;");
-    expect(styles).toContain("max-width: 1120px;");
-    expect(styles).toContain("overflow: auto;");
-    expect(indexHtml).toContain('aria-labelledby="user-detail-title"');
+    expect(styles).toContain("#page-users .user-detail-columns");
+    expect(styles).toContain("#page-users .user-profile-summary");
   });
 
   it("keeps the student detail modal outside hidden page sections for Analytics access", () => {

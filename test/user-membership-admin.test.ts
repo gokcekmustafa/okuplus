@@ -931,8 +931,8 @@ describe("user + membership admin", () => {
         (context: { tenantId: string }) => context.tenantId === ORG_TENANT,
       ).memberships,
     ).toEqual([
-      { role: "PARENT", status: "PENDING" },
-      { role: "TEACHER", status: "ACTIVE" },
+      { role: "PARENT", status: "PENDING", deleted: false },
+      { role: "TEACHER", status: "ACTIVE", deleted: false },
     ]);
     expect(
       detail.accountContexts.find(
