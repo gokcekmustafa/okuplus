@@ -226,8 +226,12 @@ export function createUiMotion(env = globalThis) {
 
     // A completed station is the visual anchor while the refreshed map settles.
     // Reduced motion goes straight to the server-selected destination.
-    if (plan && allowed()) alignStep(from, originViewportTop);
-    else if (current) alignStep(current);
+    if (plan && allowed() && from) alignStep(from, originViewportTop);
+    else if (completedStepId) {
+      const completedButton = buttons.find((button) => button.dataset.nodeId === completedStepId);
+      if (completedButton) alignStep(completedButton);
+      else if (current) alignStep(current);
+    } else if (current) alignStep(current);
 
     if (plan && allowed() && from && to) {
       const fromStep = from.closest?.(".learning-map-v6-step");
@@ -275,10 +279,12 @@ export function createUiMotion(env = globalThis) {
             ],
             340,
           );
-        } else if (current && plan.toId && allowed()) {
+        } else if (allowed()) {
           // If the optional animation cannot be prepared, still settle at the
-          // server-confirmed active node rather than leaving a stale viewport.
-          alignStep(current);
+          // server-confirmed active or completed node rather than leaving a
+          // stale viewport.
+          const destination = to || current;
+          if (destination) alignStep(destination);
         }
         // Signal after the existing character animation has actually been
         // created; in reduced-motion/fallback mode this still marks the

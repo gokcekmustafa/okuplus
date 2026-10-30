@@ -3098,7 +3098,7 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
   // refreshed map, never the completion response alone, authorizes continuation.
   insightRequestCache().clear();
   const continuation =
-    node?.id && !replay && node.status !== "completed"
+    node?.id && !replay
       ? {
           fromId: node.id,
           nextId: nextStep?.id || null,
@@ -3114,7 +3114,11 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
   } else learningPathTimingActive = false;
   setLearningPathTransitionStatus("");
   navigate("dashboard", {
-    ...(visualPosition ? { learningPathReturnPosition: visualPosition } : {}),
+    learningPathReturnPosition: visualPosition || {
+      stepId: String(node.id),
+      scope: insightScope(),
+      viewportTop: null,
+    },
     continuation,
   });
 }
