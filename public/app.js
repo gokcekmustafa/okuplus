@@ -3230,8 +3230,13 @@ async function startLearningPathNode(
   activeLearningStepNavigationFromStepId = navigationFromStepId;
   const stationDetail = $("lesson-detail");
   if (stationDetail) stationDetail.innerHTML = "";
+  const stationLayout = $("lesson-layout");
+  if (stationLayout) stationLayout.classList.add("hidden");
   const stationStatus = $("lessons-status");
-  if (stationStatus) stationStatus.textContent = "Sıradaki istasyon hazırlanıyor…";
+  if (stationStatus) {
+    stationStatus.textContent = "Sıradaki istasyon hazırlanıyor…";
+    stationStatus.classList.remove("hidden");
+  }
   const stationError = $("lessons-error");
   stationError?.classList.add("hidden");
   learningPathEntryMode = true;
@@ -5095,8 +5100,10 @@ async function loadFocusedLearningPathStep() {
   const status = $("lessons-status");
   const error = $("lessons-error");
   const detail = $("lesson-detail");
+  const layout = $("lesson-layout");
   if (!status) return;
   const loadRevision = ++learningPathFocusedLessonRevision;
+  if (layout) layout.classList.remove("hidden");
   setLessonPageMode(true);
   if (detail) detail.innerHTML = "";
   status.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
