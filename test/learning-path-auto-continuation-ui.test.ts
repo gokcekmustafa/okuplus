@@ -13,6 +13,10 @@ const startNode = section(
   "async function startLearningPathNode(",
   "window.startTodayLearningStep =",
 );
+const transitionOverlay = section(
+  "function ensureStationTransitionOverlay(",
+  "async function startLearningPathNode(",
+);
 const startAssessment = section(
   "window.startTodayAssessment = async function (",
   "window.startTodayExercise =",
@@ -83,6 +87,10 @@ function harness(stepId = "35") {
     learningPathTimingSequence: 0,
     learningPathTransitionSequence: 0,
     learningPathNavigationRevision: 0,
+    stationTransitionRevision: 0,
+    stationTransitionOwner: null,
+    exercisePageLoadRevision: 0,
+    pendingExercisePageLoad: null,
     learningPathNodeStartRequests: new Set<string>(),
     activeLearningStepNode: { id: stepId, status: "active" },
     activeLearningStepVisualPosition: null,
@@ -142,7 +150,13 @@ function harness(stepId = "35") {
     },
   });
   runInContext(
-    shared + startNode + usable + transitionStatus + navigationHelpers + navigation,
+    shared +
+      transitionOverlay +
+      startNode +
+      usable +
+      transitionStatus +
+      navigationHelpers +
+      navigation,
     context,
   );
   const actualStartLearningPathNode = runInContext("startLearningPathNode", context) as (

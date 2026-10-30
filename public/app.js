@@ -142,6 +142,8 @@ let learningPathCompletionTimingMarked = false;
 let learningPathTimingSequence = 0;
 let learningPathTransitionSequence = 0;
 let learningPathNavigationRevision = 0;
+let stationTransitionRevision = 0;
+let stationTransitionOwner = null;
 let learningPathCourseModules = [];
 let selectedLearningPathModuleKey = null;
 let pendingP1Reconcile = null;
@@ -3232,16 +3234,37 @@ function ensureStationTransitionOverlay() {
   return overlay;
 }
 
-function showStationTransitionOverlay() {
+function showStationTransitionOverlay(page) {
   const overlay = ensureStationTransitionOverlay();
-  if (!overlay) return;
+  const revision = ++stationTransitionRevision;
+  stationTransitionOwner = { revision, page };
+  if (!overlay) return revision;
   overlay.style.display = "flex";
   overlay.setAttribute("aria-busy", "true");
+  overlay.dataset.transitionRevision = String(revision);
+  return revision;
 }
 
-function hideStationTransitionOverlay() {
-  const overlay = document?.getElementById?.("station-transition-overlay");
-  if (overlay) overlay.style.display = "none";
+function ownsStationTransition(revision, page = null) {
+  return Boolean(
+    revision !== null &&
+    revision !== undefined &&
+    stationTransitionOwner?.revision === revision &&
+    (!page || stationTransitionOwner.page === page),
+  );
+}
+
+function hideStationTransitionOverlay(revision) {
+  if (!ownsStationTransition(revision)) return false;
+  const doc = typeof document === "undefined" ? null : document;
+  const overlay = doc?.getElementById?.("station-transition-overlay");
+  if (overlay) {
+    overlay.style.display = "none";
+    overlay.setAttribute("aria-busy", "false");
+    delete overlay.dataset.transitionRevision;
+  }
+  stationTransitionOwner = null;
+  return true;
 }
 
 async function startLearningPathNode(
@@ -3269,7 +3292,13 @@ async function startLearningPathNode(
   activeLearningStepNode = node;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = navigationFromStepId;
-  showStationTransitionOverlay();
+  const transitionPage =
+    type === "TEACHING" ||
+    (type === "SMALL_STUDY" && node?.contentVersionId) ||
+    type === "NEXT_LEARNING"
+      ? "lessons"
+      : "exercise";
+  const transitionRevision = showStationTransitionOverlay(transitionPage);
   const stationDetail = $("lesson-detail");
   if (stationDetail) stationDetail.innerHTML = "";
   const stationLayout = $("lesson-layout");
@@ -3288,17 +3317,19 @@ async function startLearningPathNode(
   activeTrainingActivityId = null;
   if (type === "TEACHING") {
     if (!node?.contentVersionId) {
+      hideStationTransitionOverlay(transitionRevision);
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
       return;
     }
-    navigate("lessons");
+    navigate("lessons", { stationTransitionRevision: transitionRevision });
     return;
   }
   if (type === "SMALL_STUDY" && node?.contentVersionId) {
-    navigate("lessons");
+    navigate("lessons", { stationTransitionRevision: transitionRevision });
     return;
   }
   if (type === "SMALL_STUDY" && !tv) {
+    hideStationTransitionOverlay(transitionRevision);
     alert("Bu kısa çalışmanın yayınlanmış içeriği veya egzersizi henüz hazır değil.");
     return;
   }
@@ -3309,6 +3340,7 @@ async function startLearningPathNode(
         navigationFromStepId,
         node.id,
         continuation,
+        transitionRevision,
       );
     } catch (error) {
       if (!continuation) {
@@ -3321,10 +3353,11 @@ async function startLearningPathNode(
     // The final station is a terminal checkpoint rather than another lesson
     // or exercise. Open it in the focused Learning Path view so the student
     // receives a clear completion action instead of a silent no-op.
-    navigate("lessons");
+    navigate("lessons", { stationTransitionRevision: transitionRevision });
     return;
   }
   if (!tv) {
+    hideStationTransitionOverlay(transitionRevision);
     if (type === "SKILL") alert("Bu beceri için henüz içerik yok");
     return;
   }
@@ -3357,11 +3390,17 @@ async function startLearningPathNode(
         );
       }
     }
-    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
+    if (
+      revision !== learningPathNavigationRevision ||
+      scope !== insightScope() ||
+      !ownsStationTransition(transitionRevision, transitionPage)
+    )
+      return;
     exerciseRequestedSessionId = data.sessionId;
-    navigate("exercise");
+    navigate("exercise", { stationTransitionRevision: transitionRevision });
   } catch (error) {
-    hideStationTransitionOverlay();
+    if (!ownsStationTransition(transitionRevision, transitionPage)) return;
+    hideStationTransitionOverlay(transitionRevision);
     setAsyncButtonState(button, false, "Başlatılıyor…");
     const stationError = $("lessons-error");
     if (stationError) {
@@ -4315,6 +4354,7 @@ window.startTodayAssessment = async function (
   navigationFromStepId = null,
   navigationTargetStepId = null,
   continuation = null,
+  transitionRevision = null,
 ) {
   const revision = learningPathNavigationRevision;
   const scope = insightScope();
@@ -4327,11 +4367,22 @@ window.startTodayAssessment = async function (
       body: JSON.stringify(body),
     });
     var data = await parseResponse(r);
-    if (revision !== learningPathNavigationRevision || scope !== insightScope()) return;
+    if (
+      revision !== learningPathNavigationRevision ||
+      scope !== insightScope() ||
+      (transitionRevision !== null && !ownsStationTransition(transitionRevision, "exercise"))
+    )
+      return;
     exerciseRequestedSessionId = data.sessionId;
-    navigate("exercise");
+    navigate(
+      "exercise",
+      transitionRevision === null ? {} : { stationTransitionRevision: transitionRevision },
+    );
   } catch (e) {
-    hideStationTransitionOverlay();
+    if (transitionRevision !== null) {
+      if (!ownsStationTransition(transitionRevision, "exercise")) return;
+      hideStationTransitionOverlay(transitionRevision);
+    }
     if (continuation) handleLearningPathStationStartFailure(continuation, e);
     else if (!isPremiumLimitError(e))
       alert(formatStudentError(e, "Değerlendirme şu anda açılamadı."));
@@ -5059,7 +5110,7 @@ function normalizeLearningPathNavigation(navigation, learningStep) {
 
 function renderFocusedLesson(lesson, learningStep, serverNavigation) {
   const detail = $("lesson-detail");
-  if (!detail) return;
+  if (!detail) return false;
   const completed = Boolean(lesson?.completion?.completed);
   const lessonType = learningStep?.type === "SMALL_STUDY" ? "SMALL_STUDY" : "TEACHING";
   const stepTypeLabel = lessonType === "SMALL_STUDY" ? "Kısa çalışma" : "Öğretim";
@@ -5098,11 +5149,12 @@ function renderFocusedLesson(lesson, learningStep, serverNavigation) {
       ${navigationMarkup}
     </article>`
     : '<p class="muted">Bu öğrenme adımı için yayınlanmış ders bulunamadı.</p>';
+  return true;
 }
 
 function renderLearningPathTerminalStep(node) {
   const detail = $("lesson-detail");
-  if (!detail) return;
+  if (!detail) return false;
   const position = learningPathProgressLabel(node);
   detail.innerHTML = `
     <div class="learning-path-terminal" role="status" aria-live="polite">
@@ -5116,6 +5168,7 @@ function renderLearningPathTerminalStep(node) {
       </div>
       <p id="lesson-detail-status" class="muted" role="status" aria-live="polite"></p>
     </div>`;
+  return true;
 }
 
 function learningPathStepApi(stepId, suffix, options) {
@@ -5140,14 +5193,29 @@ function learningPathStepApi(stepId, suffix, options) {
   );
 }
 
-async function loadFocusedLearningPathStep() {
-  hideStationTransitionOverlay();
+async function loadFocusedLearningPathStep(transitionRevision = null) {
   const status = $("lessons-status");
   const error = $("lessons-error");
   const detail = $("lesson-detail");
   const layout = $("lesson-layout");
-  if (!status) return;
+  if (currentPage !== "lessons") return;
+  if (transitionRevision !== null && !ownsStationTransition(transitionRevision, "lessons")) return;
+  if (!status) {
+    if (transitionRevision !== null) {
+      if (error) {
+        error.textContent =
+          "Öğrenme adımı ekranı açılamadı. Yol haritasına dönüp tekrar deneyebilirsin.";
+        error.classList.remove("hidden");
+      }
+      hideStationTransitionOverlay(transitionRevision);
+    }
+    return;
+  }
   const loadRevision = ++learningPathFocusedLessonRevision;
+  const mayCommit = () =>
+    loadRevision === learningPathFocusedLessonRevision &&
+    currentPage === "lessons" &&
+    (transitionRevision === null || ownsStationTransition(transitionRevision, "lessons"));
   if (layout) layout.classList.remove("hidden");
   setLessonPageMode(true);
   if (detail) detail.innerHTML = "";
@@ -5156,20 +5224,35 @@ async function loadFocusedLearningPathStep() {
   try {
     if (!activeLearningStepNode) {
       const path = await insightApi("learning-path");
-      if (loadRevision !== learningPathFocusedLessonRevision) return;
+      if (!mayCommit()) return;
       activeLearningStepNode = activeLearningPathNodeFromData(path);
     }
     let node = activeLearningStepNode;
-    if (loadRevision !== learningPathFocusedLessonRevision) return;
+    if (!mayCommit()) return;
     if (!node) {
       activeLearningStepNavigation = null;
       status.textContent = "Öğrenme yolundaki tüm durakları tamamladın.";
-      renderFocusedLesson(null, null);
+      const rendered = renderFocusedLesson(null, null);
+      if (transitionRevision !== null) {
+        if (!rendered) {
+          if (error) {
+            error.textContent =
+              "Öğrenme yolu ekranı açılamadı. Yol haritasına dönüp tekrar deneyebilirsin.";
+            error.classList.remove("hidden");
+          }
+        }
+        hideStationTransitionOverlay(transitionRevision);
+      }
       return;
     }
     if (node.type === "NEXT_LEARNING") {
-      renderLearningPathTerminalStep(node);
+      const rendered = renderLearningPathTerminalStep(node);
       status.textContent = "";
+      if (transitionRevision !== null && !rendered && error) {
+        error.textContent = "Öğrenme adımı açılamadı. Yol haritasına dönüp tekrar deneyebilirsin.";
+        error.classList.remove("hidden");
+      }
+      if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
       return;
     }
     if (node.type !== "TEACHING" && node.type !== "SMALL_STUDY") {
@@ -5182,19 +5265,24 @@ async function loadFocusedLearningPathStep() {
         navigationFromStepId: activeLearningStepNavigationFromStepId,
       }),
     );
-    if (
-      loadRevision !== learningPathFocusedLessonRevision ||
-      activeLearningStepNode?.id !== node.id
-    ) {
-      return;
-    }
+    if (!mayCommit() || activeLearningStepNode?.id !== node.id) return;
     const learningStep = { ...node, ...(data?.learningStep || {}) };
     activeLearningStepNode = learningStep;
     activeLearningStepNavigation = normalizeLearningPathNavigation(data?.navigation, learningStep);
     activeLearningStepNavigationFromStepId = null;
-    renderFocusedLesson(data?.lesson || null, learningStep, activeLearningStepNavigation);
+    const rendered = renderFocusedLesson(
+      data?.lesson || null,
+      learningStep,
+      activeLearningStepNavigation,
+    );
     status.textContent = "";
+    if (transitionRevision !== null && !rendered && error) {
+      error.textContent = "Öğrenme adımı açılamadı. Yol haritasına dönüp tekrar deneyebilirsin.";
+      error.classList.remove("hidden");
+    }
+    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   } catch (err) {
+    if (!mayCommit()) return;
     status.textContent = "";
     if (error) {
       error.textContent = formatStudentError(
@@ -5203,6 +5291,7 @@ async function loadFocusedLearningPathStep() {
       );
       error.classList.remove("hidden");
     }
+    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   }
 }
 
@@ -5589,7 +5678,6 @@ async function navigateLearningPathAdjacent(direction) {
     learningPathEntryMode = true;
     await startLearningPathNode(targetWithProgress, null, currentStepId);
   } catch (error) {
-    hideStationTransitionOverlay();
     setAsyncButtonState(button, false, "Yükleniyor…");
     const status = $("lesson-detail-status");
     if (status) status.textContent = formatStudentError(error, "Sonraki adım açılamadı.");
@@ -5840,9 +5928,12 @@ function setStudentBottomNavigation(page) {
 
 function navigate(
   page,
-  { continuation = null, learningPathReturnPosition: returnPosition = null } = {},
+  {
+    continuation = null,
+    learningPathReturnPosition: returnPosition = null,
+    stationTransitionRevision: transitionRevision = null,
+  } = {},
 ) {
-  hideStationTransitionOverlay();
   if (!PAGES.includes(page)) return;
   if (!canAccessPage(page)) {
     const fallback = roleHomePage();
@@ -5851,6 +5942,15 @@ function navigate(
   }
   if (page === "premium-info" && isPlatformUser !== false) return;
   if (page === "billing-account" && !canAccessPage(page)) return;
+
+  if (transitionRevision !== null && !ownsStationTransition(transitionRevision, page)) return;
+  if (stationTransitionOwner && stationTransitionOwner.revision !== transitionRevision) {
+    hideStationTransitionOverlay(stationTransitionOwner.revision);
+  }
+  if (page !== "exercise") {
+    exercisePageLoadRevision += 1;
+    pendingExercisePageLoad = null;
+  }
 
   uiMotion.cancel();
   learningPathNavigationRevision++;
@@ -5920,14 +6020,14 @@ function navigate(
     void loadTemplates();
     void populateTemplateFilters();
   } else if (page === "exercise") {
-    void loadExercisePage();
+    void loadExercisePage({ stationTransitionRevision: transitionRevision });
   } else if (page === "lessons") {
     if (isPlatformUser === false && learningPathEntryMode) {
       const lessonDetail = $("lesson-detail");
       if (lessonDetail) lessonDetail.innerHTML = "";
       const lessonStatus = $("lessons-status");
       if (lessonStatus) lessonStatus.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
-      void loadFocusedLearningPathStep();
+      void loadFocusedLearningPathStep(transitionRevision);
     } else {
       void loadLessons();
     }
@@ -11388,6 +11488,8 @@ let exerciseRetryingQuestionVersionId = null;
 let exerciseAwaitingNext = false;
 let exerciseBusy = false;
 let exerciseLoading = false;
+let exercisePageLoadRevision = 0;
+let pendingExercisePageLoad = null;
 let exerciseGamification = null;
 let exerciseGamificationRequest = 0;
 let exerciseRequest = null;
@@ -14106,9 +14208,31 @@ async function navigateLearningPathExerciseAdjacent(direction) {
   }
 }
 
-async function loadExercisePage() {
-  hideStationTransitionOverlay();
-  if (exerciseLoading || exerciseBusy) return;
+async function loadExercisePage({ stationTransitionRevision: transitionRevision = null } = {}) {
+  const loadRevision = ++exercisePageLoadRevision;
+  const mayCommit = () =>
+    loadRevision === exercisePageLoadRevision &&
+    (transitionRevision === null ||
+      (currentPage === "exercise" && ownsStationTransition(transitionRevision, "exercise")));
+  if (transitionRevision !== null && !ownsStationTransition(transitionRevision, "exercise")) return;
+  if (exerciseBusy) {
+    if (transitionRevision !== null && mayCommit()) {
+      const status = $("exercise-load-status");
+      const retryButton = $("exercise-retry-load");
+      if (status)
+        status.textContent = "Açık çalışmandaki işlem bitince istasyonu yeniden deneyebilirsin.";
+      if (retryButton) {
+        retryButton.textContent = "Tekrar dene";
+        retryButton.classList.remove("hidden");
+      }
+      hideStationTransitionOverlay(transitionRevision);
+    }
+    return;
+  }
+  if (exerciseLoading) {
+    pendingExercisePageLoad = { loadRevision, transitionRevision };
+    return;
+  }
   exerciseLoading = true;
   hideExerciseError();
   const isStudent = isPlatformUser === false;
@@ -14126,7 +14250,10 @@ async function loadExercisePage() {
       }
       exerciseScope = scope;
       let dailySession = null;
-      if (dailyTrainingSessionId) dailySession = await fetchDailyTraining(dailyTrainingSessionId);
+      if (dailyTrainingSessionId) {
+        dailySession = await fetchDailyTraining(dailyTrainingSessionId);
+        if (!mayCommit()) return;
+      }
       const dailyItem = nextDailyTrainingItem(dailySession);
       if (dailySession) dailyTrainingSummary = dailySession;
       if (dailySession) $("exercise-gp").textContent = "⭐ — GP";
@@ -14155,12 +14282,14 @@ async function loadExercisePage() {
         try {
           session = await fetchStudentExercise(id);
         } catch (err) {
+          if (!mayCommit()) return;
           if (err.status === 403 || err.status === 404) {
             resetExerciseState();
             rememberExerciseSession(null);
           }
           throw err;
         }
+        if (!mayCommit()) return;
         if (exerciseSession?.id !== session.id) resetExerciseState();
         exerciseSession = session;
         if (session.learningStepId && learningPathEntryMode) {
@@ -14185,11 +14314,20 @@ async function loadExercisePage() {
         restoreExerciseAttempts(session);
         rememberExerciseSession(session.id);
         if (Array.isArray(session.questions)) applyExerciseQuestions(session.questions);
-        else await loadExerciseQuestions();
+        else {
+          await loadExerciseQuestions({
+            loadRevision,
+            stationTransitionRevision: transitionRevision,
+          });
+          if (!mayCommit()) return;
+        }
       } else {
         resetExerciseState();
         if (dailyTrainingSummary) rememberExerciseSession(null);
-        else await loadTrainingActivities();
+        else {
+          await loadTrainingActivities();
+          if (!mayCommit()) return;
+        }
       }
       // Points are supplementary UI data; do not delay the first question
       // paint while the gamification summary is fetched.
@@ -14198,10 +14336,16 @@ async function loadExercisePage() {
       await Promise.all([populateExerciseStudentSelect(), populateExerciseTemplateVersionSelect()]);
       if (exerciseSession) await loadExerciseQuestions();
     }
-    renderExerciseSession();
+    if (!mayCommit()) return;
+    const rendered = renderExerciseSession();
     if (exerciseSession) $("exercise-load-status").textContent = "";
     renderTrainingActivities();
+    if (transitionRevision !== null && !rendered) {
+      throw new Error("The learning-path exercise did not render usable session content");
+    }
+    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   } catch (error) {
+    if (!mayCommit()) return;
     const activityListError =
       !dailyTrainingSessionId && !exerciseSession && trainingActivitiesState === "error";
     if (activityListError) {
@@ -14214,11 +14358,23 @@ async function loadExercisePage() {
       retryButton.textContent = "Tekrar dene";
       retryButton.classList.remove("hidden");
     }
+    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   } finally {
     exerciseLoading = false;
-    if (exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
+    if (mayCommit() && exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
       const button = $("exercise-submit-attempt");
       if (button) button.disabled = exerciseBusy;
+    }
+    const pendingLoad = pendingExercisePageLoad;
+    pendingExercisePageLoad = null;
+    if (
+      pendingLoad &&
+      pendingLoad.loadRevision === exercisePageLoadRevision &&
+      currentPage === "exercise" &&
+      (pendingLoad.transitionRevision === null ||
+        ownsStationTransition(pendingLoad.transitionRevision, "exercise"))
+    ) {
+      void loadExercisePage({ stationTransitionRevision: pendingLoad.transitionRevision });
     }
   }
 }
@@ -14393,7 +14549,7 @@ function renderExerciseSession() {
     else $("exercise-result-card").style.display = "none";
     renderTrainingActivities();
     renderLearningPathExerciseNavigation();
-    return;
+    return false;
   }
   if (method) method.style.display = "flex";
   const activities = $("training-activities-list");
@@ -14457,6 +14613,12 @@ function renderExerciseSession() {
     }
   }
   renderLearningPathExerciseNavigation();
+  return Boolean(
+    exerciseSession &&
+    (exerciseQuestions.length > 0 ||
+      (exerciseSession.status === "COMPLETED" && Boolean(exerciseSession.scoreSummary)) ||
+      (readingCard && readingCard.style.display !== "none")),
+  );
 }
 function isFastReadingExercise() {
   const family = exerciseSession?.templateVersion?.training?.family;
@@ -14800,12 +14962,24 @@ function applyExerciseQuestions(questions) {
   renderExerciseQuestion();
   renderExerciseSession();
 }
-async function loadExerciseQuestions() {
-  if (!exerciseSession) return;
+async function loadExerciseQuestions({
+  loadRevision = null,
+  stationTransitionRevision: transitionRevision = null,
+  sessionId = exerciseSession?.id,
+} = {}) {
+  if (!sessionId) return;
   const data = await parseResponse(
-    await exerciseApi(`/exercise-sessions/${encodeURIComponent(exerciseSession.id)}/questions`),
+    await exerciseApi(`/exercise-sessions/${encodeURIComponent(sessionId)}/questions`),
   );
+  if (
+    loadRevision !== null &&
+    (loadRevision !== exercisePageLoadRevision ||
+      currentPage !== "exercise" ||
+      (transitionRevision !== null && !ownsStationTransition(transitionRevision, "exercise")))
+  )
+    return null;
   applyExerciseQuestions(data.questions);
+  return data.questions;
 }
 function renderExerciseQuestion() {
   const container = $("exercise-current-question");
