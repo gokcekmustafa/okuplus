@@ -372,6 +372,9 @@ export class JwtAuthProvider implements AuthProvider {
         if (recovery.status === "DELETION_REQUEST_OPEN") {
           throw personalContextRecoveryError("DELETION_REQUEST_OPEN");
         }
+        if (recovery.status === "DELETION_CHECK_UNAVAILABLE") {
+          throw personalContextRecoveryError("CHECK_FAILED");
+        }
         if (recovery.status === "RESTORED") {
           memberships = await loadMemberships();
           accessible = memberships.filter(

@@ -37,7 +37,8 @@ export type PersonalContextRecoveryResult =
   | { status: "RESTORED"; tenantId: string }
   | { status: "NOT_APPLICABLE" }
   | { status: "AMBIGUOUS" }
-  | { status: "DELETION_REQUEST_OPEN" };
+  | { status: "DELETION_REQUEST_OPEN" }
+  | { status: "DELETION_CHECK_UNAVAILABLE" };
 
 const OPEN_ACCOUNT_DELETION_STATUSES = [
   "RECEIVED",
@@ -58,6 +59,7 @@ export async function restoreDeletedPersonalContextInTransaction(
   tx: Prisma.TransactionClient,
   userId: string,
   requestedTenantId?: string | null,
+  actorUserId = userId,
 ): Promise<PersonalContextRecoveryResult> {
   await tx.$queryRaw`
     SELECT 1::int AS acquired
@@ -110,20 +112,19 @@ export async function restoreDeletedPersonalContextInTransaction(
     return { status: "AMBIGUOUS" };
   }
 
-  if (deletionTable[0]?.relationName) {
-    const openRequest = await tx.accountDeletionRequest.findFirst({
-      where: { userId, status: { in: [...OPEN_ACCOUNT_DELETION_STATUSES] } },
-      select: { id: true },
-    });
-    if (openRequest) return { status: "DELETION_REQUEST_OPEN" };
-  }
+  if (!deletionTable[0]?.relationName) return { status: "DELETION_CHECK_UNAVAILABLE" };
+  const openRequest = await tx.accountDeletionRequest.findFirst({
+    where: { userId, status: { in: [...OPEN_ACCOUNT_DELETION_STATUSES] } },
+    select: { id: true },
+  });
+  if (openRequest) return { status: "DELETION_REQUEST_OPEN" };
 
   const restoredAt = new Date();
   await tx.tenant.update({ where: { id: tenant.id }, data: { deletedAt: null } });
   await tx.auditLog.create({
     data: {
       tenantId: tenant.id,
-      actorUserId: userId,
+      actorUserId,
       action: "UPDATE",
       entityType: "PERSONAL_CONTEXT_RECOVERY",
       entityId: tenant.id,

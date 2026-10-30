@@ -79,13 +79,43 @@ describe("user + membership admin", () => {
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
+    await prisma.studentProfile.deleteMany({
+      where: { tenantId: SOFT_DELETED_CONTEXT_TENANT_ID, studentId: SOFT_DELETED_CONTEXT_USER_ID },
+    });
     await prisma.entitlement.deleteMany({
       where: {
         OR: [
-          { id: { in: [ORG_ENTITLEMENT_ID, PERSONAL_ENTITLEMENT_ID] } },
-          { userId: USER_A_ID },
-          { tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+          {
+            id: {
+              in: [
+                ORG_ENTITLEMENT_ID,
+                PERSONAL_ENTITLEMENT_ID,
+                SOFT_DELETED_CONTEXT_ENTITLEMENT_ID,
+              ],
+            },
+          },
+          { userId: { in: [USER_A_ID, SOFT_DELETED_CONTEXT_USER_ID] } },
+          {
+            tenantId: {
+              in: [
+                ORG_TENANT,
+                ORG_TENANT_2,
+                INDIVIDUAL_TENANT,
+                INDIVIDUAL_TENANT_2,
+                SOFT_DELETED_CONTEXT_TENANT_ID,
+              ],
+            },
+          },
         ],
+      },
+    });
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: SOFT_DELETED_CONTEXT_USER_ID },
+    });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "PERSONAL_CONTEXT_RECOVERY",
+        entityId: SOFT_DELETED_CONTEXT_TENANT_ID,
       },
     });
     await prisma.membership.deleteMany({
@@ -169,15 +199,42 @@ describe("user + membership admin", () => {
     await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
     await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: SOFT_DELETED_CONTEXT_USER_ID },
+    });
+    await prisma.auditLog.deleteMany({
+      where: {
+        entityType: "PERSONAL_CONTEXT_RECOVERY",
+        entityId: SOFT_DELETED_CONTEXT_TENANT_ID,
+      },
+    });
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.entitlement.deleteMany({
       where: {
         OR: [
-          { id: { in: [ORG_ENTITLEMENT_ID, PERSONAL_ENTITLEMENT_ID] } },
-          { userId: USER_A_ID },
-          { tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+          {
+            id: {
+              in: [
+                ORG_ENTITLEMENT_ID,
+                PERSONAL_ENTITLEMENT_ID,
+                SOFT_DELETED_CONTEXT_ENTITLEMENT_ID,
+              ],
+            },
+          },
+          { userId: { in: [USER_A_ID, SOFT_DELETED_CONTEXT_USER_ID] } },
+          {
+            tenantId: {
+              in: [
+                ORG_TENANT,
+                ORG_TENANT_2,
+                INDIVIDUAL_TENANT,
+                INDIVIDUAL_TENANT_2,
+                SOFT_DELETED_CONTEXT_TENANT_ID,
+              ],
+            },
+          },
         ],
       },
     });
@@ -185,6 +242,9 @@ describe("user + membership admin", () => {
       where: {
         tenantId: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] },
       },
+    });
+    await prisma.studentProfile.deleteMany({
+      where: { tenantId: SOFT_DELETED_CONTEXT_TENANT_ID, studentId: SOFT_DELETED_CONTEXT_USER_ID },
     });
     await prisma.pointEvent.deleteMany({
       where: {
@@ -211,7 +271,17 @@ describe("user + membership admin", () => {
       },
     });
     await prisma.tenant.deleteMany({
-      where: { id: { in: [ORG_TENANT, ORG_TENANT_2, INDIVIDUAL_TENANT, INDIVIDUAL_TENANT_2] } },
+      where: {
+        id: {
+          in: [
+            ORG_TENANT,
+            ORG_TENANT_2,
+            INDIVIDUAL_TENANT,
+            INDIVIDUAL_TENANT_2,
+            SOFT_DELETED_CONTEXT_TENANT_ID,
+          ],
+        },
+      },
     });
     await prisma.user.deleteMany({
       where: {
@@ -1162,6 +1232,262 @@ describe("user + membership admin", () => {
         ),
     ).toBe(true);
     await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
+  });
+
+  it("kurum paketini başlangıç, uzatma, değiştirme ve sonlandırma işlemleri tenant kapsamıyla yönetir", async () => {
+    const effectiveAt = new Date(Date.now() - 60_000);
+    const initialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const started = await app.inject({
+      method: "POST",
+      url: "/admin/entitlements",
+      headers: await superAdminHeaders(),
+      payload: {
+        tenantId: ORG_TENANT_2,
+        scope: "ORGANIZATION",
+        plan: "PLAN_PREMIUM",
+        effectiveAt: effectiveAt.toISOString(),
+        expiresAt: initialEnd.toISOString(),
+      },
+    });
+    expect(started.statusCode).toBe(200);
+    const original = started.json().data;
+    expect(original).toMatchObject({ tenantId: ORG_TENANT_2, userId: null, scope: "ORGANIZATION" });
+
+    const extendedEnd = new Date(initialEnd.getTime() + 45 * 24 * 60 * 60 * 1000);
+    const extended = await app.inject({
+      method: "PATCH",
+      url: `/admin/entitlements/${encodeURIComponent(original.id)}`,
+      headers: await superAdminHeaders(),
+      payload: { expiresAt: extendedEnd.toISOString() },
+    });
+    expect(extended.statusCode).toBe(200);
+    expect(extended.json().data.expiresAt).toBe(extendedEnd.toISOString());
+
+    const requestStartedAt = new Date();
+    const transitionAt = new Date(Date.now() - 5_000);
+    const nextEnd = new Date(transitionAt.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const changed = await app.inject({
+      method: "POST",
+      url: `/admin/entitlements/${encodeURIComponent(original.id)}/change-plan`,
+      headers: await superAdminHeaders(),
+      payload: {
+        plan: "PLAN_FREE",
+        effectiveAt: transitionAt.toISOString(),
+        expiresAt: nextEnd.toISOString(),
+      },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().data.current).toMatchObject({
+      tenantId: ORG_TENANT_2,
+      userId: null,
+      scope: "ORGANIZATION",
+      plan: "PLAN_FREE",
+    });
+    expect(new Date(changed.json().data.current.effectiveAt).getTime()).toBeGreaterThanOrEqual(
+      requestStartedAt.getTime(),
+    );
+
+    const ended = await app.inject({
+      method: "PATCH",
+      url: `/admin/entitlements/${encodeURIComponent(changed.json().data.current.id)}`,
+      headers: await superAdminHeaders(),
+      payload: { active: false },
+    });
+    expect(ended.statusCode).toBe(200);
+    expect(ended.json().data.active).toBe(false);
+    const history = await prisma.auditLog.findMany({
+      where: { entityId: { in: [original.id, changed.json().data.current.id] } },
+    });
+    expect(history).toHaveLength(5);
+    expect(history.every((entry) => entry.tenantId === ORG_TENANT_2)).toBe(true);
+  });
+
+  it("yalnızca kanıtlanan aynı kişisel alanı geri açar; öğrenci ve paket kayıtlarını korur", async () => {
+    await prisma.user.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_USER_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_USER_ID,
+        email: "soft-deleted-context-admin-test@example.com",
+        displayName: "Kapalı kişisel alan",
+        passwordHash: await hasher.hash(PASSWORD),
+      },
+      update: { status: "ACTIVE", deletedAt: null, platformRole: null },
+    });
+    await prisma.tenant.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_TENANT_ID,
+        type: "INDIVIDUAL",
+        name: "Kişisel",
+        deletedAt: new Date(),
+      },
+      update: { status: "ACTIVE", deletedAt: new Date() },
+    });
+    await prisma.membership.upsert({
+      where: { id: "99999998-0000-7000-8000-0000000000c5" },
+      create: {
+        id: "99999998-0000-7000-8000-0000000000c5",
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        userId: SOFT_DELETED_CONTEXT_USER_ID,
+        role: "STUDENT",
+        status: "ACTIVE",
+      },
+      update: { status: "ACTIVE", deletedAt: null },
+    });
+    const profileBefore = await prisma.studentProfile.upsert({
+      where: {
+        tenantId_studentId: {
+          tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+          studentId: SOFT_DELETED_CONTEXT_USER_ID,
+        },
+      },
+      create: {
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        studentId: SOFT_DELETED_CONTEXT_USER_ID,
+      },
+      update: {},
+    });
+    await prisma.accountDeletionRequest.deleteMany({
+      where: { userId: SOFT_DELETED_CONTEXT_USER_ID },
+    });
+    const entitlementBefore = await prisma.entitlement.findUnique({
+      where: { id: SOFT_DELETED_CONTEXT_ENTITLEMENT_ID },
+      select: { id: true, tenantId: true, active: true },
+    });
+
+    try {
+      const restored = await app.inject({
+        method: "POST",
+        url: `/admin/users/${SOFT_DELETED_CONTEXT_USER_ID}/personal-context/restore`,
+        headers: await superAdminHeaders(),
+        payload: { tenantId: SOFT_DELETED_CONTEXT_TENANT_ID },
+      });
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json().data).toMatchObject({
+        status: "RESTORED",
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+      });
+      expect(
+        await prisma.tenant.findUnique({
+          where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+          select: { deletedAt: true },
+        }),
+      ).toEqual({ deletedAt: null });
+      expect(
+        await prisma.studentProfile.findUnique({
+          where: {
+            tenantId_studentId: {
+              tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+              studentId: SOFT_DELETED_CONTEXT_USER_ID,
+            },
+          },
+        }),
+      ).toMatchObject({ id: profileBefore.id });
+      expect(
+        await prisma.membership.findUnique({
+          where: { id: "99999998-0000-7000-8000-0000000000c5" },
+        }),
+      ).toMatchObject({ status: "ACTIVE", deletedAt: null });
+      expect(
+        await prisma.entitlement.findUnique({
+          where: { id: SOFT_DELETED_CONTEXT_ENTITLEMENT_ID },
+          select: { id: true, tenantId: true, active: true },
+        }),
+      ).toEqual(entitlementBefore);
+      expect(
+        await prisma.auditLog.findFirst({
+          where: {
+            entityType: "PERSONAL_CONTEXT_RECOVERY",
+            entityId: SOFT_DELETED_CONTEXT_TENANT_ID,
+            actorUserId: PLATFORM_USER_ID,
+          },
+        }),
+      ).toBeTruthy();
+    } finally {
+      await prisma.tenant.update({
+        where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+        data: { deletedAt: new Date() },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          entityType: "PERSONAL_CONTEXT_RECOVERY",
+          entityId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        },
+      });
+      await prisma.studentProfile.deleteMany({
+        where: {
+          tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+          studentId: SOFT_DELETED_CONTEXT_USER_ID,
+        },
+      });
+    }
+  });
+
+  it("açık hesap silme talebi bulunan kişisel alanı geri yüklemez", async () => {
+    await prisma.user.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_USER_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_USER_ID,
+        email: "soft-deleted-context-admin-test@example.com",
+        displayName: "Kapalı kişisel alan",
+        passwordHash: await hasher.hash(PASSWORD),
+      },
+      update: { status: "ACTIVE", deletedAt: null, platformRole: null },
+    });
+    await prisma.tenant.update({
+      where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+      data: { status: "ACTIVE", deletedAt: new Date() },
+    });
+    await prisma.membership.upsert({
+      where: { id: "99999998-0000-7000-8000-0000000000c5" },
+      create: {
+        id: "99999998-0000-7000-8000-0000000000c5",
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        userId: SOFT_DELETED_CONTEXT_USER_ID,
+        role: "STUDENT",
+        status: "ACTIVE",
+      },
+      update: { status: "ACTIVE", deletedAt: null },
+    });
+    await prisma.studentProfile.upsert({
+      where: {
+        tenantId_studentId: {
+          tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+          studentId: SOFT_DELETED_CONTEXT_USER_ID,
+        },
+      },
+      create: {
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        studentId: SOFT_DELETED_CONTEXT_USER_ID,
+      },
+      update: {},
+    });
+    const request = await prisma.accountDeletionRequest.create({
+      data: { userId: SOFT_DELETED_CONTEXT_USER_ID, status: "PROCESSING" },
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/admin/users/${SOFT_DELETED_CONTEXT_USER_ID}/personal-context/restore`,
+        headers: await superAdminHeaders(),
+        payload: { tenantId: SOFT_DELETED_CONTEXT_TENANT_ID },
+      });
+      expect(response.statusCode).toBe(409);
+      expect(
+        await prisma.tenant.findUnique({
+          where: { id: SOFT_DELETED_CONTEXT_TENANT_ID },
+          select: { deletedAt: true },
+        }),
+      ).toMatchObject({ deletedAt: expect.any(Date) });
+    } finally {
+      await prisma.accountDeletionRequest.delete({ where: { id: request.id } });
+      await prisma.studentProfile.deleteMany({
+        where: {
+          tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+          studentId: SOFT_DELETED_CONTEXT_USER_ID,
+        },
+      });
+    }
   });
 
   it("INDIVIDUAL üyelik rolü kurumsal role değiştirilemez: 400 döner", async () => {

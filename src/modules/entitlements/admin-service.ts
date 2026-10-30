@@ -93,12 +93,15 @@ export async function updateAdminEntitlement(
     if (existing.source !== "ADMIN") {
       throw conflictError("Ödeme sağlayıcısı kaynaklı paket erişimi bu ekrandan değiştirilemez");
     }
-    if (existing.scope !== "PERSONAL" || !existing.userId) {
-      throw conflictError("Kurum kapsamındaki paket kullanıcı profilinden değiştirilemez");
-    }
-    const personalContext = await resolveUniquePersonalContext(tx, existing.userId);
-    if (personalContext.tenantId !== existing.tenantId) {
-      throw conflictError("Paketin bağlı olduğu kişisel çalışma alanı doğrulanamadı");
+    if (existing.scope === "PERSONAL") {
+      if (!existing.userId) throw conflictError("Kişisel paket kullanıcıyla eşleşmiyor");
+      const personalContext = await resolveUniquePersonalContext(tx, existing.userId);
+      if (personalContext.tenantId !== existing.tenantId) {
+        throw conflictError("Paketin bağlı olduğu kişisel çalışma alanı doğrulanamadı");
+      }
+    } else {
+      if (existing.userId !== null) throw conflictError("Kurum paketi kullanıcıya bağlı olamaz");
+      await resolveOrganizationContext(tx, existing.tenantId);
     }
     if (input.expiresAt === undefined && input.active !== false) {
       throw validationError("Uzatma tarihi veya erişimi sonlandırma işlemi gerekli");
@@ -132,7 +135,7 @@ export async function updateAdminEntitlement(
     const row = await tx.entitlement.update({ where: { id }, data, select: entitlementSelect });
     await tx.auditLog.create({
       data: {
-        tenantId: existing.tenant.type === "ORGANIZATION" ? existing.tenantId : null,
+        tenantId: existing.scope === "ORGANIZATION" ? existing.tenantId : null,
         actorUserId,
         action: "UPDATE",
         entityType: "ENTITLEMENT",
@@ -217,27 +220,40 @@ export async function changeManagedAdminEntitlementPlan(
     await lockManagedEntitlementContext(tx, existing.tenantId, existing.scope, existing.userId);
     existing = await tx.entitlement.findUnique({ where: { id }, select: entitlementSelect });
     if (!existing) throw notFoundError("Paket kaydı bulunamadı");
-    if (
-      existing.source !== "ADMIN" ||
-      !existing.active ||
-      existing.scope !== "PERSONAL" ||
-      !existing.userId
-    ) {
-      throw conflictError("Yalnızca etkin kişisel yönetici paketleri değiştirilebilir");
+    if (existing.source !== "ADMIN" || !existing.active) {
+      throw conflictError("Yalnızca etkin yönetici paketleri değiştirilebilir");
+    }
+    if (existing.scope === "PERSONAL" && !existing.userId) {
+      throw conflictError("Kişisel paket kullanıcıyla eşleşmiyor");
+    }
+    if (existing.scope === "ORGANIZATION" && existing.userId !== null) {
+      throw conflictError("Kurum paketi kullanıcıya bağlı olamaz");
     }
     const now = new Date();
     if (existing.effectiveAt > now || (existing.expiresAt && existing.expiresAt <= now)) {
       throw conflictError("Yalnızca şu anda etkin paket değiştirilebilir");
     }
-    const context = await resolveUniquePersonalContext(tx, existing.userId);
-    if (context.tenantId !== existing.tenantId) {
-      throw conflictError("Paketin bağlı olduğu kişisel çalışma alanı doğrulanamadı");
+    if (existing.scope === "PERSONAL") {
+      const context = await resolveUniquePersonalContext(tx, existing.userId!);
+      if (context.tenantId !== existing.tenantId) {
+        throw conflictError("Paketin bağlı olduğu kişisel çalışma alanı doğrulanamadı");
+      }
+    } else {
+      await resolveOrganizationContext(tx, existing.tenantId);
     }
-    if (input.effectiveAt < now) throw validationError("Değişiklik başlangıcı geçmişte olamaz");
+    // The admin form sends the current instant when today's date is selected.
+    // Network/transaction latency can make that timestamp a few seconds old by
+    // the time it reaches this check. Clamp only that short transit window to
+    // now; dates meaningfully in the past remain rejected.
+    const transitionAt =
+      input.effectiveAt < now && now.getTime() - input.effectiveAt.getTime() <= 60_000
+        ? now
+        : input.effectiveAt;
+    if (transitionAt < now) throw validationError("Değişiklik başlangıcı geçmişte olamaz");
     const conflicting = await tx.entitlement.findMany({
       where: {
         tenantId: existing.tenantId,
-        scope: "PERSONAL",
+        scope: existing.scope,
         userId: existing.userId,
         active: true,
         id: { not: id },
@@ -249,7 +265,7 @@ export async function changeManagedAdminEntitlementPlan(
       throw conflictError("Aynı bağlamda başka bir etkin paket kaydı bulundu");
     }
     const nextExpiresAt = input.expiresAt === undefined ? existing.expiresAt : input.expiresAt;
-    if (nextExpiresAt && nextExpiresAt <= input.effectiveAt) {
+    if (nextExpiresAt && nextExpiresAt <= transitionAt) {
       throw validationError("Yeni bitiş tarihi başlangıç tarihinden sonra olmalı");
     }
 
@@ -258,9 +274,7 @@ export async function changeManagedAdminEntitlementPlan(
       where: { id },
       data: {
         expiresAt:
-          oldExpiresAt === null || input.effectiveAt < oldExpiresAt
-            ? input.effectiveAt
-            : oldExpiresAt,
+          oldExpiresAt === null || transitionAt < oldExpiresAt ? transitionAt : oldExpiresAt,
       },
       select: entitlementSelect,
     });
@@ -268,17 +282,34 @@ export async function changeManagedAdminEntitlementPlan(
       data: {
         userId: existing.userId,
         tenantId: existing.tenantId,
-        scope: "PERSONAL",
+        scope: existing.scope,
         plan: input.plan,
         source: "ADMIN",
         active: true,
-        effectiveAt: input.effectiveAt,
+        effectiveAt: transitionAt,
         expiresAt: nextExpiresAt,
       },
       select: entitlementSelect,
     });
-    await writeEntitlementAudit(tx, actorUserId, null, "UPDATE", closed.id, existing, closed);
-    await writeEntitlementAudit(tx, actorUserId, null, "CREATE", created.id, null, created);
+    const auditTenantId = existing.scope === "ORGANIZATION" ? existing.tenantId : null;
+    await writeEntitlementAudit(
+      tx,
+      actorUserId,
+      auditTenantId,
+      "UPDATE",
+      closed.id,
+      existing,
+      closed,
+    );
+    await writeEntitlementAudit(
+      tx,
+      actorUserId,
+      auditTenantId,
+      "CREATE",
+      created.id,
+      null,
+      created,
+    );
     return { closed, created };
   });
   return { previous: toPublicEntitlement(rows.closed), current: toPublicEntitlement(rows.created) };

@@ -10644,6 +10644,137 @@ textarea:focus-visible {
   min-width: 0;
   animation: user-workspace-in 160ms ease-out both;
 }
+#page-users .user-profile-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+#page-users .user-profile-breadcrumb {
+  color: var(--muted);
+  font-size: 12px;
+}
+#page-users .user-profile-breadcrumb span {
+  padding-inline: 5px;
+}
+#page-users .user-profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  margin-bottom: 16px;
+  padding: 17px 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(110deg, var(--surface) 58%, var(--primary-soft, #eef5ff));
+}
+#page-users .user-profile-hero-copy {
+  min-width: 0;
+  flex: 1;
+}
+#page-users .user-profile-hero h2 {
+  margin: 2px 0 3px;
+  color: var(--text);
+  font-size: clamp(22px, 2.5vw, 29px);
+  letter-spacing: -0.035em;
+}
+#page-users .user-profile-hero p {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+#page-users .user-profile-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.8fr);
+  align-items: start;
+  gap: 16px;
+}
+#page-users .user-profile-main,
+#page-users .user-profile-side {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+#page-users .user-profile-main > .user-overview-section,
+#page-users .user-profile-side > .user-overview-section {
+  margin: 0;
+}
+#page-users .user-profile-side .user-edit-card {
+  padding: 16px;
+}
+#page-users .user-profile-side .user-create-form-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+#page-users .user-profile-side .user-fact-list {
+  grid-template-columns: minmax(0, 1fr);
+}
+#page-users .user-profile-side .user-account-tools {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+#page-users .user-profile-disclosure {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+#page-users .user-profile-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  padding: 13px 16px;
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  list-style-position: inside;
+}
+#page-users .user-profile-disclosure > summary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+}
+#page-users .user-profile-disclosure[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+#page-users .user-profile-disclosure-body {
+  padding: 12px;
+}
+#page-users .user-profile-disclosure-body > .user-overview-section {
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+#page-users .user-context-recovery {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--warning, #ad6a00) 40%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warning, #ad6a00) 8%, var(--surface));
+}
+#page-users .user-context-recovery p,
+#page-users .user-package-scope-note {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+#page-users .user-context-recovery .btn {
+  flex: 0 0 auto;
+}
+#page-users .user-package-scope-note {
+  margin-top: 8px;
+}
 @keyframes user-workspace-in {
   from {
     opacity: 0.7;
@@ -11354,9 +11485,36 @@ textarea:focus-visible {
 
 @media (max-width: 760px) {
   #page-users .user-admin-heading,
-  #page-users .user-workspace-header {
+  #page-users .user-workspace-header,
+  #page-users .user-profile-topbar {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+  #page-users .user-profile-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #page-users .user-profile-hero {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+  #page-users .user-profile-hero-copy {
+    flex: 1 1 calc(100% - 68px);
+  }
+  #page-users .user-profile-status {
+    width: 100%;
+    margin-left: 62px;
+  }
+  #page-users .user-profile-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  #page-users .user-profile-actions .btn:first-child {
+    flex: 1;
+  }
+  #page-users .user-context-recovery {
+    align-items: stretch;
+    flex-direction: column;
   }
   #page-users .user-admin-heading > button {
     width: 100%;

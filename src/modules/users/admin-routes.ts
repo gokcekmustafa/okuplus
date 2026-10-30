@@ -9,6 +9,7 @@ import {
   getUser,
   listUsers,
   resetUserPassword,
+  restoreUserPersonalContext,
   softDeleteUser,
   updateUser,
   type UserAdminReadActor,
@@ -27,6 +28,7 @@ import {
   updateMembershipSchema,
   updateUserSchema,
   resetUserPasswordSchema,
+  restoreUserPersonalContextSchema,
 } from "./schemas.js";
 
 function readParamId(request: FastifyRequest): string {
@@ -78,6 +80,21 @@ export async function userAdminRoutes(
   app.get("/admin/users/:id", { preHandler: platformOnly }, async (request) => {
     return ok(await getUser(readParamId(request), readSuperAdminActor(request)));
   });
+
+  app.post(
+    "/admin/users/:id/personal-context/restore",
+    { preHandler: platformOnly },
+    async (request) => {
+      const { tenantId } = restoreUserPersonalContextSchema.parse(request.body);
+      return ok(
+        await restoreUserPersonalContext(
+          readParamId(request),
+          tenantId,
+          readSuperAdminActor(request),
+        ),
+      );
+    },
+  );
 
   app.patch("/admin/users/:id", { preHandler: platformOnly }, async (request) => {
     const input = updateUserSchema.parse(request.body);

@@ -3,7 +3,10 @@ import { prisma } from "../../lib/prisma.js";
 import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
 import { ScryptPasswordHasher } from "../auth/index.js";
 import { entitlementPlanFeatureLabels } from "../entitlements/service.js";
-import { provisionPersonalContextInTransaction } from "../tenant/personal-service.js";
+import {
+  provisionPersonalContextInTransaction,
+  restoreDeletedPersonalContextInTransaction,
+} from "../tenant/personal-service.js";
 import {
   adminEntitlementStatus,
   entitlementForAccountContext,
@@ -613,6 +616,7 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
   const activityEntityIds = [
     id,
     ...memberships.map((membership) => membership.id),
+    ...memberships.map((membership) => membership.tenant.id),
     ...entitlements.map((item) => item.id),
   ];
   const activity = await prisma.auditLog.findMany({
@@ -718,6 +722,34 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
     })),
     activity,
   };
+}
+
+/**
+ * Restore only the same soft-deleted personal tenant when its original active
+ * student membership and profile prove exclusive ownership. No membership,
+ * profile, entitlement, or learning record is recreated or moved.
+ */
+export async function restoreUserPersonalContext(
+  userId: string,
+  tenantId: string,
+  actor: UserAdminReadActor,
+) {
+  const result = await prisma.$transaction((tx) =>
+    restoreDeletedPersonalContextInTransaction(tx, userId, tenantId, actor.userId),
+  );
+  if (result.status === "RESTORED") return result;
+  if (result.status === "DELETION_REQUEST_OPEN") {
+    throw conflictError("Açık hesap silme talebi var; kişisel alan geri yüklenmedi");
+  }
+  if (result.status === "DELETION_CHECK_UNAVAILABLE") {
+    throw conflictError("Silme talebi durumu doğrulanamadı; kişisel alan geri yüklenmedi");
+  }
+  if (result.status === "AMBIGUOUS") {
+    throw conflictError(
+      "Kişisel alan bağlantıları tekil olarak doğrulanamadı; kayıtlar değiştirilmedi",
+    );
+  }
+  throw conflictError("Geri yüklenebilir kişisel alan bulunamadı; kayıtlar değiştirilmedi");
 }
 
 export async function createUser(

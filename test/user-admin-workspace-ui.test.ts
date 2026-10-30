@@ -35,6 +35,7 @@ const helpers = {
   userPackageAction: "",
   userAdminPlanLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Premium" : "Başlangıç"),
   formatUserAdminDate: (value: unknown) => (value ? "tarih" : "Kaydedilmemiş"),
+  formatUserAdminDateTime: (value: unknown) => (value ? "tarih-saat (İstanbul)" : "—"),
   renderUserEntitlementHistory: () => "Paket geçmişi",
 };
 
@@ -75,7 +76,7 @@ describe("Superadmin user workspace P0", () => {
     expect(html).toContain("Yönetici tarafından tanımlandı");
     expect(html).toContain("Başlangıç");
     expect(html).toContain("Bitiş");
-    expect(html).toContain("Süreyi uzat");
+    expect(html).toContain("Süre ekle");
     expect(html).toContain("Paketi değiştir");
     expect(html).toContain("Erişimi sonlandır");
   });
@@ -99,7 +100,7 @@ describe("Superadmin user workspace P0", () => {
         },
       ],
     });
-    expect(html).toContain("Bu hesapta paket bağlamı yok");
+    expect(html).toContain("Hesap bağlamı bulunamadı");
     expect(html).toContain("Paket geçmişi");
     expect(html).not.toContain("Varsayılan ücretsiz hak");
   });
@@ -141,20 +142,101 @@ describe("Superadmin user workspace P0", () => {
     expect(html).not.toContain("providerSubscriptionId");
   });
 
-  it("provides account-context filters and a responsive full-page detail workspace", () => {
+  it("provides account-context filters and the new single-screen responsive profile workspace", () => {
     expect(indexHtml).toContain('id="user-membership-status-filter"');
     expect(indexHtml).toContain('id="user-management-subpage"');
     expect(indexHtml).toContain('data-user-segment="INDIVIDUAL"');
     expect(indexHtml).toContain('data-user-segment="ORGANIZATION"');
     expect(indexHtml).not.toContain("user-detail-modal-backdrop");
     expect(indexHtml).not.toContain("user-form-modal");
-    expect(styles).toContain("#page-users .user-profile-tabs");
+    expect(appJs).toContain('class="user-profile-workbench"');
+    expect(appJs).not.toContain('<nav class="user-profile-tabs"');
+    expect(styles).toContain("#page-users .user-profile-workbench");
+    expect(styles).toContain("#page-users .user-profile-disclosure");
     expect(styles).toContain("#page-users .user-create-workspace");
     expect(styles).toContain("@media (max-width: 760px)");
     expect(styles).toContain(
       'grid-template-areas: "user user" "types types" "context context" "package access" "status status" "actions actions"',
     );
     expect(styles).not.toContain(".user-detail-drawer");
+  });
+
+  it("shows the package, actual access status, source and expiry in the user list summary", () => {
+    const context = createContext(helpers);
+    const render = runInContext(
+      `${functionSource("function renderUserPackageSummary(", "function renderMembershipStatusSummary(")}; renderUserPackageSummary`,
+      context,
+    ) as (user: unknown) => string;
+    const html = render({
+      accountContexts: [
+        {
+          tenantType: "INDIVIDUAL",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: false,
+          memberships: [{ status: "ACTIVE", deleted: false }],
+          packageRight: {
+            plan: "PLAN_PREMIUM",
+            source: "ADMIN",
+            status: "ACTIVE",
+            expiresAt: "2026-12-01T00:00:00.000Z",
+          },
+        },
+      ],
+      unlinkedPackageRights: [
+        {
+          plan: "PLAN_PREMIUM",
+          source: "ADMIN",
+          tenantName: "Eski alan",
+        },
+      ],
+    });
+
+    expect(html).toContain("Premium");
+    expect(html).toContain("Hak etkin");
+    expect(html).toContain("Yönetici tarafından tanımlandı");
+    expect(html).toContain("Bitiş");
+    expect(html).toContain("eşleşmeyen kayıt");
+    expect(html).toContain("erişime uygulanmıyor");
+  });
+
+  it("opens account management with package access on the same screen, not behind legacy tabs", () => {
+    const host = { innerHTML: "" };
+    const context = createContext({
+      $: () => host,
+      userDetailTab: "general",
+      userInitials: () => "ZA",
+      escapeHtml: (value: unknown) => String(value ?? ""),
+      userStatusBadge: () => "<status>Aktif</status>",
+      renderUserPackageOverview: () => '<section id="package-access">Paket erişimi</section>',
+      renderUserBillingOverview: () => '<section id="billing">Ödeme aboneliği</section>',
+      renderUserOrganizationTab: () => '<section id="contexts">Hesap bağlantıları</section>',
+      renderUserActivityTab: () => '<section id="history">İşlem geçmişi</section>',
+      renderUserGeneralTab: () => '<section id="account-data">Hesap durumu</section>',
+      canAccessPage: () => false,
+      populateMembershipTenantSelect: () => undefined,
+      platformRoleLabel: (role: string) => role,
+    });
+    const render = runInContext(
+      `${functionSource("function renderUserDetail(", "function renderUserEntitlementHistory(")}; renderUserDetail`,
+      context,
+    ) as (user: unknown, notice?: string) => void;
+
+    render({
+      id: "user-1",
+      displayName: "Zeynep",
+      email: "zeynep@example.test",
+      status: "ACTIVE",
+      platformRole: null,
+      memberships: [],
+      accountContexts: [],
+    });
+
+    expect(host.innerHTML.indexOf('id="package-access"')).toBeLessThan(
+      host.innerHTML.indexOf('id="account-data"'),
+    );
+    expect(host.innerHTML).toContain('id="billing"');
+    expect(host.innerHTML).toContain('id="contexts"');
+    expect(host.innerHTML).not.toContain("user-profile-tabs");
   });
 
   it("shows deleted tenant membership as no access even when its entitlement remains active", () => {
@@ -228,12 +310,14 @@ describe("Superadmin user workspace P0", () => {
       unlinkedPackageRights: [
         {
           plan: "PLAN_PREMIUM",
+          source: "ADMIN",
           tenantName: "Kişisel alan",
         },
       ],
     });
-    expect(html).toContain("Ücretli Paket");
-    expect(html).toContain("Kişisel alan · bağlam eşleşmiyor");
+    expect(html).toContain("Premium");
+    expect(html).toContain("Kişisel alan · eşleşmeyen kayıt");
+    expect(html).toContain("erişime uygulanmıyor");
   });
 
   it("keeps multi-context users visible in every relevant account context", () => {
@@ -290,7 +374,7 @@ describe("Superadmin user workspace P0", () => {
     expect(contexts).toContain("Okul");
   });
 
-  it("creates individuals without an institution and keeps organization package controls read-only", () => {
+  it("creates individuals without an institution and identifies shared organization package scope", () => {
     expect(appJs).toContain("accountType: userCreateAccountType");
     expect(appJs).toContain('userCreateAccountType === "ORGANIZATION"');
     expect(appJs).toContain('tenantId: $("user-create-tenant").value');
@@ -368,10 +452,10 @@ describe("Superadmin user workspace P0", () => {
       ],
       entitlements: [],
     });
-    expect(html).toContain("kurumdaki diğer kullanıcıları da etkiler");
-    expect(html).not.toContain('data-package-action="extend"');
-    expect(html).not.toContain('data-package-action="change"');
-    expect(html).not.toContain('data-package-action="end"');
+    expect(html).toContain("tüm kullanıcıların erişimini etkiler");
+    expect(html).toContain('data-package-action="extend"');
+    expect(html).toContain('data-package-action="change"');
+    expect(html).toContain('data-package-action="end"');
   });
 
   it("keeps a deleted personal context visible as history without presenting active access", () => {
@@ -405,7 +489,8 @@ describe("Superadmin user workspace P0", () => {
     });
     expect(html).toContain("Premium");
     expect(html).toContain("Hak pasif");
-    expect(html).not.toContain("data-package-action=");
+    expect(html).toContain('data-personal-context-restore="deleted-personal-context"');
+    expect(html).not.toContain('data-package-action="start"');
   });
 
   it("requires a visible preview and a separate confirmation for package actions", () => {
@@ -478,6 +563,9 @@ describe("Superadmin user workspace P0", () => {
           {
             tenantId: "personal-context",
             tenantType: "INDIVIDUAL",
+            tenantStatus: "ACTIVE",
+            tenantDeleted: false,
+            memberships: [{ status: "ACTIVE", deleted: false }],
             packageRight: { id: "old-entitlement", plan: "PLAN_FREE", expiresAt: null },
           },
         ],
@@ -509,6 +597,91 @@ describe("Superadmin user workspace P0", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].path).toBe("/old-entitlement/change-plan");
     expect(calls[0].options.method).toBe("POST");
+  });
+
+  it("sends a shared entitlement to its organization tenant rather than to one user", async () => {
+    const calls: Array<{ path: string; options: { method: string; body: string } }> = [];
+    const form = {
+      dataset: { packageForm: "start", confirmed: "true" },
+      querySelector: () => ({ textContent: "Onayla ve kaydet", disabled: false }),
+    };
+    class TestFormData {
+      get(name: string) {
+        return { plan: "PLAN_PREMIUM", effectiveAt: "2026-11-15", expiresAt: "" }[name];
+      }
+    }
+    const context = createContext({
+      ...helpers,
+      FormData: TestFormData,
+      document: {
+        querySelector: () => ({ textContent: "", classList: { toggle: () => undefined } }),
+      },
+      userDetailCurrent: {
+        id: "org-member-user",
+        accountContexts: [
+          {
+            tenantId: "school-tenant",
+            tenantType: "ORGANIZATION",
+            tenantStatus: "ACTIVE",
+            tenantDeleted: false,
+            packageRight: { id: null, plan: "PLAN_FREE" },
+          },
+        ],
+      },
+      userPackageContextId: "school-tenant",
+      entitlementAdminApi: async (path: string, options: { method: string; body: string }) => {
+        calls.push({ path, options });
+        return { ok: true };
+      },
+      parseResponse: async (response: unknown) => response,
+      setUserPackageActionStatus: () => undefined,
+      openUserDetail: async () => undefined,
+      loadUsers: async () => undefined,
+    });
+    const submit = runInContext(
+      `${functionSource("function adminDateInputValue(", "function setUserDetailLoading(")}; submitUserPackageAction`,
+      context,
+    ) as (event: { preventDefault(): void; target: typeof form }) => Promise<void>;
+
+    await submit({ preventDefault: () => undefined, target: form });
+
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0]!.options.body)).toMatchObject({
+      tenantId: "school-tenant",
+      scope: "ORGANIZATION",
+      plan: "PLAN_PREMIUM",
+    });
+    expect(JSON.parse(calls[0]!.options.body)).not.toHaveProperty("userId");
+  });
+
+  it("treats today's package start as immediate and never calls an unbounded expiry unsaved", () => {
+    const context = createContext({ ...helpers });
+    const run = runInContext(
+      `${functionSource("function formatUserAdminDate(value)", "function formatUserAdminPayment(")}; ${functionSource("function adminDateInputValue(", "function resetUserPackageActionPreview(")}; ({formatUserAdminDate, adminDateInputValue, toAdminDate})`,
+      context,
+    ) as {
+      formatUserAdminDate(value: null): string;
+      adminDateInputValue(): string;
+      toAdminDate(value: string): string;
+    };
+    const before = Date.now();
+    const startsAt = new Date(run.toAdminDate(run.adminDateInputValue())).getTime();
+    expect(Math.abs(startsAt - before)).toBeLessThan(1000);
+    expect(run.formatUserAdminDate(null)).not.toBe("Kaydedilmemiş");
+  });
+
+  it("interprets package date-only values in the Istanbul business timezone", () => {
+    const context = createContext({ ...helpers });
+    const run = runInContext(
+      `${functionSource("function adminDateInputValue(", "function setUserDetailLoading(")}; ({adminDateInputValue, toAdminDate})`,
+      context,
+    ) as {
+      adminDateInputValue(value: string): string;
+      toAdminDate(value: string): string;
+    };
+
+    expect(run.adminDateInputValue("2026-10-31T21:30:00.000Z")).toBe("2026-11-01");
+    expect(run.toAdminDate("2026-11-01")).toBe("2026-10-31T21:00:00.000Z");
   });
 
   it("shows audit values before and after manual entitlement changes", () => {

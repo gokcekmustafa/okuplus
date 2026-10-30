@@ -105,6 +105,10 @@ export const resetUserPasswordSchema = z.object({
     .max(128, "Parola en fazla 128 karakter"),
 });
 
+export const restoreUserPersonalContextSchema = z.object({
+  tenantId: z.string().trim().uuid(),
+});
+
 /** Kullanıcı listeleme sorgu parametreleri. */
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
