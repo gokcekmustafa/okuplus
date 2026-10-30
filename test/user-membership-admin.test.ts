@@ -40,8 +40,10 @@ const BILLING_SUBSCRIPTION_ID = "99999998-0000-7000-8000-0000000000d2";
 const BILLING_PAYMENT_ID = "99999998-0000-7000-8000-0000000000d3";
 const CREATED_ORG_USER_EMAIL = "admin-created-org-user@example.com";
 const CREATED_INDIVIDUAL_USER_EMAIL = "admin-created-individual-user@example.com";
+const PACKAGE_TEST_USER_EMAIL = "admin-package-lifecycle@example.com";
 const SOFT_DELETED_CONTEXT_USER_ID = "99999998-0000-7000-8000-0000000000a5";
 const SOFT_DELETED_CONTEXT_TENANT_ID = "99999998-0000-7000-8000-0000000000b5";
+const SOFT_DELETED_CONTEXT_ENTITLEMENT_ID = "99999998-0000-7000-8000-0000000000c5";
 
 async function cleanupCreatedUser(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -51,6 +53,13 @@ async function cleanupCreatedUser(email: string): Promise<void> {
     select: { tenantId: true },
   });
   const tenantIds = memberships.map((membership) => membership.tenantId);
+  const entitlements = await prisma.entitlement.findMany({
+    where: { OR: [{ userId: user.id }, { tenantId: { in: tenantIds } }] },
+    select: { id: true },
+  });
+  await prisma.auditLog.deleteMany({
+    where: { entityId: { in: [user.id, ...entitlements.map((item) => item.id)] } },
+  });
   await prisma.studentProfile.deleteMany({ where: { studentId: user.id } });
   await prisma.membership.deleteMany({ where: { userId: user.id } });
   await prisma.tenant.deleteMany({ where: { id: { in: tenantIds }, type: "INDIVIDUAL" } });
@@ -64,6 +73,7 @@ describe("user + membership admin", () => {
     await prisma.$connect();
     await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
+    await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
 
     // Tekrar çalıştırmalarda kalıcı olabilecek veriyi temizle.
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
@@ -158,6 +168,7 @@ describe("user + membership admin", () => {
     await app.close();
     await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
+    await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingSubscription.deleteMany({ where: { userId: USER_A_ID } });
     await prisma.billingCustomer.deleteMany({ where: { userId: USER_A_ID } });
@@ -268,6 +279,9 @@ describe("user + membership admin", () => {
     const body = res.json();
     expect(body.success).toBe(true);
     expect(body.data.items.length).toBeGreaterThanOrEqual(1);
+    expect(body.data.items.some((user: { id: string }) => user.id === PLATFORM_USER_ID)).toBe(
+      false,
+    );
     const found = body.data.items.find((u: { id: string }) => u.id === USER_A_ID);
     expect(found).toBeTruthy();
     expect(found.displayName).toBe("Kullanıcı A");
@@ -285,6 +299,30 @@ describe("user + membership admin", () => {
         tenantType: "ORGANIZATION",
       }),
     ]);
+  });
+
+  it("varsayılan müşteri listesi platform kullanıcılarını dışarıda tutar, platform sekmesi onları gösterir", async () => {
+    const customers = await app.inject({
+      method: "GET",
+      url: "/admin/users?page=1&pageSize=100",
+      headers: await superAdminHeaders(),
+    });
+    expect(customers.statusCode).toBe(200);
+    expect(
+      customers
+        .json()
+        .data.items.some((user: { platformRole: string | null }) => user.platformRole !== null),
+    ).toBe(false);
+
+    const platform = await app.inject({
+      method: "GET",
+      url: "/admin/users?segment=PLATFORM",
+      headers: await superAdminHeaders(),
+    });
+    expect(platform.statusCode).toBe(200);
+    expect(
+      platform.json().data.items.some((user: { id: string }) => user.id === PLATFORM_USER_ID),
+    ).toBe(true);
   });
 
   it("Arama: ad veya e-posta ile filtreler", async () => {
@@ -357,6 +395,20 @@ describe("user + membership admin", () => {
       },
       update: { deletedAt: null, status: "ACTIVE" },
     });
+    await prisma.entitlement.upsert({
+      where: { id: SOFT_DELETED_CONTEXT_ENTITLEMENT_ID },
+      create: {
+        id: SOFT_DELETED_CONTEXT_ENTITLEMENT_ID,
+        userId: SOFT_DELETED_CONTEXT_USER_ID,
+        tenantId: SOFT_DELETED_CONTEXT_TENANT_ID,
+        scope: "PERSONAL",
+        plan: "PLAN_PREMIUM",
+        source: "ADMIN",
+        active: true,
+        effectiveAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      },
+      update: { active: true },
+    });
 
     const platform = await app.inject({
       method: "GET",
@@ -384,7 +436,10 @@ describe("user + membership admin", () => {
       .json()
       .data.items.find((user: { id: string }) => user.id === SOFT_DELETED_CONTEXT_USER_ID);
     expect(recoveryCandidate.accountContexts[0]).toMatchObject({ tenantDeleted: true });
-    expect(recoveryCandidate.accountContexts[0].packageRight).toBeTruthy();
+    expect(recoveryCandidate.accountContexts[0].packageRight).toMatchObject({
+      plan: "PLAN_PREMIUM",
+      status: "INACTIVE",
+    });
     expect(
       unlinked
         .json()
@@ -960,6 +1015,153 @@ describe("user + membership admin", () => {
     expect(JSON.stringify(detail.billingSubscriptions)).not.toContain("providerSubscriptionId");
     expect(JSON.stringify(detail.billingPayments)).not.toContain("providerPaymentId");
     expect(JSON.stringify(detail.billingPayments)).not.toContain("providerOrderReference");
+  });
+
+  it("bireysel manuel paket başlatma, uzatma, değiştirme ve sonlandırma audit üretir", async () => {
+    await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
+    const created = await app.inject({
+      method: "POST",
+      url: "/admin/users",
+      headers: await superAdminHeaders(),
+      payload: {
+        displayName: "Paket İşlem Testi",
+        email: PACKAGE_TEST_USER_EMAIL,
+        password: "package-user-pass-123!",
+        accountType: "INDIVIDUAL",
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const user = created.json().data;
+    const tenantId = user.memberships[0].tenantId as string;
+    const progressBefore = await prisma.studentProgress.count({
+      where: { studentId: user.id, tenantId },
+    });
+
+    const spoofSource = await app.inject({
+      method: "POST",
+      url: "/admin/entitlements",
+      headers: await superAdminHeaders(),
+      payload: {
+        userId: user.id,
+        scope: "PERSONAL",
+        plan: "PLAN_PREMIUM",
+        source: "BILLING",
+      },
+    });
+    expect(spoofSource.statusCode).toBe(400);
+
+    const startedAt = new Date();
+    const initialEnd = new Date(startedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const startPayload = {
+      userId: user.id,
+      scope: "PERSONAL",
+      plan: "PLAN_PREMIUM",
+      effectiveAt: startedAt.toISOString(),
+      expiresAt: initialEnd.toISOString(),
+    };
+    const starts = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/admin/entitlements",
+        headers: await superAdminHeaders(),
+        payload: startPayload,
+      }),
+      app.inject({
+        method: "POST",
+        url: "/admin/entitlements",
+        headers: await superAdminHeaders(),
+        payload: startPayload,
+      }),
+    ]);
+    expect(starts.map((response) => response.statusCode).sort()).toEqual([200, 409]);
+    const started = starts.find((response) => response.statusCode === 200)!;
+    expect(started.statusCode).toBe(200);
+    const original = started.json().data;
+    expect(original).toMatchObject({
+      userId: user.id,
+      tenantId,
+      tenantType: "INDIVIDUAL",
+      scope: "PERSONAL",
+      plan: "PLAN_PREMIUM",
+      source: "ADMIN",
+    });
+
+    const extendedEnd = new Date(initialEnd.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const extended = await app.inject({
+      method: "PATCH",
+      url: `/admin/entitlements/${encodeURIComponent(original.id)}`,
+      headers: await superAdminHeaders(),
+      payload: { expiresAt: extendedEnd.toISOString() },
+    });
+    expect(extended.statusCode).toBe(200);
+    expect(extended.json().data.expiresAt).toBe(extendedEnd.toISOString());
+
+    const changeStart = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const changedEnd = new Date(changeStart.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const changed = await app.inject({
+      method: "POST",
+      url: `/admin/entitlements/${encodeURIComponent(original.id)}/change-plan`,
+      headers: await superAdminHeaders(),
+      payload: {
+        plan: "PLAN_FREE",
+        effectiveAt: changeStart.toISOString(),
+        expiresAt: changedEnd.toISOString(),
+      },
+    });
+    expect(changed.statusCode).toBe(200);
+    const changedData = changed.json().data;
+    expect(changedData.previous.expiresAt).toBe(changeStart.toISOString());
+    expect(changedData.current).toMatchObject({
+      userId: user.id,
+      tenantId,
+      plan: "PLAN_FREE",
+      source: "ADMIN",
+    });
+
+    const ended = await app.inject({
+      method: "PATCH",
+      url: `/admin/entitlements/${encodeURIComponent(changedData.current.id)}`,
+      headers: await superAdminHeaders(),
+      payload: { active: false },
+    });
+    expect(ended.statusCode).toBe(200);
+    expect(ended.json().data.active).toBe(false);
+    expect(await prisma.entitlement.count({ where: { userId: user.id } })).toBe(2);
+
+    const audit = await prisma.auditLog.findMany({
+      where: { entityId: { in: [original.id, changedData.current.id] } },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audit).toHaveLength(5);
+    expect(audit.every((entry) => entry.actorUserId === PLATFORM_USER_ID)).toBe(true);
+    const afterProgress = await prisma.studentProgress.count({
+      where: { studentId: user.id, tenantId },
+    });
+    expect(afterProgress).toBe(progressBefore);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/admin/users/${encodeURIComponent(user.id)}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(
+      detail
+        .json()
+        .data.activity.some(
+          (entry: {
+            entityType: string;
+            before: unknown;
+            after: unknown;
+            actor: { displayName: string };
+          }) =>
+            entry.entityType === "ENTITLEMENT" &&
+            entry.before &&
+            entry.after &&
+            entry.actor.displayName === "User Super Admin",
+        ),
+    ).toBe(true);
+    await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
   });
 
   it("INDIVIDUAL üyelik rolü kurumsal role değiştirilemez: 400 döner", async () => {

@@ -18,6 +18,9 @@ const ADMIN_ID = "8a000000-0000-7000-8000-000000000001";
 const RECOVERY_EMAIL = "stage8a-recovery@example.com";
 const RECOVERY_USER_ID = "8a000000-0000-7000-8000-000000000002";
 const RECOVERY_TENANT_ID = "8a000000-0000-7000-8000-0000000000a2";
+const PROFILE_ONLY_USER_ID = "8a000000-0000-7000-8000-000000000003";
+const PROFILE_ONLY_EMAIL = "stage8a-profile-only@example.com";
+const PROFILE_ONLY_TENANT_ID = "8a000000-0000-7000-8000-0000000000a4";
 const ORG_ID = "8a000000-0000-7000-8000-0000000000a1";
 const CONTENT_ID = "8a000000-0000-7000-8000-0000000000b1";
 const CONTENT_VERSION_ID = "8a000000-0000-7000-8000-0000000000b2";
@@ -40,9 +43,21 @@ let attemptId = "";
 let createdBadgeId: string | null = null;
 
 async function cleanup(): Promise<void> {
-  const emails = [EMAIL_A, EMAIL_B, ROLLBACK_EMAIL, ADMIN_EMAIL, RECOVERY_EMAIL];
+  const emails = [
+    EMAIL_A,
+    EMAIL_B,
+    ROLLBACK_EMAIL,
+    ADMIN_EMAIL,
+    RECOVERY_EMAIL,
+    PROFILE_ONLY_EMAIL,
+  ];
   const users = await prisma.user.findMany({
-    where: { OR: [{ email: { in: emails } }, { id: { in: [ADMIN_ID, RECOVERY_USER_ID] } }] },
+    where: {
+      OR: [
+        { email: { in: emails } },
+        { id: { in: [ADMIN_ID, RECOVERY_USER_ID, PROFILE_ONLY_USER_ID] } },
+      ],
+    },
     select: { id: true },
   });
   const userIds = users.map((user) => user.id);
@@ -53,6 +68,7 @@ async function cleanup(): Promise<void> {
   const tenantIds = [
     ORG_ID,
     RECOVERY_TENANT_ID,
+    PROFILE_ONLY_TENANT_ID,
     ...memberships.map((membership) => membership.tenantId),
     tenantAId,
     tenantBId,
@@ -350,6 +366,90 @@ describe.sequential("individual account foundation", () => {
         where: { userId: userAId, tenant: { type: "INDIVIDUAL" }, status: "ACTIVE" },
       }),
     ).toBe(1);
+  });
+
+  it("birden fazla kişisel tenant geçmişi varsa otomatik seçim yapmaz ve mevcut bağlamı korur", async () => {
+    const duplicateTenantId = "8a000000-0000-7000-8000-0000000000a3";
+    await prisma.tenant.create({
+      data: { id: duplicateTenantId, type: "INDIVIDUAL", name: "Kişisel eski bağlam" },
+    });
+    await prisma.membership.create({
+      data: {
+        tenantId: duplicateTenantId,
+        userId: userAId,
+        role: "STUDENT",
+        status: "REMOVED",
+        deletedAt: new Date(),
+      },
+    });
+    try {
+      await expect(provisionPersonalContext(userAId)).rejects.toThrow(
+        "Birden fazla kişisel çalışma alanı bulundu",
+      );
+      expect(
+        await prisma.tenant.findUnique({ where: { id: tenantAId }, select: { deletedAt: true } }),
+      ).toEqual({
+        deletedAt: null,
+      });
+      expect(
+        await prisma.studentProfile.findUnique({
+          where: { tenantId_studentId: { tenantId: tenantAId, studentId: userAId } },
+        }),
+      ).toBeTruthy();
+    } finally {
+      await prisma.membership.deleteMany({
+        where: { tenantId: duplicateTenantId, userId: userAId },
+      });
+      await prisma.tenant.delete({ where: { id: duplicateTenantId } });
+    }
+  });
+
+  it("kişisel tenant StudentProfile içinde varsa üyelik olmadan yeni tenant oluşturmaz", async () => {
+    await prisma.studentProfile.deleteMany({
+      where: { tenantId: PROFILE_ONLY_TENANT_ID, studentId: PROFILE_ONLY_USER_ID },
+    });
+    await prisma.membership.deleteMany({
+      where: { tenantId: PROFILE_ONLY_TENANT_ID, userId: PROFILE_ONLY_USER_ID },
+    });
+    await prisma.user.deleteMany({ where: { id: PROFILE_ONLY_USER_ID } });
+    await prisma.tenant.deleteMany({ where: { id: PROFILE_ONLY_TENANT_ID } });
+    await prisma.user.create({
+      data: {
+        id: PROFILE_ONLY_USER_ID,
+        email: PROFILE_ONLY_EMAIL,
+        displayName: "Profil bağlantısı olan kullanıcı",
+        passwordHash: await new ScryptPasswordHasher().hash(PASSWORD),
+      },
+    });
+    await prisma.tenant.create({
+      data: { id: PROFILE_ONLY_TENANT_ID, type: "INDIVIDUAL", name: "Eski kişisel alan" },
+    });
+    await prisma.studentProfile.create({
+      data: { tenantId: PROFILE_ONLY_TENANT_ID, studentId: PROFILE_ONLY_USER_ID },
+    });
+    try {
+      await expect(provisionPersonalContext(PROFILE_ONLY_USER_ID)).rejects.toThrow(
+        "bağlantısı güvenle doğrulanamadı",
+      );
+      expect(
+        await prisma.tenant.count({
+          where: {
+            type: "INDIVIDUAL",
+            studentProfiles: { some: { studentId: PROFILE_ONLY_USER_ID } },
+          },
+        }),
+      ).toBe(1);
+      expect(await prisma.membership.count({ where: { userId: PROFILE_ONLY_USER_ID } })).toBe(0);
+    } finally {
+      await prisma.studentProfile.deleteMany({
+        where: { tenantId: PROFILE_ONLY_TENANT_ID, studentId: PROFILE_ONLY_USER_ID },
+      });
+      await prisma.membership.deleteMany({
+        where: { tenantId: PROFILE_ONLY_TENANT_ID, userId: PROFILE_ONLY_USER_ID },
+      });
+      await prisma.user.deleteMany({ where: { id: PROFILE_ONLY_USER_ID } });
+      await prisma.tenant.deleteMany({ where: { id: PROFILE_ONLY_TENANT_ID } });
+    }
   });
 
   it("9. email + password login başarılıdır", async () => {

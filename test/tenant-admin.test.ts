@@ -21,6 +21,7 @@ const PLATFORM_USER_ID = "99999999-0000-7000-8000-000000000001";
 const NORMAL_USER_ID = "99999999-0000-7000-8000-000000000002";
 const TENANT_A = "99999999-0000-7000-8000-00000000000a";
 const TENANT_B = "99999999-0000-7000-8000-00000000000b";
+const INDIVIDUAL_TENANT = "99999999-0000-7000-8000-00000000000c";
 
 // POST /admin/tenants ile oluşturulan kurum; afterAll'da temizlenir.
 let createdTenantId: string | null = null;
@@ -36,7 +37,9 @@ describe("tenant admin", () => {
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.membership.deleteMany({ where: { userId: NORMAL_USER_ID } });
     await prisma.tenant.deleteMany({ where: { slug: "test-kurumu" } });
-    await prisma.tenant.deleteMany({ where: { id: { in: [TENANT_A, TENANT_B] } } });
+    await prisma.tenant.deleteMany({
+      where: { id: { in: [TENANT_A, TENANT_B, INDIVIDUAL_TENANT] } },
+    });
     await prisma.user.deleteMany({
       where: { id: { in: [PLATFORM_USER_ID, NORMAL_USER_ID] } },
     });
@@ -66,6 +69,9 @@ describe("tenant admin", () => {
     await prisma.tenant.create({
       data: { id: TENANT_B, type: "ORGANIZATION", name: "Tenant B" },
     });
+    await prisma.tenant.create({
+      data: { id: INDIVIDUAL_TENANT, type: "INDIVIDUAL", name: "Sistem içi kişisel alan" },
+    });
     await prisma.membership.create({
       data: {
         id: "99999999-0000-7000-8000-0000000000aa",
@@ -89,7 +95,7 @@ describe("tenant admin", () => {
       where: { userId: NORMAL_USER_ID },
     });
     await prisma.tenant.deleteMany({
-      where: { id: { in: [TENANT_A, TENANT_B] } },
+      where: { id: { in: [TENANT_A, TENANT_B, INDIVIDUAL_TENANT] } },
     });
     // API üzerinden oluşturulan "Test Kurumu" da temizlenir.
     if (createdTenantId) {
@@ -138,6 +144,67 @@ describe("tenant admin", () => {
     expect(found).toBeTruthy();
     expect(found.name).toBe("Tenant A");
     expect(typeof found.membershipCount).toBe("number");
+    expect(
+      body.data.items.every((tenant: { type: string }) => tenant.type === "ORGANIZATION"),
+    ).toBe(true);
+  });
+
+  it("Kurum listesi, total ve arama kişisel çalışma alanlarını dışarıda bırakır", async () => {
+    const all = await app.inject({
+      method: "GET",
+      url: "/admin/tenants?page=1&pageSize=1",
+      headers: await superAdminHeaders(),
+    });
+    expect(all.statusCode).toBe(200);
+    expect(all.json().data.items).toHaveLength(1);
+    expect(all.json().data.items[0].type).toBe("ORGANIZATION");
+    expect(all.json().data.total).toBe(
+      await prisma.tenant.count({ where: { type: "ORGANIZATION", deletedAt: null } }),
+    );
+
+    const search = await app.inject({
+      method: "GET",
+      url: "/admin/tenants?search=Sistem%20i%C3%A7i%20ki%C5%9Fisel%20alan",
+      headers: await superAdminHeaders(),
+    });
+    expect(search.statusCode).toBe(200);
+    expect(search.json().data).toMatchObject({ items: [], total: 0 });
+  });
+
+  it("Kurum API'si bireysel tenant oluşturamaz, dönüştüremez veya silemez", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/admin/tenants",
+      headers: await superAdminHeaders(),
+      payload: { type: "INDIVIDUAL", name: "Yasak kişisel kurum" },
+    });
+    expect(create.statusCode).toBe(400);
+
+    const convert = await app.inject({
+      method: "PATCH",
+      url: `/admin/tenants/${TENANT_A}`,
+      headers: await superAdminHeaders(),
+      payload: { type: "INDIVIDUAL" },
+    });
+    expect(convert.statusCode).toBe(400);
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/admin/tenants/${INDIVIDUAL_TENANT}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(detail.statusCode).toBe(404);
+
+    const deleteResponse = await app.inject({
+      method: "DELETE",
+      url: `/admin/tenants/${INDIVIDUAL_TENANT}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(deleteResponse.statusCode).toBe(404);
+    expect(await prisma.tenant.findUnique({ where: { id: INDIVIDUAL_TENANT } })).toMatchObject({
+      type: "INDIVIDUAL",
+      deletedAt: null,
+    });
   });
 
   it("Normal tenant kullanıcısı: tenant yönetimine erişemez (403)", async () => {

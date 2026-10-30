@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTenantSchema } from "../src/modules/tenant/schemas.js";
+import { createTenantSchema, updateTenantSchema } from "../src/modules/tenant/schemas.js";
 
 describe("initial tenant administrator TCKN contract", () => {
   const organization = {
@@ -24,5 +24,16 @@ describe("initial tenant administrator TCKN contract", () => {
 
     expect(parsed.admin).not.toHaveProperty("nationalId");
     expect(parsed.admin).toMatchObject(organization.admin);
+  });
+
+  it("limits institution creation to ORGANIZATION", () => {
+    expect(createTenantSchema.safeParse({ type: "INDIVIDUAL", name: "Kişisel" }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects tenant-type conversion through the organization update contract", () => {
+    expect(updateTenantSchema.safeParse({ type: "INDIVIDUAL" }).success).toBe(false);
+    expect(updateTenantSchema.safeParse({ type: "ORGANIZATION" }).success).toBe(false);
   });
 });

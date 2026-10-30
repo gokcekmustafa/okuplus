@@ -7,7 +7,9 @@ import { turkishPhoneSchema } from "../../lib/person-data.js";
  * (requirePlatformRole) ile korunur.
  */
 
-const tenantTypeSchema = z.enum(["INDIVIDUAL", "ORGANIZATION"]);
+// This API is the organization directory. Personal contexts are internal
+// student-data boundaries and are created only by personal-context services.
+const tenantTypeSchema = z.literal("ORGANIZATION");
 const tenantStatusSchema = z.enum(["ACTIVE", "SUSPENDED", "CLOSED"]);
 
 const slugSchema = z
@@ -45,7 +47,10 @@ export const createTenantSchema = z.object({
 });
 
 /** Kurum güncelleme gövdesi (kısmi). */
-export const updateTenantSchema = createTenantSchema.omit({ admin: true }).partial();
+export const updateTenantSchema = createTenantSchema
+  .omit({ admin: true, type: true })
+  .partial()
+  .strict();
 
 /** Kurum durum değişikliği gövdesi. */
 export const updateTenantStatusSchema = z.object({

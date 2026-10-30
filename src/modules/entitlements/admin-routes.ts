@@ -5,12 +5,14 @@ import { requireAuth } from "../../middleware/authenticate.js";
 import { requirePlatformRole } from "../../middleware/require-platform.js";
 import type { AuthProvider } from "../auth/index.js";
 import {
-  createEntitlementSchema,
+  changeManagedEntitlementPlanSchema,
+  createManagedEntitlementSchema,
   listEntitlementsQuerySchema,
   updateEntitlementSchema,
 } from "./admin-schemas.js";
 import {
-  createAdminEntitlement,
+  createManagedAdminEntitlement,
+  changeManagedAdminEntitlementPlan,
   listAdminEntitlements,
   updateAdminEntitlement,
 } from "./admin-service.js";
@@ -31,8 +33,17 @@ export async function entitlementAdminRoutes(
   );
   app.post("/admin/entitlements", { preHandler: platformOnly }, async (request) =>
     ok(
-      await createAdminEntitlement(
-        createEntitlementSchema.parse(request.body),
+      await createManagedAdminEntitlement(
+        createManagedEntitlementSchema.parse(request.body),
+        request.authUser!.id,
+      ),
+    ),
+  );
+  app.post("/admin/entitlements/:id/change-plan", { preHandler: platformOnly }, async (request) =>
+    ok(
+      await changeManagedAdminEntitlementPlan(
+        readId(request),
+        changeManagedEntitlementPlanSchema.parse(request.body),
         request.authUser!.id,
       ),
     ),

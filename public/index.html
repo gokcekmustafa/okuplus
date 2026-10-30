@@ -1901,13 +1901,10 @@
                       placeholder="Örnek Koleji"
                     />
                   </label>
-                  <label class="field">
-                    <span>Tip *</span>
-                    <select id="tenant-form-type">
-                      <option value="ORGANIZATION">Kurum (Organizasyon)</option>
-                      <option value="INDIVIDUAL">Bireysel</option>
-                    </select>
-                  </label>
+                  <p class="field-hint">
+                    Bu bölüm yalnızca kurumları yönetir. Bireysel çalışma alanları öğrenci
+                    verilerini korumak için sistem tarafından yönetilir.
+                  </p>
                   <label class="field">
                     <span>Slug (kurumlar için)</span>
                     <input
@@ -2019,7 +2016,7 @@
 
               <div class="user-segment-tabs" role="tablist" aria-label="Kullanıcı grupları">
                 <button type="button" role="tab" aria-selected="true" data-user-segment="">
-                  Tümü
+                  Tüm müşteriler
                 </button>
                 <button
                   type="button"

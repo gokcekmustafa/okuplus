@@ -212,24 +212,54 @@ export async function provisionPersonalContextInTransaction(
     throw new PersonalContextLookupError("PERSONAL_CONTEXT_ACCOUNT_STATE_CHANGED");
   }
 
-  // Admin akışında daha önce farklı bir id ile kurulmuş personal tenant varsa
-  // onu koru; ikinci tenant oluşturma.
-  const existingIndividual = await tx.membership.findFirst({
+  // Never silently select one of multiple personal contexts. Tenant IDs are
+  // referenced by student profiles, progress and RLS-scoped records.
+  const existingIndividuals = await tx.membership.findMany({
     where: {
       userId,
-      status: { in: ["ACTIVE", "PENDING"] },
-      deletedAt: null,
-      tenant: { type: "INDIVIDUAL", deletedAt: null },
+      tenant: { type: "INDIVIDUAL" },
     },
+    select: {
+      tenantId: true,
+      status: true,
+      role: true,
+      deletedAt: true,
+      tenant: { select: { type: true, name: true, status: true, deletedAt: true } },
+    },
+  });
+  const existingPersonalProfiles = await tx.studentProfile.findMany({
+    where: { studentId: userId, tenant: { type: "INDIVIDUAL" } },
     select: {
       tenantId: true,
       tenant: { select: { type: true, name: true, status: true, deletedAt: true } },
     },
-    orderBy: { createdAt: "asc" },
   });
 
-  let tenantId = existingIndividual?.tenantId ?? null;
-  let tenant = existingIndividual?.tenant ?? null;
+  const individualTenantIds = new Set([
+    ...existingIndividuals.map((membership) => membership.tenantId),
+    ...existingPersonalProfiles.map((profile) => profile.tenantId),
+  ]);
+  if (individualTenantIds.size > 1) {
+    throw conflictError("Birden fazla kişisel çalışma alanı bulundu; destek incelemesi gerekiyor");
+  }
+
+  const existingProfile = existingPersonalProfiles[0];
+  const existingIndividual = existingIndividuals.find(
+    (membership) =>
+      membership.role === "STUDENT" &&
+      membership.status === "ACTIVE" &&
+      membership.deletedAt === null,
+  );
+  const existingTenantMembership = existingIndividuals[0];
+  let tenantId = existingTenantMembership?.tenantId ?? existingProfile?.tenantId ?? null;
+  let tenant = existingTenantMembership?.tenant ?? existingProfile?.tenant ?? null;
+
+  if (tenant?.deletedAt) {
+    throw conflictError("Kişisel çalışma alanı kurtarma incelemesi gerektiriyor");
+  }
+  if ((existingTenantMembership || existingProfile) && !existingIndividual) {
+    throw conflictError("Mevcut kişisel çalışma alanı bağlantısı güvenle doğrulanamadı");
+  }
 
   if (tenant && tenant.status !== "ACTIVE") {
     throw conflictError("Mevcut kişisel alan aktif değil");

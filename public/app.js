@@ -6354,7 +6354,6 @@ function openTenantForm(mode, tenant = null) {
   $("tenant-form-title").textContent = mode === "create" ? "Yeni kurum" : "Kurumu düzenle";
   $("tenant-form-id").value = tenant?.id ?? "";
   $("tenant-form-name").value = tenant?.name ?? "";
-  $("tenant-form-type").value = tenant?.type ?? "ORGANIZATION";
   $("tenant-form-slug").value = tenant?.slug ?? "";
   $("tenant-form-logo").value = tenant?.logoUrl ?? "";
   $("tenant-form-admin-name").value = "";
@@ -6370,7 +6369,7 @@ function openTenantForm(mode, tenant = null) {
 function updateTenantAdminFields() {
   const fields = $("tenant-form-admin-fields");
   if (!fields) return;
-  const visible = tenantFormMode === "create" && $("tenant-form-type").value === "ORGANIZATION";
+  const visible = tenantFormMode === "create";
   fields.classList.toggle("hidden", !visible);
   for (const input of fields.querySelectorAll("input")) input.required = visible;
 }
@@ -6389,7 +6388,7 @@ async function submitTenantForm(event) {
   errorEl.classList.add("hidden");
 
   const payload = {
-    type: $("tenant-form-type").value,
+    type: "ORGANIZATION",
     name: $("tenant-form-name").value.trim(),
   };
   const slug = $("tenant-form-slug").value.trim();
@@ -6397,7 +6396,7 @@ async function submitTenantForm(event) {
   if (slug) payload.slug = slug;
   if (logoUrl) payload.logoUrl = logoUrl;
 
-  if (tenantFormMode === "create" && payload.type === "ORGANIZATION") {
+  if (tenantFormMode === "create") {
     const admin = {
       displayName: $("tenant-form-admin-name").value.trim(),
       email: $("tenant-form-admin-email").value.trim(),
@@ -6569,7 +6568,6 @@ function setupTenantEvents() {
   $("tenant-form").addEventListener("submit", submitTenantForm);
   $("tenant-form-close").addEventListener("click", closeTenantForm);
   $("tenant-form-cancel").addEventListener("click", closeTenantForm);
-  $("tenant-form-type").addEventListener("change", updateTenantAdminFields);
 
   $("tenant-detail-close").addEventListener("click", () => {
     $("tenant-detail-modal").classList.add("hidden");
@@ -6899,6 +6897,9 @@ let userDetailTab = "general";
 let userCreateStep = 1;
 let userCreateAccountType = "INDIVIDUAL";
 let userOrganizationOptions = [];
+let userPackageContextId = "";
+let userPackageOwnerId = "";
+let userPackageAction = "";
 
 function userApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -6912,6 +6913,20 @@ function userApi(path, options = {}) {
     delete headers["content-type"];
   }
   return fetch(`/admin/users${path}`, { ...options, method, headers });
+}
+
+function entitlementAdminApi(path, options = {}) {
+  const { accessToken, tenantId } = getStoredTokens();
+  const method = options.method ?? "GET";
+  return fetch(`/admin/entitlements${path}`, {
+    ...options,
+    method,
+    headers: {
+      ...authHeaders(accessToken, tenantId),
+      ...(method !== "GET" ? csrfHeaders() : {}),
+      ...(options.headers ?? {}),
+    },
+  });
 }
 
 function membershipApi(path, options = {}) {
@@ -7443,45 +7458,86 @@ function renderUserPackageOverview(user) {
   const contexts = user.accountContexts ?? [];
   const entitlements = user.entitlements ?? [];
   if (!contexts.length) {
-    return `<section class="user-overview-section"><div class="user-overview-heading"><div><span class="eyebrow">ERİŞİM HAKLARI</span><h4>Tanımlı paket</h4></div></div><div class="user-package-empty">Bu kullanıcıya bağlı kişisel alan veya kurum üyeliği bulunmuyor. Paket hakkı bir hesap bağlamına göre değerlendirilir.</div>${renderUnlinkedUserEntitlements(entitlements)}</section>`;
+    return `<section class="user-overview-section"><div class="user-overview-heading"><div><span class="eyebrow">PAKET ERİŞİMİ</span><h3>Bu hesapta paket bağlamı yok</h3></div></div><div class="user-package-empty">Bireysel paket işlemi için doğrulanmış kişisel çalışma alanı gerekir. Kurum kapsamındaki paketler kuruma bağlıdır.</div>${renderUserEntitlementHistory(entitlements)}</section>`;
   }
-  const linkedEntitlementIds = new Set(
-    contexts.map((context) => context.packageRight?.id).filter(Boolean),
-  );
-  const unlinkedEntitlements = entitlements.filter(
-    (entitlement) => !linkedEntitlementIds.has(entitlement.id),
-  );
-  return `<section class="user-overview-section"><div class="user-overview-heading"><div><span class="eyebrow">ERİŞİM HAKLARI</span><h4>Hesap bağlamına göre paket</h4><p class="muted">Bir kullanıcı birden fazla kişisel alan veya kuruma bağlı olabilir.</p></div></div><div class="user-package-grid">${contexts
-    .map((context) => {
-      const right = context.packageRight ?? {
-        plan: "PLAN_FREE",
-        source: "DEFAULT",
-        status: "DEFAULT",
-        features: [],
-      };
-      const status = right.status ?? "DEFAULT";
-      const features = (right.features ?? [])
-        .map((feature) => `<li>${escapeHtml(feature)}</li>`)
-        .join("");
-      return `<article class="user-package-card">
-        <div class="user-package-context"><span class="badge badge-context">${escapeHtml(tenantTypeLabel(context.tenantType))}</span><strong title="${escapeHtml(context.tenantName)}">${escapeHtml(context.tenantName)}</strong></div>
-        <div class="user-package-title"><div><span class="eyebrow">TANIMLI PAKET</span><h5>${escapeHtml(planLabel(right.plan))}</h5></div><span class="access-status access-status-${escapeHtml(status.toLowerCase())}">${escapeHtml(entitlementAdminStatusLabel(status))}</span></div>
-        <div class="user-package-context-meta">${escapeHtml(accountContextMembershipSummary(context))}${context.tenantDeleted ? " · kurum silinmiş" : ""}</div>
-        ${features ? `<ul class="user-package-features">${features}</ul>` : '<p class="muted">Paket özelliği bilgisi yok.</p>'}
-        <dl class="user-package-dates"><div><dt>Başlangıç</dt><dd>${right.effectiveAt ? escapeHtml(new Date(right.effectiveAt).toLocaleDateString("tr-TR")) : "Varsayılan hak"}</dd></div><div><dt>Bitiş</dt><dd>${right.expiresAt ? escapeHtml(new Date(right.expiresAt).toLocaleDateString("tr-TR")) : "Bitiş tarihi yok"}</dd></div><div><dt>Kaynak</dt><dd>${escapeHtml(entitlementSourceLabel(right.source))}</dd></div></dl>
-      </article>`;
-    })
-    .join("")}</div>${renderUnlinkedUserEntitlements(unlinkedEntitlements)}</section>`;
+  if (userPackageOwnerId !== user.id) {
+    userPackageOwnerId = user.id;
+    userPackageContextId = "";
+    userPackageAction = "";
+  }
+  const context =
+    contexts.find((item) => item.tenantId === userPackageContextId) ??
+    contexts.find((item) => item.tenantType === "INDIVIDUAL" && !item.tenantDeleted) ??
+    contexts[0];
+  userPackageContextId = context.tenantId;
+  const right = context.packageRight ?? {
+    id: null,
+    plan: "PLAN_FREE",
+    source: "DEFAULT",
+    status: "DEFAULT",
+    effectiveAt: null,
+    expiresAt: null,
+    features: [],
+  };
+  const status = right.status ?? "DEFAULT";
+  const features = (right.features ?? [])
+    .map((feature) => `<li>${escapeHtml(feature)}</li>`)
+    .join("");
+  const eligible =
+    context.tenantType === "INDIVIDUAL" &&
+    !context.tenantDeleted &&
+    context.tenantStatus === "ACTIVE" &&
+    (context.memberships ?? []).some(
+      (membership) => membership.status === "ACTIVE" && !membership.deleted,
+    );
+  const manual = right.source === "ADMIN" || right.source === "DEFAULT";
+  let actions = "";
+  if (!eligible) {
+    actions =
+      context.tenantType === "ORGANIZATION"
+        ? '<p class="user-package-admin-note">Bu paket kurum kapsamındadır ve kurumdaki diğer kullanıcıları da etkiler. Kullanıcı profilinden kurum paketini değiştirmiyoruz.</p>'
+        : '<p class="user-package-admin-note">Bu çalışma alanı etkin değil. Paket işlemi için önce bağlamın güvenli biçimde doğrulanması gerekir.</p>';
+  } else if (!manual) {
+    actions =
+      '<p class="user-package-admin-note">Bu erişim ödeme/abonelik sistemi tarafından yönetiliyor. Bu ekrandan ödeme aboneliği değiştirilemez.</p>';
+  } else if (status === "ACTIVE" && right.id) {
+    actions = `<div class="user-package-actions">${right.expiresAt ? '<button type="button" class="btn btn-secondary" data-package-action="extend">Süreyi uzat</button>' : ""}<button type="button" class="btn btn-secondary" data-package-action="change">Paketi değiştir</button><button type="button" class="btn btn-danger" data-package-action="end">Erişimi sonlandır</button></div>`;
+  } else if (status === "SCHEDULED") {
+    actions =
+      '<p class="user-package-admin-note">Paket başlangıcı planlanmış. Başlangıç tarihinden önce ikinci bir paket oluşturulamaz.</p>';
+  } else {
+    actions = `<div class="user-package-actions"><button type="button" class="btn btn-primary" data-package-action="start">${status === "EXPIRED" || status === "INACTIVE" ? "Paketi yeniden başlat" : "Paket başlat"}</button></div>`;
+  }
+  const contextSelect =
+    contexts.length > 1
+      ? `<label class="field user-package-context-select"><span>Hesap bağlamı</span><select id="user-package-context">${contexts.map((item) => `<option value="${escapeHtml(item.tenantId)}" ${item.tenantId === context.tenantId ? "selected" : ""}>${escapeHtml(item.tenantName)} · ${escapeHtml(tenantTypeLabel(item.tenantType))}</option>`).join("")}</select></label>`
+      : `<span class="badge badge-context">${escapeHtml(tenantTypeLabel(context.tenantType))} · ${escapeHtml(context.tenantName)}</span>`;
+  const history = entitlements.filter((item) => item.tenantId === context.tenantId);
+  return `<section class="user-overview-section user-package-management"><header class="user-package-management-head"><div><span class="eyebrow">ERİŞİMİ YÖNET</span><h3>Paket ve üyelik</h3></div>${contextSelect}</header><article class="user-package-card user-package-current"><div class="user-package-title"><div><span class="eyebrow">MEVCUT PAKET</span><h4>${escapeHtml(userAdminPlanLabel(right.plan))}</h4></div><span class="access-status access-status-${escapeHtml(status.toLowerCase())}">${escapeHtml(entitlementAdminStatusLabel(status))}</span></div><dl class="user-package-dates"><div><dt>Başlangıç</dt><dd>${right.effectiveAt ? formatUserAdminDate(right.effectiveAt) : "Varsayılan erişim"}</dd></div><div><dt>Bitiş</dt><dd>${right.expiresAt ? formatUserAdminDate(right.expiresAt) : "Süre sınırı yok"}</dd></div><div><dt>Tanımlama kaynağı</dt><dd>${escapeHtml(entitlementSourceLabel(right.source))}</dd></div></dl>${features ? `<ul class="user-package-features">${features}</ul>` : '<p class="muted">Paket özelliği bilgisi yok.</p>'}${actions}${userPackageAction ? renderUserPackageActionForm(userPackageAction, right) : ""}</article>${renderUserEntitlementHistory(history)}</section>`;
 }
 
-function renderUnlinkedUserEntitlements(entitlements) {
-  if (!entitlements.length) return "";
-  return `<div class="user-unlinked-entitlements"><h5>Paket kayıtları dışında kalan bağlamlar</h5><div class="user-package-grid">${entitlements
-    .map(
-      (item) =>
-        `<article class="user-package-card user-package-card-unlinked"><div class="user-package-context"><span class="badge badge-context">${escapeHtml(tenantTypeLabel(item.tenantType))}</span><strong>${escapeHtml(item.tenantName)}</strong></div><div class="user-package-title"><div><span class="eyebrow">ÜYELİK BAĞLAMI YOK</span><h5>${escapeHtml(planLabel(item.plan))}</h5></div><span class="access-status access-status-${escapeHtml(String(item.adminStatus).toLowerCase())}">${escapeHtml(entitlementAdminStatusLabel(item.adminStatus))}</span></div><div class="user-package-context-meta">${escapeHtml(entitlementSourceLabel(item.source))}</div></article>`,
-    )
-    .join("")}</div></div>`;
+function userAdminPlanLabel(plan) {
+  return plan === "PLAN_PREMIUM" ? "Premium" : "Başlangıç";
+}
+
+function adminDateInputValue(value = new Date()) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function renderUserPackageActionForm(action, right) {
+  const planOptions = `<option value="PLAN_FREE" ${right.plan === "PLAN_FREE" ? "selected" : ""}>Başlangıç</option><option value="PLAN_PREMIUM" ${right.plan === "PLAN_PREMIUM" ? "selected" : ""}>Premium</option>`;
+  if (action === "end") {
+    return `<div class="user-package-action-form" role="group" aria-label="Paket erişimini sonlandır"><h4>Erişimi şimdi sonlandır</h4><p>Manuel paket hakkı hemen pasif yapılır. Geçmiş kayıt korunur; ödeme sağlayıcısındaki abonelik bu işlemle iptal edilmez.</p><div class="user-package-actions"><button type="button" class="btn btn-danger" data-package-confirm-end="true">Erişimi sonlandır</button><button type="button" class="btn btn-ghost" data-package-action-cancel="true">Vazgeç</button></div><p class="user-package-action-status" role="status"></p></div>`;
+  }
+  if (action === "extend") {
+    const currentEnd = right.expiresAt ? adminDateInputValue(right.expiresAt) : "";
+    return `<form class="user-package-action-form" data-package-form="extend"><h4>Paket süresini uzat</h4><p>Mevcut bitiş: <strong>${currentEnd ? formatUserAdminDate(right.expiresAt) : "Süre sınırı yok"}</strong></p><div class="user-package-quick-dates"><button type="button" data-extend-months="1">+1 ay</button><button type="button" data-extend-months="3">+3 ay</button><button type="button" data-extend-months="6">+6 ay</button><button type="button" data-extend-months="12">+1 yıl</button></div><label class="field"><span>Yeni bitiş tarihi</span><input name="expiresAt" type="date" required value="${currentEnd}" /></label><div class="user-package-preview" data-package-preview hidden></div><p class="user-package-action-status" role="status"></p><div class="user-package-actions"><button class="btn btn-primary" type="submit">Önizle</button><button type="button" class="btn btn-ghost" data-package-action-cancel="true">Vazgeç</button></div></form>`;
+  }
+  if (action === "change") {
+    return `<form class="user-package-action-form" data-package-form="change"><h4>Paketi değiştir</h4><p>${escapeHtml(userAdminPlanLabel(right.plan))} paketinin geçmiş kaydı korunur; yeni paket aşağıdaki tarihte başlar.</p><label class="field"><span>Yeni paket</span><select name="plan">${planOptions}</select></label><label class="field"><span>Başlangıç tarihi</span><input name="effectiveAt" type="date" required value="${adminDateInputValue()}" /></label><label class="field"><span>Yeni bitiş tarihi (boş bırakılırsa süresiz)</span><input name="expiresAt" type="date" value="${right.expiresAt ? adminDateInputValue(right.expiresAt) : ""}" /></label><div class="user-package-preview" data-package-preview hidden></div><p class="user-package-action-status" role="status"></p><div class="user-package-actions"><button class="btn btn-primary" type="submit">Önizle</button><button type="button" class="btn btn-ghost" data-package-action-cancel="true">Vazgeç</button></div></form>`;
+  }
+  return `<form class="user-package-action-form" data-package-form="start"><h4>${right.status === "EXPIRED" || right.status === "INACTIVE" ? "Paketi yeniden başlat" : "Paket erişimi başlat"}</h4><label class="field"><span>Paket</span><select name="plan">${planOptions}</select></label><label class="field"><span>Başlangıç tarihi</span><input name="effectiveAt" type="date" required value="${adminDateInputValue()}" /></label><label class="field"><span>Bitiş tarihi (boş bırakılırsa süresiz)</span><input name="expiresAt" type="date" /></label><div class="user-package-preview" data-package-preview hidden></div><p class="user-package-action-status" role="status">Bu manuel erişimdir; ödeme başlatmaz ve otomatik yenileme oluşturmaz.</p><div class="user-package-actions"><button class="btn btn-primary" type="submit">Önizle</button><button type="button" class="btn btn-ghost" data-package-action-cancel="true">Vazgeç</button></div></form>`;
 }
 
 function renderUserBillingOverview(user) {
@@ -7559,12 +7615,7 @@ function renderUserDetail(u, notice = "") {
   ];
   let content = "";
   if (userDetailTab === "package") {
-    content =
-      renderUserPackageOverview(u) +
-      renderUserBillingOverview(u) +
-      '<section class="user-overview-section"><h3>Paket hakkı kayıtları</h3><p class="muted">Paket hakkı ve ödeme aboneliği birbirinden ayrıdır. Bu P0 görünümü mevcut kayıtları gösterir.</p>' +
-      renderUserEntitlementHistory(u.entitlements ?? []) +
-      "</section>";
+    content = renderUserPackageOverview(u) + renderUserBillingOverview(u);
   } else if (userDetailTab === "organization") {
     content = renderUserOrganizationTab(u);
   } else if (userDetailTab === "history") {
@@ -7615,33 +7666,14 @@ function renderUserDetail(u, notice = "") {
 }
 
 function renderUserEntitlementHistory(entitlements) {
-  if (!entitlements.length)
-    return '<div class="user-package-empty">Paket hakkı kaydı bulunmuyor.</div>';
-  const rows = entitlements
+  if (!entitlements.length) return '<p class="muted">Önceki paket kaydı bulunmuyor.</p>';
+  const records = entitlements
     .map(
       (item) =>
-        "<tr><td>" +
-        escapeHtml(item.tenantName) +
-        "</td><td>" +
-        escapeHtml(item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel") +
-        "</td><td><strong>" +
-        escapeHtml(planLabel(item.plan)) +
-        "</strong></td><td>" +
-        escapeHtml(entitlementSourceLabel(item.source)) +
-        "</td><td>" +
-        escapeHtml(entitlementAdminStatusLabel(item.adminStatus)) +
-        "</td><td>" +
-        formatUserAdminDate(item.effectiveAt) +
-        "</td><td>" +
-        formatUserAdminDate(item.expiresAt) +
-        "</td></tr>",
+        `<li><strong>${escapeHtml(userAdminPlanLabel(item.plan))}</strong><span>${escapeHtml(entitlementAdminStatusLabel(item.adminStatus))} · ${escapeHtml(entitlementSourceLabel(item.source))}</span><small>${formatUserAdminDate(item.effectiveAt)} — ${formatUserAdminDate(item.expiresAt)}</small></li>`,
     )
     .join("");
-  return (
-    '<div class="table-wrap"><table class="data-table"><thead><tr><th>Bağlam</th><th>Kapsam</th><th>Paket</th><th>Kaynak</th><th>Durum</th><th>Başlangıç</th><th>Bitiş</th></tr></thead><tbody>' +
-    rows +
-    "</tbody></table></div>"
-  );
+  return `<details class="user-package-history"><summary>Paket geçmişi (${entitlements.length})</summary><ul>${records}</ul></details>`;
 }
 
 function renderUserGeneralTab(u, notice) {
@@ -7705,7 +7737,11 @@ function renderUserOrganizationTab(u) {
   const statuses = Object.entries(MEMBERSHIP_STATUS_LABELS)
     .map(([value, label]) => '<option value="' + value + '">' + label + "</option>")
     .join("");
-  const memberships = u.memberships ?? [];
+  const memberships = (u.memberships ?? []).filter((item) => item.tenantType === "ORGANIZATION");
+  const personalContexts = (u.memberships ?? []).filter((item) => item.tenantType === "INDIVIDUAL");
+  const isIndividualOnly =
+    personalContexts.length > 0 && memberships.length === 0 && !u.platformRole;
+  const canAddOrganization = !u.platformRole && !isIndividualOnly;
   const rows = memberships
     .map((item) => {
       const unavailable = item.deleted || item.tenantDeleted || item.tenantStatus !== "ACTIVE";
@@ -7799,18 +7835,34 @@ function renderUserOrganizationTab(u) {
         "</td></tr>",
     )
     .join("");
+  const personalSummary = personalContexts.length
+    ? '<section class="user-overview-section"><span class="eyebrow">İÇ HESAP BAĞLAMI</span><h3>Bireysel çalışma alanı</h3><p class="muted">Bu teknik alan öğrenci profili ve öğrenme kayıtlarının tenant sınırını korur. Kurum değildir; bu ekrandan seçilemez, düzenlenemez veya kaldırılamaz.</p>' +
+      personalContexts
+        .map(
+          (item) =>
+            `<div class="user-personal-context-row"><strong>Bireysel çalışma alanı</strong><span>${escapeHtml(generalStatusLabel(item.status))}${item.deleted || item.tenantDeleted ? " · silinmiş" : ""}</span></div>`,
+        )
+        .join("") +
+      "</section>"
+    : "";
+  const organizationAdd = canAddOrganization
+    ? '<div class="membership-add-row user-membership-add"><label class="field"><span>Kurum</span><select id="membership-add-tenant"><option value="">Yükleniyor…</option></select></label>' +
+      '<label class="field"><span>Rol</span><select id="membership-add-role"><option value="">Rol seçin…</option></select></label><label class="field"><span>Durum</span><select id="membership-add-status">' +
+      statuses +
+      "</select></label>" +
+      '<button id="membership-add-btn" type="button" class="btn btn-primary">Kuruma bağla</button></div>'
+    : isIndividualOnly
+      ? '<p class="user-package-admin-note">Bu bireysel hesap için kurum seçimi gerekmez. Kurum bağlantısı eklemek bu ekrandan sunulmaz.</p>'
+      : "";
   return (
-    '<section class="user-overview-section"><div class="user-overview-heading"><div><span class="eyebrow">HESAP BAĞLAMLARI</span><h3>Kurum ve kişisel alan üyelikleri</h3><p class="muted">Bir kullanıcı birden fazla bağlama bağlı olabilir.</p></div></div>' +
-    '<div class="membership-add-row user-membership-add"><label class="field"><span>Kurum veya alan</span><select id="membership-add-tenant"><option value="">Yükleniyor…</option></select></label>' +
-    '<label class="field"><span>Rol</span><select id="membership-add-role"><option value="">Rol seçin…</option></select></label><label class="field"><span>Durum</span><select id="membership-add-status">' +
-    statuses +
-    "</select></label>" +
-    '<button id="membership-add-btn" type="button" class="btn btn-primary">Bağlam ekle</button></div>' +
+    '<section class="user-overview-section"><div class="user-overview-heading"><div><span class="eyebrow">HESAP BAĞLAMLARI</span><h3>Kurum üyelikleri</h3><p class="muted">Kurumsal ilişkiler ayrı yönetilir; bireysel çalışma alanı öğrenci verisi için salt okunur gösterilir.</p></div></div>' +
+    organizationAdd +
+    personalSummary +
     table(
-      "Üyelikler",
-      ["Kurum / alan", "Rol", "Durum", "İşlem"],
+      "Kurumsal üyelikler",
+      ["Kurum", "Rol", "Durum", "İşlem"],
       rows,
-      "Hesap bağlamı bulunmuyor.",
+      "Kurumsal üyelik bulunmuyor.",
     ) +
     table("Şube bağlantıları", ["Şube", "Kurum", "Durum"], branches, "Şube bağlantısı yok.") +
     table("Sınıf atamaları", ["Kurum", "Sınıf", "Şube", "Durum"], classes, "Sınıf ataması yok.") +
@@ -7821,16 +7873,39 @@ function renderUserOrganizationTab(u) {
 function renderUserActivityTab(activity) {
   const labels = { CREATE: "Oluşturuldu", UPDATE: "Güncellendi", DELETE: "Kaldırıldı" };
   const items = activity
-    .map(
-      (item) =>
+    .map((item) => {
+      const before = item.before ?? {};
+      const after = item.after ?? {};
+      let title = `${labels[item.action] ?? item.action} · ${item.entityType}`;
+      let detail = "";
+      if (item.entityType === "ENTITLEMENT") {
+        const plan = userAdminPlanLabel(after.plan ?? before.plan);
+        if (item.action === "CREATE") title = `${plan} paket erişimi tanımlandı`;
+        else if (after.active === false) title = "Paket erişimi sonlandırıldı";
+        else if (before.expiresAt !== after.expiresAt && before.plan === after.plan)
+          title = "Paket süresi güncellendi";
+        else if (before.plan && before.plan !== after.plan)
+          title = `${userAdminPlanLabel(before.plan)} paketi ${plan} ile değiştirildi`;
+        else title = "Paket değişikliği planlandı";
+        const changeDetail =
+          before.expiresAt !== undefined && before.expiresAt !== after.expiresAt
+            ? `Önceki bitiş: ${formatUserAdminDate(before.expiresAt)} → Yeni bitiş: ${formatUserAdminDate(after.expiresAt)}`
+            : before.plan && before.plan !== after.plan
+              ? `Önceki paket: ${userAdminPlanLabel(before.plan)} → Yeni paket: ${plan}`
+              : `${plan} · ${formatUserAdminDate(after.effectiveAt)} — ${formatUserAdminDate(after.expiresAt)}`;
+        detail = `<span>${escapeHtml(entitlementAdminStatusLabel(after.active === false ? "INACTIVE" : "ACTIVE"))} · ${changeDetail}</span>`;
+      }
+      return (
         '<li class="user-history-item"><span class="user-history-dot" aria-hidden="true"></span><div><strong>' +
-        escapeHtml(labels[item.action] ?? item.action) +
-        " · " +
-        escapeHtml(item.entityType) +
-        "</strong><time>" +
+        escapeHtml(title) +
+        detail +
+        "<small>İşlemi yapan: " +
+        escapeHtml(item.actor?.displayName ?? "Sistem") +
+        "</small><time>" +
         formatUserAdminDate(item.createdAt) +
-        "</time></div></li>",
-    )
+        "</time></div></li>"
+      );
+    })
     .join("");
   return (
     '<section class="user-overview-section"><span class="eyebrow">DENETİM KAYITLARI</span><h3>İşlem geçmişi</h3>' +
@@ -7839,6 +7914,151 @@ function renderUserActivityTab(activity) {
       : '<div class="user-package-empty">Görüntülenebilir işlem kaydı bulunmuyor.</div>') +
     "</section>"
   );
+}
+
+function setUserPackageActionStatus(message, isError = false) {
+  const status = document.querySelector(".user-package-action-status");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("error", isError);
+}
+
+function toAdminDate(value) {
+  if (!value) return null;
+  if (value === adminDateInputValue()) return new Date().toISOString();
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function resetUserPackageActionPreview(form) {
+  if (!form || form.dataset.confirmed !== "true") return;
+  form.dataset.confirmed = "false";
+  const preview = form.querySelector("[data-package-preview]");
+  if (preview) {
+    preview.hidden = true;
+    preview.textContent = "";
+  }
+  const button = form.querySelector('button[type="submit"]');
+  if (button) button.textContent = "Önizle";
+}
+
+function userPackagePreviewMarkup(action, currentPlan, plan, effectiveAt, expiresAt) {
+  const newPlan = userAdminPlanLabel(plan);
+  const dates = `${effectiveAt ? formatUserAdminDate(effectiveAt) : "Bugün"} — ${formatUserAdminDate(expiresAt)}`;
+  if (action === "extend") {
+    return `<strong>${escapeHtml(userAdminPlanLabel(currentPlan?.plan))} paketi</strong><span>Mevcut bitiş: ${formatUserAdminDate(currentPlan?.expiresAt)} → Yeni bitiş: ${formatUserAdminDate(expiresAt)}</span>`;
+  }
+  if (action === "change") {
+    return `<strong>${escapeHtml(userAdminPlanLabel(currentPlan.plan))} → ${escapeHtml(newPlan)}</strong><span>Yeni dönem: ${dates}. Önceki paket kaydı korunur.</span>`;
+  }
+  return `<strong>${escapeHtml(newPlan)} paket erişimi</strong><span>Dönem: ${dates}. Bu işlem ödeme başlatmaz veya otomatik yenileme oluşturmaz.</span>`;
+}
+
+async function submitUserPackageAction(event) {
+  event.preventDefault();
+  const form = event.target;
+  const action = form.dataset.packageForm;
+  const context = userDetailCurrent?.accountContexts?.find(
+    (item) => item.tenantId === userPackageContextId,
+  );
+  if (!context || context.tenantType !== "INDIVIDUAL" || !userDetailCurrent) {
+    setUserPackageActionStatus("Bireysel çalışma alanı doğrulanamadı. İşlem yapılmadı.", true);
+    return;
+  }
+  const formData = new FormData(form);
+  const plan = String(formData.get("plan") ?? "");
+  const effectiveAt = toAdminDate(String(formData.get("effectiveAt") ?? ""));
+  const expiresAt = toAdminDate(String(formData.get("expiresAt") ?? ""));
+  const button = form.querySelector('button[type="submit"]');
+  if (form.dataset.confirmed !== "true") {
+    const preview = form.querySelector("[data-package-preview]");
+    if (preview) {
+      preview.innerHTML = userPackagePreviewMarkup(
+        action,
+        context.packageRight,
+        plan,
+        effectiveAt,
+        expiresAt,
+      );
+      preview.hidden = false;
+    }
+    form.dataset.confirmed = "true";
+    if (button) button.textContent = "Onayla ve kaydet";
+    setUserPackageActionStatus("Önizlemeyi kontrol edin; kaydetmek için onaylayın.");
+    return;
+  }
+  if (button) button.disabled = true;
+  setUserPackageActionStatus("Kaydediliyor…");
+  try {
+    if (action === "start") {
+      await parseResponse(
+        await entitlementAdminApi("", {
+          method: "POST",
+          body: JSON.stringify({
+            userId: userDetailCurrent.id,
+            scope: "PERSONAL",
+            plan,
+            effectiveAt,
+            expiresAt,
+          }),
+        }),
+      );
+    } else if (action === "extend") {
+      const entitlementId = context.packageRight?.id;
+      if (!entitlementId || !expiresAt)
+        throw new Error("Etkin paket veya yeni bitiş tarihi bulunamadı.");
+      await parseResponse(
+        await entitlementAdminApi(`/${encodeURIComponent(entitlementId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ expiresAt }),
+        }),
+      );
+    } else if (action === "change") {
+      const entitlementId = context.packageRight?.id;
+      if (!entitlementId || !effectiveAt)
+        throw new Error("Etkin paket veya başlangıç tarihi bulunamadı.");
+      await parseResponse(
+        await entitlementAdminApi(`/${encodeURIComponent(entitlementId)}/change-plan`, {
+          method: "POST",
+          body: JSON.stringify({ plan, effectiveAt, expiresAt }),
+        }),
+      );
+    }
+    userPackageAction = "";
+    await openUserDetail(userDetailCurrent.id);
+    userDetailTab = "package";
+    await loadUsers();
+  } catch (error) {
+    setUserPackageActionStatus(error.message || "Paket işlemi tamamlanamadı.", true);
+    if (button) button.disabled = false;
+  }
+}
+
+async function endUserPackageAccess() {
+  const context = userDetailCurrent?.accountContexts?.find(
+    (item) => item.tenantId === userPackageContextId,
+  );
+  const entitlementId = context?.packageRight?.id;
+  if (
+    !entitlementId ||
+    !window.confirm("Bu manuel paket erişimi şimdi sonlandırılacak. Devam edilsin mi?")
+  )
+    return;
+  try {
+    await parseResponse(
+      await entitlementAdminApi(`/${encodeURIComponent(entitlementId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: false }),
+      }),
+    );
+    userPackageAction = "";
+    const userId = userDetailCurrent.id;
+    await openUserDetail(userId);
+    userDetailTab = "package";
+    await loadUsers();
+  } catch (error) {
+    setUserPackageActionStatus(error.message || "Erişim sonlandırılamadı.", true);
+  }
 }
 
 function setUserDetailLoading(isLoading) {
@@ -8057,6 +8277,33 @@ function setupUserEvents() {
       if (userDetailCurrent) renderUserDetail(userDetailCurrent);
       return;
     }
+    if (target.matches("[data-package-action]")) {
+      userPackageAction = target.dataset.packageAction;
+      if (userDetailCurrent) renderUserDetail(userDetailCurrent);
+      return;
+    }
+    if (target.matches("[data-package-action-cancel]")) {
+      userPackageAction = "";
+      if (userDetailCurrent) renderUserDetail(userDetailCurrent);
+      return;
+    }
+    if (target.matches("[data-package-confirm-end]")) {
+      void endUserPackageAccess();
+      return;
+    }
+    if (target.matches("[data-extend-months]")) {
+      const input = document.querySelector('[data-package-form="extend"] input[name="expiresAt"]');
+      if (input?.value) {
+        const [year, month, day] = input.value.split("-").map(Number);
+        const result = new Date(year, month - 1, 1, 12);
+        result.setMonth(result.getMonth() + Number(target.dataset.extendMonths));
+        const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+        result.setDate(Math.min(day, lastDay));
+        input.value = adminDateInputValue(result);
+        resetUserPackageActionPreview(input.closest("[data-package-form]"));
+      }
+      return;
+    }
     if (target.matches("[data-user-edit-current]")) {
       if (userDetailCurrent) openUserForm("edit", userDetailCurrent);
       return;
@@ -8120,12 +8367,22 @@ function setupUserEvents() {
     }
   });
   page.addEventListener("input", (event) => {
+    const packageForm = event.target.closest?.("[data-package-form]");
+    if (packageForm) resetUserPackageActionPreview(packageForm);
     if (event.target.id !== "user-search") return;
     userPage = 1;
     clearTimeout(userSearchTimer);
     userSearchTimer = setTimeout(() => void loadUsers(), 180);
   });
   page.addEventListener("change", (event) => {
+    const packageForm = event.target.closest?.("[data-package-form]");
+    if (packageForm) resetUserPackageActionPreview(packageForm);
+    if (event.target.id === "user-package-context") {
+      userPackageContextId = event.target.value;
+      userPackageAction = "";
+      if (userDetailCurrent) renderUserDetail(userDetailCurrent);
+      return;
+    }
     if (["user-status-filter", "user-membership-status-filter"].includes(event.target.id)) {
       userPage = 1;
       void loadUsers();
@@ -8147,6 +8404,7 @@ function setupUserEvents() {
     if (event.target.id === "user-create-form") void submitUserForm(event);
     else if (event.target.id === "user-edit-form") void submitUserEditForm(event);
     else if (event.target.id === "user-detail-form") void submitUserDetailForm(event);
+    else if (event.target.matches("[data-package-form]")) void submitUserPackageAction(event);
   });
 }
 

@@ -1,6 +1,6 @@
 import { Prisma, type Tenant, type TenantType } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { conflictError, notFoundError } from "../../lib/errors.js";
+import { conflictError, notFoundError, validationError } from "../../lib/errors.js";
 import { ScryptPasswordHasher } from "../auth/index.js";
 import type {
   CreateTenantInput,
@@ -95,6 +95,7 @@ export async function listTenants(query: ListTenantsQuery): Promise<TenantListRe
   const { search, status, page, pageSize } = query;
 
   const where: Prisma.TenantWhereInput = {
+    type: "ORGANIZATION",
     deletedAt: null,
     ...(status ? { status } : {}),
     ...(search
@@ -128,7 +129,7 @@ export async function listTenants(query: ListTenantsQuery): Promise<TenantListRe
 
 export async function getTenant(id: string): Promise<TenantDetail> {
   const row = await prisma.tenant.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, type: "ORGANIZATION", deletedAt: null },
     select: DETAIL_SELECT,
   });
 
@@ -150,6 +151,9 @@ export async function getTenant(id: string): Promise<TenantDetail> {
 }
 
 export async function createTenant(input: CreateTenantInput): Promise<TenantDetail> {
+  if (input.type !== "ORGANIZATION") {
+    throw validationError("Kurum yönetiminden yalnızca kurum oluşturulabilir");
+  }
   try {
     const created = await prisma.$transaction(async (tx) => {
       await assertSlugAvailable(input.slug ?? null, undefined, tx);
@@ -199,7 +203,12 @@ export async function createTenant(input: CreateTenantInput): Promise<TenantDeta
 }
 
 export async function updateTenant(id: string, input: UpdateTenantInput): Promise<TenantDetail> {
-  const existing = await prisma.tenant.findFirst({ where: { id, deletedAt: null } });
+  if ("type" in input && input.type !== "ORGANIZATION") {
+    throw validationError("Kurum türü bu ekrandan değiştirilemez");
+  }
+  const existing = await prisma.tenant.findFirst({
+    where: { id, type: "ORGANIZATION", deletedAt: null },
+  });
   if (!existing) {
     throw notFoundError("Kurum bulunamadı");
   }
@@ -209,7 +218,6 @@ export async function updateTenant(id: string, input: UpdateTenantInput): Promis
   }
 
   const data: Prisma.TenantUpdateInput = {
-    ...(input.type !== undefined ? { type: input.type } : {}),
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.slug !== undefined ? { slug: input.slug } : {}),
     ...(input.logoUrl !== undefined ? { logoUrl: input.logoUrl } : {}),
@@ -233,7 +241,9 @@ export async function updateTenantStatus(
   id: string,
   input: UpdateTenantStatusInput,
 ): Promise<TenantDetail> {
-  const existing = await prisma.tenant.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.tenant.findFirst({
+    where: { id, type: "ORGANIZATION", deletedAt: null },
+  });
   if (!existing) {
     throw notFoundError("Kurum bulunamadı");
   }
@@ -247,7 +257,9 @@ export async function updateTenantStatus(
 }
 
 export async function softDeleteTenant(id: string): Promise<{ id: string; deletedAt: Date }> {
-  const existing = await prisma.tenant.findFirst({ where: { id, deletedAt: null } });
+  const existing = await prisma.tenant.findFirst({
+    where: { id, type: "ORGANIZATION", deletedAt: null },
+  });
   if (!existing) {
     throw notFoundError("Kurum bulunamadı");
   }

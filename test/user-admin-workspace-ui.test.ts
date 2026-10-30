@@ -30,6 +30,12 @@ const helpers = {
   billingPaymentStatusLabel: (status: string) => ({ SUCCEEDED: "Başarılı" })[status] ?? status,
   MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif", PENDING: "Beklemede" },
   MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci" },
+  userPackageOwnerId: "",
+  userPackageContextId: "",
+  userPackageAction: "",
+  userAdminPlanLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Premium" : "Başlangıç"),
+  formatUserAdminDate: (value: unknown) => (value ? "tarih" : "Kaydedilmemiş"),
+  renderUserEntitlementHistory: () => "Paket geçmişi",
 };
 
 describe("Superadmin user workspace P0", () => {
@@ -42,11 +48,16 @@ describe("Superadmin user workspace P0", () => {
     const html = render({
       accountContexts: [
         {
+          tenantId: "personal-context",
           tenantName: "Kişisel alan",
           tenantType: "INDIVIDUAL",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: false,
+          memberships: [{ status: "ACTIVE", deleted: false }],
           role: "STUDENT",
           membershipStatus: "ACTIVE",
           packageRight: {
+            id: "admin-entitlement",
             plan: "PLAN_PREMIUM",
             source: "ADMIN",
             status: "ACTIVE",
@@ -58,12 +69,15 @@ describe("Superadmin user workspace P0", () => {
       ],
     });
     expect(html).toContain("Kişisel alan");
-    expect(html).toContain("Ücretli Paket");
+    expect(html).toContain("Premium");
     expect(html).toContain("Hak etkin");
     expect(html).toContain("Sınırsız alıştırma");
     expect(html).toContain("Yönetici tarafından tanımlandı");
     expect(html).toContain("Başlangıç");
     expect(html).toContain("Bitiş");
+    expect(html).toContain("Süreyi uzat");
+    expect(html).toContain("Paketi değiştir");
+    expect(html).toContain("Erişimi sonlandır");
   });
 
   it("does not invent a context or hide a package when no membership is present", () => {
@@ -85,9 +99,8 @@ describe("Superadmin user workspace P0", () => {
         },
       ],
     });
-    expect(html).toContain("kişisel alan veya kurum üyeliği bulunmuyor");
-    expect(html).toContain("ÜYELİK BAĞLAMI YOK");
-    expect(html).toContain("Süresi dolmuş");
+    expect(html).toContain("Bu hesapta paket bağlamı yok");
+    expect(html).toContain("Paket geçmişi");
     expect(html).not.toContain("Varsayılan ücretsiz hak");
   });
 
@@ -195,7 +208,8 @@ describe("Superadmin user workspace P0", () => {
       classAssignments: [],
       enrollments: [],
     });
-    expect(html).toContain("Erişim yok");
+    expect(html).toContain("silinmiş");
+    expect(html).toContain("Bireysel çalışma alanı");
     expect(html).not.toContain("data-mem-status=");
     expect(html).not.toContain("data-mem-update=");
   });
@@ -276,12 +290,257 @@ describe("Superadmin user workspace P0", () => {
     expect(contexts).toContain("Okul");
   });
 
-  it("creates individual users without sending an institution and keeps package administration out of P0", () => {
+  it("creates individuals without an institution and keeps organization package controls read-only", () => {
     expect(appJs).toContain("accountType: userCreateAccountType");
     expect(appJs).toContain('userCreateAccountType === "ORGANIZATION"');
     expect(appJs).toContain('tenantId: $("user-create-tenant").value');
     expect(usersService).toContain("provisionPersonalContextInTransaction(tx, created.id)");
     expect(appJs).not.toContain('id="user-form-tenant"');
-    expect(appJs).not.toContain("user-detail-entitlement-btn");
+    expect(appJs).toContain('scope: "PERSONAL"');
+    expect(appJs).toContain('method: "PATCH"');
+    expect(appJs).not.toContain('id="tenant-form-type"');
+  });
+
+  it("shows an individual workspace read-only and omits its institution membership controls", () => {
+    const context = createContext({
+      ...helpers,
+      setSelectedOption: () => "",
+      membershipRoleOptions: () => "",
+      membershipStatusBadge: () => '<span class="badge">Aktif</span>',
+      generalStatusLabel: (status: string) => status,
+    });
+    const render = runInContext(
+      `${functionSource("function renderUserOrganizationTab(", "function renderUserActivityTab(")}; renderUserOrganizationTab`,
+      context,
+    ) as (user: unknown) => string;
+    const html = render({
+      platformRole: null,
+      memberships: [
+        {
+          id: "personal-membership",
+          role: "STUDENT",
+          status: "ACTIVE",
+          deleted: false,
+          tenantId: "personal-context",
+          tenantName: "Kişisel",
+          tenantType: "INDIVIDUAL",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: false,
+        },
+      ],
+      branches: [],
+      classAssignments: [],
+      enrollments: [],
+    });
+    expect(html).toContain("Bireysel çalışma alanı");
+    expect(html).toContain("salt okunur");
+    expect(html).not.toContain('id="membership-add-tenant"');
+    expect(html).not.toContain("data-mem-update=");
+    expect(html).not.toContain("data-mem-remove=");
+  });
+
+  it("does not expose personal-user actions on a shared organization package context", () => {
+    const context = createContext(helpers);
+    const render = runInContext(
+      `${functionSource("function entitlementAdminStatusLabel(", "function userInitials(")}; ${functionSource("function renderUserPackageOverview(", "function renderUserBillingOverview(")}; renderUserPackageOverview`,
+      context,
+    ) as (user: unknown) => string;
+    const html = render({
+      id: "organization-user",
+      accountContexts: [
+        {
+          tenantId: "school-tenant",
+          tenantName: "Örnek Okul",
+          tenantType: "ORGANIZATION",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: false,
+          memberships: [{ status: "ACTIVE", deleted: false }],
+          packageRight: {
+            id: "shared-right",
+            plan: "PLAN_PREMIUM",
+            source: "ADMIN",
+            status: "ACTIVE",
+            effectiveAt: "2026-10-01T00:00:00.000Z",
+            expiresAt: "2027-10-01T00:00:00.000Z",
+            features: [],
+          },
+        },
+      ],
+      entitlements: [],
+    });
+    expect(html).toContain("kurumdaki diğer kullanıcıları da etkiler");
+    expect(html).not.toContain('data-package-action="extend"');
+    expect(html).not.toContain('data-package-action="change"');
+    expect(html).not.toContain('data-package-action="end"');
+  });
+
+  it("keeps a deleted personal context visible as history without presenting active access", () => {
+    const context = createContext(helpers);
+    const render = runInContext(
+      `${functionSource("function entitlementAdminStatusLabel(", "function userInitials(")}; ${functionSource("function renderUserPackageOverview(", "function renderUserBillingOverview(")}; renderUserPackageOverview`,
+      context,
+    ) as (user: unknown) => string;
+    const html = render({
+      id: "deleted-context-user",
+      accountContexts: [
+        {
+          tenantId: "deleted-personal-context",
+          tenantName: "Kişisel alan (silindi)",
+          tenantType: "INDIVIDUAL",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: true,
+          memberships: [{ status: "ACTIVE", deleted: false }],
+          packageRight: {
+            id: "historical-entitlement",
+            plan: "PLAN_PREMIUM",
+            source: "ADMIN",
+            status: "INACTIVE",
+            effectiveAt: "2026-10-01T00:00:00.000Z",
+            expiresAt: null,
+            features: ["Öğrenme yolu"],
+          },
+        },
+      ],
+      entitlements: [],
+    });
+    expect(html).toContain("Premium");
+    expect(html).toContain("Hak pasif");
+    expect(html).not.toContain("data-package-action=");
+  });
+
+  it("requires a visible preview and a separate confirmation for package actions", () => {
+    const context = createContext({
+      ...helpers,
+      userPackageOwnerId: "personal-user",
+      userPackageAction: "change",
+    });
+    const render = runInContext(
+      `${functionSource("function entitlementAdminStatusLabel(", "function userInitials(")}; ${functionSource("function renderUserPackageOverview(", "function renderUserBillingOverview(")}; renderUserPackageOverview`,
+      context,
+    ) as (user: unknown) => string;
+    const html = render({
+      id: "personal-user",
+      accountContexts: [
+        {
+          tenantId: "personal-context",
+          tenantName: "Kişisel alan",
+          tenantType: "INDIVIDUAL",
+          tenantStatus: "ACTIVE",
+          tenantDeleted: false,
+          memberships: [{ status: "ACTIVE", deleted: false }],
+          packageRight: {
+            id: "current-entitlement",
+            plan: "PLAN_FREE",
+            source: "ADMIN",
+            status: "ACTIVE",
+            effectiveAt: "2026-10-01T00:00:00.000Z",
+            expiresAt: "2027-01-01T00:00:00.000Z",
+            features: [],
+          },
+        },
+      ],
+      entitlements: [],
+    });
+    expect(html).toContain('data-package-form="change"');
+    expect(html).toContain("data-package-preview hidden");
+    expect(html).toContain(">Önizle</button>");
+  });
+
+  it("does not send a package mutation until the preview is explicitly confirmed", async () => {
+    const calls: Array<{ path: string; options: { method: string; body: string } }> = [];
+    const form = {
+      dataset: { packageForm: "change", confirmed: "false" },
+      querySelector(selector: string) {
+        if (selector === 'button[type="submit"]') return button;
+        if (selector === "[data-package-preview]") return preview;
+        return null;
+      },
+    };
+    const button = { textContent: "Önizle", disabled: false };
+    const preview = { hidden: true, innerHTML: "", textContent: "" };
+    class TestFormData {
+      get(name: string) {
+        return {
+          plan: "PLAN_PREMIUM",
+          effectiveAt: "2026-11-15",
+          expiresAt: "2027-11-15",
+        }[name];
+      }
+    }
+    const statusElement = { textContent: "", classList: { toggle: () => undefined } };
+    const context = createContext({
+      ...helpers,
+      FormData: TestFormData,
+      document: { querySelector: () => statusElement },
+      userDetailCurrent: {
+        id: "personal-user",
+        accountContexts: [
+          {
+            tenantId: "personal-context",
+            tenantType: "INDIVIDUAL",
+            packageRight: { id: "old-entitlement", plan: "PLAN_FREE", expiresAt: null },
+          },
+        ],
+      },
+      userPackageContextId: "personal-context",
+      entitlementAdminApi: async (path: string, options: { method: string; body: string }) => {
+        calls.push({ path, options });
+        return { ok: true };
+      },
+      parseResponse: async (response: unknown) => response,
+      setUserPackageActionStatus: () => undefined,
+      openUserDetail: async () => undefined,
+      loadUsers: async () => undefined,
+    });
+    const submit = runInContext(
+      `${functionSource("function adminDateInputValue(", "function setUserDetailLoading(")}; submitUserPackageAction`,
+      context,
+    ) as (event: { preventDefault(): void; target: typeof form }) => Promise<void>;
+    const event = { preventDefault: () => undefined, target: form };
+
+    await submit(event);
+    expect(calls).toHaveLength(0);
+    expect(form.dataset.confirmed).toBe("true");
+    expect(preview.hidden).toBe(false);
+    expect(preview.innerHTML).toContain("Başlangıç → Premium");
+    expect(button.textContent).toBe("Onayla ve kaydet");
+
+    await submit(event);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].path).toBe("/old-entitlement/change-plan");
+    expect(calls[0].options.method).toBe("POST");
+  });
+
+  it("shows audit values before and after manual entitlement changes", () => {
+    const context = createContext({
+      ...helpers,
+      formatUserAdminDate: (value: unknown) => String(value ?? "Kaydedilmemiş"),
+    });
+    const render = runInContext(
+      `${functionSource("function renderUserActivityTab(", "function setUserPackageActionStatus(")}; renderUserActivityTab`,
+      context,
+    ) as (activity: unknown[]) => string;
+    const html = render([
+      {
+        action: "UPDATE",
+        entityType: "ENTITLEMENT",
+        before: { plan: "PLAN_PREMIUM", expiresAt: "2026-12-01" },
+        after: { plan: "PLAN_PREMIUM", expiresAt: "2027-01-01", active: true },
+        actor: { displayName: "Yönetici" },
+        createdAt: "2026-10-31",
+      },
+      {
+        action: "UPDATE",
+        entityType: "ENTITLEMENT",
+        before: { plan: "PLAN_FREE" },
+        after: { plan: "PLAN_PREMIUM", active: true },
+        actor: { displayName: "Yönetici" },
+        createdAt: "2026-10-31",
+      },
+    ]);
+    expect(html).toContain("Önceki bitiş: 2026-12-01 → Yeni bitiş: 2027-01-01");
+    expect(html).toContain("Başlangıç paketi Premium ile değiştirildi");
+    expect(html).toContain("Önceki paket: Başlangıç → Yeni paket: Premium");
+    expect(html).toContain("İşlemi yapan: Yönetici");
   });
 });

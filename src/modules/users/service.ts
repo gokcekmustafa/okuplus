@@ -245,6 +245,9 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
   const { search, status, tenantType, membershipStatus, segment, page, pageSize } = query;
 
   const filters: Prisma.UserWhereInput[] = [{ deletedAt: null }];
+  // The default customer view must never mix platform operators with users.
+  // Platform users remain available through the explicit Platform segment.
+  if (segment !== "PLATFORM") filters.push({ platformRole: null });
   if (status) filters.push({ status });
   if (search) {
     filters.push({
@@ -387,6 +390,10 @@ function toAccountContext(
   now: Date,
 ): UserAccountContext {
   const entitlement = entitlementForAccountContext(entitlementRows, context, now);
+  const contextIsAccessible =
+    !context.tenantDeleted &&
+    context.tenantStatus === "ACTIVE" &&
+    context.memberships.some((membership) => membership.status === "ACTIVE" && !membership.deleted);
   return {
     tenantId: context.tenantId,
     tenantName: context.tenantDeleted ? `${context.tenantName} (silindi)` : context.tenantName,
@@ -399,7 +406,7 @@ function toAccountContext(
           id: entitlement.id,
           plan: entitlement.plan,
           source: entitlement.source,
-          status: entitlement.adminStatus,
+          status: contextIsAccessible ? entitlement.adminStatus : "INACTIVE",
           effectiveAt: entitlement.effectiveAt,
           expiresAt: entitlement.expiresAt,
           features: entitlementPlanFeatureLabels(entitlement.plan),
@@ -408,7 +415,7 @@ function toAccountContext(
           id: null,
           plan: "PLAN_FREE",
           source: "DEFAULT",
-          status: "DEFAULT",
+          status: contextIsAccessible ? "DEFAULT" : "INACTIVE",
           effectiveAt: null,
           expiresAt: null,
           features: entitlementPlanFeatureLabels("PLAN_FREE"),
@@ -610,7 +617,15 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
   ];
   const activity = await prisma.auditLog.findMany({
     where: { entityId: { in: activityEntityIds } },
-    select: { action: true, entityType: true, createdAt: true },
+    select: {
+      action: true,
+      entityType: true,
+      entityId: true,
+      before: true,
+      after: true,
+      createdAt: true,
+      actor: { select: { displayName: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
