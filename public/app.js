@@ -5072,16 +5072,21 @@ function learningPathStepApi(stepId, suffix, options) {
 async function loadFocusedLearningPathStep() {
   const status = $("lessons-status");
   const error = $("lessons-error");
+  const detail = $("lesson-detail");
   if (!status) return;
+  const loadRevision = ++learningPathFocusedLessonRevision;
   setLessonPageMode(true);
+  if (detail) detail.innerHTML = "";
   status.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
   error?.classList.add("hidden");
   try {
     if (!activeLearningStepNode) {
       const path = await insightApi("learning-path");
+      if (loadRevision !== learningPathFocusedLessonRevision) return;
       activeLearningStepNode = activeLearningPathNodeFromData(path);
     }
     let node = activeLearningStepNode;
+    if (loadRevision !== learningPathFocusedLessonRevision) return;
     if (!node) {
       activeLearningStepNavigation = null;
       status.textContent = "Öğrenme yolundaki tüm durakları tamamladın.";
@@ -5103,6 +5108,12 @@ async function loadFocusedLearningPathStep() {
         navigationFromStepId: activeLearningStepNavigationFromStepId,
       }),
     );
+    if (
+      loadRevision !== learningPathFocusedLessonRevision ||
+      activeLearningStepNode?.id !== node.id
+    ) {
+      return;
+    }
     const learningStep = { ...node, ...(data?.learningStep || {}) };
     activeLearningStepNode = learningStep;
     activeLearningStepNavigation = normalizeLearningPathNavigation(data?.navigation, learningStep);
@@ -11316,6 +11327,7 @@ let trainingActivitiesStateMessage = "";
 let activeTrainingActivityId = null;
 let exerciseMode = null;
 let activeLearningStepNode = null;
+let learningPathFocusedLessonRevision = 0;
 let activeLearningStepVisualPosition = null;
 let activeLearningStepNavigation = null;
 let activeLearningStepNavigationFromStepId = null;
