@@ -7051,12 +7051,9 @@ function renderUserRoleConnections(user) {
   if (!contexts.length) return `${platformRole}<span class="muted">Bağlı hesap bağlamı yok</span>`;
   return `${platformRole}<div class="user-context-list">${contexts
     .map((context) => {
-      const membership =
-        MEMBERSHIP_STATUS_LABELS[context.membershipStatus] ?? context.membershipStatus;
-      const role = MEMBERSHIP_ROLE_LABELS[context.role] ?? context.role;
       const packageRight = context.packageRight;
       return `<div class="user-context-row">
-        <div class="user-context-main"><div class="user-context-title"><span class="badge badge-context">${escapeHtml(tenantTypeLabel(context.tenantType))}</span><strong title="${escapeHtml(context.tenantName)}">${escapeHtml(context.tenantName)}</strong></div><span class="user-context-meta">${escapeHtml(role)} · ${escapeHtml(membership)}</span></div>
+        <div class="user-context-main"><div class="user-context-title"><span class="badge badge-context">${escapeHtml(tenantTypeLabel(context.tenantType))}</span><strong title="${escapeHtml(context.tenantName)}">${escapeHtml(context.tenantName)}</strong></div><span class="user-context-meta">${escapeHtml(accountContextMembershipSummary(context))}</span></div>
         <div class="user-context-package"><strong>${escapeHtml(planLabel(packageRight?.plan))}</strong><span>${escapeHtml(entitlementSourceLabel(packageRight?.source))}</span></div>
       </div>`;
     })
@@ -7085,6 +7082,22 @@ function entitlementAdminStatusLabel(status) {
       DEFAULT: "Varsayılan ücretsiz",
     }[status] ?? "Durum bilinmiyor"
   );
+}
+
+function accountContextMembershipSummary(context) {
+  const memberships =
+    context.memberships ??
+    (context.role || context.membershipStatus
+      ? [{ role: context.role, status: context.membershipStatus }]
+      : []);
+  if (!memberships.length) return "Üyelik bağlantısı yok";
+  return memberships
+    .map((membership) => {
+      const role = MEMBERSHIP_ROLE_LABELS[membership.role] ?? membership.role;
+      const status = MEMBERSHIP_STATUS_LABELS[membership.status] ?? membership.status;
+      return [role, status].filter(Boolean).join(" · ");
+    })
+    .join(" / ");
 }
 
 function userInitials(name) {
@@ -7293,12 +7306,10 @@ function renderUserPackageOverview(user) {
       const features = (right.features ?? [])
         .map((feature) => `<li>${escapeHtml(feature)}</li>`)
         .join("");
-      const membershipStatus =
-        MEMBERSHIP_STATUS_LABELS[context.membershipStatus] ?? context.membershipStatus;
       return `<article class="user-package-card">
         <div class="user-package-context"><span class="badge badge-context">${escapeHtml(tenantTypeLabel(context.tenantType))}</span><strong title="${escapeHtml(context.tenantName)}">${escapeHtml(context.tenantName)}</strong></div>
         <div class="user-package-title"><div><span class="eyebrow">TANIMLI PAKET</span><h5>${escapeHtml(planLabel(right.plan))}</h5></div><span class="access-status access-status-${escapeHtml(status.toLowerCase())}">${escapeHtml(entitlementAdminStatusLabel(status))}</span></div>
-        <div class="user-package-context-meta">${escapeHtml(MEMBERSHIP_ROLE_LABELS[context.role] ?? context.role)} · üyelik ${escapeHtml(membershipStatus)}${context.tenantDeleted ? " · kurum silinmiş" : ""}</div>
+        <div class="user-package-context-meta">${escapeHtml(accountContextMembershipSummary(context))}${context.tenantDeleted ? " · kurum silinmiş" : ""}</div>
         ${features ? `<ul class="user-package-features">${features}</ul>` : '<p class="muted">Paket özelliği bilgisi yok.</p>'}
         <dl class="user-package-dates"><div><dt>Başlangıç</dt><dd>${right.effectiveAt ? escapeHtml(new Date(right.effectiveAt).toLocaleDateString("tr-TR")) : "Varsayılan hak"}</dd></div><div><dt>Bitiş</dt><dd>${right.expiresAt ? escapeHtml(new Date(right.expiresAt).toLocaleDateString("tr-TR")) : "Bitiş tarihi yok"}</dd></div><div><dt>Kaynak</dt><dd>${escapeHtml(entitlementSourceLabel(right.source))}</dd></div></dl>
       </article>`;

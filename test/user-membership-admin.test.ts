@@ -735,6 +735,14 @@ describe("user + membership admin", () => {
     expect(
       detail.accountContexts.find(
         (context: { tenantId: string }) => context.tenantId === ORG_TENANT,
+      ).memberships,
+    ).toEqual([
+      { role: "PARENT", status: "PENDING" },
+      { role: "TEACHER", status: "ACTIVE" },
+    ]);
+    expect(
+      detail.accountContexts.find(
+        (context: { tenantId: string }) => context.tenantId === ORG_TENANT,
       ).packageRight,
     ).toMatchObject({ plan: "PLAN_FREE", source: "ADMIN", status: "ACTIVE" });
     expect(

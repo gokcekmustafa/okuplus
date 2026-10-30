@@ -117,8 +117,7 @@ export interface UserAccountContext {
   tenantType: TenantType;
   tenantStatus: string;
   tenantDeleted: boolean;
-  role: string;
-  membershipStatus: Membership["status"];
+  memberships: Array<{ role: Membership["role"]; status: Membership["status"] }>;
   packageRight: {
     id: string | null;
     plan: string;
@@ -273,22 +272,7 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
   const now = new Date();
   return {
     items: rows.map(({ _count, memberships, ...u }) => {
-      const accountContexts = memberships.map((membership) =>
-        toAccountContext(
-          {
-            userId: u.id,
-            tenantId: membership.tenant.id,
-            tenantName: membership.tenant.name,
-            tenantType: membership.tenant.type,
-            tenantStatus: membership.tenant.status,
-            tenantDeleted: membership.tenant.deletedAt !== null,
-            role: membership.role,
-            membershipStatus: membership.status,
-          },
-          entitlementRows,
-          now,
-        ),
-      );
+      const accountContexts = toAccountContexts(u.id, memberships, entitlementRows, now);
       return {
         ...u,
         membershipCount: _count.memberships,
@@ -341,8 +325,7 @@ function toAccountContext(
     tenantName: string;
     tenantStatus: string;
     tenantDeleted: boolean;
-    role: string;
-    membershipStatus: Membership["status"];
+    memberships: Array<{ role: Membership["role"]; status: Membership["status"] }>;
   },
   entitlementRows: AdminEntitlementRecord[],
   now: Date,
@@ -354,8 +337,7 @@ function toAccountContext(
     tenantType: context.tenantType,
     tenantStatus: context.tenantStatus,
     tenantDeleted: context.tenantDeleted,
-    role: context.role,
-    membershipStatus: context.membershipStatus,
+    memberships: context.memberships,
     packageRight: entitlement
       ? {
           id: entitlement.id,
@@ -376,6 +358,50 @@ function toAccountContext(
           features: entitlementPlanFeatureLabels("PLAN_FREE"),
         },
   };
+}
+
+function toAccountContexts(
+  userId: string,
+  rows: Array<{
+    role: Membership["role"];
+    status: Membership["status"];
+    tenant: {
+      id: string;
+      name: string;
+      type: TenantType;
+      status: string;
+      deletedAt: Date | null;
+    };
+  }>,
+  entitlementRows: AdminEntitlementRecord[],
+  now: Date,
+): UserAccountContext[] {
+  const contexts = new Map<string, Parameters<typeof toAccountContext>[0]>();
+  for (const row of rows) {
+    const current = contexts.get(row.tenant.id);
+    if (current) {
+      current.memberships.push({ role: row.role, status: row.status });
+      continue;
+    }
+    contexts.set(row.tenant.id, {
+      userId,
+      tenantId: row.tenant.id,
+      tenantName: row.tenant.name,
+      tenantType: row.tenant.type,
+      tenantStatus: row.tenant.status,
+      tenantDeleted: row.tenant.deletedAt !== null,
+      memberships: [{ role: row.role, status: row.status }],
+    });
+  }
+  return [...contexts.values()]
+    .sort((left, right) => left.tenantName.localeCompare(right.tenantName, "tr"))
+    .map((context) => {
+      context.memberships.sort(
+        (left, right) =>
+          left.role.localeCompare(right.role) || left.status.localeCompare(right.status),
+      );
+      return toAccountContext(context, entitlementRows, now);
+    });
 }
 
 export async function getUser(id: string, actor: UserAdminReadActor): Promise<UserDetail> {
@@ -515,22 +541,9 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
     : [[], []];
 
   const now = new Date();
-  const accountMemberships = memberships.map(({ tenant, ...membership }) => ({
-    userId: id,
-    tenantId: tenant.id,
-    tenantName: tenant.name,
-    tenantType: tenant.type,
-    tenantStatus: tenant.status,
-    tenantDeleted: tenant.deletedAt !== null,
-    role: membership.role,
-    membershipStatus: membership.status,
-  }));
-
   return {
     ...user,
-    accountContexts: accountMemberships.map((context) =>
-      toAccountContext(context, entitlements, now),
-    ),
+    accountContexts: toAccountContexts(id, memberships, entitlements, now),
     memberships: memberships.map(({ tenant, ...m }) => ({
       id: m.id,
       tenantId: tenant.id,
