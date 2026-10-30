@@ -144,7 +144,7 @@ describe("mobile native app identity", () => {
     expect(workflow).toContain("github.ref == 'refs/heads/master'");
     expect(workflow).toContain("needs: android");
     expect(workflow).toContain("needs: [android, android-hosted-kvm-instrumentation]");
-    expect(workflow).toContain("runs-on: macos-14");
+    expect(iosJob).toContain("runs-on: macos-15");
     expect(workflow).toContain("runs-on: ${{ vars.ANDROID_SECURE_STORAGE_RUNNER_LABEL }}");
     expect(workflow).toContain("Verify KVM before starting the emulator");
     expect(workflow).toContain("test -r /dev/kvm && test -w /dev/kvm");
