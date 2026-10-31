@@ -1536,10 +1536,24 @@ describe("user + membership admin", () => {
       url: `/admin/users/${USER_A_ID}`,
       headers: await superAdminHeaders(),
     });
-    const mem = detail
+    expect(detail.statusCode).toBe(200);
+    const personalContext = detail
       .json()
-      .data.memberships.find((m: { id: string }) => m.id === individualMembershipId);
-    expect(mem.role).toBe("STUDENT");
+      .data.personalContexts.find(
+        (context: { tenantId: string }) => context.tenantId === INDIVIDUAL_TENANT,
+      );
+    expect(personalContext).toBeDefined();
+    const membership = await prisma.membership.findUnique({
+      where: { id: individualMembershipId },
+      select: { tenantId: true, userId: true, role: true, status: true, deletedAt: true },
+    });
+    expect(membership).toMatchObject({
+      tenantId: personalContext.tenantId,
+      userId: USER_A_ID,
+      role: "STUDENT",
+      status: "ACTIVE",
+      deletedAt: null,
+    });
   });
 
   it("INDIVIDUAL tenant'a kurumsal rol (OWNER): 400 döner", async () => {
