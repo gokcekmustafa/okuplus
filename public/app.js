@@ -7081,10 +7081,7 @@ function renderUserPackageSummary(user) {
       );
     const status = accessible ? (right.status ?? "DEFAULT") : "INACTIVE";
     const statusText = accessible ? entitlementAdminStatusLabel(status) : "Erişim yok";
-    const packageName =
-      right.source === "DEFAULT"
-        ? "Ücretsiz varsayılan"
-        : userAdminPlanLabel(right.plan ?? "PLAN_FREE");
+    const packageName = planLabel(right.plan ?? "PLAN_FREE");
     const endDate = right.expiresAt
       ? `Bitiş ${formatUserAdminDate(right.expiresAt)}`
       : right.source === "DEFAULT"
@@ -7750,7 +7747,15 @@ function renderUserGeneralTab(u, notice) {
       .join("") +
     "</dl>" +
     '<section class="user-account-tools"><h3>Güvenlik</h3><label class="field"><span>Yeni parola</span><input id="user-detail-new-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" /></label>' +
-    '<button id="user-detail-password-btn" type="button" class="btn btn-secondary">Parolayı belirle</button><p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p></section></section>'
+    '<button id="user-detail-password-btn" type="button" class="btn btn-secondary">Parolayı belirle</button><p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p></section>' +
+    (u.accountContexts ?? []).some((context) =>
+      context.memberships?.some((membership) => membership.role === "STUDENT")
+        ? '<section class="user-overview-section"><h3>Öğrenci kayıtları</h3><p class="muted">Mevcut öğrenme ilerlemesini görüntüleyin.</p><button type="button" class="btn btn-secondary" data-user-open-student="' +
+          escapeHtml(u.id) +
+          '">Öğrenci ayrıntılarını aç</button></section>'
+        : "",
+    ) +
+    "</section>"
   );
 }
 
