@@ -2960,7 +2960,6 @@ dialog::backdrop {
   width: 258px;
   height: 100vh;
   overflow-x: hidden;
-  overflow-y: auto;
   color: #e9f1ff;
   background: linear-gradient(180deg, #14243b 0%, #101d31 100%);
   border: 0;

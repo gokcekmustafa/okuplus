@@ -121,6 +121,7 @@ function harness(stepId = "35") {
               ? container
               : null,
     PAGES: ["dashboard", "exercise", "lessons", "badges"],
+    currentPlatformRole: null,
     canAccessPage: () => true,
     isPlatformUser: false,
     setUserMenuOpen() {},
