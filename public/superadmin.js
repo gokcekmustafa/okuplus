@@ -466,11 +466,93 @@ function bindNavigation() {
   });
 }
 
+async function openCreateUserModal() {
+  const modal = $("sa-create-user-modal");
+  const typeSelect = $("sa-create-account-type");
+  const orgFields = $("sa-create-org-fields");
+  const tenantSelect = $("sa-create-tenant");
+  const status = $("sa-create-user-status");
+  if (status) status.textContent = "";
+  if (typeSelect && orgFields) {
+    orgFields.classList.toggle("hidden", typeSelect.value !== "ORGANIZATION");
+  }
+  if (tenantSelect && tenantSelect.options.length === 0) {
+    try {
+      const data = await api("/admin/tenants?page=1&pageSize=100");
+      const tenants = data?.items ?? data ?? [];
+      tenantSelect.innerHTML = tenants
+        .filter((tenant) => tenant.type === "ORGANIZATION" && tenant.status === "ACTIVE")
+        .map(
+          (tenant) =>
+            `<option value="${escapeHtml(tenant.id)}">${escapeHtml(tenant.name)}</option>`,
+        )
+        .join("");
+    } catch {
+      if (status) status.textContent = "Kurumlar yüklenemedi.";
+    }
+  }
+  modal?.classList.remove("hidden");
+}
+
+function closeCreateUserModal() {
+  $("sa-create-user-modal")?.classList.add("hidden");
+}
+
+async function submitCreateUser(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const status = $("sa-create-user-status");
+  const accountType = form.accountType.value;
+  const payload = {
+    displayName: form.displayName.value.trim(),
+    email: form.email.value.trim(),
+    password: form.password.value,
+    phone: form.phone.value.trim() || null,
+    accountType,
+  };
+  if (accountType === "ORGANIZATION") {
+    payload.tenantId = form.tenantId.value;
+    payload.membershipRole = form.membershipRole.value;
+  }
+  try {
+    await api("/admin/users", {
+      method: "POST",
+      headers: { "x-csrf-token": csrfToken() },
+      body: JSON.stringify(payload),
+    });
+    if (status) status.textContent = "Kullanıcı oluşturuldu.";
+    form.reset();
+    closeCreateUserModal();
+    const page = document.querySelector(".sa-page.is-active")?.dataset.page || "org-users";
+    if (page === "individual-users") await loadUsers("INDIVIDUAL", "sa-individual-users-table");
+    else if (page === "platform-users") await loadUsers("PLATFORM", "sa-platform-users-table");
+    else if (page === "org-users" || page === "overview")
+      await loadUsers("ORGANIZATION", "sa-org-users-table");
+    if (page === "overview") await loadUsers("ALL", "sa-overview-users-table");
+  } catch (error) {
+    if (status) status.textContent = error.message || "Kullanıcı oluşturulamadı.";
+  }
+}
+
+function bindCreateUserEvents() {
+  $("sa-create-user-open")?.addEventListener("click", () => void openCreateUserModal());
+  $("sa-create-user-close")?.addEventListener("click", closeCreateUserModal);
+  $("sa-create-user-modal")?.addEventListener("click", (event) => {
+    if (event.target === $("sa-create-user-modal")) closeCreateUserModal();
+  });
+  $("sa-create-account-type")?.addEventListener("change", (event) => {
+    const orgFields = $("sa-create-org-fields");
+    orgFields?.classList.toggle("hidden", event.target.value !== "ORGANIZATION");
+  });
+  $("sa-create-user-form")?.addEventListener("submit", submitCreateUser);
+}
+
 async function init() {
   const allowed = await restoreSession();
   if (!allowed) return;
   bindNavigation();
   bindTableEvents();
+  bindCreateUserEvents();
   showPage("overview");
 }
 

@@ -48,6 +48,9 @@
             <h1 id="sa-page-title">Genel Bakış</h1>
           </div>
           <div class="sa-topbar-actions">
+            <button type="button" class="sa-btn sa-btn-primary" id="sa-create-user-open">
+              Yeni kullanıcı
+            </button>
             <span class="sa-user-chip" id="sa-user-chip">Yükleniyor…</span>
             <button type="button" class="sa-btn sa-btn-secondary" id="sa-logout">Çıkış</button>
           </div>
@@ -178,10 +181,64 @@
             </div>
             <div class="sa-empty-state">Ayarlar sonraki aşamada bağlanacak.</div>
           </section>
+          <section class="sa-page" data-page="user-detail">
+            <div id="sa-user-detail"></div>
+          </section>
         </main>
       </div>
     </div>
 
+    <div class="sa-modal hidden" id="sa-create-user-modal">
+      <div class="sa-modal-card">
+        <div class="sa-modal-head">
+          <h2>Yeni kullanıcı</h2>
+          <button type="button" class="sa-btn sa-btn-secondary" id="sa-create-user-close">
+            Kapat
+          </button>
+        </div>
+        <form id="sa-create-user-form" class="sa-form-grid">
+          <label class="sa-field"
+            ><span>Ad soyad *</span><input name="displayName" required maxlength="120"
+          /></label>
+          <label class="sa-field"
+            ><span>E-posta *</span><input name="email" type="email" required
+          /></label>
+          <label class="sa-field"
+            ><span>Parola *</span
+            ><input name="password" type="password" required minlength="8" maxlength="128"
+          /></label>
+          <label class="sa-field"><span>Telefon</span><input name="phone" type="tel" /></label>
+          <label class="sa-field"
+            ><span>Hesap türü</span>
+            <select name="accountType" id="sa-create-account-type">
+              <option value="INDIVIDUAL">Bireysel</option>
+              <option value="ORGANIZATION">Kurumsal</option>
+            </select>
+          </label>
+          <div id="sa-create-org-fields" class="hidden">
+            <label class="sa-field"
+              ><span>Kurum</span
+              ><select name="tenantId" id="sa-create-tenant"></select
+            ></label>
+            <label class="sa-field"
+              ><span>Rol</span>
+              <select name="membershipRole">
+                <option value="STUDENT">Öğrenci</option>
+                <option value="PARENT">Veli</option>
+                <option value="TEACHER">Öğretmen</option>
+                <option value="BRANCH_MANAGER">Şube yöneticisi</option>
+                <option value="ORG_ADMIN">Kurum yöneticisi</option>
+                <option value="OWNER">Sahip</option>
+              </select>
+            </label>
+          </div>
+          <div class="sa-form-actions">
+            <button type="submit" class="sa-btn sa-btn-primary">Oluştur</button>
+          </div>
+          <p id="sa-create-user-status" class="sa-muted" role="status"></p>
+        </form>
+      </div>
+    </div>
     <script src="/superadmin.js"></script>
   </body>
 </html>
