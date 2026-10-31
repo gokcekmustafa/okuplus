@@ -2917,3 +2917,467 @@ dialog::backdrop {
     border-radius: 18px;
   }
 }
+
+/* Superadmin management shell: presentation only; routes and role checks stay in app.js. */
+.platform-brand-emblem,
+.platform-brand-caption,
+.platform-nav-label,
+.platform-sidebar-footer,
+.platform-page-heading {
+  display: none;
+}
+
+.platform-brand-copy {
+  display: contents;
+}
+
+.app.superadmin-shell {
+  --admin-canvas: #f3f6fb;
+  --admin-surface: #ffffff;
+  --admin-ink: #17243b;
+  --admin-muted: #68778e;
+  --admin-line: #e3e9f2;
+  --admin-brand: #1768e8;
+  --admin-brand-soft: #eaf2ff;
+  min-height: 100vh;
+  color: var(--admin-ink);
+  background: var(--admin-canvas);
+}
+
+:root[data-theme="dark"] .app.superadmin-shell {
+  --admin-canvas: #111a29;
+  --admin-surface: #1b2739;
+  --admin-ink: #edf3fc;
+  --admin-muted: #a5b3c8;
+  --admin-line: #35445a;
+  --admin-brand: #8db6ff;
+  --admin-brand-soft: #263a5b;
+}
+
+.app.superadmin-shell .sidebar {
+  position: sticky;
+  top: 0;
+  width: 258px;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: #e9f1ff;
+  background: linear-gradient(180deg, #14243b 0%, #101d31 100%);
+  border: 0;
+  box-shadow: 5px 0 24px rgb(18 36 64 / 8%);
+  scrollbar-color: #42536d transparent;
+}
+
+.app.superadmin-shell .sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgb(211 226 248 / 11%);
+}
+
+.app.superadmin-shell .platform-brand-emblem {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 2px solid #62c7ff;
+  border-radius: 12px 12px 12px 4px;
+  color: #fff;
+  background: linear-gradient(145deg, #1c9de5, #2364d8);
+  font-size: 18px;
+  font-weight: 850;
+  box-shadow: 0 5px 15px rgb(25 126 224 / 30%);
+}
+
+.app.superadmin-shell .platform-brand-copy,
+.app.superadmin-shell .platform-sidebar-footer > span:last-child {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.app.superadmin-shell .brand-mark {
+  color: #f7faff;
+  font-size: 18px;
+  font-weight: 780;
+  letter-spacing: -0.035em;
+}
+
+.app.superadmin-shell .platform-brand-caption {
+  color: #aebbd0;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.025em;
+}
+
+.app.superadmin-shell .sidebar-nav {
+  display: flex;
+  gap: 4px;
+  padding: 15px 12px 22px;
+}
+
+.app.superadmin-shell .platform-nav-label {
+  display: none;
+}
+
+.app.superadmin-shell .platform-nav-label[data-platform-nav-label] {
+  display: block;
+  margin: 15px 10px 4px;
+  color: #8fa2bd;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.11em;
+  line-height: 1.4;
+}
+
+.app.superadmin-shell .platform-nav-label:first-child {
+  margin-top: 1px;
+}
+
+.app.superadmin-shell .nav-item {
+  min-height: 43px;
+  padding: 9px 11px;
+  gap: 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #bdc9da;
+  font-size: 13px;
+  font-weight: 570;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.app.superadmin-shell .nav-item:hover {
+  color: #fff;
+  background: rgb(119 157 211 / 12%);
+}
+
+.app.superadmin-shell .nav-item.active {
+  color: #fff;
+  background: linear-gradient(100deg, #1b63c8, #2052a2);
+  border-color: rgb(132 182 255 / 22%);
+  box-shadow: 0 5px 16px rgb(2 10 28 / 19%);
+  font-weight: 680;
+}
+
+.app.superadmin-shell .nav-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: #a9bbd4;
+}
+
+.app.superadmin-shell .nav-item.active .nav-icon {
+  color: #fff;
+}
+
+.app.superadmin-shell .nav-icon .ui-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.app.superadmin-shell .platform-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 70px;
+  margin-top: auto;
+  padding: 13px 20px;
+  border-top: 1px solid rgb(211 226 248 / 11%);
+}
+
+.app.superadmin-shell .platform-footer-indicator {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #54d49c;
+  box-shadow: 0 0 0 4px rgb(84 212 156 / 13%);
+}
+
+.app.superadmin-shell .platform-sidebar-footer strong {
+  overflow: hidden;
+  color: #e7effb;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app.superadmin-shell .platform-sidebar-footer small {
+  color: #97a8c0;
+  font-size: 10px;
+}
+
+.app.superadmin-shell .app-main {
+  min-width: 0;
+  background: var(--admin-canvas);
+}
+
+.app.superadmin-shell .topbar {
+  z-index: 10;
+  height: 76px;
+  padding-inline: clamp(18px, 3vw, 38px);
+  gap: 18px;
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-line);
+  box-shadow: 0 3px 14px rgb(22 39 67 / 3%);
+}
+
+.app.superadmin-shell .tenant-name {
+  display: none;
+}
+
+.app.superadmin-shell .platform-page-heading {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.app.superadmin-shell .platform-page-breadcrumb {
+  overflow: hidden;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app.superadmin-shell .platform-page-title {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--admin-ink);
+  font-size: 17px;
+  font-weight: 730;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app.superadmin-shell .topbar-user {
+  gap: 10px;
+}
+
+.app.superadmin-shell .user-menu-toggle {
+  min-height: 42px;
+  padding-inline: 12px;
+  border: 1px solid var(--admin-line);
+  border-radius: 11px;
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+}
+
+.app.superadmin-shell .theme-toggle,
+.app.superadmin-shell #sidebar-toggle {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  color: var(--admin-muted);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-line);
+}
+
+.app.superadmin-shell .page {
+  width: 100%;
+  padding: clamp(20px, 3vw, 36px);
+}
+
+.app.superadmin-shell .page-view {
+  width: 100%;
+  max-width: 1360px;
+  margin-inline: auto;
+}
+
+.app.superadmin-shell .page-head {
+  margin-bottom: 24px;
+}
+
+.app.superadmin-shell .page-head h1,
+.app.superadmin-shell .page-head h2 {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: clamp(24px, 2.2vw, 30px);
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  line-height: 1.2;
+}
+
+.app.superadmin-shell .page-head p {
+  margin: 7px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.app.superadmin-shell .card,
+.app.superadmin-shell .table-card,
+.app.superadmin-shell .admin-panel {
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-line);
+  border-radius: 15px;
+  box-shadow: 0 5px 20px rgb(26 45 78 / 4%);
+}
+
+.app.superadmin-shell .card {
+  padding: 20px;
+}
+
+.app.superadmin-shell .card h2,
+.app.superadmin-shell .card h3,
+.app.superadmin-shell .card h4 {
+  color: var(--admin-ink);
+}
+
+.app.superadmin-shell .data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+}
+
+.app.superadmin-shell .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+  background: var(--admin-surface);
+  scrollbar-width: thin;
+}
+
+.app.superadmin-shell .data-table th {
+  color: var(--admin-muted);
+  background: color-mix(in srgb, var(--admin-surface) 88%, var(--admin-canvas));
+  border-bottom: 1px solid var(--admin-line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.app.superadmin-shell .data-table td {
+  color: var(--admin-ink);
+  border-bottom: 1px solid var(--admin-line);
+  font-size: 13px;
+}
+
+.app.superadmin-shell .data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.app.superadmin-shell .data-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--admin-brand-soft) 38%, var(--admin-surface));
+}
+
+.app.superadmin-shell input:not([type="checkbox"]):not([type="radio"]),
+.app.superadmin-shell select,
+.app.superadmin-shell textarea {
+  border-color: var(--admin-line);
+  border-radius: 9px;
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+}
+
+.app.superadmin-shell input:focus,
+.app.superadmin-shell select:focus,
+.app.superadmin-shell textarea:focus {
+  border-color: var(--admin-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--admin-brand) 18%, transparent);
+}
+
+.app.superadmin-shell .btn-primary {
+  border-color: var(--admin-brand);
+  border-radius: 9px;
+  color: #fff;
+  background: #1768e8;
+  box-shadow: 0 4px 10px rgb(23 104 232 / 17%);
+}
+
+.app.superadmin-shell .btn-primary:hover {
+  background: #1059cb;
+}
+
+.app.superadmin-shell .btn-secondary,
+.app.superadmin-shell .btn-ghost {
+  border-radius: 9px;
+}
+
+.app.superadmin-shell .modal-backdrop {
+  background: rgb(10 22 40 / 52%);
+  backdrop-filter: blur(3px);
+}
+
+.app.superadmin-shell .modal {
+  border: 1px solid var(--admin-line);
+  border-radius: 17px;
+  background: var(--admin-surface);
+  box-shadow: 0 24px 75px rgb(9 20 39 / 22%);
+}
+
+@media (max-width: 900px) {
+  .app.superadmin-shell .sidebar {
+    position: fixed;
+    width: min(290px, 86vw);
+    height: 100dvh;
+    border-radius: 0 16px 16px 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .app.superadmin-shell .topbar {
+    height: 66px;
+    padding-inline: 12px;
+    gap: 10px;
+  }
+
+  .app.superadmin-shell .platform-page-breadcrumb {
+    font-size: 10px;
+  }
+
+  .app.superadmin-shell .platform-page-title {
+    max-width: 42vw;
+    font-size: 14px;
+  }
+
+  .app.superadmin-shell .user-menu-toggle {
+    max-width: 132px;
+    min-height: 40px;
+    padding-inline: 9px;
+  }
+
+  .app.superadmin-shell .user-name {
+    max-width: 82px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app.superadmin-shell .topbar-user {
+    gap: 6px;
+  }
+
+  .app.superadmin-shell .theme-toggle,
+  .app.superadmin-shell #sidebar-toggle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .app.superadmin-shell .page {
+    padding: 18px 14px 28px;
+  }
+
+  .app.superadmin-shell .card {
+    padding: 16px;
+  }
+
+  .app.superadmin-shell .page-head {
+    margin-bottom: 18px;
+  }
+}

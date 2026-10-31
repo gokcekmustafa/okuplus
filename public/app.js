@@ -1422,6 +1422,7 @@ function showDashboard(me) {
     !isPlatform && currentTenantType === "INDIVIDUAL" && (isStudentUser || isParentUser);
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
+  $("view-app").classList.toggle("superadmin-shell", currentPlatformRole === "SUPER_ADMIN");
   const analyticsScopeCopy = $("analytics-scope-copy");
   if (analyticsScopeCopy) {
     analyticsScopeCopy.textContent = isPlatform
@@ -5896,6 +5897,23 @@ function studentBottomNavigationTarget(page, isLearningPathExercise) {
   return page;
 }
 
+function updatePlatformAdminHeading(page) {
+  const title = $("admin-page-title");
+  const breadcrumb = $("admin-page-breadcrumb");
+  if (!title || !breadcrumb) return;
+  const navItem = [...document.querySelectorAll(".nav-item")].find(
+    (item) => item.dataset.page === page,
+  );
+  const pageTitle =
+    navItem?.querySelector(".nav-label")?.textContent?.trim() ||
+    {
+      settings: "Yönetici ayarları",
+    }[page] ||
+    "Yönetim";
+  title.textContent = pageTitle;
+  breadcrumb.textContent = `Yönetim Masası / ${pageTitle}`;
+}
+
 function setStudentMoreMenuOpen(open, returnFocus = false) {
   const toggle = $("student-bottom-nav-more-toggle");
   const menu = $("student-bottom-nav-more");
@@ -5961,6 +5979,7 @@ function navigate(
   else if (!continuation) clearLearningPathTransitionStatus();
 
   currentPage = page;
+  if (currentPlatformRole === "SUPER_ADMIN") updatePlatformAdminHeading(page);
 
   setUserMenuOpen(false);
   setStudentMoreMenuOpen(false);

@@ -415,10 +415,15 @@
       <!-- Sidebar -->
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-          <span class="brand-mark">OkuPratik</span>
+          <span class="platform-brand-emblem" aria-hidden="true">O</span>
+          <span class="platform-brand-copy">
+            <span class="brand-mark">OkuPratik</span>
+            <span class="platform-brand-caption">Yönetim Masası</span>
+          </span>
         </div>
 
         <nav class="sidebar-nav" aria-label="Ana menü">
+          <span class="platform-nav-label" data-platform-nav-label>GENEL</span>
           <button class="nav-item" data-page="dashboard" data-student-primary type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -426,13 +431,7 @@
             ></span>
             <span class="nav-label">Ana Sayfa</span>
           </button>
-          <button class="nav-item" data-page="tenants" data-admin type="button">
-            <span class="nav-icon" aria-hidden="true"
-              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <use href="/assets/ui-icons.svg#building"></use></svg
-            ></span>
-            <span class="nav-label">Kurumlar</span>
-          </button>
+          <span class="platform-nav-label" data-platform-nav-label>KULLANICI YÖNETİMİ</span>
           <button class="nav-item" data-page="users" data-admin type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -453,6 +452,14 @@
                 <use href="/assets/ui-icons.svg#users"></use></svg
             ></span>
             <span class="nav-label">Öğretmenler</span>
+          </button>
+          <span class="platform-nav-label" data-platform-nav-label>KURUM YÖNETİMİ</span>
+          <button class="nav-item" data-page="tenants" data-admin type="button">
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#building"></use></svg
+            ></span>
+            <span class="nav-label">Kurumlar</span>
           </button>
           <button class="nav-item" data-page="branches" data-admin data-organization type="button">
             <span class="nav-icon" aria-hidden="true"
@@ -482,6 +489,7 @@
             ></span>
             <span class="nav-label">Akademik Yıllar</span>
           </button>
+          <span class="platform-nav-label" data-platform-nav-label>EĞİTİM YÖNETİMİ</span>
           <button class="nav-item" data-page="contents" data-admin type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -544,6 +552,7 @@
             ></span>
             <span class="nav-label">Kurum Paneli</span>
           </button>
+          <span class="platform-nav-label" data-platform-nav-label>ANALİZ</span>
           <button class="nav-item" data-page="analytics" data-management type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -614,6 +623,10 @@
             <span class="nav-label">Gelişimim</span>
           </button>
         </nav>
+        <div class="platform-sidebar-footer">
+          <span class="platform-footer-indicator" aria-hidden="true"></span>
+          <span><strong>Platform yönetimi</strong><small>Superadmin alanı</small></span>
+        </div>
       </aside>
 
       <!-- İçerik alanı -->
@@ -632,6 +645,12 @@
 
           <div class="topbar-context">
             <span class="tenant-name" id="topbar-tenant">—</span>
+            <div class="platform-page-heading" aria-live="polite">
+              <span class="platform-page-breadcrumb" id="admin-page-breadcrumb"
+                >Yönetim Masası</span
+              >
+              <span class="platform-page-title" id="admin-page-title">Ana Sayfa</span>
+            </div>
             <select
               id="context-switcher"
               class="context-switcher hidden"
