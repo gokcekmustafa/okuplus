@@ -9,6 +9,7 @@ const SUPERADMIN_PAGES = [
   "payments",
   "activity",
   "settings",
+  "user-detail",
 ];
 
 const pageTitles = {
@@ -22,10 +23,47 @@ const pageTitles = {
   payments: "Ödemeler",
   activity: "İşlem Geçmişi",
   settings: "Ayarlar",
+  "user-detail": "Kullanıcı Profili",
 };
+
+let currentUser = null;
+let currentSegment = "ORGANIZATION";
 
 function $(id) {
   return document.getElementById(id);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function csrfToken() {
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("__Host-oku_csrf="));
+  return cookie ? decodeURIComponent(cookie.slice("__Host-oku_csrf=".length)) : "";
+}
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "include",
+    ...options,
+    headers: {
+      "content-type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(body?.error?.message || "İstek başarısız");
+    error.status = response.status;
+    throw error;
+  }
+  return body?.data ?? body;
 }
 
 function showPage(page) {
@@ -40,21 +78,7 @@ function showPage(page) {
   if (title) title.textContent = pageTitles[page] || "Superadmin";
   const sidebar = $("sa-sidebar");
   sidebar?.classList.remove("is-open");
-  void loadPageData(page);
-}
-
-async function api(path) {
-  const response = await fetch(path, { credentials: "include" });
-  if (!response.ok) throw new Error("request_failed");
-  const body = await response.json().catch(() => ({}));
-  return body?.data ?? body;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  if (page !== "user-detail") void loadPageData(page);
 }
 
 function renderEmpty(container, message) {
@@ -77,6 +101,7 @@ function renderUsersTable(container, items) {
             <th>Durum</th>
             <th>Paket</th>
             <th>Bağlam</th>
+            <th>İşlemler</th>
           </tr>
         </thead>
         <tbody>
@@ -87,17 +112,23 @@ function renderUsersTable(container, items) {
               return `
                 <tr>
                   <td>
-                    <div class="sa-user-cell">
+                    <button type="button" class="sa-user-link" data-open-user="${escapeHtml(user.id)}">
                       <span class="sa-avatar">${escapeHtml((user.displayName || "?").slice(0, 2).toUpperCase())}</span>
-                      <div>
+                      <span>
                         <strong>${escapeHtml(user.displayName || "İsimsiz")}</strong>
-                        <span>${escapeHtml(user.email || "E-posta yok")}</span>
-                      </div>
-                    </div>
+                        <small>${escapeHtml(user.email || "E-posta yok")}</small>
+                      </span>
+                    </button>
                   </td>
                   <td>${escapeHtml(user.status || "—")}</td>
                   <td>${escapeHtml(plan)}</td>
                   <td>${escapeHtml(context?.tenantType || "Bağlantısız")}</td>
+                  <td>
+                    <div class="sa-row-actions">
+                      <button type="button" class="sa-btn sa-btn-secondary sa-btn-sm" data-open-user="${escapeHtml(user.id)}">Aç</button>
+                      <button type="button" class="sa-btn sa-btn-secondary sa-btn-sm" data-edit-user="${escapeHtml(user.id)}">Düzenle</button>
+                    </div>
+                  </td>
                 </tr>`;
             })
             .join("")}
@@ -143,10 +174,19 @@ async function loadUsers(segment, containerId) {
   if (!container) return;
   renderEmpty(container, "Yükleniyor…");
   try {
-    const data = await api(
-      `/admin/users?segment=${encodeURIComponent(segment)}&page=1&pageSize=20`,
-    );
+    const query =
+      segment && segment !== "ALL"
+        ? `/admin/users?segment=${encodeURIComponent(segment)}&page=1&pageSize=20`
+        : "/admin/users?page=1&pageSize=20";
+    const data = await api(query);
     renderUsersTable(container, data?.items ?? []);
+    const total = document.getElementById("sa-total-users");
+    if (
+      total &&
+      (container.id === "sa-overview-users-table" || container.id === "sa-org-users-table")
+    ) {
+      total.textContent = String(data?.total ?? (data?.items ?? []).length);
+    }
   } catch {
     renderEmpty(container, "Kullanıcılar yüklenemedi.");
   }
@@ -164,14 +204,204 @@ async function loadTenants(containerId) {
   }
 }
 
+async function openUserDetail(userId) {
+  const container = $("sa-user-detail");
+  if (!container) return;
+  renderEmpty(container, "Kullanıcı yükleniyor…");
+  showPage("user-detail");
+  try {
+    currentUser = await api(`/admin/users/${encodeURIComponent(userId)}`);
+    renderUserDetail(currentUser);
+  } catch {
+    renderEmpty(container, "Kullanıcı detayı yüklenemedi.");
+  }
+}
+
+function renderUserDetail(user) {
+  const container = $("sa-user-detail");
+  if (!container || !user) return;
+  const general = `
+    <form id="sa-user-general-form" class="sa-form-grid">
+      <label class="sa-field"><span>Ad soyad</span><input name="displayName" value="${escapeHtml(user.displayName || "")}" required /></label>
+      <label class="sa-field"><span>E-posta</span><input name="email" type="email" value="${escapeHtml(user.email || "")}" required /></label>
+      <label class="sa-field"><span>Telefon</span><input name="phone" value="${escapeHtml(user.phone || "")}" /></label>
+      <label class="sa-field"><span>Hesap durumu</span>
+        <select name="status">
+          <option value="ACTIVE" ${user.status === "ACTIVE" ? "selected" : ""}>Aktif</option>
+          <option value="INVITED" ${user.status === "INVITED" ? "selected" : ""}>Davetli</option>
+          <option value="SUSPENDED" ${user.status === "SUSPENDED" ? "selected" : ""}>Askıda</option>
+          <option value="CLOSED" ${user.status === "CLOSED" ? "selected" : ""}>Kapalı</option>
+        </select>
+      </label>
+      <div class="sa-form-actions">
+        <button type="submit" class="sa-btn sa-btn-primary">Bilgileri kaydet</button>
+      </div>
+      <p id="sa-user-general-status" class="sa-muted" role="status"></p>
+    </form>
+    <form id="sa-user-password-form" class="sa-form-grid">
+      <label class="sa-field"><span>Yeni parola</span><input name="password" type="password" minlength="8" maxlength="128" required /></label>
+      <div class="sa-form-actions">
+        <button type="submit" class="sa-btn sa-btn-secondary">Parolayı belirle</button>
+      </div>
+      <p id="sa-user-password-status" class="sa-muted" role="status"></p>
+    </form>`;
+  const packageHtml = `
+    <div class="sa-detail-grid">
+      <div class="sa-detail-item"><span>Paket</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.plan || "—")}</strong></div>
+      <div class="sa-detail-item"><span>Kaynak</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.source || "—")}</strong></div>
+      <div class="sa-detail-item"><span>Başlangıç</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.effectiveAt || "—")}</strong></div>
+      <div class="sa-detail-item"><span>Bitiş</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.expiresAt || "Süresiz")}</strong></div>
+    </div>`;
+  const orgHtml = `
+    <div class="sa-detail-grid">
+      ${
+        (user.memberships ?? [])
+          .map(
+            (membership) => `
+            <div class="sa-detail-item">
+              <span>${escapeHtml(membership.tenantName || membership.tenantId)}</span>
+              <strong>${escapeHtml(membership.role)} · ${escapeHtml(membership.status)}</strong>
+            </div>`,
+          )
+          .join("") || '<p class="sa-muted">Bağlantı yok.</p>'
+      }
+    </div>`;
+  const activityHtml = `
+    <div class="sa-detail-grid">
+      ${
+        (user.activity ?? [])
+          .map(
+            (item) => `
+            <div class="sa-detail-item">
+              <span>${escapeHtml(item.action || "İşlem")}</span>
+              <strong>${escapeHtml(item.entityType || "—")}</strong>
+            </div>`,
+          )
+          .join("") || '<p class="sa-muted">İşlem geçmişi yok.</p>'
+      }
+    </div>`;
+
+  container.innerHTML = `
+    <div class="sa-profile-shell">
+      <div class="sa-profile-topbar">
+        <button type="button" class="sa-btn sa-btn-secondary" id="sa-back-to-users">← Kullanıcılara dön</button>
+        <h2>${escapeHtml(user.displayName || "Kullanıcı")}</h2>
+      </div>
+      <div class="sa-tabs" role="tablist">
+        <button type="button" class="sa-tab is-active" data-tab="general">Genel Bilgiler</button>
+        <button type="button" class="sa-tab" data-tab="package">Paket ve Üyelik</button>
+        <button type="button" class="sa-tab" data-tab="organization">Kurum Bilgileri</button>
+        <button type="button" class="sa-tab" data-tab="activity">İşlem Geçmişi</button>
+      </div>
+      <div class="sa-tab-panel is-active" data-tab-panel="general">${general}</div>
+      <div class="sa-tab-panel" data-tab-panel="package">${packageHtml}</div>
+      <div class="sa-tab-panel" data-tab-panel="organization">${orgHtml}</div>
+      <div class="sa-tab-panel" data-tab-panel="activity">${activityHtml}</div>
+    </div>`;
+
+  bindUserDetailEvents(user);
+}
+
+function bindUserDetailEvents(user) {
+  document.querySelectorAll(".sa-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".sa-tab").forEach((item) => item.classList.remove("is-active"));
+      document
+        .querySelectorAll(".sa-tab-panel")
+        .forEach((panel) => panel.classList.remove("is-active"));
+      button.classList.add("is-active");
+      document
+        .querySelector(`[data-tab-panel="${button.dataset.tab}"]`)
+        ?.classList.add("is-active");
+    });
+  });
+
+  $("sa-back-to-users")?.addEventListener("click", () => {
+    showPage(
+      currentSegment === "PLATFORM"
+        ? "platform-users"
+        : currentSegment === "INDIVIDUAL"
+          ? "individual-users"
+          : "org-users",
+    );
+  });
+
+  $("sa-user-general-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = $("sa-user-general-status");
+    try {
+      const payload = {
+        displayName: form.displayName.value.trim(),
+        email: form.email.value.trim(),
+        phone: form.phone.value.trim() || null,
+        status: form.status.value,
+      };
+      const updated = await api(`/admin/users/${encodeURIComponent(user.id)}`, {
+        method: "PATCH",
+        headers: { "x-csrf-token": csrfToken() },
+        body: JSON.stringify(payload),
+      });
+      currentUser = updated;
+      if (status) status.textContent = "Bilgiler kaydedildi.";
+      renderUserDetail(updated);
+    } catch (error) {
+      if (status) status.textContent = error.message || "Kayıt başarısız.";
+    }
+  });
+
+  $("sa-user-password-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const status = $("sa-user-password-status");
+    try {
+      await api(`/admin/users/${encodeURIComponent(user.id)}/password`, {
+        method: "POST",
+        headers: { "x-csrf-token": csrfToken() },
+        body: JSON.stringify({ password: form.password.value }),
+      });
+      if (status) status.textContent = "Parola belirlendi.";
+      form.reset();
+    } catch (error) {
+      if (status) status.textContent = error.message || "Parola belirlenemedi.";
+    }
+  });
+}
+
 async function loadPageData(page) {
   if (page === "overview") {
+    await loadUsers("ALL", "sa-overview-users-table");
     await loadUsers("ALL", "sa-org-users-table");
   }
   if (page === "organizations") await loadTenants("sa-organizations-table");
-  if (page === "org-users") await loadUsers("ORGANIZATION", "sa-org-users-table");
-  if (page === "individual-users") await loadUsers("INDIVIDUAL", "sa-individual-users-table");
-  if (page === "platform-users") await loadUsers("PLATFORM", "sa-platform-users-table");
+  if (page === "org-users") {
+    currentSegment = "ORGANIZATION";
+    await loadUsers("ORGANIZATION", "sa-org-users-table");
+  }
+  if (page === "individual-users") {
+    currentSegment = "INDIVIDUAL";
+    await loadUsers("INDIVIDUAL", "sa-individual-users-table");
+  }
+  if (page === "platform-users") {
+    currentSegment = "PLATFORM";
+    await loadUsers("PLATFORM", "sa-platform-users-table");
+  }
+}
+
+function bindTableEvents() {
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const openId = target.closest("[data-open-user]")?.getAttribute("data-open-user");
+    const editId = target.closest("[data-edit-user]")?.getAttribute("data-edit-user");
+    if (openId) {
+      void openUserDetail(openId);
+      return;
+    }
+    if (editId) {
+      void openUserDetail(editId);
+    }
+  });
 }
 
 async function restoreSession() {
@@ -240,6 +470,7 @@ async function init() {
   const allowed = await restoreSession();
   if (!allowed) return;
   bindNavigation();
+  bindTableEvents();
   showPage("overview");
 }
 
