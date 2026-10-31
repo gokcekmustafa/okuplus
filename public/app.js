@@ -1402,6 +1402,10 @@ function showDashboard(me) {
   setUserMenuOpen(false);
 
   const { user, tenantContext } = me;
+  if (user?.platformRole === "SUPER_ADMIN" && !nativeMobileRuntime) {
+    window.location.replace("/superadmin.html");
+    return;
+  }
   resetInsights();
   latestEntitlements = null;
   insightsIdentity = user.id + ":" + (tenantContext?.tenantId || "");

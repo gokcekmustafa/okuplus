@@ -40,6 +40,138 @@ function showPage(page) {
   if (title) title.textContent = pageTitles[page] || "Superadmin";
   const sidebar = $("sa-sidebar");
   sidebar?.classList.remove("is-open");
+  void loadPageData(page);
+}
+
+async function api(path) {
+  const response = await fetch(path, { credentials: "include" });
+  if (!response.ok) throw new Error("request_failed");
+  const body = await response.json().catch(() => ({}));
+  return body?.data ?? body;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function renderEmpty(container, message) {
+  if (!container) return;
+  container.innerHTML = `<div class="sa-empty-state">${escapeHtml(message)}</div>`;
+}
+
+function renderUsersTable(container, items) {
+  if (!container) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    renderEmpty(container, "Kullanıcı bulunamadı.");
+    return;
+  }
+  container.innerHTML = `
+    <div class="sa-table-scroll">
+      <table class="sa-table">
+        <thead>
+          <tr>
+            <th>Kullanıcı</th>
+            <th>Durum</th>
+            <th>Paket</th>
+            <th>Bağlam</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map((user) => {
+              const context = (user.accountContexts ?? [])[0];
+              const plan = context?.packageRight?.plan ?? "—";
+              return `
+                <tr>
+                  <td>
+                    <div class="sa-user-cell">
+                      <span class="sa-avatar">${escapeHtml((user.displayName || "?").slice(0, 2).toUpperCase())}</span>
+                      <div>
+                        <strong>${escapeHtml(user.displayName || "İsimsiz")}</strong>
+                        <span>${escapeHtml(user.email || "E-posta yok")}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${escapeHtml(user.status || "—")}</td>
+                  <td>${escapeHtml(plan)}</td>
+                  <td>${escapeHtml(context?.tenantType || "Bağlantısız")}</td>
+                </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderTenantsTable(container, items) {
+  if (!container) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    renderEmpty(container, "Kurum bulunamadı.");
+    return;
+  }
+  container.innerHTML = `
+    <div class="sa-table-scroll">
+      <table class="sa-table">
+        <thead>
+          <tr>
+            <th>Kurum</th>
+            <th>Tür</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map(
+              (tenant) => `
+                <tr>
+                  <td>${escapeHtml(tenant.name || "İsimsiz kurum")}</td>
+                  <td>${escapeHtml(tenant.type || "—")}</td>
+                  <td>${escapeHtml(tenant.status || "—")}</td>
+                </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function loadUsers(segment, containerId) {
+  const container = $(containerId);
+  if (!container) return;
+  renderEmpty(container, "Yükleniyor…");
+  try {
+    const data = await api(
+      `/admin/users?segment=${encodeURIComponent(segment)}&page=1&pageSize=20`,
+    );
+    renderUsersTable(container, data?.items ?? []);
+  } catch {
+    renderEmpty(container, "Kullanıcılar yüklenemedi.");
+  }
+}
+
+async function loadTenants(containerId) {
+  const container = $(containerId);
+  if (!container) return;
+  renderEmpty(container, "Yükleniyor…");
+  try {
+    const data = await api("/admin/tenants?page=1&pageSize=20");
+    renderTenantsTable(container, data?.items ?? data ?? []);
+  } catch {
+    renderEmpty(container, "Kurumlar yüklenemedi.");
+  }
+}
+
+async function loadPageData(page) {
+  if (page === "overview") {
+    await loadUsers("ALL", "sa-org-users-table");
+  }
+  if (page === "organizations") await loadTenants("sa-organizations-table");
+  if (page === "org-users") await loadUsers("ORGANIZATION", "sa-org-users-table");
+  if (page === "individual-users") await loadUsers("INDIVIDUAL", "sa-individual-users-table");
+  if (page === "platform-users") await loadUsers("PLATFORM", "sa-platform-users-table");
 }
 
 async function restoreSession() {
