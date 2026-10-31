@@ -1463,7 +1463,7 @@ describe("user + membership admin", () => {
       update: {},
     });
     const request = await prisma.accountDeletionRequest.create({
-      data: { userId: SOFT_DELETED_CONTEXT_USER_ID, status: "PROCESSING" },
+      data: { userId: SOFT_DELETED_CONTEXT_USER_ID, status: "IDENTITY_REQUIRED" },
     });
     try {
       const response = await app.inject({
