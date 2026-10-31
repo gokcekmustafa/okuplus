@@ -42,7 +42,7 @@ function analyticsStudentFlowSource(includeFetcher = false): string {
 }
 
 describe("admin student workspace and question editing UI", () => {
-  it("labels account roles by platform and tenant scope without exposing raw markup", () => {
+  it("separates platform type, organization roles, and escaped organization context", () => {
     const context = createContext({
       MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", TEACHER: "Öğretmen" },
       MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif" },
@@ -51,12 +51,16 @@ describe("admin student workspace and question editing UI", () => {
       platformRoleLabel: () => "Platform yöneticisi",
       tenantTypeLabel: (type: string) => (type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"),
     });
-    const render = runInContext(
-      `${functionSource("function renderUserRoleConnections(", "const INDIVIDUAL_ALLOWED_ROLES")}; renderUserRoleConnections`,
+    const renderers = runInContext(
+      `${functionSource("function renderUserAccountType(", "const INDIVIDUAL_ALLOWED_ROLES")}; ({renderUserAccountType, renderUserAccountLocations, renderUserMembershipSummary})`,
       context,
-    ) as (user: unknown) => string;
+    ) as {
+      renderUserAccountType: (user: unknown) => string;
+      renderUserAccountLocations: (user: unknown) => string;
+      renderUserMembershipSummary: (user: unknown) => string;
+    };
 
-    const html = render({
+    const user = {
       platformRole: "SUPER_ADMIN",
       roleConnections: [
         {
@@ -66,11 +70,11 @@ describe("admin student workspace and question editing UI", () => {
           tenantType: "ORGANIZATION",
         },
       ],
-    });
-    expect(html).toContain("Platform yöneticisi");
-    expect(html).toContain("Kurumsal · Öğrenci");
-    expect(html).toContain("&lt;Örnek Kurum&gt;");
-    expect(html).not.toContain("<Örnek Kurum>");
+    };
+    expect(renderers.renderUserAccountType(user)).toContain("Platform yöneticisi");
+    expect(renderers.renderUserMembershipSummary(user)).toContain("Öğrenci");
+    expect(renderers.renderUserAccountLocations(user)).toContain("&lt;Örnek Kurum&gt;");
+    expect(renderers.renderUserAccountLocations(user)).not.toContain("<Örnek Kurum>");
   });
 
   it("opens the matching shared student profile from the analytics row", async () => {
@@ -341,6 +345,11 @@ describe("admin student workspace and question editing UI", () => {
 
   it("opens the same student workspace from User Management when the account has student access", async () => {
     const close = vi.fn();
+    const showDirectory = vi.fn();
+    const elements = {
+      "user-detail-modal": { classList: { add: close } },
+      "user-directory-view": { classList: { remove: showDirectory } },
+    };
     const openStudentDetail = vi.fn(async () => true);
     const data = { student: { profileId: "profile-2" } };
     const context = createContext({
@@ -349,12 +358,12 @@ describe("admin student workspace and question editing UI", () => {
       fetchAnalyticsStudentDetail: vi.fn(async () => data),
       openStudentDetail,
       showUserError: vi.fn(),
-      $: (id: string) => ({
-        classList: { add: id === "user-detail-modal" ? close : vi.fn() },
-      }),
+      userDetailRequest: 0,
+      userDetailCurrent: { id: "user-2" },
+      $: (id: string) => elements[id as keyof typeof elements],
     });
     runInContext(
-      `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
+      `${functionSource("function returnToUserList()", "function renderUserDetail(")}\n${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
       context,
     );
     await runInContext("openAnalyticsStudentWorkspace('user-2', {closeUserDetail:true})", context);
@@ -363,6 +372,7 @@ describe("admin student workspace and question editing UI", () => {
       isCurrent: expect.any(Function),
     });
     expect(close).toHaveBeenCalledExactlyOnceWith("hidden");
+    expect(showDirectory).toHaveBeenCalledExactlyOnceWith("hidden");
   });
 
   it("keeps a student name click in User Management on the general user detail", () => {
@@ -407,14 +417,20 @@ describe("admin student workspace and question editing UI", () => {
         {
           id: "student-user",
           displayName: "Öğrenci Adı",
+          email: "student@example.test",
           roleConnections: [{ role: "STUDENT" }],
+          accountContexts: [],
+          unlinkedPackageRights: [],
           status: "ACTIVE",
           membershipCount: 1,
         },
         {
           id: "teacher-user",
           displayName: "Öğretmen Adı",
+          email: "teacher@example.test",
           roleConnections: [{ role: "TEACHER" }],
+          accountContexts: [],
+          unlinkedPackageRights: [],
           status: "ACTIVE",
           membershipCount: 1,
         },
@@ -424,15 +440,18 @@ describe("admin student workspace and question editing UI", () => {
       USER_PAGE_SIZE: 20,
       $: (id: string) => elements[id],
       escapeHtml: (value: unknown) => String(value),
-      renderUserRoleConnections: () => "roller",
-      formatTurkishPhoneValue: (value: unknown) => String(value),
+      MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", TEACHER: "Öğretmen" },
+      MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif" },
+      platformRoleLabel: () => "Platform yöneticisi",
       userStatusBadge: () => "durum",
+      document: { querySelectorAll: () => [] },
       Math,
     });
-    runInContext(
-      `${functionSource("function renderUserList()", "function renderUserRoleConnections(")}; renderUserList`,
-      context,
-    )();
+    const userListSource = [
+      functionSource("function renderUserAccountType(", "const INDIVIDUAL_ALLOWED_ROLES"),
+      functionSource("function renderUserList()", "function renderUserAccountType("),
+    ].join("\n");
+    runInContext(`${userListSource}; renderUserList`, context)();
 
     const [studentRow, teacherRow] = listBody.innerHTML.split("<tr>").slice(1);
     expect(studentRow).toContain('data-user-detail-id="student-user"');
@@ -481,7 +500,11 @@ describe("admin student workspace and question editing UI", () => {
     const renderUserDetail = vi.fn();
     const elements = {
       "user-detail-modal": { classList: { remove() {} } },
+      "user-directory-view": { classList: { add() {}, remove() {} } },
       "user-detail-title": { textContent: "" },
+      "user-profile-email": { textContent: "" },
+      "user-profile-status": { innerHTML: "" },
+      "user-profile-avatar": { textContent: "" },
       "user-detail-body": { innerHTML: "" },
     };
     const context = createContext({
@@ -505,7 +528,7 @@ describe("admin student workspace and question editing UI", () => {
     resolveFirst({ id: "user-old" });
     await older;
 
-    expect(renderUserDetail).toHaveBeenCalledExactlyOnceWith({ id: "user-new" });
+    expect(renderUserDetail).toHaveBeenCalledExactlyOnceWith({ id: "user-new" }, "");
   });
 
   it("keeps User Management open when the shared student detail fails", async () => {

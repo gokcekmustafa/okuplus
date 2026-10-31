@@ -3320,6 +3320,447 @@ dialog::backdrop {
   box-shadow: 0 24px 75px rgb(9 20 39 / 22%);
 }
 
+.app.superadmin-shell .user-segment-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 22px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-segment-tab {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--admin-line);
+  border-radius: 11px;
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.app.superadmin-shell .user-segment-tab:hover,
+.app.superadmin-shell .user-segment-tab.active,
+.app.superadmin-shell .user-segment-tab[aria-pressed="true"] {
+  border-color: var(--admin-brand);
+  background: color-mix(in srgb, var(--admin-brand) 9%, var(--admin-surface));
+  color: var(--admin-brand);
+}
+.app.superadmin-shell .user-list-contexts,
+.app.superadmin-shell .user-list-package {
+  display: grid;
+  gap: 4px;
+}
+.app.superadmin-shell .user-list-contexts span,
+.app.superadmin-shell .user-list-package strong {
+  color: var(--admin-ink);
+  font-size: 13px;
+  font-weight: 650;
+}
+.app.superadmin-shell .user-list-package small,
+.app.superadmin-shell .user-list-contexts .muted {
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .user-list-contexts span,
+.app.superadmin-shell .user-list-package {
+  min-width: 0;
+}
+.app.superadmin-shell .user-list-contexts strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+}
+.app.superadmin-shell .user-list-contexts small {
+  display: block;
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+.app.superadmin-shell .user-list-memberships {
+  display: grid;
+  gap: 5px;
+}
+.app.superadmin-shell .user-list-memberships > small {
+  color: var(--admin-muted);
+  font-size: 11px;
+}
+.app.superadmin-shell .user-membership-summary-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  color: var(--admin-ink);
+  font-size: 12px;
+}
+.app.superadmin-shell .user-membership-summary-item .badge {
+  padding: 2px 7px;
+  font-size: 10px;
+  font-style: normal;
+}
+.app.superadmin-shell .user-profile-workspace {
+  min-width: 0;
+  padding: 0 0 48px;
+}
+.app.superadmin-shell .user-profile-header {
+  display: grid;
+  gap: 18px;
+  margin: -4px 0 22px;
+  padding: 18px 0 20px;
+  border-bottom: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-profile-back {
+  justify-self: start;
+  min-height: 40px;
+}
+.app.superadmin-shell .user-profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.app.superadmin-shell .user-profile-avatar {
+  display: grid;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--admin-brand) 10%, var(--admin-surface));
+  color: var(--admin-brand);
+  font-size: 19px;
+  font-weight: 800;
+}
+.app.superadmin-shell .user-profile-heading h2 {
+  margin: 2px 0;
+  color: var(--admin-ink);
+  font-size: clamp(21px, 2.5vw, 29px);
+}
+.app.superadmin-shell .user-profile-eyebrow,
+.app.superadmin-shell .eyebrow {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.app.superadmin-shell .user-profile-heading > #user-profile-status {
+  margin-left: auto;
+}
+.app.superadmin-shell .user-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.app.superadmin-shell .user-profile-actions .btn {
+  min-height: 42px;
+}
+.app.superadmin-shell .user-profile-body {
+  min-width: 0;
+}
+.app.superadmin-shell .user-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.85fr);
+  align-items: start;
+  gap: 18px;
+}
+.app.superadmin-shell .user-profile-main-column,
+.app.superadmin-shell .user-profile-side-column {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+.app.superadmin-shell .user-profile-panel {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--admin-line);
+  border-radius: 16px;
+  background: var(--admin-surface);
+  box-shadow: 0 5px 18px rgb(15 23 42 / 4%);
+}
+.app.superadmin-shell .user-profile-panel-heading,
+.app.superadmin-shell .user-entitlement-card-main,
+.app.superadmin-shell .personal-context-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.app.superadmin-shell .user-profile-panel-heading {
+  margin-bottom: 16px;
+}
+.app.superadmin-shell .user-profile-panel-heading h3 {
+  margin: 4px 0 0;
+  color: var(--admin-ink);
+  font-size: 18px;
+}
+.app.superadmin-shell .user-profile-panel-heading p {
+  margin: 6px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+.app.superadmin-shell .count-pill {
+  display: inline-grid;
+  min-width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0 7px;
+  place-items: center;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--admin-brand) 8%, var(--admin-surface));
+  color: var(--admin-muted);
+  font-size: 12px;
+  vertical-align: 2px;
+}
+.app.superadmin-shell .user-profile-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+}
+.app.superadmin-shell .user-profile-facts,
+.app.superadmin-shell .compact-definition-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  margin: 18px 0 0;
+}
+.app.superadmin-shell .user-profile-facts > div,
+.app.superadmin-shell .compact-definition-list > div {
+  min-width: 0;
+  padding: 11px 0;
+  border-top: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-profile-facts dt,
+.app.superadmin-shell .compact-definition-list dt {
+  margin-bottom: 4px;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .user-profile-facts dd,
+.app.superadmin-shell .compact-definition-list dd {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.app.superadmin-shell .personal-context-grid,
+.app.superadmin-shell .user-related-grid {
+  display: grid;
+  gap: 12px;
+}
+.app.superadmin-shell .personal-context-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--admin-surface) 92%, var(--admin-brand));
+}
+.app.superadmin-shell .personal-context-card h4,
+.app.superadmin-shell .user-related-grid h4 {
+  margin: 4px 0 0;
+  color: var(--admin-ink);
+}
+.app.superadmin-shell .personal-context-recovery {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .personal-context-recovery p {
+  margin: 0 0 10px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app.superadmin-shell .user-profile-student-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--admin-brand) 24%, var(--admin-line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--admin-brand) 8%, var(--admin-surface));
+}
+.app.superadmin-shell .user-profile-student-link strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--admin-ink);
+}
+.app.superadmin-shell .user-profile-student-link p {
+  margin: 4px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+.app.superadmin-shell .user-profile-action-status:not(:empty) {
+  margin: 0 0 14px;
+  color: var(--admin-muted);
+}
+.app.superadmin-shell .user-entitlement-list,
+.app.superadmin-shell .billing-summary-list {
+  display: grid;
+  gap: 11px;
+}
+.app.superadmin-shell .user-entitlement-card,
+.app.superadmin-shell .user-current-access-card,
+.app.superadmin-shell .billing-summary-list article {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--admin-line);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--admin-surface) 95%, var(--admin-brand));
+}
+.app.superadmin-shell .user-current-access-list {
+  display: grid;
+  gap: 10px;
+}
+.app.superadmin-shell .user-current-access-card {
+  border-color: color-mix(in srgb, var(--admin-brand) 22%, var(--admin-line));
+}
+.app.superadmin-shell .user-entitlement-card h4 {
+  margin: 4px 0 0;
+  color: var(--admin-ink);
+  font-size: 17px;
+}
+.app.superadmin-shell .user-entitlement-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 12px;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .entitlement-feature-list {
+  display: grid;
+  gap: 5px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .user-entitlement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+.app.superadmin-shell .user-profile-note {
+  margin: 13px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .billing-summary-list article > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.app.superadmin-shell .billing-summary-list p,
+.app.superadmin-shell .billing-summary-list small {
+  display: block;
+  margin: 7px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .billing-subheading {
+  margin: 18px 0 10px;
+  color: var(--admin-ink);
+  font-size: 14px;
+}
+.app.superadmin-shell .user-empty-state {
+  padding: 18px;
+  border: 1px dashed var(--admin-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--admin-surface) 96%, var(--admin-brand));
+}
+.app.superadmin-shell .user-empty-state strong {
+  color: var(--admin-ink);
+}
+.app.superadmin-shell .user-empty-state p {
+  margin: 5px 0 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+.app.superadmin-shell .user-empty-state.compact {
+  padding: 12px;
+  color: var(--admin-muted);
+  font-size: 13px;
+}
+.app.superadmin-shell .user-secondary-disclosure {
+  margin-top: 14px;
+  border-top: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-secondary-disclosure > summary {
+  padding: 13px 0 0;
+  color: var(--admin-ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+.app.superadmin-shell .user-secondary-disclosure .membership-add-row {
+  margin-top: 12px;
+}
+.app.superadmin-shell .user-activity-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.app.superadmin-shell .user-activity-list li {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-activity-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--admin-brand);
+}
+.app.superadmin-shell .user-activity-list strong {
+  color: var(--admin-ink);
+  font-size: 13px;
+}
+.app.superadmin-shell .user-activity-list p {
+  margin: 4px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.app.superadmin-shell .user-entitlement-dialog {
+  width: min(540px, calc(100vw - 28px));
+}
+.app.superadmin-shell .user-entitlement-form {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+.app.superadmin-shell .user-entitlement-form .field small {
+  color: var(--admin-muted);
+}
+.app.superadmin-shell .user-entitlement-form .modal-actions {
+  margin: 0;
+}
+.app.superadmin-shell .user-profile-workspace .membership-table td > div {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.app.superadmin-shell .membership-table .cell-muted {
+  display: block;
+}
+.app.superadmin-shell .user-form-organization-membership {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 @media (max-width: 900px) {
   .app.superadmin-shell .sidebar {
     position: fixed;
@@ -3378,5 +3819,144 @@ dialog::backdrop {
 
   .app.superadmin-shell .page-head {
     margin-bottom: 18px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .app.superadmin-shell .user-profile-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app.superadmin-shell .user-profile-side-column {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .app.superadmin-shell .user-directory-table {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .app.superadmin-shell .user-directory-table .data-table,
+  .app.superadmin-shell .user-directory-table .data-table thead,
+  .app.superadmin-shell .user-directory-table .data-table tbody,
+  .app.superadmin-shell .user-directory-table .data-table tr,
+  .app.superadmin-shell .user-directory-table .data-table td {
+    display: block;
+    width: 100%;
+  }
+  .app.superadmin-shell .user-directory-table .data-table {
+    background: transparent;
+  }
+  .app.superadmin-shell .user-directory-table .data-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .app.superadmin-shell .user-directory-table .data-table tbody {
+    display: grid;
+    gap: 12px;
+  }
+  .app.superadmin-shell .user-directory-table .data-table tbody tr {
+    padding: 9px 14px;
+    border: 1px solid var(--admin-line);
+    border-radius: 13px;
+    background: var(--admin-surface);
+    box-shadow: 0 4px 16px rgb(26 45 78 / 4%);
+  }
+  .app.superadmin-shell .user-directory-table .data-table td {
+    display: grid;
+    grid-template-columns: minmax(98px, 0.72fr) minmax(0, 1.28fr);
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--admin-line);
+    text-align: left;
+  }
+  .app.superadmin-shell .user-directory-table .data-table td::before {
+    content: attr(data-label);
+    color: var(--admin-muted);
+    font-size: 11px;
+    font-weight: 650;
+  }
+  .app.superadmin-shell .user-directory-table .data-table td:last-child {
+    border-bottom: 0;
+  }
+  .app.superadmin-shell .user-directory-table .data-table td .btn {
+    justify-self: start;
+  }
+  .app.superadmin-shell .user-profile-side-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .app.superadmin-shell .user-segment-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-top: 16px;
+    padding-bottom: 10px;
+  }
+  .app.superadmin-shell .user-segment-tab {
+    justify-content: flex-start;
+    min-height: 44px;
+    text-align: left;
+  }
+  .app.superadmin-shell .user-profile-header {
+    gap: 14px;
+  }
+  .app.superadmin-shell .user-profile-heading {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .app.superadmin-shell .user-profile-avatar {
+    flex-basis: 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    font-size: 16px;
+  }
+  .app.superadmin-shell .user-profile-heading > #user-profile-status {
+    margin-left: 0;
+  }
+  .app.superadmin-shell .user-profile-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .app.superadmin-shell .user-profile-actions .btn {
+    width: 100%;
+  }
+  .app.superadmin-shell .user-profile-panel {
+    padding: 15px;
+    border-radius: 13px;
+  }
+  .app.superadmin-shell .user-profile-facts,
+  .app.superadmin-shell .compact-definition-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app.superadmin-shell .user-form-organization-membership {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app.superadmin-shell .user-profile-student-link {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .app.superadmin-shell .user-profile-student-link .btn {
+    width: 100%;
+  }
+  .app.superadmin-shell .user-entitlement-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .app.superadmin-shell .user-entitlement-actions .btn {
+    width: 100%;
+  }
+  .app.superadmin-shell .user-entitlement-form {
+    padding: 16px;
   }
 }

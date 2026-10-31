@@ -2022,73 +2022,106 @@
 
           <!-- Kullanıcılar -->
           <section id="page-users" class="page-view hidden">
-            <div class="page-head">
-              <h2>Kullanıcı Hesapları</h2>
-              <p class="muted">
-                Hesapları, platform rollerini ve kurum üyeliklerini yönetin. Öğrenci ilerlemesi ayrı
-                Öğrenci Analitiği alanındadır.
-              </p>
-            </div>
-
-            <div class="tenant-toolbar">
-              <div class="tenant-filters">
-                <label class="field inline-field">
-                  <span class="visually-hidden">Kullanıcı ara</span>
-                  <input
-                    id="user-search"
-                    type="search"
-                    placeholder="Ad veya e-posta ara…"
-                    autocomplete="off"
-                  />
-                </label>
-                <label class="field inline-field">
-                  <span class="visually-hidden">Durum filtresi</span>
-                  <select id="user-status-filter">
-                    <option value="">Tüm durumlar</option>
-                    <option value="ACTIVE">Aktif</option>
-                    <option value="INVITED">Davetli</option>
-                    <option value="SUSPENDED">Askıda</option>
-                    <option value="CLOSED">Kapatıldı</option>
-                  </select>
-                </label>
+            <div id="user-directory-view">
+              <div class="page-head">
+                <h2>Kullanıcı Hesapları</h2>
+                <p class="muted">
+                  Bireysel, kurumsal ve platform hesaplarını; paket ve erişim durumlarını tek yerden
+                  yönetin.
+                </p>
               </div>
-              <button id="user-create-btn" type="button" class="btn btn-primary">
-                Yeni kullanıcı
-              </button>
-            </div>
 
-            <div id="user-error" class="error hidden" role="alert"></div>
-
-            <div class="card table-card">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Kullanıcı</th>
-                    <th>Hesap ve roller</th>
-                    <th>Telefon</th>
-                    <th>Doğum Yılı</th>
-                    <th>Durum</th>
-                    <th>Üyelikler</th>
-                    <th class="text-right">İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody id="user-list-body">
-                  <tr>
-                    <td colspan="7" class="empty-cell">Yükleniyor…</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="tenant-pagination">
-              <span id="user-page-info" class="muted">—</span>
-              <div class="pagination-actions">
-                <button id="user-prev-btn" type="button" class="btn btn-ghost btn-sm">
-                  Önceki
+              <nav
+                id="user-segment-tabs"
+                class="user-segment-tabs"
+                aria-label="Kullanıcı kategorisi"
+              >
+                <button
+                  type="button"
+                  class="user-segment-tab"
+                  data-user-segment="ORGANIZATION"
+                  aria-pressed="false"
+                >
+                  Kurumsal kullanıcılar
                 </button>
-                <button id="user-next-btn" type="button" class="btn btn-ghost btn-sm">
-                  Sonraki
+                <button
+                  type="button"
+                  class="user-segment-tab"
+                  data-user-segment="INDIVIDUAL"
+                  aria-pressed="false"
+                >
+                  Bireysel kullanıcılar
                 </button>
+                <button
+                  type="button"
+                  class="user-segment-tab"
+                  data-user-segment="PLATFORM"
+                  aria-pressed="false"
+                >
+                  Platform kullanıcıları
+                </button>
+              </nav>
+
+              <div class="tenant-toolbar">
+                <div class="tenant-filters">
+                  <label class="field inline-field">
+                    <span class="visually-hidden">Kullanıcı ara</span>
+                    <input
+                      id="user-search"
+                      type="search"
+                      placeholder="Ad veya e-posta ara…"
+                      autocomplete="off"
+                    />
+                  </label>
+                  <label class="field inline-field">
+                    <span class="visually-hidden">Durum filtresi</span>
+                    <select id="user-status-filter">
+                      <option value="">Tüm durumlar</option>
+                      <option value="ACTIVE">Aktif</option>
+                      <option value="INVITED">Davetli</option>
+                      <option value="SUSPENDED">Askıda</option>
+                      <option value="CLOSED">Kapatıldı</option>
+                    </select>
+                  </label>
+                </div>
+                <button id="user-create-btn" type="button" class="btn btn-primary">
+                  Yeni kullanıcı
+                </button>
+              </div>
+
+              <div id="user-error" class="error hidden" role="alert"></div>
+
+              <div class="user-directory-table table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Kullanıcı</th>
+                      <th>Hesap türü</th>
+                      <th>Kurum / kişisel alan</th>
+                      <th>Paket ve erişim</th>
+                      <th>Durum</th>
+                      <th>Kurum rolleri</th>
+                      <th class="text-right">İşlemler</th>
+                    </tr>
+                  </thead>
+                  <tbody id="user-list-body">
+                    <tr>
+                      <td colspan="7" class="empty-cell">Yükleniyor…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="tenant-pagination">
+                <span id="user-page-info" class="muted">—</span>
+                <div class="pagination-actions">
+                  <button id="user-prev-btn" type="button" class="btn btn-ghost btn-sm">
+                    Önceki
+                  </button>
+                  <button id="user-next-btn" type="button" class="btn btn-ghost btn-sm">
+                    Sonraki
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -2168,21 +2201,34 @@
                     />
                   </label>
                   <fieldset id="user-form-initial-membership" class="fieldset-group">
-                    <legend>İlk kurum üyeliği</legend>
+                    <legend>Hesap türü</legend>
                     <label class="field">
-                      <span>Kurum</span>
-                      <select id="user-form-tenant">
-                        <option value="">Kurum seçin…</option>
+                      <span>Bu hesap nasıl kullanılacak?</span>
+                      <select id="user-form-account-type">
+                        <option value="INDIVIDUAL">Bireysel · kurum seçmeden</option>
+                        <option value="ORGANIZATION">Kurumsal · kuruma bağla</option>
                       </select>
                     </label>
-                    <label class="field">
-                      <span>Rol</span>
-                      <select id="user-form-role">
-                        <option value="">Rol seçin…</option>
-                      </select>
-                    </label>
+                    <div
+                      id="user-form-organization-membership"
+                      class="user-form-organization-membership hidden"
+                    >
+                      <label class="field">
+                        <span>Kurum *</span>
+                        <select id="user-form-tenant">
+                          <option value="">Kurum seçin…</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>Kurumdaki rol *</span>
+                        <select id="user-form-role">
+                          <option value="">Rol seçin…</option>
+                        </select>
+                      </label>
+                    </div>
                     <p class="muted field-hint">
-                      Kurum seçilirse kullanıcı oluşturulduğunda üyelik de eklenir.
+                      Bireysel hesap kendi kişisel çalışma alanını alır. Kurum ve üyelik yalnızca
+                      kurumsal hesapta oluşturulur.
                     </p>
                   </fieldset>
                   <p id="user-form-error" class="error hidden" role="alert"></p>
@@ -2197,31 +2243,114 @@
               </div>
             </div>
 
-            <!-- Detay modalı (bilgi + üyelik yönetimi) -->
-            <div id="user-detail-modal" class="modal-backdrop hidden">
-              <div
-                class="modal modal-wide user-detail-modal-dialog admin-record-detail-modal"
+            <!-- Tam ekran kullanıcı çalışma alanı -->
+            <section
+              id="user-detail-modal"
+              class="user-profile-workspace hidden"
+              aria-labelledby="user-detail-title"
+            >
+              <header class="user-profile-header">
+                <button
+                  id="user-detail-close"
+                  type="button"
+                  class="btn btn-ghost user-profile-back"
+                >
+                  ← Kullanıcı listesine dön
+                </button>
+                <div class="user-profile-heading">
+                  <div id="user-profile-avatar" class="user-profile-avatar" aria-hidden="true">
+                    —
+                  </div>
+                  <div>
+                    <p class="user-profile-eyebrow">Kullanıcı çalışma alanı</p>
+                    <h2 id="user-detail-title">Kullanıcı ayrıntısı</h2>
+                    <p id="user-profile-email" class="muted"></p>
+                  </div>
+                  <div id="user-profile-status"></div>
+                </div>
+                <div class="user-profile-actions">
+                  <button id="user-detail-entitlement-start" type="button" class="btn btn-primary">
+                    Paket ata
+                  </button>
+                  <button id="user-detail-edit" type="button" class="btn btn-secondary">
+                    Kullanıcı bilgilerini düzenle
+                  </button>
+                  <button id="user-detail-delete" type="button" class="btn btn-danger">
+                    Hesabı kapat
+                  </button>
+                </div>
+              </header>
+              <div id="user-detail-body" class="user-profile-body"></div>
+            </section>
+
+            <div id="user-entitlement-dialog" class="modal-backdrop hidden">
+              <section
+                class="modal user-entitlement-dialog"
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="user-detail-title"
+                aria-labelledby="user-entitlement-dialog-title"
               >
                 <div class="modal-head">
-                  <h3 id="user-detail-title">Kullanıcı detayı</h3>
+                  <div>
+                    <p class="eyebrow">Paket yönetimi</p>
+                    <h3 id="user-entitlement-dialog-title">Paket ata</h3>
+                  </div>
                   <button
-                    id="user-detail-close"
+                    id="user-entitlement-dialog-close"
                     type="button"
                     class="btn btn-icon"
                     aria-label="Kapat"
                   >
-                    <span aria-hidden="true">✕</span>
+                    ✕
                   </button>
                 </div>
-                <div id="user-detail-body" class="modal-body"></div>
-                <div class="modal-actions">
-                  <button id="user-detail-edit" type="button" class="btn btn-ghost">Düzenle</button>
-                  <button id="user-detail-delete" type="button" class="btn btn-danger">Sil</button>
-                </div>
-              </div>
+                <form id="user-entitlement-form" class="user-entitlement-form" novalidate>
+                  <input id="user-entitlement-id" type="hidden" />
+                  <input id="user-entitlement-action" type="hidden" />
+                  <label id="user-entitlement-scope-field" class="field"
+                    ><span>Uygulama kapsamı</span
+                    ><select id="user-entitlement-scope">
+                      <option value="PERSONAL">Yalnızca bu kişinin hesabı</option>
+                      <option value="ORGANIZATION">Kurumun tamamı</option>
+                    </select></label
+                  >
+                  <label id="user-entitlement-organization-field" class="field hidden"
+                    ><span>Kurum</span
+                    ><select id="user-entitlement-organization">
+                      <option value="">Kurum üyeliği seçin…</option></select
+                    ><small
+                      >Bu paket seçilen kurumun kapsamındaki kullanıcılara uygulanır.</small
+                    ></label
+                  >
+                  <label id="user-entitlement-plan-field" class="field"
+                    ><span>Paket</span
+                    ><select id="user-entitlement-plan">
+                      <option value="PLAN_FREE">Başlangıç</option>
+                      <option value="PLAN_PREMIUM">Premium</option>
+                    </select></label
+                  >
+                  <label id="user-entitlement-effective-field" class="field"
+                    ><span>Başlangıç</span
+                    ><input id="user-entitlement-effective" type="datetime-local"
+                  /></label>
+                  <label id="user-entitlement-expires-field" class="field"
+                    ><span>Bitiş</span><input id="user-entitlement-expires" type="datetime-local"
+                  /></label>
+                  <p
+                    id="user-entitlement-form-status"
+                    class="muted"
+                    role="status"
+                    aria-live="polite"
+                  ></p>
+                  <div class="modal-actions">
+                    <button id="user-entitlement-cancel" type="button" class="btn btn-ghost">
+                      Vazgeç</button
+                    ><button id="user-entitlement-submit" type="submit" class="btn btn-primary">
+                      Kaydet
+                    </button>
+                  </div>
+                </form>
+              </section>
             </div>
           </section>
 

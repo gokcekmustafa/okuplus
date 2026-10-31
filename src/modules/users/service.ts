@@ -49,7 +49,6 @@ const USER_LIST_SELECT = {
       tenant: { select: { id: true, name: true, type: true, status: true, deletedAt: true } },
     },
   },
-  _count: { select: { memberships: true } },
 } satisfies Prisma.UserSelect;
 
 const USER_DETAIL_SELECT = {
@@ -93,6 +92,7 @@ export interface UserListItem {
     status: Membership["status"];
     tenantName: string;
     tenantType: string;
+    tenantStatus: string;
   }>;
 }
 
@@ -110,6 +110,16 @@ export interface UserDetail {
   createdAt: Date;
   updatedAt: Date;
   memberships: MembershipSummary[];
+  personalContexts: Array<{
+    tenantId: string;
+    tenantName: string;
+    tenantStatus: string;
+    tenantDeleted: boolean;
+    membershipRole: Membership["role"];
+    membershipStatus: Membership["status"];
+    membershipDeleted: boolean;
+    createdAt: Date;
+  }>;
   accountContexts: UserAccountContext[];
   branches: UserBranchSummary[];
   classAssignments: UserClassAssignmentSummary[];
@@ -272,24 +282,34 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
     });
   }
   if (segment === "PLATFORM") filters.push({ platformRole: { not: null } });
+  const activeOrganizationMembership: Prisma.MembershipWhereInput = {
+    status: "ACTIVE",
+    deletedAt: null,
+    tenant: { type: "ORGANIZATION", status: "ACTIVE", deletedAt: null },
+  };
+  const activeAccountMembership: Prisma.MembershipWhereInput = {
+    status: "ACTIVE",
+    deletedAt: null,
+    tenant: { status: "ACTIVE", deletedAt: null },
+  };
   if (segment === "INDIVIDUAL") {
-    filters.push({ platformRole: null, memberships: { some: { tenant: { type: "INDIVIDUAL" } } } });
+    filters.push({
+      platformRole: null,
+      memberships: { some: { tenant: { type: "INDIVIDUAL" } } },
+      NOT: { memberships: { some: activeOrganizationMembership } },
+    });
   }
   if (segment === "ORGANIZATION") {
     filters.push({
       platformRole: null,
-      memberships: { some: { tenant: { type: "ORGANIZATION" } } },
+      memberships: { some: activeOrganizationMembership },
     });
   }
   if (segment === "UNLINKED") {
     filters.push({
       platformRole: null,
       memberships: {
-        none: {
-          status: "ACTIVE",
-          deletedAt: null,
-          tenant: { status: "ACTIVE", deletedAt: null },
-        },
+        none: activeAccountMembership,
       },
     });
   }
@@ -313,7 +333,14 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
   const entitlementRows = await findAccountEntitlements(userIds, tenantIds);
   const now = new Date();
   return {
-    items: rows.map(({ _count, memberships, ...u }) => {
+    items: rows.map(({ memberships, ...u }) => {
+      const organizationMemberships = memberships.filter(
+        (membership) =>
+          membership.tenant.type === "ORGANIZATION" &&
+          membership.deletedAt === null &&
+          membership.status !== "REMOVED" &&
+          membership.tenant.deletedAt === null,
+      );
       const accountContexts = toAccountContexts(u.id, memberships, entitlementRows, now);
       const linkedEntitlementIds = new Set(
         accountContexts.map((context) => context.packageRight.id).filter(Boolean),
@@ -330,16 +357,15 @@ export async function listUsers(query: ListUsersQuery): Promise<UserListResult> 
         }));
       return {
         ...u,
-        membershipCount: _count.memberships,
+        membershipCount: organizationMemberships.length,
         accountContexts,
         unlinkedPackageRights,
-        roleConnections: memberships.map((membership) => ({
+        roleConnections: organizationMemberships.map((membership) => ({
           role: membership.role,
           status: membership.status,
-          tenantName: membership.tenant.deletedAt
-            ? `${membership.tenant.name} (silindi)`
-            : membership.tenant.name,
+          tenantName: membership.tenant.name,
           tenantType: membership.tenant.type,
+          tenantStatus: membership.tenant.status,
         })),
       };
     }),
@@ -495,7 +521,16 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
       startedAt: true,
       endedAt: true,
       createdAt: true,
-      tenant: { select: { id: true, name: true, type: true, status: true, deletedAt: true } },
+      tenant: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          status: true,
+          deletedAt: true,
+          createdAt: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -616,11 +651,25 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
   const activityEntityIds = [
     id,
     ...memberships.map((membership) => membership.id),
-    ...memberships.map((membership) => membership.tenant.id),
     ...entitlements.map((item) => item.id),
   ];
+  const personalContextTenantIds = memberships
+    .filter((membership) => membership.tenant.type === "INDIVIDUAL")
+    .map((membership) => membership.tenant.id);
   const activity = await prisma.auditLog.findMany({
-    where: { entityId: { in: activityEntityIds } },
+    where: {
+      OR: [
+        { entityId: { in: activityEntityIds } },
+        ...(personalContextTenantIds.length
+          ? [
+              {
+                entityType: "PERSONAL_CONTEXT_RECOVERY",
+                entityId: { in: personalContextTenantIds },
+              },
+            ]
+          : []),
+      ],
+    },
     select: {
       action: true,
       entityType: true,
@@ -638,20 +687,34 @@ export async function getUser(id: string, actor: UserAdminReadActor): Promise<Us
   return {
     ...user,
     accountContexts: toAccountContexts(id, memberships, entitlements, now),
-    memberships: memberships.map(({ tenant, ...m }) => ({
-      id: m.id,
-      tenantId: tenant.id,
-      tenantName: tenant.deletedAt ? `${tenant.name} (silindi)` : tenant.name,
-      tenantType: tenant.type,
-      tenantStatus: tenant.status,
-      tenantDeleted: tenant.deletedAt !== null,
-      role: m.role,
-      status: m.status,
-      deleted: m.deletedAt !== null,
-      startedAt: m.startedAt,
-      endedAt: m.endedAt,
-      createdAt: m.createdAt,
-    })),
+    memberships: memberships
+      .filter((membership) => membership.tenant.type === "ORGANIZATION")
+      .map(({ tenant, ...m }) => ({
+        id: m.id,
+        tenantId: tenant.id,
+        tenantName: tenant.deletedAt ? `${tenant.name} (silindi)` : tenant.name,
+        tenantType: tenant.type,
+        tenantStatus: tenant.status,
+        tenantDeleted: tenant.deletedAt !== null,
+        role: m.role,
+        status: m.status,
+        deleted: m.deletedAt !== null,
+        startedAt: m.startedAt,
+        endedAt: m.endedAt,
+        createdAt: m.createdAt,
+      })),
+    personalContexts: memberships
+      .filter((membership) => membership.tenant.type === "INDIVIDUAL")
+      .map((membership) => ({
+        tenantId: membership.tenant.id,
+        tenantName: membership.tenant.name,
+        tenantStatus: membership.tenant.status,
+        tenantDeleted: membership.tenant.deletedAt !== null,
+        membershipRole: membership.role,
+        membershipStatus: membership.status,
+        membershipDeleted: membership.deletedAt !== null,
+        createdAt: membership.tenant.createdAt,
+      })),
     branches: branches.map((item) => ({
       id: item.id,
       name: item.branch.name,

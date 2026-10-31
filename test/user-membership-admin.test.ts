@@ -527,6 +527,9 @@ describe("user + membership admin", () => {
         .json()
         .data.items.some((user: { id: string }) => user.id === SOFT_DELETED_CONTEXT_USER_ID),
     ).toBe(true);
+    expect(individual.json().data.items.map((user: { id: string }) => user.id)).not.toContain(
+      USER_A_ID,
+    );
   });
 
   it("Sayfalama: page ve pageSize uygulanır", async () => {
@@ -594,6 +597,9 @@ describe("user + membership admin", () => {
 
   it("bireysel kullanıcıyı kurum seçmeden oluşturur ve kişisel alanı tek işlemde kurar", async () => {
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
+    const organizationCountBefore = await prisma.tenant.count({
+      where: { type: "ORGANIZATION", deletedAt: null },
+    });
     const res = await app.inject({
       method: "POST",
       url: "/admin/users",
@@ -608,21 +614,29 @@ describe("user + membership admin", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json().data;
     expect(body.status).toBe("ACTIVE");
-    expect(body.memberships).toHaveLength(1);
-    expect(body.memberships[0]).toMatchObject({
-      tenantType: "INDIVIDUAL",
-      role: "STUDENT",
-      status: "ACTIVE",
+    expect(body.memberships).toEqual([]);
+    expect(body.personalContexts).toHaveLength(1);
+    expect(body.personalContexts[0]).toMatchObject({
+      tenantStatus: "ACTIVE",
+      membershipRole: "STUDENT",
+      membershipStatus: "ACTIVE",
+      membershipDeleted: false,
     });
     expect(body.accountContexts).toHaveLength(1);
     expect(body.accountContexts[0]).toMatchObject({
       tenantType: "INDIVIDUAL",
       tenantName: "Kişisel",
     });
+    expect(await prisma.tenant.count({ where: { type: "ORGANIZATION", deletedAt: null } })).toBe(
+      organizationCountBefore,
+    );
     expect(
       await prisma.studentProfile.findUnique({
         where: {
-          tenantId_studentId: { tenantId: body.memberships[0].tenantId, studentId: body.id },
+          tenantId_studentId: {
+            tenantId: body.personalContexts[0].tenantId,
+            studentId: body.id,
+          },
         },
       }),
     ).toBeTruthy();
@@ -1024,9 +1038,9 @@ describe("user + membership admin", () => {
       headers: await superAdminHeaders(),
     });
     expect(individualSegment.statusCode).toBe(200);
-    expect(individualSegment.json().data.items.map((item: { id: string }) => item.id)).toContain(
-      USER_A_ID,
-    );
+    expect(
+      individualSegment.json().data.items.map((item: { id: string }) => item.id),
+    ).not.toContain(USER_A_ID);
     expect(
       individualSegment
         .json()
@@ -1051,6 +1065,20 @@ describe("user + membership admin", () => {
     expect(res.statusCode).toBe(200);
     const detail = res.json().data;
     expect(detail.accountContexts).toHaveLength(3);
+    expect(
+      detail.memberships.every(
+        (membership: { tenantType: string }) => membership.tenantType === "ORGANIZATION",
+      ),
+    ).toBe(true);
+    expect(detail.personalContexts).toEqual([
+      expect.objectContaining({
+        tenantId: INDIVIDUAL_TENANT,
+        tenantStatus: "ACTIVE",
+        membershipRole: "STUDENT",
+        membershipStatus: "ACTIVE",
+        membershipDeleted: false,
+      }),
+    ]);
     expect(
       detail.accountContexts.find(
         (context: { tenantId: string }) => context.tenantId === ORG_TENANT,
@@ -1102,7 +1130,8 @@ describe("user + membership admin", () => {
     });
     expect(created.statusCode).toBe(200);
     const user = created.json().data;
-    const tenantId = user.memberships[0].tenantId as string;
+    expect(user.memberships).toEqual([]);
+    const tenantId = user.personalContexts[0].tenantId as string;
     const progressBefore = await prisma.studentProgress.count({
       where: { studentId: user.id, tenantId },
     });

@@ -9,6 +9,10 @@ import { EDUCATION_V2_P1_800_DRAFT_CYCLES } from "../src/curriculum/education-v2
 const appJs = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 const indexHtml = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+const designSystemStyles = readFileSync(
+  new URL("../public/design-system.css", import.meta.url),
+  "utf8",
+);
 
 describe("management UI follow-ups", () => {
   it("keeps Cycle 4 owner-approved while accurately waiting for its production graph", () => {
@@ -81,10 +85,7 @@ describe("management UI follow-ups", () => {
     expect(appJs).toContain("void openUserDetail(detailBtn.dataset.userDetailId)");
     const userListRenderer = appJs.slice(
       appJs.indexOf("function renderUserList()"),
-      appJs.indexOf(
-        "function renderUserRoleConnections(",
-        appJs.indexOf("function renderUserList()"),
-      ),
+      appJs.indexOf("function renderUserAccountType(", appJs.indexOf("function renderUserList()")),
     );
     expect(userListRenderer).not.toContain("data-user-open-student");
     expect(appJs).toContain("options.analyticsData.student.profileId !== detail.id");
@@ -96,14 +97,22 @@ describe("management UI follow-ups", () => {
     expect(appJs).toContain('data-user-open-student="${escapeHtml(u.id)}"');
   });
 
-  it("gives user detail headings opaque theme-aware surfaces with mobile sizing", () => {
-    expect(indexHtml).toContain("user-detail-modal-dialog");
-    expect(styles).toContain(".user-detail-modal-dialog .admin-detail-disclosure > summary");
+  it("uses a full-screen user profile workspace with responsive user and package views", () => {
+    expect(indexHtml).toContain('id="user-detail-modal"');
+    expect(indexHtml).toContain('class="user-profile-workspace hidden"');
+    expect(indexHtml).not.toContain("user-detail-modal-dialog");
+    expect(designSystemStyles).toContain(".app.superadmin-shell .user-profile-layout");
+    expect(designSystemStyles).toContain(".app.superadmin-shell .user-current-access-card");
+    expect(designSystemStyles).toContain(".app.superadmin-shell .user-directory-table");
+    expect(designSystemStyles).toContain("@media (max-width: 760px)");
+    expect(indexHtml).toContain("Kurumsal kullanıcılar");
+    expect(indexHtml).toContain("Bireysel kullanıcılar");
+    expect(indexHtml).toContain("Platform kullanıcıları");
+    expect(indexHtml).toContain('id="user-entitlement-dialog"');
+    expect(indexHtml).toContain('id="user-form-account-type"');
     expect(styles).toContain("background-color: var(--surface);");
     expect(styles).toContain("background-color: var(--primary-soft);");
     expect(styles).toContain("@media (max-width: 600px)");
-    expect(styles).toContain(".admin-record-detail-modal .modal-head");
-    expect(styles).toContain(".user-detail-modal-dialog option");
     expect(styles).toContain(".admin-record-detail-modal {\n  display: flex;");
     expect(styles).toContain("max-width: 1120px;");
     expect(styles).toContain("overflow: auto;");

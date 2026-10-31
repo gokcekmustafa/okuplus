@@ -6904,6 +6904,7 @@ const MEMBERSHIP_STATUS_LABELS = {
 };
 
 let userPage = 1;
+let userSegment = "ORGANIZATION";
 const USER_PAGE_SIZE = 20;
 let userTotal = 0;
 let userData = [];
@@ -6911,6 +6912,7 @@ let userFormMode = "create";
 let userEditingId = null;
 let userDetailCurrent = null;
 let userDetailRequest = 0;
+let userEntitlementSaving = false;
 
 function userApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -6992,6 +6994,7 @@ async function loadUsers() {
   const params = new URLSearchParams({
     page: userPage,
     pageSize: USER_PAGE_SIZE,
+    segment: userSegment,
   });
   if (search) params.set("search", search);
   if (status) params.set("status", status);
@@ -7011,6 +7014,13 @@ async function loadUsers() {
 
 function renderUserList() {
   const tbody = $("user-list-body");
+  if (typeof document !== "undefined") {
+    for (const tab of document.querySelectorAll("[data-user-segment]")) {
+      const selected = tab.dataset.userSegment === userSegment;
+      tab.setAttribute("aria-pressed", String(selected));
+      tab.classList.toggle("active", selected);
+    }
+  }
 
   if (userData.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
@@ -7019,20 +7029,19 @@ function renderUserList() {
       .map(
         (u) => `
         <tr>
-          <td>
+          <td data-label="Kullanıcı">
             <button type="button" class="link-btn" data-user-detail-id="${u.id}">
               ${escapeHtml(u.displayName)}
             </button>
             ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
           </td>
-          <td>${renderUserRoleConnections(u)}</td>
-          <td>${u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"}</td>
-          <td>${u.birthYear ?? "—"}</td>
-          <td>${userStatusBadge(u.status)}</td>
-          <td>${u.membershipCount}</td>
-          <td class="text-right">
-            <button type="button" class="btn btn-ghost btn-sm" data-user-edit-id="${u.id}">Düzenle</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-user-delete-id="${u.id}">Sil</button>
+          <td data-label="Hesap türü">${renderUserAccountType(u)}</td>
+          <td data-label="Kurum / kişisel alan">${renderUserAccountLocations(u)}</td>
+          <td data-label="Paket ve erişim">${renderUserPackageSummary(u)}</td>
+          <td data-label="Hesap durumu">${userStatusBadge(u.status)}</td>
+          <td data-label="Kurum bağlantıları"><div class="user-list-memberships">${renderUserMembershipSummary(u)}<small>${Number(u.membershipCount ?? 0)} kurum bağlantısı</small></div></td>
+          <td data-label="İşlemler" class="text-right">
+            <button type="button" class="btn btn-secondary btn-sm" data-user-detail-id="${escapeHtml(u.id)}">Ayrıntı</button>
           </td>
         </tr>`,
       )
@@ -7045,23 +7054,90 @@ function renderUserList() {
   $("user-next-btn").disabled = userPage >= totalPages;
 }
 
-function renderUserRoleConnections(user) {
-  const labels = [];
-  if (user.platformRole)
+function renderUserAccountType(user) {
+  if (user.platformRole) {
+    return `<span class="badge badge-info">${escapeHtml(platformRoleLabel(user.platformRole))}</span>`;
+  }
+  const hasOrganization = (user.roleConnections ?? []).some(
+    (connection) =>
+      connection.tenantType === "ORGANIZATION" &&
+      connection.status === "ACTIVE" &&
+      (!connection.tenantStatus || connection.tenantStatus === "ACTIVE"),
+  );
+  return hasOrganization
+    ? '<span class="badge badge-info">Kurumsal</span>'
+    : '<span class="badge badge-neutral">Bireysel</span>';
+}
+
+function renderUserAccountLocations(user) {
+  const organizations = (user.roleConnections ?? [])
+    .filter((connection) => connection.tenantType === "ORGANIZATION")
+    .map((connection) => {
+      const status = MEMBERSHIP_STATUS_LABELS[connection.status] ?? connection.status;
+      const role = MEMBERSHIP_ROLE_LABELS[connection.role] ?? connection.role;
+      return `<span><strong>${escapeHtml(connection.tenantName)}</strong><small>${escapeHtml(role)} · ${escapeHtml(status)}</small></span>`;
+    });
+  const personal = (user.accountContexts ?? []).some(
+    (context) => context.tenantType === "INDIVIDUAL",
+  );
+  const labels = [...new Set(organizations)];
+  if (personal)
     labels.push(
-      `<span class="badge badge-info">${escapeHtml(platformRoleLabel(user.platformRole))}</span>`,
+      "<span><strong>Kişisel çalışma alanı</strong><small>Kurum üyeliği değildir</small></span>",
     );
-  for (const connection of user.roleConnections ?? []) {
-    const role = MEMBERSHIP_ROLE_LABELS[connection.role] ?? connection.role;
-    const tenantType = tenantTypeLabel(connection.tenantType);
-    const status = MEMBERSHIP_STATUS_LABELS[connection.status] ?? connection.status;
+  return labels.length
+    ? `<div class="user-list-contexts">${labels.slice(0, 2).join("")}${labels.length > 2 ? `<span class="muted">+${labels.length - 2} diğer</span>` : ""}</div>`
+    : '<span class="muted">Bağlı alan yok</span>';
+}
+
+function renderUserMembershipSummary(user) {
+  const connections = (user.roleConnections ?? []).filter(
+    (connection) => connection.tenantType === "ORGANIZATION",
+  );
+  if (!connections.length) return '<span class="muted">Kurum rolü yok</span>';
+  return connections
+    .slice(0, 2)
+    .map((connection) => {
+      const role = MEMBERSHIP_ROLE_LABELS[connection.role] ?? connection.role;
+      const status = MEMBERSHIP_STATUS_LABELS[connection.status] ?? connection.status;
+      return `<span class="user-membership-summary-item">${escapeHtml(role)} <em class="badge ${connection.status === "ACTIVE" ? "badge-success" : "badge-neutral"}">${escapeHtml(status)}</em></span>`;
+    })
+    .join("");
+}
+
+function renderUserPackageSummary(user) {
+  const contexts = (user.accountContexts ?? []).filter(
+    (context) => context.packageRight && context.packageRight.status !== "DEFAULT",
+  );
+  const unlinked = user.unlinkedPackageRights ?? [];
+  const labels = contexts.map((context) => {
+    const status = entitlementStatusLabel(context.packageRight.status);
+    const location = context.tenantType === "INDIVIDUAL" ? "Kişisel" : context.tenantName;
+    return `<span class="user-list-package"><strong>${escapeHtml(planLabel(context.packageRight.plan))}</strong><small>${escapeHtml(location)} · ${escapeHtml(status)}</small></span>`;
+  });
+  for (const item of unlinked) {
     labels.push(
-      `<span class="role-connection" title="${escapeHtml(connection.tenantName)} · ${escapeHtml(status)}"><span class="badge">${escapeHtml(tenantType)} · ${escapeHtml(role)}</span><span class="cell-muted">${escapeHtml(connection.tenantName)} · ${escapeHtml(status)}</span></span>`,
+      `<span class="user-list-package"><strong>${escapeHtml(planLabel(item.plan))}</strong><small>${escapeHtml(item.tenantType === "INDIVIDUAL" ? "Kişisel alan doğrulanmalı" : item.tenantName)} · ${escapeHtml(entitlementStatusLabel(item.status))}</small></span>`,
     );
   }
   return labels.length
-    ? `<div class="role-connection-list">${labels.join("")}</div>`
-    : '<span class="muted">Üyelik rolü yok</span>';
+    ? labels.slice(0, 2).join("")
+    : '<span class="muted">Varsayılan erişim</span>';
+}
+
+function entitlementStatusLabel(status) {
+  return (
+    {
+      DEFAULT: "Varsayılan",
+      ACTIVE: "Erişim açık",
+      SCHEDULED: "Planlandı",
+      EXPIRED: "Süresi doldu",
+      INACTIVE: "Sonlandırıldı",
+      INVALID: "Doğrulanamıyor",
+    }[status] ??
+    status ??
+    "Durum bilinmiyor"
+  );
 }
 
 const INDIVIDUAL_ALLOWED_ROLES = ["STUDENT", "PARENT"];
@@ -7093,20 +7169,39 @@ function openUserForm(mode, user = null) {
   // İlk kurum üyeliği yalnızca oluştururken sunulur.
   $("user-form-initial-membership").classList.toggle("hidden", !isCreate);
   if (isCreate) {
+    $("user-form-account-type").value = "INDIVIDUAL";
     $("user-form-tenant").value = "";
     $("user-form-role").innerHTML = `<option value="">Rol seçin…</option>`;
     void populateUserFormTenantSelect();
   }
+  updateUserFormAccountType();
   $("user-form-error").classList.add("hidden");
   $("user-form-modal").classList.remove("hidden");
   $("user-form-name").focus();
+}
+
+function updateUserFormAccountType() {
+  const organization = $("user-form-account-type")?.value === "ORGANIZATION";
+  $("user-form-organization-membership")?.classList.toggle("hidden", !organization);
+  const tenant = $("user-form-tenant");
+  const role = $("user-form-role");
+  if (tenant) tenant.required = organization;
+  if (role) role.required = organization;
+  const status = $("user-form-status");
+  if (status) {
+    const individualCreate = userFormMode === "create" && !organization;
+    for (const option of status.options) {
+      option.disabled = individualCreate && option.value !== "ACTIVE";
+    }
+    if (individualCreate) status.value = "ACTIVE";
+  }
 }
 
 async function populateUserFormTenantSelect() {
   const select = $("user-form-tenant");
   select.innerHTML = `<option value="">Kurum seçin…</option>`;
   try {
-    const res = await userApi("/../tenants?page=1&pageSize=100");
+    const res = await tenantApi("?page=1&pageSize=100");
     const body = await parseResponse(res);
     const options = body.items
       .map(
@@ -7147,16 +7242,14 @@ async function submitUserForm(event) {
   if (birthYear) payload.birthYear = Number(birthYear);
   if (userFormMode === "create") {
     payload.password = $("user-form-password").value;
-    // Current admin API creates the account context with the user. The legacy
-    // form still lets the operator pick an organization + role, so map that
-    // selection to the API contract instead of adding a second membership.
+    const accountType = $("user-form-account-type").value;
     const tenantSelect = $("user-form-tenant");
     const tenantId = tenantSelect.value;
     const tenantType = tenantSelect.selectedOptions?.[0]?.dataset?.type ?? "";
     const role = $("user-form-role").value;
-    if (tenantId && tenantType === "ORGANIZATION") {
-      if (!role) {
-        $("user-form-error").textContent = "Kurum için rol seçilmelidir.";
+    if (accountType === "ORGANIZATION") {
+      if (!tenantId || tenantType !== "ORGANIZATION" || !role) {
+        $("user-form-error").textContent = "Kurumsal hesap için gerçek bir kurum ve rol seçin.";
         $("user-form-error").classList.remove("hidden");
         return;
       }
@@ -7165,6 +7258,8 @@ async function submitUserForm(event) {
       payload.membershipRole = role;
     } else {
       payload.accountType = "INDIVIDUAL";
+      delete payload.tenantId;
+      delete payload.membershipRole;
     }
   }
 
@@ -7190,9 +7285,16 @@ async function submitUserForm(event) {
     const res = isCreate
       ? await userApi("", { method: "POST", body: JSON.stringify(payload) })
       : await userApi(`/${userEditingId}`, { method: "PATCH", body: JSON.stringify(payload) });
-    await parseResponse(res);
+    const savedUser = await parseResponse(res);
 
     closeUserForm();
+    if (isCreate) {
+      userSegment = savedUser.platformRole
+        ? "PLATFORM"
+        : savedUser.memberships?.some((membership) => membership.tenantType === "ORGANIZATION")
+          ? "ORGANIZATION"
+          : "INDIVIDUAL";
+    }
     userPage = 1;
     await loadUsers();
   } catch (err) {
@@ -7203,13 +7305,18 @@ async function submitUserForm(event) {
   }
 }
 
-async function openUserDetail(id) {
+async function openUserDetail(id, notice = "") {
   const requestId = ++userDetailRequest;
   analyticsStudentDetailRequest += 1;
-  const modal = $("user-detail-modal");
+  const profile = $("user-detail-modal");
+  const directory = $("user-directory-view");
+  directory?.classList.add("hidden");
   $("user-detail-title").textContent = "Kullanıcı ayrıntısı yükleniyor…";
+  $("user-profile-email").textContent = "";
+  $("user-profile-status").innerHTML = "";
+  $("user-profile-avatar").textContent = "…";
   $("user-detail-body").innerHTML = '<p class="muted">Yükleniyor…</p>';
-  modal.classList.remove("hidden");
+  profile.classList.remove("hidden");
 
   try {
     const res = await userApi(`/${encodeURIComponent(id)}`);
@@ -7217,7 +7324,7 @@ async function openUserDetail(id) {
     if (requestId !== userDetailRequest) return;
     if (detail.id !== id) throw new Error("Açılan kullanıcı kaydı istenen kullanıcıyla eşleşmedi.");
     userDetailCurrent = detail;
-    renderUserDetail(detail);
+    renderUserDetail(detail, notice);
   } catch (err) {
     if (requestId !== userDetailRequest) return;
     userDetailCurrent = null;
@@ -7227,192 +7334,143 @@ async function openUserDetail(id) {
   }
 }
 
+function returnToUserList() {
+  userDetailRequest += 1;
+  analyticsStudentDetailRequest += 1;
+  userDetailCurrent = null;
+  $("user-detail-modal")?.classList.add("hidden");
+  $("user-directory-view")?.classList.remove("hidden");
+}
+
 function renderUserDetail(u, notice = "") {
   $("user-detail-title").textContent = u.displayName;
-
-  const rows = [
-    ["Kullanıcı kimliği", `<span class="mono">${escapeHtml(u.id)}</span>`],
-    ["E-posta", u.email ? escapeHtml(u.email) : "—"],
-    ["Telefon", u.phone ? escapeHtml(formatTurkishPhoneValue(u.phone)) : "—"],
-    ["TC Kimlik No", u.nationalId ? `•••••••••${escapeHtml(u.nationalId.slice(-2))}` : "—"],
-    ["Doğum yılı", u.birthYear ?? "—"],
-    ["Durum", userStatusBadge(u.status)],
-    [
-      "Platform rolü",
-      u.platformRole
-        ? `<span class="mono">${escapeHtml(platformRoleLabel(u.platformRole))}</span>`
-        : "Yok",
-    ],
-    [
-      "E-posta doğrulandı",
-      u.emailVerifiedAt ? new Date(u.emailVerifiedAt).toLocaleString("tr-TR") : "Hayır",
-    ],
-    ["Son giriş", u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("tr-TR") : "—"],
-    ["Oluşturulma", u.createdAt ? new Date(u.createdAt).toLocaleDateString("tr-TR") : "—"],
-  ];
-
+  $("user-profile-email").textContent = u.email ?? "E-posta yok";
+  $("user-profile-status").innerHTML = userStatusBadge(u.status);
+  $("user-profile-avatar").textContent = u.displayName
+    .trim()
+    .split(/\s+/u)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toLocaleUpperCase("tr-TR");
   const statusOptions = Object.entries(MEMBERSHIP_STATUS_LABELS)
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
     .join("");
-
-  const memberships = u.memberships ?? [];
+  const memberships = (u.memberships ?? []).filter((item) => item.tenantType === "ORGANIZATION");
+  const personalContexts = u.personalContexts ?? [];
   const branches = u.branches ?? [];
   const classAssignments = u.classAssignments ?? [];
   const enrollments = u.enrollments ?? [];
   const entitlements = u.entitlements ?? [];
-  const hasStudentRole = memberships.some((membership) => membership.role === "STUDENT");
-  const membershipRows = memberships.length
-    ? memberships
-        .map(
-          (m) => `
-      <tr>
-        <td>${escapeHtml(m.tenantName)}</td>
-        <td>${tenantTypeLabel(m.tenantType)}</td>
-        <td>
-          <select class="mem-role-select" data-mem-role="${m.id}">
-            ${setSelectedOption(membershipRoleOptions(m.tenantType), m.role)}
-          </select>
-        </td>
-        <td>
-          <div class="mem-status-cell">
-            ${membershipStatusBadge(m.status)}
-            <select class="mem-status-select" data-mem-status="${m.id}">
-              ${setSelectedOption(statusOptions, m.status)}
-            </select>
-          </div>
-        </td>
-        <td class="text-right">
-          <div class="membership-row-actions">
-            <button type="button" class="btn btn-ghost btn-sm" data-mem-update="${m.id}">Uygula</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-mem-remove="${m.id}">Kaldır</button>
-          </div>
-        </td>
-      </tr>`,
-        )
+  const accountContexts = u.accountContexts ?? [];
+  const hasStudentRole =
+    memberships.some((membership) => membership.role === "STUDENT") ||
+    personalContexts.some((context) => context.membershipRole === "STUDENT");
+  const validPersonalContext = personalContexts.some(
+    (context) =>
+      !context.tenantDeleted &&
+      context.tenantStatus === "ACTIVE" &&
+      !context.membershipDeleted &&
+      context.membershipStatus === "ACTIVE" &&
+      context.membershipRole === "STUDENT",
+  );
+  const validOrganizationMemberships = memberships.filter(
+    (item) =>
+      item.status === "ACTIVE" &&
+      !item.deleted &&
+      !item.tenantDeleted &&
+      item.tenantStatus === "ACTIVE",
+  );
+  const startButton = $("user-detail-entitlement-start");
+  if (startButton) {
+    startButton.disabled =
+      u.status !== "ACTIVE" ||
+      u.platformRole === "SUPER_ADMIN" ||
+      (!validPersonalContext && validOrganizationMemberships.length === 0);
+  }
+  const personalContextCards = personalContexts.length
+    ? personalContexts
+        .map((context) => {
+          const packageContext = accountContexts.find((item) => item.tenantId === context.tenantId);
+          const contextState = context.tenantDeleted
+            ? "Silinmiş alan"
+            : generalStatusLabel(context.tenantStatus);
+          const membershipState = context.membershipDeleted
+            ? "Üyelik kaldırıldı"
+            : membershipStatusBadge(context.membershipStatus);
+          const packageRight = packageContext?.packageRight;
+          const restoreAction =
+            context.tenantDeleted && u.status === "ACTIVE"
+              ? `<div class="personal-context-recovery"><p>Sunucu, bu alanın aynı öğrenciye ait olduğunu ve açık silme talebi bulunmadığını ayrıca doğrulayacaktır.</p><button type="button" class="btn btn-secondary btn-sm" data-personal-context-restore="${escapeHtml(context.tenantId)}">Kişisel alanı geri yükle</button></div>`
+              : "";
+          return `<article class="personal-context-card"><div class="personal-context-card-heading"><div><span class="eyebrow">Bireysel hesap alanı</span><h4>Kişisel çalışma alanı</h4></div><span class="badge ${context.tenantDeleted || context.tenantStatus !== "ACTIVE" ? "badge-warning" : "badge-success"}">${escapeHtml(contextState)}</span></div><dl class="compact-definition-list"><div><dt>Öğrenci bağlantısı</dt><dd>${escapeHtml(context.membershipRole === "STUDENT" ? "Öğrenci" : (MEMBERSHIP_ROLE_LABELS[context.membershipRole] ?? context.membershipRole))} · ${typeof membershipState === "string" ? escapeHtml(membershipState) : membershipState}</dd></div><div><dt>Oluşturulma</dt><dd>${context.createdAt ? new Date(context.createdAt).toLocaleDateString("tr-TR") : "—"}</dd></div><div><dt>Kişisel paket</dt><dd>${packageRight ? `${escapeHtml(planLabel(packageRight.plan))} · ${escapeHtml(entitlementStatusLabel(packageRight.status))}` : "Varsayılan erişim"}</dd></div><div><dt>Alan kimliği</dt><dd><code>${escapeHtml(context.tenantId)}</code></dd></div></dl>${restoreAction}</article>`;
+        })
         .join("")
-    : '<tr><td colspan="5" class="empty-cell">Üyelik yok.</td></tr>';
-
+    : '<div class="user-empty-state"><strong>Kişisel çalışma alanı yok</strong><p>Bu hesap bireysel olarak kurulmamış. Kurum üyelikleri ayrı bölümde gösterilir.</p></div>';
+  const entitlementRows = entitlements.length
+    ? entitlements
+        .map((item) => {
+          const managerGrant = item.source === "ADMIN";
+          const canChange = managerGrant && item.active && item.adminStatus === "ACTIVE";
+          const actions = canChange
+            ? `<div class="user-entitlement-actions"><button type="button" class="btn btn-ghost btn-sm" data-entitlement-action="extend" data-entitlement-id="${escapeHtml(item.id)}">Süreyi uzat</button><button type="button" class="btn btn-ghost btn-sm" data-entitlement-action="change" data-entitlement-id="${escapeHtml(item.id)}">Paketi değiştir</button><button type="button" class="btn btn-danger btn-sm" data-entitlement-action="end" data-entitlement-id="${escapeHtml(item.id)}">Erişimi bitir</button></div>`
+            : managerGrant && item.active && item.adminStatus === "SCHEDULED"
+              ? '<span class="muted">Başlaması bekleniyor</span>'
+              : '<span class="muted">Ödeme kaynaklı veya geçmiş kayıt · buradan değiştirilemez</span>';
+          const period = `${item.effectiveAt ? new Date(item.effectiveAt).toLocaleDateString("tr-TR") : "—"} – ${item.expiresAt ? new Date(item.expiresAt).toLocaleDateString("tr-TR") : "Süresiz"}`;
+          return `<article class="user-entitlement-card"><div class="user-entitlement-card-main"><div><span class="eyebrow">${item.scope === "PERSONAL" ? "Kişisel erişim" : `Kurum · ${escapeHtml(item.tenantName)}`}</span><h4>${escapeHtml(planLabel(item.plan))}</h4></div><span class="badge ${item.adminStatus === "ACTIVE" ? "badge-success" : item.adminStatus === "SCHEDULED" ? "badge-info" : item.adminStatus === "EXPIRED" ? "badge-warning" : "badge-neutral"}">${escapeHtml(entitlementStatusLabel(item.adminStatus))}</span></div><div class="user-entitlement-meta"><span>${escapeHtml(entitlementSourceLabel(item.source))}</span><span>${escapeHtml(period)}</span></div>${item.features?.length ? `<ul class="entitlement-feature-list">${item.features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join("")}</ul>` : ""}${actions}</article>`;
+        })
+        .join("")
+    : '<div class="user-empty-state"><strong>Yönetici paketi yok</strong><p>Varsayılan ücretsiz erişim dışında tanımlı bir hak bulunmuyor.</p></div>';
+  const currentAccessRows = accountContexts.length
+    ? accountContexts
+        .map((context) => {
+          const right = context.packageRight;
+          const contextLabel =
+            context.tenantType === "INDIVIDUAL"
+              ? "Kişisel çalışma alanı"
+              : `Kurum · ${context.tenantName}`;
+          const statusClass =
+            right.status === "ACTIVE" || right.status === "DEFAULT"
+              ? "badge-success"
+              : right.status === "SCHEDULED"
+                ? "badge-info"
+                : right.status === "EXPIRED"
+                  ? "badge-warning"
+                  : "badge-neutral";
+          const period = right.effectiveAt
+            ? `${new Date(right.effectiveAt).toLocaleDateString("tr-TR")} – ${right.expiresAt ? new Date(right.expiresAt).toLocaleDateString("tr-TR") : "Süresiz"}`
+            : "Varsayılan erişim dönemi";
+          return `<article class="user-current-access-card"><div class="user-entitlement-card-main"><div><span class="eyebrow">${escapeHtml(contextLabel)}</span><h4>${escapeHtml(planLabel(right.plan))}</h4></div><span class="badge ${statusClass}">${escapeHtml(entitlementStatusLabel(right.status))}</span></div><div class="user-entitlement-meta"><span>${escapeHtml(entitlementSourceLabel(right.source))}</span><span>${escapeHtml(period)}</span></div>${right.features?.length ? `<ul class="entitlement-feature-list">${right.features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join("")}</ul>` : ""}</article>`;
+        })
+        .join("")
+    : '<div class="user-empty-state"><strong>Doğrulanmış hesap alanı bulunamadı</strong><p>Bu nedenle bu kullanıcı için paket kapsamı belirlenemiyor.</p></div>';
+  const activity = u.activity ?? [];
+  const billingSubscriptions = u.billingSubscriptions ?? [];
+  const billingPayments = u.billingPayments ?? [];
   $("user-detail-body").innerHTML = `
-    ${hasStudentRole && canAccessPage("students") && canAccessPage("analytics") ? `<section class="detail-section student-workspace-link"><div><h4>Öğrenci görünümü</h4><p class="muted">Öğrencinin hesabı, öğrenme yolu ve performansını tek ayrıntıda inceleyin.</p></div><button type="button" class="btn btn-primary btn-sm" data-user-open-student="${escapeHtml(u.id)}">Öğrenci ayrıntılarını aç</button></section>` : ""}
-    <form id="user-detail-form" class="detail-edit-form" novalidate>
-      <h4>Kullanıcı bilgileri</h4>
-      <div class="form-grid">
-        <label class="field"><span>Ad soyad *</span><input id="user-detail-name" type="text" maxlength="120" required value="${escapeHtml(u.displayName ?? "")}" /></label>
-        <label class="field"><span>E-posta *</span><input id="user-detail-email" type="email" maxlength="254" required value="${escapeHtml(u.email ?? "")}" /></label>
-        <label class="field"><span>Telefon</span><input id="user-detail-phone" type="text" maxlength="30" value="${escapeHtml(u.phone ?? "")}" /></label>
-        <label class="field"><span>Doğum yılı</span><input id="user-detail-birthyear" type="number" min="1900" max="${new Date().getFullYear()}" value="${u.birthYear ?? ""}" /></label>
-        <label class="field"><span>Durum *</span><select id="user-detail-status">${setSelectedOption(
+    ${hasStudentRole && canAccessPage("students") && canAccessPage("analytics") ? `<section class="user-profile-student-link"><div><span class="eyebrow">Öğrenci kaydı</span><strong>Öğrenci çalışma alanı ve ilerleme verileri</strong><p>Öğrenci verileri korunur; incelemek için mevcut öğrenci ayrıntısını açın.</p></div><button type="button" class="btn btn-secondary" data-user-open-student="${escapeHtml(u.id)}">Öğrenci ayrıntılarını aç</button></section>` : ""}
+    <p id="user-profile-action-status" class="user-profile-action-status" role="status" aria-live="polite">${escapeHtml(notice)}</p>
+    <div class="user-profile-layout">
+      <div class="user-profile-main-column">
+        <section class="user-profile-panel" aria-labelledby="user-general-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Hesap</span><h3 id="user-general-title">Genel bilgiler</h3></div><span>${u.platformRole ? `<span class="badge badge-info">${escapeHtml(platformRoleLabel(u.platformRole))}</span>` : ""}</span></div><form id="user-detail-form" class="detail-edit-form" novalidate><div class="form-grid"><label class="field"><span>Ad soyad *</span><input id="user-detail-name" type="text" maxlength="120" required value="${escapeHtml(u.displayName ?? "")}" /></label><label class="field"><span>E-posta *</span><input id="user-detail-email" type="email" maxlength="254" required value="${escapeHtml(u.email ?? "")}" /></label><label class="field"><span>Telefon</span><input id="user-detail-phone" type="text" maxlength="30" value="${escapeHtml(u.phone ?? "")}" /></label><label class="field"><span>Doğum yılı</span><input id="user-detail-birthyear" type="number" min="1900" max="${new Date().getFullYear()}" value="${u.birthYear ?? ""}" /></label><label class="field"><span>Hesap durumu</span><select id="user-detail-status">${setSelectedOption(
           Object.entries(USER_STATUS_LABELS)
             .map(([value, label]) => `<option value="${value}">${label}</option>`)
             .join(""),
           u.status,
-        )}</select></label>
+        )}</select></label></div><div class="user-profile-form-footer"><span id="user-detail-save-status" class="muted" role="status" aria-live="polite">${escapeHtml(notice)}</span><button id="user-detail-save" type="submit" class="btn btn-primary"><span class="btn-label">Bilgileri kaydet</span><span class="btn-spinner hidden" aria-hidden="true"></span></button></div></form><dl class="user-profile-facts"><div><dt>E-posta doğrulaması</dt><dd>${u.emailVerifiedAt ? `Doğrulandı · ${new Date(u.emailVerifiedAt).toLocaleDateString("tr-TR")}` : "Doğrulanmadı"}</dd></div><div><dt>Son giriş</dt><dd>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString("tr-TR") : "Henüz giriş yok"}</dd></div><div><dt>Kayıt tarihi</dt><dd>${u.createdAt ? new Date(u.createdAt).toLocaleDateString("tr-TR") : "—"}</dd></div><div><dt>Kullanıcı kimliği</dt><dd><code>${escapeHtml(u.id)}</code></dd></div>${u.nationalId ? `<div><dt>Kimlik bilgisi</dt><dd>•••••••••${escapeHtml(u.nationalId.slice(-2))}</dd></div>` : ""}</dl></section>
+        <section class="user-profile-panel" aria-labelledby="personal-context-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Bireysel hesap</span><h3 id="personal-context-title">Kişisel hesap alanı</h3><p>Kişisel çalışma alanı kurum değildir; teknik bağlantı ve öğrenci verileri korunur.</p></div></div><div class="personal-context-grid">${personalContextCards}</div></section>
+        <section class="user-profile-panel" aria-labelledby="organization-membership-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Kurum ilişkileri</span><h3 id="organization-membership-title">Kurum üyelikleri <span class="count-pill">${memberships.length}</span></h3></div></div>${memberships.length ? `<div class="table-wrap"><table class="data-table membership-table"><thead><tr><th>Kurum</th><th>Rol</th><th>Üyelik durumu</th><th>Tarih</th><th>İşlem</th></tr></thead><tbody>${memberships.map((m) => `<tr><td><strong>${escapeHtml(m.tenantName)}</strong><small class="cell-muted">${escapeHtml(tenantTypeLabel(m.tenantType))}${m.tenantDeleted ? " · silinmiş kurum" : ""}</small></td><td><select class="mem-role-select" data-mem-role="${escapeHtml(m.id)}">${setSelectedOption(membershipRoleOptions("ORGANIZATION"), m.role)}</select></td><td><div>${membershipStatusBadge(m.status)}<select class="mem-status-select" data-mem-status="${escapeHtml(m.id)}">${setSelectedOption(statusOptions, m.status)}</select></div></td><td>${m.startedAt ? new Date(m.startedAt).toLocaleDateString("tr-TR") : "—"}${m.endedAt ? `<small class="cell-muted">Bitiş: ${new Date(m.endedAt).toLocaleDateString("tr-TR")}</small>` : ""}</td><td><div class="membership-row-actions"><button type="button" class="btn btn-ghost btn-sm" data-mem-update="${escapeHtml(m.id)}">Uygula</button><button type="button" class="btn btn-danger btn-sm" data-mem-remove="${escapeHtml(m.id)}">Kaldır</button></div></td></tr>`).join("")}</tbody></table></div>` : '<div class="user-empty-state"><strong>Kurum üyeliği yok</strong><p>Kişisel hesap alanı bu listede gösterilmez ve kurum üyeliği sayılmaz.</p></div>'}<details class="user-secondary-disclosure"><summary>Kurum üyeliği ekle</summary><div class="membership-add-row"><label class="field"><span>Gerçek kurum</span><select id="membership-add-tenant"><option value="">Kurumlar yükleniyor…</option></select></label><label class="field"><span>Rol</span><select id="membership-add-role"><option value="">Rol seçin…</option></select></label><label class="field"><span>Durum</span><select id="membership-add-status">${statusOptions}</select></label><button id="membership-add-btn" type="button" class="btn btn-secondary">Üyelik ekle</button></div></details></section>
+        <section class="user-profile-panel" aria-labelledby="user-password-title"><details class="user-secondary-disclosure"><summary id="user-password-title">Parola yönetimi</summary><div class="membership-add-row"><label class="field"><span>Yeni parola</span><input id="user-detail-new-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" /></label><button id="user-detail-password-btn" type="button" class="btn btn-secondary">Parolayı yenile</button></div><p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p></details></section>
+        <section class="user-profile-panel" aria-labelledby="user-education-relations-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Bağlantılar</span><h3 id="user-education-relations-title">Eğitim ilişkileri</h3></div></div><div class="user-related-grid"><article><h4>Şube bağlantıları <span class="count-pill">${branches.length}</span></h4>${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(generalStatusLabel(item.status))}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}</article><article><h4>Öğretmen sınıf atamaları <span class="count-pill">${classAssignments.length}</span></h4>${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube / yıl</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)} · ${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}</article><article><h4>Öğrenci kayıtları <span class="count-pill">${enrollments.length}</span></h4>${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}</article></div></section>
       </div>
-      <div class="modal-actions detail-edit-actions">
-        <button id="user-detail-save" type="submit" class="btn btn-primary">
-          <span class="btn-label">Değişiklikleri kaydet</span>
-          <span class="btn-spinner hidden" aria-hidden="true"></span>
-        </button>
-      </div>
-      <p id="user-detail-save-status" class="muted" role="status" aria-live="polite">${escapeHtml(notice)}</p>
-    </form>
-
-    <dl class="info-grid">${rows
-      .map(
-        ([k, v]) => `
-        <div class="info-item">
-          <dt>${k}</dt>
-          <dd>${v}</dd>
-        </div>`,
-      )
-      .join("")}</dl>
-
-    <details class="admin-detail-disclosure">
-    <summary>Üyelikler ve kurum rolleri (${memberships.length})</summary>
-    <div class="admin-detail-disclosure-content membership-section">
-      <h4>Üyelik ekle</h4>
-      <div class="membership-add-row">
-        <label class="field">
-          <span>Kurum *</span>
-          <select id="membership-add-tenant">
-            <option value="">Yükleniyor…</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Rol *</span>
-          <select id="membership-add-role"><option value="">Rol seçin…</option></select>
-        </label>
-        <label class="field">
-          <span>Durum *</span>
-          <select id="membership-add-status">${statusOptions}</select>
-        </label>
-        <button id="membership-add-btn" type="button" class="btn btn-primary">Ekle</button>
-      </div>
-
-      <h4>Üyelikler (${memberships.length})</h4>
-      <div class="card table-card">
-        <table class="data-table membership-table">
-          <thead>
-            <tr>
-              <th>Kurum</th>
-              <th>Kurum türü</th>
-              <th>Rol</th>
-              <th>Durum</th>
-              <th class="text-right">İşlemler</th>
-            </tr>
-          </thead>
-          <tbody>${membershipRows}</tbody>
-        </table>
-      </div>
-    </div>
-    </details>
-
-    <details class="admin-detail-disclosure">
-      <summary>Parola yönetimi</summary>
-      <section class="admin-detail-disclosure-content detail-section">
-      <div class="membership-add-row">
-        <label class="field">
-          <span>Yeni parola</span>
-          <input id="user-detail-new-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" />
-        </label>
-        <button id="user-detail-password-btn" type="button" class="btn btn-primary">Yeni parola belirle</button>
-      </div>
-      <p id="user-detail-password-status" class="muted" role="status" aria-live="polite"></p>
-      </section>
-    </details>
-
-    <details class="admin-detail-disclosure"><summary>Kurum ve şube bağlantıları (${branches.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Kurum/şube bağlantıları</h4>
-      ${branches.length ? `<ul class="compact-list">${branches.map((item) => `<li><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(item.tenantName)} · ${escapeHtml(generalStatusLabel(item.status))}</li>`).join("")}</ul>` : '<p class="muted">Şube bağlantısı yok.</p>'}
-    </section></details>
-    <details class="admin-detail-disclosure"><summary>Öğretmen sınıf atamaları (${classAssignments.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Öğretmen sınıf atamaları (${classAssignments.length})</h4>
-      ${classAssignments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Ders</th><th>Durum</th></tr></thead><tbody>${classAssignments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(item.subject || "—")}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Sınıf ataması yok.</p>'}
-    </section></details>
-    <details class="admin-detail-disclosure"><summary>Öğrenci kayıtları (${enrollments.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Öğrenci kayıtları (${enrollments.length})</h4>
-      ${enrollments.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Sınıf</th><th>Şube</th><th>Akademik yıl</th><th>Durum</th></tr></thead><tbody>${enrollments.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${escapeHtml(item.className)}</td><td>${escapeHtml(item.branchName)}</td><td>${escapeHtml(item.academicYearName)}</td><td>${escapeHtml(generalStatusLabel(item.status))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Öğrenci kaydı yok.</p>'}
-    </section></details>
-    <details class="admin-detail-disclosure"><summary>Paket ve kullanım hakları (${entitlements.length})</summary><section class="admin-detail-disclosure-content detail-section"><h4>Paket ve kullanım hakları (${entitlements.length})</h4>
-      ${entitlements.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>Kurum</th><th>Kapsam</th><th>Paket</th><th>Kaynak</th><th>Durum</th><th>Bitiş</th></tr></thead><tbody>${entitlements.map((item) => `<tr><td>${escapeHtml(item.tenantName)}</td><td>${item.scope === "ORGANIZATION" ? "Kurum" : "Kişisel"}</td><td>${planLabel(item.plan)}</td><td>${escapeHtml(entitlementSourceLabel(item.source))}</td><td>${item.active ? "Aktif" : "Pasif"}</td><td>${item.expiresAt ? escapeHtml(new Date(item.expiresAt).toLocaleDateString("tr-TR")) : "Süresiz"}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted">Tanımlı paket ve kullanım hakkı yok.</p>'}
-      <div class="membership-add-row">
-        <label class="field"><span>Kapsam kurumu</span><select id="user-detail-entitlement-tenant"><option value="">Kurum seçin…</option>${memberships
-          .filter(
-            (item, index, all) =>
-              all.findIndex((candidate) => candidate.tenantId === item.tenantId) === index,
-          )
-          .map(
-            (item) =>
-              `<option value="${escapeHtml(item.tenantId)}" data-type="${escapeHtml(item.tenantType)}">${escapeHtml(item.tenantName)} (${tenantTypeLabel(item.tenantType)})</option>`,
-          )
-          .join("")}</select></label>
-        <label class="field"><span>Kapsam</span><select id="user-detail-entitlement-scope"><option value="PERSONAL">Kişisel</option><option value="ORGANIZATION">Kurum</option></select></label>
-        <label class="field"><span>Paket</span><select id="user-detail-entitlement-plan"><option value="PLAN_FREE">Ücretsiz Paket</option><option value="PLAN_PREMIUM">Ücretli Paket</option></select></label>
-        <label class="field"><span>Paket kaynağı</span><select id="user-detail-entitlement-source"><option value="ADMIN">Yönetici tarafından tanımlandı</option><option value="BILLING">Ödeme ve abonelik</option><option value="SUBSCRIPTION">Abonelik</option></select></label>
-        <label class="field"><span>Başlangıç</span><input id="user-detail-entitlement-effective" type="datetime-local" /></label>
-        <label class="field"><span>Bitiş</span><input id="user-detail-entitlement-expires" type="datetime-local" /></label>
-        <button id="user-detail-entitlement-btn" type="button" class="btn btn-primary"><span class="btn-label">Paket ve kullanım haklarını kaydet</span><span class="btn-spinner hidden" aria-hidden="true"></span></button>
-      </div>
-      <p id="user-detail-entitlement-status" class="muted" role="status" aria-live="polite">Günlük alıştırma ve soru hakları seçilen pakete göre uygulanır.</p>
-    </section></details>`;
-
+      <aside class="user-profile-side-column">
+        <section class="user-profile-panel user-entitlements-panel" aria-labelledby="user-current-access-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Paket ve erişim</span><h3 id="user-current-access-title">Güncel paket durumu</h3><p>Paket hakkı, ödeme aboneliğinden ayrı değerlendirilir.</p></div></div><div class="user-current-access-list">${currentAccessRows}</div></section>
+        <section class="user-profile-panel user-entitlements-panel" aria-labelledby="user-entitlements-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Yönetici paketleri</span><h3 id="user-entitlements-title">Paket geçmişi <span class="count-pill">${entitlements.length}</span></h3></div></div><div class="user-entitlement-list">${entitlementRows}</div><p class="user-profile-note">Yalnızca yönetici tarafından tanımlanan paketler buradan değiştirilebilir. Ödeme sağlayıcısı abonelikleri ayrı gösterilir.</p></section>
+        <section class="user-profile-panel" aria-labelledby="billing-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Ödeme sistemi</span><h3 id="billing-title">Ödeme abonelikleri</h3></div></div>${billingSubscriptions.length ? `<div class="billing-summary-list">${billingSubscriptions.map((subscription) => `<article><div><strong>${escapeHtml(subscription.tenantName)}</strong><span class="badge ${subscription.status === "ACTIVE" ? "badge-success" : "badge-neutral"}">${escapeHtml(generalStatusLabel(subscription.status))}</span></div><p>${escapeHtml(formatBillingPeriod(subscription.billingPeriod))} · ${subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart).toLocaleDateString("tr-TR") : "—"} – ${subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString("tr-TR") : "—"}</p><small>${subscription.cancelRequestedAt ? `Yenileme iptal talebi: ${new Date(subscription.cancelRequestedAt).toLocaleDateString("tr-TR")}` : subscription.canceledAt ? `Sonlandırıldı: ${new Date(subscription.canceledAt).toLocaleDateString("tr-TR")}` : "Otomatik yenileme bilgisi bu kayıtta sunulmuyor."}</small></article>`).join("")}</div>` : '<p class="user-empty-state compact">Ödeme sağlayıcısında kayıtlı abonelik yok.</p>'}<h4 class="billing-subheading">Gerçek ödeme kayıtları</h4>${billingPayments.length ? `<div class="billing-summary-list">${billingPayments.map((payment) => `<article><div><strong>${payment.amountMinor !== null && payment.currency ? escapeHtml(new Intl.NumberFormat("tr-TR", { style: "currency", currency: payment.currency }).format(payment.amountMinor / 100)) : "Tutar belirtilmemiş"}</strong><span class="badge ${payment.status === "SUCCEEDED" ? "badge-success" : "badge-neutral"}">${escapeHtml(generalStatusLabel(payment.status))}</span></div><p>${escapeHtml(payment.tenantName)} · ${payment.occurredAt ? new Date(payment.occurredAt).toLocaleString("tr-TR") : new Date(payment.createdAt).toLocaleString("tr-TR")}</p></article>`).join("")}</div>` : '<p class="user-empty-state compact">Henüz doğrulanmış ödeme kaydı yok.</p>'}</section>
+        <section class="user-profile-panel" aria-labelledby="user-activity-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Denetim izi</span><h3 id="user-activity-title">Yönetim geçmişi</h3></div></div>${activity.length ? `<ol class="user-activity-list">${activity.map((item) => `<li><span class="user-activity-dot"></span><div><strong>${escapeHtml(generalStatusLabel(item.action))} · ${escapeHtml(item.entityType)}</strong><p>${new Date(item.createdAt).toLocaleString("tr-TR")}${item.actor?.displayName ? ` · ${escapeHtml(item.actor.displayName)}` : ""}</p></div></li>`).join("")}</ol>` : '<p class="user-empty-state compact">Gösterilebilen işlem geçmişi yok.</p>'}</section>
+      </aside>
+    </div>`;
   void populateMembershipTenantSelect();
 }
 
@@ -7447,9 +7505,7 @@ async function submitUserDetailForm(event) {
     );
     userDetailCurrent = updated;
     renderUserDetail(updated, "Değişiklikler kaydedildi.");
-    const listItem = userData.find((item) => item.id === updated.id);
-    if (listItem) Object.assign(listItem, updated);
-    renderUserList();
+    void loadUsers();
   } catch (err) {
     if (status) status.textContent = err.message || "Değişiklikler kaydedilemedi.";
   } finally {
@@ -7488,41 +7544,333 @@ async function resetAdminUserPassword() {
 }
 
 async function createAdminUserEntitlement() {
-  const button = $("user-detail-entitlement-btn");
-  const status = $("user-detail-entitlement-status");
-  const tenantSelect = $("user-detail-entitlement-tenant");
-  const scopeSelect = $("user-detail-entitlement-scope");
-  if (!button || !status || !tenantSelect || !scopeSelect || !userDetailCurrent) return;
-  const tenantId = tenantSelect.value;
-  if (!tenantId) {
-    status.textContent = "Kurum seçin.";
+  openUserEntitlementDialog("start");
+}
+
+function localDateTimeValue(value = new Date()) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function openUserEntitlementDialog(action, entitlement = null) {
+  if (!userDetailCurrent) return;
+  const dialog = $("user-entitlement-dialog");
+  const form = $("user-entitlement-form");
+  const scope = $("user-entitlement-scope");
+  const organization = $("user-entitlement-organization");
+  const scopes = [];
+  const personalContexts = userDetailCurrent.personalContexts ?? [];
+  const hasPersonalContext = personalContexts.some(
+    (context) =>
+      !context.tenantDeleted &&
+      context.tenantStatus === "ACTIVE" &&
+      !context.membershipDeleted &&
+      context.membershipStatus === "ACTIVE" &&
+      context.membershipRole === "STUDENT",
+  );
+  const organizations = [
+    ...new Map(
+      (userDetailCurrent.memberships ?? [])
+        .filter(
+          (item) =>
+            item.tenantType === "ORGANIZATION" &&
+            item.status === "ACTIVE" &&
+            !item.deleted &&
+            !item.tenantDeleted &&
+            item.tenantStatus === "ACTIVE",
+        )
+        .map((item) => [item.tenantId, item]),
+    ).values(),
+  ];
+  if (action === "start") {
+    if (hasPersonalContext) scopes.push(["PERSONAL", "Yalnızca bu kişinin hesabı"]);
+    if (organizations.length) scopes.push(["ORGANIZATION", "Kurumun tamamı"]);
+  }
+  if (action === "start" && !scopes.length) {
+    const status = $("user-profile-action-status");
+    if (status)
+      status.textContent =
+        "Paket başlatılamadı: etkin ve doğrulanmış kişisel alan veya kurum üyeliği yok.";
     return;
   }
-  const effectiveAt = $("user-detail-entitlement-effective").value;
-  const expiresAt = $("user-detail-entitlement-expires").value;
-  const payload = {
-    tenantId,
-    scope: scopeSelect.value,
-    userId: scopeSelect.value === "PERSONAL" ? userDetailCurrent.id : null,
-    plan: $("user-detail-entitlement-plan").value,
-    source: $("user-detail-entitlement-source").value.trim() || "ADMIN",
-    ...(effectiveAt ? { effectiveAt: new Date(effectiveAt).toISOString() } : {}),
-    ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
+
+  $("user-entitlement-action").value = action;
+  $("user-entitlement-id").value = entitlement?.id ?? "";
+  $("user-entitlement-dialog-title").textContent =
+    action === "start"
+      ? "Paket başlat"
+      : action === "extend"
+        ? "Paket süresini uzat"
+        : "Paketi değiştir";
+  $("user-entitlement-submit").textContent =
+    action === "start"
+      ? "Paketi başlat"
+      : action === "extend"
+        ? "Süreyi uzat"
+        : "Değişikliği kaydet";
+  $("user-entitlement-scope-field").classList.toggle(
+    "hidden",
+    action !== "start" || scopes.length < 2,
+  );
+  scope.innerHTML =
+    action === "start"
+      ? scopes.map(([value, label]) => `<option value="${value}">${label}</option>`).join("")
+      : `<option value="${entitlement?.scope ?? "PERSONAL"}">${entitlement?.scope === "ORGANIZATION" ? "Kurumun tamamı" : "Kişisel hesap"}</option>`;
+  scope.disabled = action !== "start" || scopes.length < 2;
+  if (action === "start" && scopes.length === 1) scope.value = scopes[0][0];
+  organization.innerHTML = `<option value="">Kurum seçin…</option>${organizations.map((item) => `<option value="${escapeHtml(item.tenantId)}">${escapeHtml(item.tenantName)}</option>`).join("")}`;
+  if (entitlement?.scope === "ORGANIZATION") organization.value = entitlement.tenantId;
+  $("user-entitlement-organization-field").classList.toggle(
+    "hidden",
+    action !== "start" || scope.value !== "ORGANIZATION",
+  );
+  $("user-entitlement-plan-field").classList.toggle("hidden", action === "extend");
+  $("user-entitlement-effective-field").classList.toggle("hidden", action === "extend");
+  const expiresField = $("user-entitlement-expires-field");
+  expiresField.classList.remove("hidden");
+  $("user-entitlement-plan").value = entitlement?.plan ?? "PLAN_PREMIUM";
+  $("user-entitlement-effective").value = localDateTimeValue(
+    action === "change" ? new Date() : (entitlement?.effectiveAt ?? new Date()),
+  );
+  $("user-entitlement-expires").value = entitlement?.expiresAt
+    ? localDateTimeValue(entitlement.expiresAt)
+    : "";
+  $("user-entitlement-expires").required = action === "extend";
+  const status = $("user-entitlement-form-status");
+  status.textContent =
+    action === "start" && scope.value === "ORGANIZATION"
+      ? "Kurum kapsamındaki mevcut üyeler bu paketten etkilenir. Kaydetmeden önce kurum adını kontrol edin."
+      : action === "change"
+        ? "Değişiklik yeni bir paket kaydı oluşturur; önceki paket geçmişte korunur."
+        : action === "extend"
+          ? "Yeni bitiş tarihi mevcut tarihten ileri olmalıdır. Süresiz paket bu işlemle uzatılamaz."
+          : "Yönetici tarafından tanımlanan manuel paket oluşturulur. Ödeme aboneliği başlatılmaz.";
+  dialog.classList.remove("hidden");
+  form.dataset.action = action;
+}
+
+function updateUserEntitlementScope() {
+  const organizationField = $("user-entitlement-organization-field");
+  const action = $("user-entitlement-action").value;
+  organizationField.classList.toggle(
+    "hidden",
+    action !== "start" || $("user-entitlement-scope").value !== "ORGANIZATION",
+  );
+  const status = $("user-entitlement-form-status");
+  if (action === "start") {
+    status.textContent =
+      $("user-entitlement-scope").value === "ORGANIZATION"
+        ? "Kurum kapsamındaki mevcut üyeler bu paketten etkilenir. Kaydetmeden önce kurum adını kontrol edin."
+        : "Yönetici tarafından tanımlanan kişisel paket oluşturulur. Kurum seçilmez.";
+  }
+}
+
+function closeUserEntitlementDialog() {
+  $("user-entitlement-dialog").classList.add("hidden");
+  $("user-entitlement-form").reset();
+}
+
+function buildUserEntitlementRequest({
+  action,
+  id,
+  userId,
+  scope,
+  plan,
+  effectiveAt,
+  expiresAt,
+  tenantId,
+}) {
+  const toIso = (value) => {
+    if (!value) return undefined;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) throw new Error("Geçerli bir tarih seçin.");
+    return date.toISOString();
   };
-  setAsyncButtonState(button, true, "Kaydediliyor…");
-  status.textContent = "Paket ve kullanım hakları kaydediliyor…";
+
+  if (action === "start") {
+    const payload = {
+      scope,
+      plan,
+      ...(toIso(effectiveAt) ? { effectiveAt: toIso(effectiveAt) } : {}),
+      ...(toIso(expiresAt) ? { expiresAt: toIso(expiresAt) } : {}),
+      ...(scope === "PERSONAL" ? { userId } : { tenantId }),
+    };
+    if (scope === "PERSONAL" && !userId) throw new Error("Kullanıcı kaydı doğrulanamadı.");
+    if (scope === "ORGANIZATION" && !tenantId) throw new Error("Paket için kurum seçin.");
+    return { path: "", method: "POST", payload };
+  }
+  if (action === "extend") {
+    const nextExpiry = toIso(expiresAt);
+    if (!nextExpiry) throw new Error("Yeni bitiş tarihini seçin.");
+    return {
+      path: `/${encodeURIComponent(id)}`,
+      method: "PATCH",
+      payload: { expiresAt: nextExpiry },
+    };
+  }
+  if (action === "change") {
+    const transitionAt = toIso(effectiveAt);
+    if (!transitionAt) throw new Error("Paket geçiş tarihini seçin.");
+    const nextExpiry = toIso(expiresAt);
+    return {
+      path: `/${encodeURIComponent(id)}/change-plan`,
+      method: "POST",
+      payload: {
+        plan,
+        effectiveAt: transitionAt,
+        ...(nextExpiry ? { expiresAt: nextExpiry } : {}),
+      },
+    };
+  }
+  if (action === "end") {
+    return { path: `/${encodeURIComponent(id)}`, method: "PATCH", payload: { active: false } };
+  }
+  throw new Error("Desteklenmeyen paket işlemi.");
+}
+
+async function submitUserEntitlementForm(event) {
+  event.preventDefault();
+  const action = $("user-entitlement-action").value;
+  const id = $("user-entitlement-id").value;
+  const status = $("user-entitlement-form-status");
+  const button = $("user-entitlement-submit");
+  if (!userDetailCurrent || !action || userEntitlementSaving) return;
   try {
+    const request = buildUserEntitlementRequest({
+      action,
+      id,
+      userId: userDetailCurrent.id,
+      scope: $("user-entitlement-scope").value,
+      plan: $("user-entitlement-plan").value,
+      effectiveAt: $("user-entitlement-effective").value,
+      expiresAt: $("user-entitlement-expires").value,
+      tenantId: $("user-entitlement-organization").value,
+    });
+    userEntitlementSaving = true;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    status.textContent = "İşlem kaydediliyor…";
     await parseResponse(
-      await entitlementAdminApi("", { method: "POST", body: JSON.stringify(payload) }),
+      await entitlementAdminApi(request.path, {
+        method: request.method,
+        body: JSON.stringify(request.payload),
+      }),
     );
     const userId = userDetailCurrent.id;
-    await openUserDetail(userId);
-    const savedStatus = $("user-detail-entitlement-status");
-    if (savedStatus) savedStatus.textContent = "Paket ve kullanım hakları kaydedildi.";
+    closeUserEntitlementDialog();
+    const successMessage =
+      action === "start"
+        ? "Paket başlatıldı."
+        : action === "extend"
+          ? "Paket süresi uzatıldı."
+          : "Paket değiştirildi; önceki kayıt geçmişte korundu.";
+    await openUserDetail(userId, successMessage);
+    void loadUsers();
   } catch (err) {
-    status.textContent = err.message || "Paket ve kullanım hakları kaydedilemedi.";
+    status.textContent = err.message || "Paket işlemi tamamlanamadı.";
   } finally {
-    setAsyncButtonState(button, false, "Kaydediliyor…");
+    userEntitlementSaving = false;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+  }
+}
+
+async function endManagedUserEntitlement(id, button = null) {
+  const entitlement = (userDetailCurrent?.entitlements ?? []).find((item) => item.id === id);
+  if (
+    !entitlement ||
+    entitlement.source !== "ADMIN" ||
+    !entitlement.active ||
+    userEntitlementSaving
+  )
+    return;
+  if (
+    !window.confirm(
+      "Bu yönetici paketinin erişimini sonlandırmak istiyor musunuz? Geçmiş kayıt korunur.",
+    )
+  )
+    return;
+  const status = $("user-profile-action-status");
+  userEntitlementSaving = true;
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  if (status) status.textContent = "Erişim sonlandırılıyor…";
+  try {
+    const request = buildUserEntitlementRequest({ action: "end", id });
+    await parseResponse(
+      await entitlementAdminApi(request.path, {
+        method: request.method,
+        body: JSON.stringify(request.payload),
+      }),
+    );
+    const userId = userDetailCurrent.id;
+    await openUserDetail(userId, "Paket erişimi sonlandırıldı. Kayıt geçmişte korundu.");
+    void loadUsers();
+  } catch (err) {
+    if (status) status.textContent = err.message || "Erişim sonlandırılamadı.";
+  } finally {
+    userEntitlementSaving = false;
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
+}
+
+function handleUserEntitlementAction(event) {
+  const button = event.target.closest("[data-entitlement-action]");
+  if (!button) return;
+  const item = (userDetailCurrent?.entitlements ?? []).find(
+    (entitlement) => entitlement.id === button.dataset.entitlementId,
+  );
+  if (!item || item.source !== "ADMIN") return;
+  if (button.dataset.entitlementAction === "end") {
+    void endManagedUserEntitlement(item.id, button);
+  } else {
+    openUserEntitlementDialog(button.dataset.entitlementAction, item);
+  }
+}
+
+async function restoreUserPersonalContext(tenantId, button) {
+  if (!userDetailCurrent || userDetailCurrent.status !== "ACTIVE" || userEntitlementSaving) return;
+  if (
+    !window.confirm(
+      "Bu işlem yalnızca sunucunun aynı öğrenciye ait olduğunu doğruladığı kişisel alanı yeniden açar. Öğrenci profili ve ilerleme kayıtları taşınmaz veya yeniden oluşturulmaz. Devam edilsin mi?",
+    )
+  ) {
+    return;
+  }
+  const userId = userDetailCurrent.id;
+  const status = $("user-profile-action-status");
+  userEntitlementSaving = true;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  if (status) status.textContent = "Kişisel alan güvenli biçimde doğrulanıyor…";
+  try {
+    await parseResponse(
+      await userApi(`/${encodeURIComponent(userId)}/personal-context/restore`, {
+        method: "POST",
+        body: JSON.stringify({ tenantId }),
+      }),
+    );
+    await openUserDetail(
+      userId,
+      "Aynı kişisel çalışma alanı geri yüklendi. Mevcut öğrenci kayıtları korundu.",
+    );
+    void loadUsers();
+  } catch (err) {
+    const currentStatus = $("user-profile-action-status");
+    if (currentStatus)
+      currentStatus.textContent =
+        err.message || "Kişisel alan geri yüklenemedi; kayıtlar değiştirilmedi.";
+  } finally {
+    userEntitlementSaving = false;
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
   }
 }
 
@@ -7574,6 +7922,7 @@ async function updateMembership(membershipId) {
     });
     await parseResponse(res);
     await openUserDetail(userDetailCurrent.id);
+    void loadUsers();
   } catch (err) {
     showUserError(err.message || "Üyelik güncellenemedi.");
   }
@@ -7587,6 +7936,7 @@ async function removeMembership(membershipId) {
     });
     await parseResponse(res);
     await openUserDetail(userDetailCurrent.id);
+    void loadUsers();
   } catch (err) {
     showUserError(err.message || "Üyelik kaldırılamadı.");
   }
@@ -7609,6 +7959,7 @@ async function addMembership() {
     });
     await parseResponse(res);
     await openUserDetail(userDetailCurrent.id);
+    void loadUsers();
   } catch (err) {
     showUserError(err.message || "Üyelik eklenemedi.");
   }
@@ -7622,6 +7973,7 @@ async function deleteUser(id) {
   try {
     const res = await userApi(`/${encodeURIComponent(id)}`, { method: "DELETE" });
     await parseResponse(res);
+    if (userDetailCurrent?.id === id) returnToUserList();
     userPage = 1;
     await loadUsers();
   } catch (err) {
@@ -7655,6 +8007,14 @@ function setupUserEvents() {
     userPage = 1;
     void loadUsers();
   });
+  $("user-segment-tabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-user-segment]");
+    if (!tab || !["ORGANIZATION", "INDIVIDUAL", "PLATFORM"].includes(tab.dataset.userSegment))
+      return;
+    userSegment = tab.dataset.userSegment;
+    userPage = 1;
+    void loadUsers();
+  });
   $("user-prev-btn").addEventListener("click", () => {
     if (userPage > 1) {
       userPage -= 1;
@@ -7670,6 +8030,7 @@ function setupUserEvents() {
   $("user-form").addEventListener("submit", submitUserForm);
   $("user-form-close").addEventListener("click", closeUserForm);
   $("user-form-cancel").addEventListener("click", closeUserForm);
+  $("user-form-account-type").addEventListener("change", updateUserFormAccountType);
 
   // Kurum seçildiğinde rol seçenekleri tenant tipine göre filtrelenir.
   $("user-form-tenant").addEventListener("change", (event) => {
@@ -7681,12 +8042,6 @@ function setupUserEvents() {
 
   // Üyelik ekleme bölümünde de kurum tipine göre rol filtresi.
   $("user-detail-body").addEventListener("change", (event) => {
-    if (event.target.id === "user-detail-entitlement-tenant") {
-      const type = event.target.selectedOptions[0]?.dataset?.type;
-      const scope = $("user-detail-entitlement-scope");
-      if (scope && type) scope.value = type === "ORGANIZATION" ? "ORGANIZATION" : "PERSONAL";
-      return;
-    }
     if (event.target.id !== "membership-add-tenant") return;
     const option = event.target.selectedOptions[0];
     const tenantType = option?.dataset?.type ?? "";
@@ -7698,36 +8053,43 @@ function setupUserEvents() {
   });
 
   $("user-detail-close").addEventListener("click", () => {
-    userDetailRequest += 1;
-    analyticsStudentDetailRequest += 1;
-    $("user-detail-modal").classList.add("hidden");
+    returnToUserList();
   });
   $("user-detail-edit").addEventListener("click", () => {
     if (!userDetailCurrent) return;
-    $("user-detail-modal").classList.add("hidden");
     void openUserForm("edit", userDetailCurrent);
   });
   $("user-detail-delete").addEventListener("click", () => {
     if (!userDetailCurrent) return;
-    $("user-detail-modal").classList.add("hidden");
     void deleteUser(userDetailCurrent.id);
   });
 
-  // Üyelik ekleme / güncelleme / kaldırma (detay modalı içinde).
+  $("user-detail-entitlement-start").addEventListener("click", createAdminUserEntitlement);
+  $("user-entitlement-form").addEventListener("submit", submitUserEntitlementForm);
+  $("user-entitlement-dialog-close").addEventListener("click", closeUserEntitlementDialog);
+  $("user-entitlement-cancel").addEventListener("click", closeUserEntitlementDialog);
+  $("user-entitlement-scope").addEventListener("change", updateUserEntitlementScope);
+
+  // Profil içindeki kurum, parola ve öğrenci bağlantısı işlemleri.
   $("user-detail-body").addEventListener("click", (event) => {
     const addBtn = event.target.closest("#membership-add-btn");
     const updateBtn = event.target.closest("[data-mem-update]");
     const removeBtn = event.target.closest("[data-mem-remove]");
     const passwordBtn = event.target.closest("#user-detail-password-btn");
-    const entitlementBtn = event.target.closest("#user-detail-entitlement-btn");
     const studentWorkspaceBtn = event.target.closest("[data-user-open-student]");
+    const restorePersonalContextBtn = event.target.closest("[data-personal-context-restore]");
 
-    if (studentWorkspaceBtn) {
+    if (event.target.closest("[data-entitlement-action]")) {
+      handleUserEntitlementAction(event);
+    } else if (restorePersonalContextBtn) {
+      void restoreUserPersonalContext(
+        restorePersonalContextBtn.dataset.personalContextRestore,
+        restorePersonalContextBtn,
+      );
+    } else if (studentWorkspaceBtn) {
       void openAnalyticsStudentWorkspace(studentWorkspaceBtn.dataset.userOpenStudent, {
         closeUserDetail: true,
       });
-    } else if (entitlementBtn) {
-      void createAdminUserEntitlement();
     } else if (passwordBtn) {
       void resetAdminUserPassword();
     } else if (addBtn) {
@@ -10527,7 +10889,7 @@ async function openAnalyticsStudentWorkspace(studentId, options = {}) {
       );
       return;
     }
-    if (opened && options.closeUserDetail) $("user-detail-modal").classList.add("hidden");
+    if (opened && options.closeUserDetail) returnToUserList();
   } catch (cause) {
     if (selectionId !== analyticsStudentDetailRequest || requestId !== analyticsRequest) return;
     const message = cause?.message ?? "Öğrenci ayrıntısı yüklenemedi.";
