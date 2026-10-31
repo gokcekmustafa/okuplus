@@ -27,6 +27,7 @@ const pageTitles = {
 };
 
 let currentUser = null;
+let currentUserEntitlements = [];
 let currentSegment = "ORGANIZATION";
 
 function $(id) {
@@ -211,6 +212,16 @@ async function openUserDetail(userId) {
   showPage("user-detail");
   try {
     currentUser = await api(`/admin/users/${encodeURIComponent(userId)}`);
+    window.currentUser = currentUser;
+    try {
+      currentUserEntitlements = await api(
+        `/admin/entitlements?userId=${encodeURIComponent(userId)}`,
+      );
+      window.currentUserEntitlements = currentUserEntitlements;
+    } catch {
+      currentUserEntitlements = [];
+      window.currentUserEntitlements = [];
+    }
     renderUserDetail(currentUser);
   } catch {
     renderEmpty(container, "Kullanıcı detayı yüklenemedi.");
@@ -245,13 +256,25 @@ function renderUserDetail(user) {
       </div>
       <p id="sa-user-password-status" class="sa-muted" role="status"></p>
     </form>`;
+  const entitlements = Array.isArray(currentUserEntitlements) ? currentUserEntitlements : [];
   const packageHtml = `
     <div class="sa-detail-grid">
-      <div class="sa-detail-item"><span>Paket</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.plan || "—")}</strong></div>
-      <div class="sa-detail-item"><span>Kaynak</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.source || "—")}</strong></div>
-      <div class="sa-detail-item"><span>Başlangıç</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.effectiveAt || "—")}</strong></div>
-      <div class="sa-detail-item"><span>Bitiş</span><strong>${escapeHtml(user.accountContexts?.[0]?.packageRight?.expiresAt || "Süresiz")}</strong></div>
-    </div>`;
+      ${
+        entitlements.length
+          ? entitlements
+              .map(
+                (right) =>
+                  `<div class="sa-detail-item"><span>${escapeHtml(right.tenantName || right.tenantId || "Baglam")}</span><strong>${escapeHtml(right.plan || "—")} · ${escapeHtml(right.active ? "Aktif" : "Pasif")}</strong><small>Kaynak: ${escapeHtml(right.source || "—")} · Bitis: ${escapeHtml(right.expiresAt || "Suresiz")}</small></div>`,
+              )
+              .join("")
+          : '<p class="sa-muted">Paket kaydi yok.</p>'
+      }
+    </div>
+    <div class="sa-form-actions" style="margin-top:16px">
+      <button type="button" class="sa-btn sa-btn-primary" id="sa-open-package-modal">Paket yonetimi</button>
+    </div>
+  `;
+
   const orgHtml = `
     <div class="sa-detail-grid">
       ${
