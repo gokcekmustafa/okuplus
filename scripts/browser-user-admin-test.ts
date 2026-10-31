@@ -30,10 +30,17 @@ async function main() {
 
   async function login(page, email, password) {
     await page.goto(`${BASE_URL}/`, { waitUntil: "domcontentloaded" });
+    for (const selector of ["#guest-header-login-btn", "#guest-login-btn"]) {
+      if (await page.isVisible(selector)) {
+        await page.click(selector);
+        break;
+      }
+    }
+    await page.waitForSelector("#view-login:not(.hidden)", { timeout: 10000 });
     await page.fill("#login-email", email);
     await page.fill("#login-password", password);
     await page.click("#login-submit");
-    await page.waitForSelector("#page-dashboard:not(.hidden)", { timeout: 10000 });
+    await page.waitForSelector("#view-app:not(.hidden)", { timeout: 10000 });
   }
 
   // ================= Super Admin =================
@@ -55,7 +62,11 @@ async function main() {
 
   // 3) Arama: demo kullanıcısını bul.
   await page.fill("#user-search", "demo");
-  await page.waitForTimeout(900);
+  await page.waitForFunction(
+    () =>
+      (document.querySelector("#user-list-body")?.textContent ?? "").includes("demo@okuplus.dev"),
+    { timeout: 10000 },
+  );
   await page.waitForSelector("#user-list-body tr:not(.empty-cell)", { timeout: 5000 });
   const searchText = await page.$eval("#user-list-body", (el) => el.textContent);
   const searchFoundDemo = searchText.includes("demo@okuplus.dev");
@@ -100,9 +111,11 @@ async function main() {
   // 5) Detay görüntüle; ilk üyelik otomatik eklenmiş olmalı.
   await row.locator("button[data-user-detail-id]").click();
   await page.waitForSelector("#user-detail-modal:not(.hidden)", { timeout: 5000 });
+  await page.waitForSelector("#user-detail-form", { timeout: 10000 });
   const detailTitle = await page.$eval("#user-detail-title", (el) => el.textContent);
   console.log(`6) Kullanıcı detayı açıldı: ${detailTitle}`);
 
+  await page.click("#user-detail-body details.admin-detail-disclosure summary");
   await page.waitForSelector("#user-detail-body tr:has(select[data-mem-role])", { timeout: 5000 });
   const initialMembershipsText = await page.$eval("#user-detail-body", (el) => el.textContent);
   const initialMembershipAdded =
@@ -117,6 +130,7 @@ async function main() {
   const roleChangedText = await page.$eval("#user-detail-body", (el) => el.textContent);
   const roleChanged = roleChangedText.includes("Öğrenci");
   console.log(`8) Üyelik rolü Öğrenci'ye değiştirildi: ${roleChanged}`);
+  await page.click("#user-detail-body details.admin-detail-disclosure summary");
 
   // 7) Durum değiştir: ACTIVE → INACTIVE.
   const memRow2 = page.locator("#user-detail-body tr:has(select[data-mem-role])").first();
@@ -126,6 +140,7 @@ async function main() {
   const statusChangedText = await page.$eval("#user-detail-body", (el) => el.textContent);
   const statusChanged = statusChangedText.includes("Pasif");
   console.log(`9) Üyelik durumu Pasif'e değiştirildi: ${statusChanged}`);
+  await page.click("#user-detail-body details.admin-detail-disclosure summary");
 
   // 7) Üyeliği kaldır.
   const removeBtn = page.locator("#user-detail-body button[data-mem-remove]").first();
@@ -188,52 +203,46 @@ async function main() {
     },
     { timeout: 5000 },
   );
-  // Bireysel kurum yoksa önce bir tane oluştur (sayfa içinden tenant API).
-  let individualOption = await indPage
+  const individualOption = await indPage
     .$eval("#user-form-tenant option[data-type='INDIVIDUAL']", (o) => (o ? o.value : ""))
     .catch(() => "");
-  if (!individualOption) {
-    const token = await indPage.evaluate(() => localStorage.getItem("oku.accessToken"));
-    const created = await indPage.evaluate(async (accessToken) => {
-      const res = await fetch("/admin/tenants", {
-        method: "POST",
-        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          type: "INDIVIDUAL",
-          name: `E2E Bireysel ${Date.now()}`,
-        }),
-      });
-      const body = await res.json();
-      return body.data;
-    }, token);
-    await indPage.waitForTimeout(400);
-    await indPage.click("#user-form-close");
-    await indPage.click("#user-create-btn");
-    await indPage.waitForSelector("#user-form-modal:not(.hidden)", { timeout: 5000 });
-    await indPage.waitForFunction(
-      () => {
-        const sel = document.querySelector("#user-form-tenant");
-        return sel && sel.options.length > 1;
-      },
-      { timeout: 5000 },
+  if (individualOption) {
+    await indPage.selectOption("#user-form-tenant", individualOption);
+    await indPage.waitForTimeout(300);
+    const roleOptionsText = await indPage.$eval("#user-form-role", (el) => el.textContent);
+    const hasOnlyIndividualRoles =
+      roleOptionsText.includes("Öğrenci") &&
+      roleOptionsText.includes("Veli") &&
+      !roleOptionsText.includes("Öğretmen") &&
+      !roleOptionsText.includes("Sahip") &&
+      !roleOptionsText.includes("Kurum Yöneticisi") &&
+      !roleOptionsText.includes("Şube Yöneticisi");
+    console.log(
+      `14) INDIVIDUAL kurumda rol seçenekleri sınırlı (Öğrenci/Veli): ${hasOnlyIndividualRoles}`,
     );
-    individualOption = created.id;
+  } else {
+    // The current tenant admin contract lists organizations only; a personal
+    // context is provisioned when a user is created without an organization.
+    const individualName = `E2E Bireysel ${Date.now()}`;
+    const individualEmail = `e2e-individual-${Date.now().toString().slice(-8)}@example.com`;
+    await indPage.fill("#user-form-name", individualName);
+    await indPage.fill("#user-form-email", individualEmail);
+    await indPage.fill("#user-form-phone", "+905551112244");
+    await indPage.selectOption("#user-form-status", "ACTIVE");
+    await indPage.fill("#user-form-password", "e2e-pass-123!");
+    await indPage.click("#user-form-submit");
+    await indPage.waitForSelector("#user-form-modal", { state: "hidden", timeout: 10000 });
+    await indPage.waitForFunction(
+      (name) => (document.querySelector("#user-list-body")?.textContent ?? "").includes(name),
+      individualName,
+      { timeout: 10000 },
+    );
+    console.log(
+      `14) Bireysel kullanıcı kurum seçmeden oluşturuldu ve listede göründü: ${individualName}`,
+    );
   }
-  await indPage.selectOption("#user-form-tenant", individualOption);
-  await indPage.waitForTimeout(300);
-  const roleOptionsText = await indPage.$eval("#user-form-role", (el) => el.textContent);
-  const hasOnlyIndividualRoles =
-    roleOptionsText.includes("Öğrenci") &&
-    roleOptionsText.includes("Veli") &&
-    !roleOptionsText.includes("Öğretmen") &&
-    !roleOptionsText.includes("Sahip") &&
-    !roleOptionsText.includes("Kurum Yöneticisi") &&
-    !roleOptionsText.includes("Şube Yöneticisi");
-  console.log(
-    `14) INDIVIDUAL kurumda rol seçenekleri sınırlı (Öğrenci/Veli): ${hasOnlyIndividualRoles}`,
-  );
   await indPage.close();
-  console.log("15) INDIVIDUAL rol filtresi kontrolü tamam");
+  console.log("15) Bireysel hesap kontrolü tamam");
   await browser.close();
 }
 

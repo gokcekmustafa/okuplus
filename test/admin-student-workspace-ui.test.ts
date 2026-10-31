@@ -42,7 +42,7 @@ function analyticsStudentFlowSource(includeFetcher = false): string {
 }
 
 describe("admin student workspace and question editing UI", () => {
-  it("labels account contexts and platform role without exposing raw markup", () => {
+  it("labels account roles by platform and tenant scope without exposing raw markup", () => {
     const context = createContext({
       MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", TEACHER: "Öğretmen" },
       MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif" },
@@ -50,78 +50,27 @@ describe("admin student workspace and question editing UI", () => {
         String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
       platformRoleLabel: () => "Platform yöneticisi",
       tenantTypeLabel: (type: string) => (type === "INDIVIDUAL" ? "Bireysel" : "Kurumsal"),
-      planLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Ücretli Paket" : "Ücretsiz Paket"),
-      entitlementSourceLabel: (source: string) => source,
     });
-    const renderers = runInContext(
-      `${functionSource("function renderUserAccountTypes(", "function userInitials(")}; ({renderUserAccountTypes, renderUserContextSummary})`,
+    const render = runInContext(
+      `${functionSource("function renderUserRoleConnections(", "const INDIVIDUAL_ALLOWED_ROLES")}; renderUserRoleConnections`,
       context,
-    ) as {
-      renderUserAccountTypes: (user: unknown) => string;
-      renderUserContextSummary: (user: unknown) => string;
-    };
-    const user = {
+    ) as (user: unknown) => string;
+
+    const html = render({
       platformRole: "SUPER_ADMIN",
-      accountContexts: [
+      roleConnections: [
         {
+          role: "STUDENT",
+          status: "ACTIVE",
           tenantName: "<Örnek Kurum>",
           tenantType: "ORGANIZATION",
-          memberships: [{ role: "STUDENT", status: "ACTIVE", deleted: false }],
         },
       ],
-    };
-    const typesHtml = renderers.renderUserAccountTypes(user);
-    const contextHtml = renderers.renderUserContextSummary(user);
-    expect(typesHtml).toContain("Platform");
-    expect(typesHtml).toContain("Kurumsal");
-    expect(contextHtml).toContain("Öğrenci · Aktif");
-    expect(contextHtml).toContain("&lt;Örnek Kurum&gt;");
-    expect(contextHtml).not.toContain("<Örnek Kurum>");
-  });
-
-  it("shows every account context and its own package in the user list", () => {
-    const context = createContext({
-      MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", PARENT: "Veli" },
-      MEMBERSHIP_STATUS_LABELS: { ACTIVE: "Aktif", PENDING: "Beklemede" },
-      escapeHtml: (value: unknown) => String(value),
-      tenantTypeLabel: (type: string) => (type === "INDIVIDUAL" ? "Bireysel" : "Kurum"),
-      planLabel: (plan: string) => (plan === "PLAN_PREMIUM" ? "Ücretli Paket" : "Ücretsiz Paket"),
-      entitlementSourceLabel: (source: string) => source,
     });
-    const renderers = runInContext(
-      `${functionSource("function renderUserContextSummary(", "function renderUserAccessSummary(")}; ${functionSource("function accountContextMembershipSummary(", "function userInitials(")}; ({renderUserContextSummary, renderUserPackageSummary, renderMembershipStatusSummary})`,
-      context,
-    ) as {
-      renderUserContextSummary: (user: unknown) => string;
-      renderUserPackageSummary: (user: unknown) => string;
-      renderMembershipStatusSummary: (user: unknown) => string;
-    };
-    const user = {
-      accountContexts: [
-        {
-          tenantName: "Kişisel alan",
-          tenantType: "INDIVIDUAL",
-          memberships: [{ role: "STUDENT", status: "ACTIVE", deleted: false }],
-          packageRight: { plan: "PLAN_PREMIUM", source: "ADMIN" },
-        },
-        {
-          tenantName: "Örnek Okul",
-          tenantType: "ORGANIZATION",
-          memberships: [{ role: "PARENT", status: "PENDING", deleted: false }],
-          packageRight: { plan: "PLAN_FREE", source: "DEFAULT" },
-        },
-      ],
-    };
-    const html = [
-      renderers.renderUserContextSummary(user),
-      renderers.renderUserPackageSummary(user),
-      renderers.renderMembershipStatusSummary(user),
-    ].join("\n");
-    expect(html).toContain("Kişisel alan");
-    expect(html).toContain("Örnek Okul");
-    expect(html).toContain("Ücretli Paket");
-    expect(html).toContain("Ücretsiz Paket");
-    expect(html).toContain("Beklemede");
+    expect(html).toContain("Platform yöneticisi");
+    expect(html).toContain("Kurumsal · Öğrenci");
+    expect(html).toContain("&lt;Örnek Kurum&gt;");
+    expect(html).not.toContain("<Örnek Kurum>");
   });
 
   it("opens the matching shared student profile from the analytics row", async () => {
@@ -391,24 +340,18 @@ describe("admin student workspace and question editing UI", () => {
   });
 
   it("opens the same student workspace from User Management when the account has student access", async () => {
-    const hideSubpage = vi.fn();
-    const showList = vi.fn();
-    const elements = {
-      "analytics-error": { classList: { add() {} } },
-      "user-management-subpage": { classList: { add: hideSubpage } },
-      "user-list-view": { classList: { remove: showList } },
-    };
+    const close = vi.fn();
     const openStudentDetail = vi.fn(async () => true);
     const data = { student: { profileId: "profile-2" } };
     const context = createContext({
       analyticsRequest: 0,
       analyticsStudentDetailRequest: 0,
-      userDetailRequest: 0,
-      userDetailCurrent: null,
       fetchAnalyticsStudentDetail: vi.fn(async () => data),
       openStudentDetail,
       showUserError: vi.fn(),
-      $: (id: string) => elements[id as keyof typeof elements],
+      $: (id: string) => ({
+        classList: { add: id === "user-detail-modal" ? close : vi.fn() },
+      }),
     });
     runInContext(
       `${functionSource("async function openAnalyticsStudentWorkspace(", "async function loadAnalyticsStudentDetail(")}; openAnalyticsStudentWorkspace`,
@@ -419,37 +362,29 @@ describe("admin student workspace and question editing UI", () => {
       analyticsData: data,
       isCurrent: expect.any(Function),
     });
-    expect(hideSubpage).toHaveBeenCalledExactlyOnceWith("hidden");
-    expect(showList).toHaveBeenCalledExactlyOnceWith("hidden");
+    expect(close).toHaveBeenCalledExactlyOnceWith("hidden");
   });
 
   it("keeps a student name click in User Management on the general user detail", () => {
     const openUserDetail = vi.fn();
     const openWorkspace = vi.fn();
-    const listeners: Record<string, (event: unknown) => void> = {};
-    const page = {
-      addEventListener: (type: string, listener: (event: unknown) => void) => {
-        listeners[type] = listener;
-      },
-    };
     const context = createContext({
       openUserDetail,
       openAnalyticsStudentWorkspace: openWorkspace,
-      $: () => page,
     });
     const handleClick = runInContext(
-      `${functionSource("function setupUserEvents()", "// ---------- Öğrenci / sınıf kayıtları yönetimi ----------")}; setupUserEvents`,
+      `${functionSource("function handleUserListClick(event)", "function setupUserEvents()")}; handleUserListClick`,
       context,
-    ) as () => void;
-    handleClick();
+    ) as (event: unknown) => void;
 
-    listeners.click({
+    handleClick({
       target: {
-        closest: () => ({
-          id: "",
-          dataset: { userDetailId: "user-42" },
-          matches: (selector: string) => selector === "[data-user-detail-id]",
-        }),
+        closest(selector: string) {
+          if (selector === "[data-user-detail-id]") {
+            return { dataset: { userDetailId: "user-42" } };
+          }
+          return null;
+        },
       },
     });
     expect(openUserDetail).toHaveBeenCalledExactlyOnceWith("user-42");
@@ -489,24 +424,19 @@ describe("admin student workspace and question editing UI", () => {
       USER_PAGE_SIZE: 20,
       $: (id: string) => elements[id],
       escapeHtml: (value: unknown) => String(value),
-      renderUserAccountTypes: () => "hesap türü",
-      renderUserContextSummary: () => "bağlam",
-      renderUserPackageSummary: () => "paket",
-      renderMembershipStatusSummary: () => "üyelik",
-      renderUserAccessSummary: () => "erişim",
-      userInitials: () => "ÖA",
+      renderUserRoleConnections: () => "roller",
       formatTurkishPhoneValue: (value: unknown) => String(value),
       userStatusBadge: () => "durum",
-      document: { querySelectorAll: () => [] },
       Math,
     });
     runInContext(
-      `${functionSource("function renderUserList()", "function renderUserAccountTypes(")}; renderUserList`,
+      `${functionSource("function renderUserList()", "function renderUserRoleConnections(")}; renderUserList`,
       context,
     )();
 
-    expect(listBody.innerHTML).toContain('data-user-detail-id="student-user"');
-    expect(listBody.innerHTML).toContain('data-user-detail-id="teacher-user"');
+    const [studentRow, teacherRow] = listBody.innerHTML.split("<tr>").slice(1);
+    expect(studentRow).toContain('data-user-detail-id="student-user"');
+    expect(teacherRow).toContain('data-user-detail-id="teacher-user"');
     expect(listBody.innerHTML).not.toContain("data-user-open-student");
   });
 
@@ -550,14 +480,14 @@ describe("admin student workspace and question editing UI", () => {
     });
     const renderUserDetail = vi.fn();
     const elements = {
-      "user-list-view": { classList: { add() {}, remove() {} } },
-      "user-management-subpage": { classList: { add() {}, remove() {} }, innerHTML: "" },
+      "user-detail-modal": { classList: { remove() {} } },
+      "user-detail-title": { textContent: "" },
+      "user-detail-body": { innerHTML: "" },
     };
     const context = createContext({
       userDetailRequest: 0,
       analyticsStudentDetailRequest: 0,
       userDetailCurrent: null,
-      userDetailTab: "general",
       userApi: vi.fn().mockReturnValueOnce(first).mockResolvedValueOnce({ id: "user-new" }),
       parseResponse: async (value: unknown) => value,
       renderUserDetail,
