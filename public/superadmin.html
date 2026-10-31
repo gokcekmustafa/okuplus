@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OkuPratik Superadmin</title>
+    <link rel="stylesheet" href="/superadmin.css" />
+  </head>
+  <body>
+    <div class="sa-shell">
+      <aside class="sa-sidebar" id="sa-sidebar">
+        <div class="sa-brand">
+          <span class="sa-brand-mark" aria-hidden="true">OP</span>
+          <div>
+            <strong>OkuPratik</strong>
+            <span>Superadmin</span>
+          </div>
+        </div>
+        <nav class="sa-nav" aria-label="Superadmin navigasyonu">
+          <button type="button" class="sa-nav-item is-active" data-page="overview">
+            Genel Bakış
+          </button>
+          <button type="button" class="sa-nav-item" data-page="organizations">Kurumlar</button>
+          <button type="button" class="sa-nav-item" data-page="org-users">
+            Kurumsal Kullanıcılar
+          </button>
+          <button type="button" class="sa-nav-item" data-page="individual-users">
+            Bireysel Kullanıcılar
+          </button>
+          <button type="button" class="sa-nav-item" data-page="platform-users">
+            Platform Kullanıcıları
+          </button>
+          <button type="button" class="sa-nav-item" data-page="packages">Paketler</button>
+          <button type="button" class="sa-nav-item" data-page="subscriptions">Abonelikler</button>
+          <button type="button" class="sa-nav-item" data-page="payments">Ödemeler</button>
+          <button type="button" class="sa-nav-item" data-page="activity">İşlem Geçmişi</button>
+          <button type="button" class="sa-nav-item" data-page="settings">Ayarlar</button>
+        </nav>
+      </aside>
+
+      <div class="sa-main">
+        <header class="sa-topbar">
+          <button type="button" class="sa-menu-toggle" id="sa-menu-toggle" aria-label="Menüyü aç">
+            ☰
+          </button>
+          <div class="sa-topbar-title">
+            <span class="sa-eyebrow">SUPERADMIN</span>
+            <h1 id="sa-page-title">Genel Bakış</h1>
+          </div>
+          <div class="sa-topbar-actions">
+            <span class="sa-user-chip" id="sa-user-chip">Yükleniyor…</span>
+            <button type="button" class="sa-btn sa-btn-secondary" id="sa-logout">Çıkış</button>
+          </div>
+        </header>
+
+        <main class="sa-content" id="sa-content">
+          <section class="sa-page is-active" data-page="overview">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">GENEL BAKIŞ</span>
+                <h2>Platform özeti</h2>
+                <p>Mevcut Superadmin arayüzünden bağımsız, yeni yönetim kabuğu iskeleti.</p>
+              </div>
+              <button type="button" class="sa-btn sa-btn-primary">Yeni kayıt</button>
+            </div>
+            <div class="sa-grid sa-grid-3">
+              <article class="sa-card">
+                <span class="sa-card-label">Toplam kullanıcı</span><strong>—</strong>
+                <p>API bağlantısı sonraki aşamada</p>
+              </article>
+              <article class="sa-card">
+                <span class="sa-card-label">Aktif kurum</span><strong>—</strong>
+                <p>API bağlantısı sonraki aşamada</p>
+              </article>
+              <article class="sa-card">
+                <span class="sa-card-label">Bekleyen işlem</span><strong>—</strong>
+                <p>API bağlantısı sonraki aşamada</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="sa-page" data-page="organizations">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">KURUMLAR</span>
+                <h2>Kurum yönetimi</h2>
+                <p>İskelet sayfa. API entegrasyonu sonraki aşamada.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Kurum listesi ve işlemler sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="org-users">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">KURUMSAL KULLANICILAR</span>
+                <h2>Kurumsal kullanıcı yönetimi</h2>
+                <p>Kurum bağlantılı hesaplar bu bölümde yönetilecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Kurumsal kullanıcı listesi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="individual-users">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">BİREYSEL KULLANICILAR</span>
+                <h2>Bireysel kullanıcı yönetimi</h2>
+                <p>Bireysel alan ve öğrenci kayıtları bu bölümde yönetilecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Bireysel kullanıcı listesi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="platform-users">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">PLATFORM KULLANICILARI</span>
+                <h2>Platform kullanıcı yönetimi</h2>
+                <p>Superadmin ve platform rolleri bu bölümde yönetilecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Platform kullanıcı listesi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="packages">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">PAKETLER</span>
+                <h2>Paket yönetimi</h2>
+                <p>Paket tanımları ve kullanım hakları bu bölümde yönetilecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Paket listesi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="subscriptions">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">ABONELİKLER</span>
+                <h2>Abonelik yönetimi</h2>
+                <p>Abonelik durumları ve yenilemeler bu bölümde izlenecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Abonelik listesi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="payments">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">ÖDEMELER</span>
+                <h2>Ödeme kayıtları</h2>
+                <p>Ödeme ve faturalama kayıtları bu bölümde incelenecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Ödeme kayıtları sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="activity">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">İŞLEM GEÇMİŞİ</span>
+                <h2>Audit ve işlem geçmişi</h2>
+                <p>Hesap ve paket değişiklikleri bu bölümde izlenecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">İşlem geçmişi sonraki aşamada bağlanacak.</div>
+          </section>
+
+          <section class="sa-page" data-page="settings">
+            <div class="sa-page-header">
+              <div>
+                <span class="sa-eyebrow">AYARLAR</span>
+                <h2>Platform ayarları</h2>
+                <p>Yapılandırma ve güvenlik ayarları bu bölümde yönetilecek.</p>
+              </div>
+            </div>
+            <div class="sa-empty-state">Ayarlar sonraki aşamada bağlanacak.</div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script src="/superadmin.js"></script>
+  </body>
+</html>
