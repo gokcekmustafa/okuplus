@@ -958,9 +958,10 @@ describe("user + membership admin", () => {
   });
 
   it("Super Admin: paket bağlamlarını ve ödeme aboneliğini ayrı, sağlayıcı sırları olmadan okur", async () => {
-    const effectiveAt = new Date("2026-10-01T00:00:00.000Z");
-    const periodStart = new Date("2026-10-01T00:00:00.000Z");
-    const periodEnd = new Date("2026-11-01T00:00:00.000Z");
+    const now = Date.now();
+    const effectiveAt = new Date(now - 24 * 60 * 60 * 1000);
+    const periodStart = effectiveAt;
+    const periodEnd = new Date(now + 30 * 24 * 60 * 60 * 1000);
     await prisma.entitlement.createMany({
       data: [
         {
