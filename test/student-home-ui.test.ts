@@ -2,108 +2,193 @@ import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-const appSource = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
-const homeRenderer = appSource.slice(
-  appSource.indexOf("function renderHomeInsights("),
-  appSource.indexOf(
-    "const DEVELOPMENT_SKILL_CARDS",
-    appSource.indexOf("function renderHomeInsights("),
-  ),
+const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const homeCode = source.slice(
+  source.indexOf("function renderHomeInsights("),
+  source.indexOf("const DEVELOPMENT_SKILL_CARDS"),
 );
+const usableStart = source.indexOf("function isUsableLearningPathNode(");
+const usableCode = source.slice(usableStart, source.indexOf("\n}", usableStart) + 2);
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
-const homeStyles = readFileSync(new URL("../public/student-home.css", import.meta.url), "utf8");
 
 function harness() {
-  type HomeElement = {
+  type Element = {
     innerHTML: string;
-    classList: {
-      add: (...args: unknown[]) => void;
-      remove: (...args: unknown[]) => void;
-      toggle: (...args: unknown[]) => void;
-    };
+    textContent: string;
+    disabled: boolean;
+    style: { width: string };
+    attrs: Map<string, string>;
+    classList: { remove: ReturnType<typeof vi.fn> };
+    setAttribute: (name: string, value: string) => void;
+    removeAttribute: (name: string) => void;
+    querySelector: () => { textContent: string };
   };
-  const elements = new Map<string, HomeElement>();
+  const elements = new Map<string, Element>();
   const get = (id: string) => {
     if (!elements.has(id)) {
+      const attrs = new Map<string, string>();
+      const label = { textContent: "" };
       elements.set(id, {
         innerHTML: "",
-        classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
+        textContent: "",
+        disabled: false,
+        style: { width: "" },
+        attrs,
+        classList: { remove: vi.fn() },
+        setAttribute: (name, value) => {
+          attrs.set(name, value);
+        },
+        removeAttribute: (name) => {
+          attrs.delete(name);
+        },
+        querySelector: () => label,
       });
     }
-    return elements.get(id);
+    return elements.get(id)!;
   };
+  let scope = "student:fixture";
+  const start = vi.fn();
   const context = createContext({
     $: get,
     escapeHtml: (value: string) =>
-      value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;"),
-    formatAccuracy: (value: number) => `${Math.round(value * 100)}%`,
+      String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;"),
     isPlatformUser: false,
+    studentHomeNextNode: null,
+    studentHomeNextScope: null,
+    insightScope: () => scope,
+    currentPage: "dashboard",
+    startLearningPathNodeFromMap: start,
   });
-  runInContext(homeRenderer, context);
+  runInContext(usableCode + "\n" + homeCode, context);
   return {
     get,
-    render: (path: unknown, progress: unknown) =>
+    start,
+    context,
+    changeScope: () => {
+      scope = "another-student";
+    },
+    render: (path: unknown, progress: unknown = null, history: unknown = null) =>
       runInContext(
-        `renderHomeInsights(${JSON.stringify(path)}, ${JSON.stringify(progress)})`,
+        `renderHomeInsights(${JSON.stringify(path)}, ${JSON.stringify(progress)}, ${JSON.stringify(history)})`,
         context,
       ),
+    activate: () => runInContext("startStudentHomeNext()", context),
   };
 }
+const active = {
+  id: "server-step-3",
+  type: "PRACTICE",
+  status: "active",
+  label: "Anlamayı Geliştirme",
+  templateVersionId: "server-template-3",
+};
+const pathData = {
+  currentLevel: { name: "3. Seviye" },
+  routeProgress: { completed: 2, total: 3, percent: 67 },
+  paths: [
+    {
+      path: { title: "Temel Beceriler" },
+      nodes: [{ ...active, id: "locked-step", status: "locked" }, active],
+    },
+  ],
+  today: { recentActivity: [] },
+};
 
 describe("student home", () => {
-  it("renders the four reference destinations and keeps secondary pages reachable", () => {
-    const nav = html.match(/<nav id="student-bottom-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
-    const destinations = [
-      ...nav.matchAll(/data-bottom-page="([^"]+)"[\s\S]*?bottom-nav-label">([^<]+)</gu),
-    ].map(([, page, label]) => [page, label]);
-
-    expect(destinations).toEqual([
-      ["dashboard", "Ana Sayfa"],
-      ["lessons", "Öğrenme Yolu"],
-      ["progress", "Gelişim"],
-      ["settings", "Profil"],
-    ]);
-    expect(html).toContain('data-user-menu-page="assignments" data-student');
-    expect(html).toContain('data-user-menu-page="assessments" data-student');
-    expect(html).toContain('data-user-menu-page="badges" data-student');
-    expect(html).toContain('href="/student-home.css"');
-    expect(homeStyles).toContain("env(safe-area-inset-bottom)");
+  it("opens the server-unlocked Learning Path station, not independent training", () => {
+    const h = harness();
+    h.render(pathData);
+    h.activate();
+    expect(h.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "server-step-3",
+        templateVersionId: "server-template-3",
+        status: "active",
+      }),
+      h.get("home-start-next"),
+    );
+    expect(h.get("home-start-next").disabled).toBe(false);
+    expect(h.get("home-work-percent").textContent).toBe("%67");
+    expect(h.get("home-work-description").textContent).toContain("3 istasyondan 2");
   });
-
-  it("uses supplied learning and measurement data without making up values", () => {
+  it("does not open locked, unavailable or another student's cached station", () => {
+    const h = harness();
+    h.render({ ...pathData, paths: [{ nodes: [{ ...active, status: "locked" }] }] });
+    h.activate();
+    expect(h.get("home-start-next").disabled).toBe(true);
+    expect(h.start).not.toHaveBeenCalled();
+    h.render({ ...pathData, paths: [{ nodes: [{ ...active, availability: "UNAVAILABLE" }] }] });
+    h.activate();
+    expect(h.get("home-start-next").disabled).toBe(true);
+    expect(h.start).not.toHaveBeenCalled();
+    h.render(pathData);
+    h.changeScope();
+    h.activate();
+    expect(h.start).not.toHaveBeenCalled();
+  });
+  it("uses actual comprehension measurements rather than a general accuracy score", () => {
+    const h = harness();
+    h.render(pathData, {
+      summary: { accuracy: 0.95 },
+      items: [
+        { skillCode: "FR_SPEED", fluencyWcpm: 162 },
+        {
+          skillCode: "RC_MAIN_IDEA",
+          skillName: "Ana Fikir",
+          accuracy: 0.78,
+          lastAttemptAt: "2026-11-05",
+        },
+      ],
+    });
+    expect(h.get("home-insights-values").innerHTML).toContain("162");
+    expect(h.get("home-insights-values").innerHTML).toContain("%78");
+    expect(h.get("home-insights-values").innerHTML).not.toContain("%95");
+  });
+  it("shows recorded activity scores and leaves unknown measurements unscored", () => {
+    const h = harness();
+    h.render(pathData, null, {
+      items: [
+        {
+          id: "history-1",
+          status: "COMPLETED",
+          templateVersion: { template: { title: "Ormanların Önemi" } },
+          scoreSummary: { averageScore: 0.8 },
+        },
+        { id: "history-2", status: "COMPLETED", title: "Temiz Hava" },
+      ],
+    });
+    const activity = h.get("home-recent-activity").innerHTML;
+    expect(activity).toContain("Ormanların Önemi");
+    expect(activity).toContain("%80");
+    expect(activity.match(/home-activity-score/g)).toHaveLength(1);
+    expect(h.get("home-insights-values").innerHTML).toContain("Henüz ölçülmedi");
+  });
+  it("presents empty states without fake zero scores or an enabled start button", () => {
     const h = harness();
     h.render(
-      {
-        currentLevel: { name: "3. Seviye" },
-        routeProgress: { completed: 2, total: 3, percent: 67 },
-        paths: [{ nodes: [{ status: "active", label: "Temel Beceriler" }] }],
-        today: { recentActivity: [{ title: "Ormanların Önemi", type: "EXERCISE" }] },
-      },
-      {
-        items: [{ fluencyWcpm: 162, lastAttemptAt: "2026-11-05T10:00:00.000Z" }],
-        summary: { accuracy: 0.78 },
-      },
+      { paths: [], today: { recentActivity: [] } },
+      { items: [], summary: { accuracy: 0.9 } },
     );
-
-    const summary = h.get("home-insights-values").innerHTML;
-    expect(summary).toContain("3. Seviye");
-    expect(summary).toContain("162 kelime/dk");
-    expect(summary).toContain("78%");
-    expect(summary).toContain("2 / 3 adım tamamlandı");
-    expect(summary).toContain("Sıradaki: Temel Beceriler");
-    expect(h.get("home-recent-activity").innerHTML).toContain("Ormanların Önemi");
-    expect(summary).not.toContain("GP");
-    expect(h.get("home-insights").classList.remove).toHaveBeenCalledWith("hidden");
+    expect(h.get("home-work-percent").textContent).toBe("—");
+    expect(h.get("home-work-progress").attrs.has("aria-valuenow")).toBe(false);
+    expect(h.get("home-insights-values").innerHTML).not.toContain("%90");
+    expect(h.get("home-insights-values").innerHTML).toContain("Henüz belirlenmedi");
+    expect(h.get("home-start-next").disabled).toBe(true);
+    expect(h.get("home-recent-activity").innerHTML).toContain("Henüz çalışma kaydın yok");
   });
-
-  it("labels unavailable measurements instead of showing placeholder statistics", () => {
-    const h = harness();
-    h.render({ today: { recentActivity: [] } }, { items: [], summary: { accuracy: null } });
-
-    const summary = h.get("home-insights-values").innerHTML;
-    expect(summary).toContain("Henüz ölçülmedi");
-    expect(summary).toContain("Henüz adım yok");
-    expect(summary).not.toContain("%0");
-    expect(h.get("home-recent-activity").innerHTML).toContain("Henüz çalışma kaydı yok.");
+  it("keeps four primary destinations and secondary features reachable", () => {
+    const nav = html.match(/<nav id="student-bottom-nav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect([...nav.matchAll(/data-bottom-page="([^"]+)"/g)].map((match) => match[1])).toEqual([
+      "dashboard",
+      "lessons",
+      "progress",
+      "settings",
+    ]);
+    for (const page of ["exercise", "assignments", "assessments", "badges"])
+      expect(html).toContain(`data-user-menu-page="${page}" data-student`);
   });
 });
