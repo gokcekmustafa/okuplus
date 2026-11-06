@@ -1952,6 +1952,7 @@ function renderTodayData(data, scope) {
       escapeHtml(data.nextAction.label || "Başla") +
       "</button>";
   }
+  na.classList.toggle("is-empty", !data.nextAction);
   na.innerHTML = escapeHtml(label + title) + " " + btn;
   stats.textContent =
     "Bugün tamamlanan: " +
@@ -4104,6 +4105,7 @@ async function loadLearningPath() {
       learningPathPhase = "home-insights";
       try {
         renderHomeInsights(data);
+        void loadHomeProgress(data, scope);
       } catch (error) {
         reportLearningPathClientError(error, learningPathPhase);
         console.error("learning-path-render-failed", {
@@ -5886,14 +5888,9 @@ function canAccessPage(page) {
 }
 
 function studentBottomNavigationTarget(page, isLearningPathExercise) {
-  if (
-    page === "dashboard" ||
-    page === "lessons" ||
-    (page === "exercise" && isLearningPathExercise)
-  ) {
-    return "dashboard";
-  }
-  if (["assignments", "assessments", "badges"].includes(page)) return "more";
+  if (page === "dashboard" || (page === "exercise" && !isLearningPathExercise)) return "dashboard";
+  if (page === "lessons" || (page === "exercise" && isLearningPathExercise)) return "lessons";
+  if (["assignments", "assessments", "badges", "settings"].includes(page)) return "settings";
   return page;
 }
 
@@ -20452,12 +20449,81 @@ async function insightApi(path) {
   requests.set(key, request);
   return request;
 }
-function renderHomeInsights(path) {
-  if (isPlatformUser || !path.today) return;
-  const p = path.routeProgress || path.overallProgress;
-  $("home-insights-values").innerHTML =
-    `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#star"></use></svg> <strong>${path.today.totalPoints}</strong> GP</span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#flame"></use></svg> <strong>${path.today.currentStreak}</strong> gün</span>${p ? `<span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#chart"></use></svg> <strong>${p.completed}/${p.total}</strong> adım</span>` : ""}`;
-  $("home-insights").classList.remove("hidden");
+function renderHomeInsights(path, progressData = null) {
+  if (isPlatformUser || !path) return;
+  const values = $("home-insights-values");
+  const recent = $("home-recent-activity");
+  const panel = $("home-insights");
+  if (!values || !recent || !panel) return;
+
+  const progress = path.routeProgress || path.overallProgress || null;
+  const completed = Number.isFinite(progress?.completed) ? progress.completed : null;
+  const total = Number.isFinite(progress?.total) ? progress.total : null;
+  const percent = Number.isFinite(progress?.percent)
+    ? Math.max(0, Math.min(100, Math.round(progress.percent)))
+    : null;
+  const levelName = path.currentLevel?.name || "Seviyen henüz belirlenmedi";
+  const paths =
+    Array.isArray(path.paths) && path.paths.length
+      ? path.paths
+      : [{ path: path.path, nodes: path.nodes || [] }];
+  const nodes = paths
+    .concat(Array.isArray(path.upcomingPaths) ? path.upcomingPaths : [])
+    .concat(Array.isArray(path.plannedPaths) ? path.plannedPaths : [])
+    .flatMap((group) => (Array.isArray(group?.nodes) ? group.nodes : []));
+  const activeStep = nodes.find((node) => node?.status === "active");
+  const speedMeasurement = (progressData?.items || [])
+    .filter((item) => Number.isFinite(item?.fluencyWcpm))
+    .sort(
+      (left, right) =>
+        new Date(right.lastAttemptAt || 0).getTime() - new Date(left.lastAttemptAt || 0).getTime(),
+    )[0];
+  const speedValue = speedMeasurement
+    ? `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(speedMeasurement.fluencyWcpm)} kelime/dk`
+    : "Henüz ölçülmedi";
+  const accuracy = Number.isFinite(progressData?.summary?.accuracy)
+    ? formatAccuracy(progressData.summary.accuracy)
+    : "Henüz ölçülmedi";
+  const metric = (icon, label, value, extraClass = "") =>
+    `<article class="student-home-metric ${extraClass}"><span class="student-home-metric-label"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#${icon}"></use></svg>${escapeHtml(label)}</span><strong${value === "Henüz ölçülmedi" ? ' class="is-muted"' : ""}>${escapeHtml(value)}</strong></article>`;
+  const routeSummary =
+    completed !== null && total !== null && total > 0
+      ? `<article class="student-home-metric student-home-route"><div class="student-home-route-heading"><span class="student-home-metric-label"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#chart"></use></svg>Öğrenme yolu</span><strong>${percent === null ? "—" : `%${percent}`}</strong></div><div class="student-home-route-track" role="progressbar" aria-label="Öğrenme yolu ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent ?? 0}"><span style="width:${percent ?? 0}%"></span></div><div class="student-home-route-copy"><span>${completed} / ${total} adım tamamlandı</span><span>${activeStep ? `Sıradaki: ${escapeHtml(activeStep.label || activeStep.title || "Öğrenme adımı")}` : ""}</span></div></article>`
+      : `<article class="student-home-metric student-home-route"><span class="student-home-metric-label"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#chart"></use></svg>Öğrenme yolu</span><strong class="is-muted">Henüz adım yok</strong></article>`;
+  values.innerHTML =
+    routeSummary +
+    metric("book", "Seviyen", levelName, "student-home-level") +
+    metric("compass", "Okuma hızı", speedValue, "student-home-speed") +
+    metric("target", "Doğruluk", accuracy, "student-home-accuracy");
+
+  const recentLabels = {
+    EXERCISE: "Alıştırma",
+    ASSIGNMENT: "Ödev",
+    ASSESSMENT: "Değerlendirme",
+  };
+  const recentActivity = Array.isArray(path.today?.recentActivity)
+    ? path.today.recentActivity.slice(0, 2)
+    : [];
+  recent.innerHTML = recentActivity.length
+    ? recentActivity
+        .map((activity) => {
+          const type = recentLabels[activity.type] || "Çalışma";
+          const icon = activity.type === "ASSESSMENT" ? "assessment" : "book";
+          return `<article class="student-home-activity"><span class="student-home-activity-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><use href="/assets/ui-icons.svg#${icon}"></use></svg></span><span class="student-home-activity-copy"><strong>${escapeHtml(activity.title || type)}</strong><span>${escapeHtml(type)}</span></span></article>`;
+        })
+        .join("")
+    : '<p class="muted" style="margin:8px 0 0;font-size:12px">Henüz çalışma kaydı yok.</p>';
+  panel.classList.remove("hidden");
+}
+
+async function loadHomeProgress(path, scope) {
+  try {
+    const progress = await insightApi("progress");
+    if (scope !== insightScope() || currentPage !== "dashboard") return;
+    renderHomeInsights(path, progress);
+  } catch {
+    if (scope === insightScope() && currentPage === "dashboard") renderHomeInsights(path);
+  }
 }
 const DEVELOPMENT_SKILL_CARDS = [
   { label: "Dikkat", icon: "👀", aliases: ["FAST_ATTENTION", "ATTENTION_BURST"] },
@@ -20751,7 +20817,7 @@ async function loadProgress() {
     const p = path.overallProgress;
     $("progress-path").innerHTML =
       `<div><p class="insight-eyebrow">ÖĞRENME YOLUN</p><h3>${path.currentLevel ? escapeHtml(path.currentLevel.name) : "Seviyen henüz belirlenmedi"}</h3><p>${p.completed} / ${p.total} adım tamamlandı · ${p.percent}%</p>${insightBar(p.total ? p.completed / p.total : null, "Öğrenme yolu")}</div><button type="button" class="btn btn-primary" data-insight-path>Öğrenme yoluna git</button>`;
-    renderHomeInsights(path);
+    renderHomeInsights(path, progress);
   }
   if (gamma) observeInsightAwards(gamma);
   const failed = results.some((r) => r.status === "rejected");
@@ -20766,12 +20832,12 @@ async function loadProgress() {
 function setupProgressEvents() {
   $("progress-refresh").addEventListener("click", loadProgress);
   $("home-progress-link").addEventListener("click", () => navigate("progress"));
+  $("home-path-link")?.addEventListener("click", () => navigate("lessons"));
   $("history-prev").addEventListener("click", () => loadInsightHistory(insightHistoryPage - 1));
   $("history-next").addEventListener("click", () => loadInsightHistory(insightHistoryPage + 1));
   $("page-progress").addEventListener("click", (event) => {
     if (event.target.closest("[data-insight-path]")) {
-      navigate("dashboard");
-      $("learning-path-card").scrollIntoView({ block: "start" });
+      navigate("lessons");
     }
   });
 }

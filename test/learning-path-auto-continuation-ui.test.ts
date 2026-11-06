@@ -134,6 +134,7 @@ function harness(stepId = "35") {
     exerciseMode: null,
     activeTrainingActivityId: null,
     loadLearningPath: vi.fn(),
+    loadHomeProgress: vi.fn(),
     loadEntitlements() {},
     loadExercisePage() {},
     loadGamification() {},
@@ -202,6 +203,18 @@ describe("guided station completion → map → motion → next server-unlocked 
     }).not.toThrow();
     expect(h.context.currentPage).toBe("badges");
     expect(h.context.learningPathNavigationRevision).toBe(1);
+  });
+
+  it("keeps the four student destinations separate and highlights the learning path during its exercises", () => {
+    const h = harness();
+
+    expect(h.run('studentBottomNavigationTarget("dashboard", false)')).toBe("dashboard");
+    expect(h.run('studentBottomNavigationTarget("lessons", false)')).toBe("lessons");
+    expect(h.run('studentBottomNavigationTarget("exercise", true)')).toBe("lessons");
+    expect(h.run('studentBottomNavigationTarget("exercise", false)')).toBe("dashboard");
+    expect(h.run('studentBottomNavigationTarget("progress", false)')).toBe("progress");
+    expect(h.run('studentBottomNavigationTarget("settings", false)')).toBe("settings");
+    expect(h.run('studentBottomNavigationTarget("assignments", false)')).toBe("settings");
   });
 
   it("binds station opening to an explicit click on its map button", () => {
