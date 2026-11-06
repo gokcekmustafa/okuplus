@@ -431,12 +431,13 @@ describe("student dashboard release 0.4", () => {
     expect(index).toContain('aria-live="polite"');
     expect(index).toContain('id="lesson-list-panel"');
     expect(index).toContain('id="lessons-heading"');
-    expect(index).not.toContain('data-bottom-page="lessons"');
+    expect(index).toContain('data-bottom-page="lessons"');
     expect(index).toContain('data-bottom-page="progress"');
-    expect(index).toContain('data-bottom-page="exercise"');
-    expect(index).toContain('data-bottom-page="assignments"');
-    expect(index).toContain('data-bottom-page="assessments"');
-    expect(index).toContain('data-bottom-page="badges"');
+    expect(index).toContain('data-bottom-page="settings"');
+    expect(index).not.toContain('data-bottom-page="exercise"');
+    expect(index).toContain('data-user-menu-page="assignments"');
+    expect(index).toContain('data-user-menu-page="assessments"');
+    expect(index).toContain('data-user-menu-page="badges"');
     expect(index).not.toContain('id="student-more-toggle"');
     expect(app).not.toContain("<span>ŞİMDİ</span>");
     expect(app).not.toContain("<b>BURADASIN</b>");

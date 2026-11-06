@@ -7,8 +7,8 @@ const styles = readFileSync("public/styles.css", "utf8");
 
 describe("training home and development UI", () => {
   it("renders the daily training home states", () => {
-    expect(index).toContain("İSTEĞE BAĞLI KISA ÇALIŞMA");
-    expect(index).toContain("Bugün kısa bir antrenman yap");
+    expect(index).toContain("BUGÜNKÜ ÇALIŞMA");
+    expect(index).toContain("Kısa antrenman");
     expect(index).toContain("Öğrenme Yolundaki ilerlemen bundan etkilenmez.");
     expect(index).toContain('id="daily-training-progress"');
     expect(index).toContain('role="progressbar"');
@@ -66,7 +66,7 @@ describe("training home and development UI", () => {
     expect(index).toContain('data-page="lessons" data-student');
     expect(index).toContain('data-page="progress" data-student-primary');
     expect(index).not.toContain('data-page="settings" data-student-primary');
-    expect(index).toContain("Bugün kısa bir antrenman yap");
+    expect(index).toContain("Kısa antrenman");
     expect(index).toContain("Öğren");
     expect(index).toContain("Geri bildirim");
     expect(app).toContain("formatStudentError");
@@ -86,13 +86,12 @@ describe("training home and development UI", () => {
     expect(index).toContain('id="user-menu-toggle"');
     expect(index).toContain('data-user-menu-page="settings"');
     expect(index).toContain('data-user-menu-page="billing-account"');
-    expect(index).toContain('data-bottom-page="exercise"');
-    expect(index).toContain('data-bottom-page="assignments"');
-    expect(index).toContain('data-bottom-page="assessments"');
-    expect(index).toContain('data-bottom-page="badges"');
-    expect(index).toContain('id="student-bottom-nav-more"');
-    expect(index).toContain('aria-controls="student-bottom-nav-more"');
-    expect(index).toContain('aria-expanded="false"');
+    expect(index).toContain('data-bottom-page="lessons"');
+    expect(index).toContain('data-bottom-page="settings"');
+    expect(index).not.toContain('id="student-bottom-nav-more"');
+    expect(index).toContain('data-user-menu-page="assignments"');
+    expect(index).toContain('data-user-menu-page="assessments"');
+    expect(index).toContain('data-user-menu-page="badges"');
     expect(app).toContain("function studentBottomNavigationTarget(page, isLearningPathExercise)");
     expect(app).toContain("setStudentBottomNavigation(page)");
     expect(index).not.toContain('id="student-more-toggle"');

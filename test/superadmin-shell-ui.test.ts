@@ -67,7 +67,7 @@ describe("Superadmin yönetim kabuğu", () => {
       document: { querySelectorAll: () => pages },
     });
     const start = appJs.indexOf("function updatePlatformAdminHeading(");
-    const end = appJs.indexOf("function setStudentMoreMenuOpen(", start);
+    const end = appJs.indexOf("\nfunction setStudentBottomNavigation(", start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
 

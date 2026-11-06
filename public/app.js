@@ -5911,30 +5911,13 @@ function updatePlatformAdminHeading(page) {
   breadcrumb.textContent = `Yönetim Masası / ${pageTitle}`;
 }
 
-function setStudentMoreMenuOpen(open, returnFocus = false) {
-  const toggle = $("student-bottom-nav-more-toggle");
-  const menu = $("student-bottom-nav-more");
-  if (!toggle || !menu) return;
-  menu.hidden = !open;
-  toggle.setAttribute("aria-expanded", String(open));
-  if (returnFocus) toggle.focus();
-}
-
 function setStudentBottomNavigation(page) {
   const activeTarget = studentBottomNavigationTarget(
     page,
     isPlatformUser === false && learningPathEntryMode,
   );
   for (const item of document.querySelectorAll("#student-bottom-nav .bottom-nav-item")) {
-    const active = item.hasAttribute("data-bottom-page-more-toggle")
-      ? activeTarget === "more"
-      : item.dataset.bottomPage === activeTarget;
-    item.classList.toggle("active", active);
-    item.toggleAttribute("aria-current", active);
-    if (active) item.setAttribute("aria-current", "page");
-  }
-  for (const item of document.querySelectorAll("#student-bottom-nav-more [data-bottom-page]")) {
-    const active = item.dataset.bottomPage === page;
+    const active = item.dataset.bottomPage === activeTarget;
     item.classList.toggle("active", active);
     item.toggleAttribute("aria-current", active);
     if (active) item.setAttribute("aria-current", "page");
@@ -5979,7 +5962,6 @@ function navigate(
   if (currentPlatformRole === "SUPER_ADMIN") updatePlatformAdminHeading(page);
 
   setUserMenuOpen(false);
-  setStudentMoreMenuOpen(false);
   for (const name of PAGES) {
     $("page-" + name)?.classList.toggle("hidden", name !== page);
   }
@@ -6755,29 +6737,12 @@ for (const item of document.querySelectorAll(".nav-item")) {
   item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }
 for (const item of document.querySelectorAll(
-  ".bottom-nav-item[data-bottom-page]:not([data-bottom-page-more-toggle])",
+  "#student-bottom-nav .bottom-nav-item[data-bottom-page]",
 )) {
   item.addEventListener("click", () =>
     navigateFromMenu(item.dataset.bottomPage || item.dataset.page),
   );
 }
-$("student-bottom-nav-more-toggle")?.addEventListener("click", (event) => {
-  event.stopPropagation();
-  const menu = $("student-bottom-nav-more");
-  setStudentMoreMenuOpen(Boolean(menu?.hidden));
-});
-for (const item of document.querySelectorAll("#student-bottom-nav-more [data-bottom-page]")) {
-  item.addEventListener("click", () => navigateFromMenu(item.dataset.bottomPage));
-}
-document.addEventListener("click", (event) => {
-  const nav = $("student-bottom-nav");
-  if (nav && !nav.contains(event.target)) setStudentMoreMenuOpen(false);
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  const menu = $("student-bottom-nav-more");
-  if (menu && !menu.hidden) setStudentMoreMenuOpen(false, true);
-});
 for (const item of document.querySelectorAll("[data-page].dashboard-link-card")) {
   item.addEventListener("click", () => navigateFromMenu(item.dataset.page));
 }

@@ -196,8 +196,6 @@ describe("guided station completion → map → motion → next server-unlocked 
     const h = harness();
 
     expect(() => {
-      h.run("setStudentMoreMenuOpen(true)");
-      h.run("setStudentMoreMenuOpen(false, true)");
       h.run('setStudentBottomNavigation("badges")');
       h.run('navigate("badges")');
     }).not.toThrow();

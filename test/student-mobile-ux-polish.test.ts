@@ -8,44 +8,44 @@ const styles = readFileSync("public/styles.css", "utf8");
 const designSystem = readFileSync("public/design-system.css", "utf8");
 
 describe("student mobile UX polish", () => {
-  it("keeps four primary destinations and exposes secondary student pages through an accessible menu", () => {
+  it("keeps four reference destinations and exposes secondary pages through the user menu", () => {
     const navStart = index.indexOf('<nav id="student-bottom-nav"');
     const navEnd = index.indexOf("</nav>", navStart) + "</nav>".length;
     const nav = index.slice(navStart, navEnd);
-    const secondaryMenuStart = nav.indexOf('<div id="student-bottom-nav-more"');
-    const toggleStart = nav.indexOf('id="student-bottom-nav-more-toggle"');
-    const primaryNav = nav.slice(0, nav.indexOf('<div class="bottom-nav-more">'));
-    const menu = nav.slice(secondaryMenuStart, toggleStart);
+    const destinations = [
+      ...nav.matchAll(/data-bottom-page="([^"]+)"[\s\S]*?bottom-nav-label">([^<]+)</gu),
+    ].map(([, page, label]) => [page, label]);
 
-    expect(nav.match(/class="bottom-nav-item"/gu)).toHaveLength(4);
-    expect(primaryNav).toContain('data-bottom-page="dashboard"');
-    expect(primaryNav).toContain('data-bottom-page="exercise"');
-    expect(primaryNav).toContain('data-bottom-page="progress"');
-    expect(nav).toContain('data-bottom-page="more"');
-    expect(nav).toContain('aria-controls="student-bottom-nav-more"');
-    expect(nav).toContain('aria-expanded="false"');
-    expect(menu).toContain('data-bottom-page="assignments"');
-    expect(menu).toContain('data-bottom-page="assessments"');
-    expect(menu).toContain('data-bottom-page="badges"');
-    expect(menu).toContain('id="student-bottom-nav-more" class="bottom-nav-more-menu" hidden');
+    expect(destinations).toEqual([
+      ["dashboard", "Ana Sayfa"],
+      ["lessons", "Öğrenme Yolu"],
+      ["progress", "Gelişim"],
+      ["settings", "Profil"],
+    ]);
+    expect(index).toContain('aria-label="Kullanıcı menüsünü aç"');
+    expect(index).toContain('aria-controls="user-menu"');
+    expect(index).toContain('data-user-menu-page="assignments"');
+    expect(index).toContain('data-user-menu-page="assessments"');
+    expect(index).toContain('data-user-menu-page="badges"');
     expect(app).toContain('event.key === "Escape"');
-    expect(app).toContain("setStudentMoreMenuOpen(false, true)");
+    expect(app).toContain("setUserMenuOpen(false);");
   });
 
-  it("highlights the correct primary destination for Learning Path and independent Training", () => {
+  it("highlights the closest destination for Learning Path and independent Training", () => {
     const start = app.indexOf("function studentBottomNavigationTarget(");
-    const end = app.indexOf("\nfunction setStudentMoreMenuOpen", start);
+    const end = app.indexOf("\nfunction updatePlatformAdminHeading", start);
     const context = createContext({});
     runInContext(app.slice(start, end), context);
 
     expect(context.studentBottomNavigationTarget("dashboard", false)).toBe("dashboard");
-    expect(context.studentBottomNavigationTarget("lessons", false)).toBe("dashboard");
-    expect(context.studentBottomNavigationTarget("exercise", true)).toBe("dashboard");
-    expect(context.studentBottomNavigationTarget("exercise", false)).toBe("exercise");
+    expect(context.studentBottomNavigationTarget("lessons", false)).toBe("lessons");
+    expect(context.studentBottomNavigationTarget("exercise", true)).toBe("lessons");
+    expect(context.studentBottomNavigationTarget("exercise", false)).toBe("dashboard");
     expect(context.studentBottomNavigationTarget("progress", false)).toBe("progress");
-    expect(context.studentBottomNavigationTarget("assignments", false)).toBe("more");
-    expect(context.studentBottomNavigationTarget("assessments", false)).toBe("more");
-    expect(context.studentBottomNavigationTarget("badges", false)).toBe("more");
+    expect(context.studentBottomNavigationTarget("settings", false)).toBe("settings");
+    expect(context.studentBottomNavigationTarget("assignments", false)).toBe("settings");
+    expect(context.studentBottomNavigationTarget("assessments", false)).toBe("settings");
+    expect(context.studentBottomNavigationTarget("badges", false)).toBe("settings");
   });
 
   it("keeps reading and answer text legible and touch targets usable on narrow screens", () => {

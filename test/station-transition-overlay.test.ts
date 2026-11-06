@@ -209,7 +209,6 @@ function fixture() {
     alert: (message: string) => alerts.push(message),
     canAccessPage: () => true,
     setUserMenuOpen() {},
-    setStudentMoreMenuOpen() {},
     setStudentBottomNavigation() {},
     closeSidebar() {},
     recordPilotTelemetry() {},
