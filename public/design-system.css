@@ -3574,6 +3574,11 @@ dialog::backdrop {
   font-size: 12px;
   line-height: 1.5;
 }
+.app.superadmin-shell .personal-context-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .app.superadmin-shell .user-profile-student-link {
   display: flex;
   align-items: center;
@@ -3598,6 +3603,14 @@ dialog::backdrop {
 .app.superadmin-shell .user-profile-action-status:not(:empty) {
   margin: 0 0 14px;
   color: var(--admin-muted);
+}
+.app.superadmin-shell .user-profile-action-status[data-state="loading"] {
+  color: var(--admin-ink);
+  font-weight: 600;
+}
+.app.superadmin-shell .user-profile-action-status[data-state="error"] {
+  color: color-mix(in srgb, var(--admin-ink) 68%, #d92d20);
+  font-weight: 600;
 }
 .app.superadmin-shell .user-entitlement-list,
 .app.superadmin-shell .billing-summary-list {

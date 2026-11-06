@@ -280,15 +280,19 @@ describe("Superadmin kullanıcı yönetimi", () => {
     );
   });
 
-  it("silinmiş bireysel alan kurtarmasını yalnızca kullanıcı onayı sonrası mevcut API'ye bağlar", () => {
+  it("silinmiş bireysel alan kurtarmasını görünür onay adımı ve mevcut API üzerinden başlatır", () => {
     expect(appJs).toContain("/personal-context/restore");
-    expect(appJs).toContain(
-      'if (!userDetailCurrent || userDetailCurrent.status !== "ACTIVE" || userEntitlementSaving) return;',
-    );
-    expect(appJs).toContain("window.confirm(");
-    expect(appJs).toContain(
-      "Öğrenci profili ve ilerleme kayıtları taşınmaz veya yeniden oluşturulmaz",
-    );
+    expect(appJs).toContain("function beginPersonalContextRestore(");
+    expect(appJs).toContain("data-personal-context-restore-confirm=");
+    expect(appJs).toContain("data-personal-context-restore-cancel=");
+    expect(appJs).toContain("Başka bir kullanıcı işlemi sürüyor. Tamamlanınca tekrar deneyin.");
+    expect(
+      functionSource(
+        "async function restoreUserPersonalContext(",
+        "async function populateMembershipTenantSelect(",
+      ),
+    ).not.toContain("window.confirm(");
+    expect(appJs).toContain("Öğrenci profili ve ilerleme kayıtları korunur.");
     expect(appJs).toContain(
       "Aynı kişisel çalışma alanı geri yüklendi. Mevcut öğrenci kayıtları korundu.",
     );
