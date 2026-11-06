@@ -20482,21 +20482,31 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
       )
     : null;
   const track = $("home-work-progress");
-  if (percent === null) track.removeAttribute("aria-valuenow");
-  else track.setAttribute("aria-valuenow", String(percent));
-  $("home-work-fill").style.width = percent === null ? "0%" : `${percent}%`;
-  $("home-work-percent").textContent = percent === null ? "—" : `%${percent}`;
-  $("home-work-description").textContent = hasProgress
-    ? `${progress.total} istasyondan ${progress.completed} tanesi tamamlandı`
-    : "Öğrenme yolun hazır olduğunda ilerlemen burada görünecek.";
+  if (percent === null) track?.removeAttribute?.("aria-valuenow");
+  else track?.setAttribute?.("aria-valuenow", String(percent));
+  const fill = $("home-work-fill");
+  if (fill?.style) fill.style.width = percent === null ? "0%" : `${percent}%`;
+  const percentLabel = $("home-work-percent");
+  if (percentLabel) percentLabel.textContent = percent === null ? "—" : `%${percent}`;
+  const progressDescription = $("home-work-description");
+  if (progressDescription)
+    progressDescription.textContent = hasProgress
+      ? `${progress.total} istasyondan ${progress.completed} tanesi tamamlandı`
+      : "Öğrenme yolun hazır olduğunda ilerlemen burada görünecek.";
   const startButton = $("home-start-next");
-  startButton.disabled = !studentHomeNextNode;
-  startButton.removeAttribute("data-retry");
-  startButton.querySelector(".btn-label").textContent = studentHomeNextNode
-    ? "Sonraki istasyona başla"
-    : "Yeni istasyon bekleniyor";
-  startButton.title =
-    studentHomeNextNode?.label || studentHomeNextNode?.title || "Şu anda açılabilir istasyon yok.";
+  if (startButton) {
+    startButton.disabled = !studentHomeNextNode;
+    startButton.removeAttribute?.("data-retry");
+    const startLabel = startButton.querySelector?.(".btn-label");
+    if (startLabel)
+      startLabel.textContent = studentHomeNextNode
+        ? "Sonraki istasyona başla"
+        : "Yeni istasyon bekleniyor";
+    startButton.title =
+      studentHomeNextNode?.label ||
+      studentHomeNextNode?.title ||
+      "Şu anda açılabilir istasyon yok.";
+  }
   const measurements = Array.isArray(progressData?.items) ? progressData.items : [];
   const newest = (items) =>
     [...items].sort((a, b) => new Date(b.lastAttemptAt || 0) - new Date(a.lastAttemptAt || 0))[0];
