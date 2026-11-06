@@ -1045,10 +1045,15 @@ export async function permanentlyDeleteUser(
       return { id, permanentlyDeleted: true };
     });
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === "P2003" || error.code === "P2014")
-    ) {
+    const prismaCode =
+      error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
+    const message = error instanceof Error ? error.message : "";
+    const restrictedByRelatedData =
+      prismaCode === "P2003" ||
+      prismaCode === "P2014" ||
+      (message.includes('PostgresError { code: "23001"') &&
+        message.includes("violates RESTRICT setting of foreign key constraint"));
+    if (restrictedByRelatedData) {
       throw conflictError(
         "Kullanıcıya bağlı öğrenci, kurum, ödeme veya saklanması gereken kayıtlar var. Veriler korunarak kalıcı silme tamamlanamadı.",
       );

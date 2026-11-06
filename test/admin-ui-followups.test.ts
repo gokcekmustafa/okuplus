@@ -81,7 +81,7 @@ describe("management UI follow-ups", () => {
     expect(appJs).toContain(
       "pending.finally(() => setAnalyticsStudentButtonLoading(actionButton, false))",
     );
-    expect(appJs).toContain('data-user-detail-id="${u.id}"');
+    expect(appJs).toContain('data-user-detail-id="${escapeHtml(u.id)}"');
     expect(appJs).toContain("void openUserDetail(detailBtn.dataset.userDetailId)");
     const userListRenderer = appJs.slice(
       appJs.indexOf("function renderUserList()"),

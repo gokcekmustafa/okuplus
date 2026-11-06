@@ -409,6 +409,11 @@ describe("admin student workspace and question editing UI", () => {
     > = {
       "user-list-body": listBody,
       "user-page-info": { textContent: "" },
+      "user-list-title": { textContent: "" },
+      "user-list-description": { textContent: "" },
+      "user-list-extra-heading": { textContent: "" },
+      "user-segment-tabs": { classList: { toggle: vi.fn() } },
+      "user-create-btn": { classList: { toggle: vi.fn() } },
       "user-prev-btn": { disabled: false },
       "user-next-btn": { disabled: false },
     };
@@ -438,6 +443,7 @@ describe("admin student workspace and question editing UI", () => {
       userTotal: 2,
       userPage: 1,
       USER_PAGE_SIZE: 20,
+      userListState: "ACTIVE",
       $: (id: string) => elements[id],
       escapeHtml: (value: unknown) => String(value),
       MEMBERSHIP_ROLE_LABELS: { STUDENT: "Öğrenci", TEACHER: "Öğretmen" },
