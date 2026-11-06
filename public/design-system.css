@@ -3346,6 +3346,53 @@ dialog::backdrop {
   background: color-mix(in srgb, var(--admin-brand) 9%, var(--admin-surface));
   color: var(--admin-brand);
 }
+.app.superadmin-shell .user-list-state-tabs {
+  display: flex;
+  gap: 18px;
+  margin: 18px 0 4px;
+  border-bottom: 1px solid var(--admin-line);
+}
+.app.superadmin-shell .user-list-state-tab {
+  min-height: 44px;
+  padding: 0 3px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--admin-muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.app.superadmin-shell .user-list-state-tab:hover,
+.app.superadmin-shell .user-list-state-tab.active,
+.app.superadmin-shell .user-list-state-tab[aria-pressed="true"] {
+  border-bottom-color: var(--admin-brand);
+  color: var(--admin-brand);
+}
+.app.superadmin-shell .user-deleted-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.app.superadmin-shell .permanent-user-delete-dialog {
+  width: min(100% - 24px, 520px);
+}
+.app.superadmin-shell .permanent-user-delete-dialog > form {
+  display: grid;
+  gap: 15px;
+}
+.app.superadmin-shell .permanent-user-delete-target {
+  display: grid;
+  gap: 4px;
+  padding: 13px 15px;
+  border: 1px solid var(--admin-line);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--admin-danger, #bd3340) 5%, var(--admin-surface));
+}
+.app.superadmin-shell .permanent-user-delete-dialog input {
+  min-height: 44px;
+}
 .app.superadmin-shell .user-list-contexts,
 .app.superadmin-shell .user-list-package {
   display: grid;
@@ -3933,6 +3980,21 @@ dialog::backdrop {
 }
 
 @media (max-width: 600px) {
+  .app.superadmin-shell .user-list-state-tabs {
+    gap: 16px;
+    overflow-x: auto;
+    margin-top: 14px;
+  }
+  .app.superadmin-shell .user-list-state-tab {
+    flex: 0 0 auto;
+  }
+  .app.superadmin-shell .user-deleted-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .app.superadmin-shell .user-deleted-actions .btn {
+    width: 100%;
+  }
   .app.superadmin-shell .user-segment-tabs {
     display: grid;
     grid-template-columns: 1fr;

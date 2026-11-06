@@ -15,6 +15,7 @@ import {
 import { withTenantContext } from "../tenant/context.js";
 import type {
   CreateUserInput,
+  ListDeletedUsersQuery,
   ListUsersQuery,
   ResetUserPasswordInput,
   UpdateUserInput,
@@ -39,6 +40,7 @@ const USER_LIST_SELECT = {
   birthYear: true,
   status: true,
   platformRole: true,
+  deletedAt: true,
   createdAt: true,
   updatedAt: true,
   memberships: {
@@ -75,6 +77,7 @@ export interface UserListItem {
   birthYear: number | null;
   status: User["status"];
   platformRole: User["platformRole"];
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   membershipCount: number;
@@ -255,12 +258,23 @@ export interface UserListResult {
 }
 
 export async function listUsers(query: ListUsersQuery): Promise<UserListResult> {
+  return listUsersByDeletionState(query, false);
+}
+
+export async function listDeletedUsers(query: ListDeletedUsersQuery): Promise<UserListResult> {
+  return listUsersByDeletionState({ ...query, segment: undefined }, true);
+}
+
+async function listUsersByDeletionState(
+  query: ListUsersQuery,
+  deleted: boolean,
+): Promise<UserListResult> {
   const { search, status, tenantType, membershipStatus, segment, page, pageSize } = query;
 
-  const filters: Prisma.UserWhereInput[] = [{ deletedAt: null }];
+  const filters: Prisma.UserWhereInput[] = [{ deletedAt: deleted ? { not: null } : null }];
   // The default customer view must never mix platform operators with users.
   // Platform users remain available through the explicit Platform segment.
-  if (segment !== "PLATFORM") filters.push({ platformRole: null });
+  if (!deleted && segment !== "PLATFORM") filters.push({ platformRole: null });
   if (status) filters.push({ status });
   if (search) {
     filters.push({
@@ -912,21 +926,135 @@ export async function updateUser(
   }
 }
 
-export async function softDeleteUser(id: string): Promise<{ id: string; deletedAt: Date }> {
-  const existing = await prisma.user.findFirst({ where: { id, deletedAt: null } });
+export async function softDeleteUser(
+  id: string,
+  actorUserId: string,
+): Promise<{ id: string; deletedAt: Date }> {
+  const existing = await prisma.user.findFirst({
+    where: { id, deletedAt: null },
+    select: { id: true, platformRole: true },
+  });
   if (!existing) {
     throw notFoundError("Kullanıcı bulunamadı");
   }
-
-  const updated = await prisma.user.update({
-    where: { id },
-    data: { deletedAt: new Date() },
-    select: { id: true, deletedAt: true },
-  });
-  if (updated.deletedAt === null) {
-    throw new Error("softDeleteUser: deletedAt set edilemedi");
+  if (existing.platformRole !== null) {
+    throw conflictError("Platform yöneticisi hesapları kullanıcı listesinden silinemez");
   }
-  return { id: updated.id, deletedAt: updated.deletedAt };
+  if (actorUserId === id) {
+    throw conflictError("Kendi hesabınızı yönetim panelinden silemezsiniz");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const deletedAt = new Date();
+    const updated = await tx.user.update({
+      where: { id },
+      data: { deletedAt },
+      select: { id: true, deletedAt: true },
+    });
+    if (updated.deletedAt === null) {
+      throw new Error("softDeleteUser: deletedAt set edilemedi");
+    }
+    await tx.authSession.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: deletedAt },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: null,
+        actorUserId,
+        action: "DELETE",
+        entityType: "USER_SOFT_DELETE",
+        entityId: id,
+        before: { deletedAt: null },
+        after: { deletedAt: deletedAt.toISOString(), recoverable: true },
+      },
+    });
+    return { id: updated.id, deletedAt };
+  });
+}
+
+export async function restoreDeletedUser(
+  id: string,
+  actorUserId: string,
+): Promise<{ id: string; deletedAt: null }> {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.user.findFirst({
+      where: { id, deletedAt: { not: null } },
+      select: { id: true, deletedAt: true },
+    });
+    if (!existing) throw notFoundError("Silinen kullanıcı bulunamadı");
+
+    const restored = await tx.user.update({
+      where: { id },
+      data: { deletedAt: null },
+      select: { id: true, deletedAt: true },
+    });
+    if (restored.deletedAt !== null) {
+      throw new Error("restoreDeletedUser: deletedAt temizlenemedi");
+    }
+    // Oturumlar geri açılmaz; kullanıcı yeniden giriş yapmalıdır.
+    await tx.authSession.updateMany({
+      where: { userId: id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: null,
+        actorUserId,
+        action: "UPDATE",
+        entityType: "USER_RESTORED",
+        entityId: id,
+        before: { deletedAt: existing.deletedAt?.toISOString() ?? null },
+        after: { deletedAt: null },
+      },
+    });
+    return { id: restored.id, deletedAt: null };
+  });
+}
+
+export async function permanentlyDeleteUser(
+  id: string,
+  actorUserId: string,
+): Promise<{ id: string; permanentlyDeleted: true }> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findFirst({
+        where: { id, deletedAt: { not: null } },
+        select: { id: true, deletedAt: true, platformRole: true },
+      });
+      if (!existing) throw notFoundError("Silinen kullanıcı bulunamadı");
+      if (existing.platformRole !== null) {
+        throw conflictError("Platform yöneticisi hesapları kalıcı olarak silinemez");
+      }
+      if (actorUserId === id) {
+        throw conflictError("Kendi hesabınızı kalıcı olarak silemezsiniz");
+      }
+
+      await tx.user.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          tenantId: null,
+          actorUserId,
+          action: "DELETE",
+          entityType: "USER_PERMANENT_DELETE",
+          entityId: id,
+          before: { deletedAt: existing.deletedAt?.toISOString() ?? null },
+          after: { permanentlyDeleted: true },
+        },
+      });
+      return { id, permanentlyDeleted: true };
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2003" || error.code === "P2014")
+    ) {
+      throw conflictError(
+        "Kullanıcıya bağlı öğrenci, kurum, ödeme veya saklanması gereken kayıtlar var. Veriler korunarak kalıcı silme tamamlanamadı.",
+      );
+    }
+    throw error;
+  }
 }
 
 export async function resetUserPassword(

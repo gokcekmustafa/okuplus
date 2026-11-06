@@ -109,6 +109,10 @@ export const restoreUserPersonalContextSchema = z.object({
   tenantId: z.string().trim().uuid(),
 });
 
+export const permanentlyDeleteUserSchema = z.object({
+  confirmation: z.literal("KALICI_SIL"),
+});
+
 /** Kullanıcı listeleme sorgu parametreleri. */
 export const listUsersQuerySchema = z.object({
   search: z.string().trim().max(120).optional(),
@@ -119,6 +123,8 @@ export const listUsersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+export const listDeletedUsersQuerySchema = listUsersQuerySchema.omit({ segment: true });
 
 /** Tenant üyelerini listeleme sorgu parametreleri. */
 export const listMembershipsQuerySchema = z.object({
@@ -149,6 +155,7 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type ResetUserPasswordInput = z.infer<typeof resetUserPasswordSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
+export type ListDeletedUsersQuery = z.infer<typeof listDeletedUsersQuerySchema>;
 export type CreateMembershipInput = z.infer<typeof createMembershipSchema>;
 export type UpdateMembershipInput = z.infer<typeof updateMembershipSchema>;
 export type ListMembershipsQuery = z.infer<typeof listMembershipsQuerySchema>;

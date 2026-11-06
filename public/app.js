@@ -6905,6 +6905,7 @@ const MEMBERSHIP_STATUS_LABELS = {
 
 let userPage = 1;
 let userSegment = "ORGANIZATION";
+let userListState = "ACTIVE";
 const USER_PAGE_SIZE = 20;
 let userTotal = 0;
 let userData = [];
@@ -6913,6 +6914,8 @@ let userEditingId = null;
 let userDetailCurrent = null;
 let userDetailRequest = 0;
 let userEntitlementSaving = false;
+let permanentDeleteTarget = null;
+let permanentDeleteSaving = false;
 
 function userApi(path, options = {}) {
   const { accessToken, tenantId } = getStoredTokens();
@@ -6920,9 +6923,10 @@ function userApi(path, options = {}) {
   const headers = {
     ...authHeaders(accessToken, tenantId),
     ...(method !== "GET" ? csrfHeaders() : {}),
+    ...(options.body ? { "content-type": "application/json" } : {}),
     ...(options.headers ?? {}),
   };
-  if (method === "DELETE") {
+  if (method === "DELETE" && !options.body) {
     delete headers["content-type"];
   }
   return fetch(`/admin/users${path}`, { ...options, method, headers });
@@ -6990,6 +6994,47 @@ function personalContextMembershipBadge(context) {
     : membershipStatusBadge(context.membershipStatus);
 }
 
+function userAuditEventLabel(item) {
+  const specificLabels = {
+    USER_SOFT_DELETE: "Kullanıcı silinenlere taşındı",
+    USER_RESTORED: "Kullanıcı geri yüklendi",
+    USER_PERMANENT_DELETE: "Kullanıcı kalıcı olarak silindi",
+    USER_PASSWORD: "Kullanıcı parolası yenilendi",
+    PERSONAL_CONTEXT_RECOVERY: "Kişisel çalışma alanı geri yüklendi",
+  };
+  if (specificLabels[item.entityType]) return specificLabels[item.entityType];
+
+  const entityLabels = {
+    ENTITLEMENT: "Paket erişimi",
+    MEMBERSHIP: "Kurum üyeliği",
+    USER: "Kullanıcı hesabı",
+    CONTENT: "İçerik",
+    CONTENT_VERSION: "İçerik sürümü",
+    QUESTION: "Soru",
+    QUESTION_VERSION: "Soru sürümü",
+    RELATION: "İçerik bağlantısı",
+  };
+  const actionLabels = {
+    CREATE: "oluşturuldu",
+    UPDATE: "güncellendi",
+    DELETE: "silindi",
+    SUBMITTED_FOR_REVIEW: "incelemeye gönderildi",
+    APPROVED: "onaylandı",
+    PUBLISH: "yayımlandı",
+    RETIRED: "kullanımdan kaldırıldı",
+    VERSION_CREATED: "yeni sürümü oluşturuldu",
+    ROLE_CHANGED: "rolü değiştirildi",
+    ENROLLMENT_CHANGED: "kaydı güncellendi",
+    CONSENT_GRANTED: "onayı verildi",
+    CONSENT_REVOKED: "onayı geri çekildi",
+    EXPORT_REQUESTED: "veri dışa aktarma isteği oluşturuldu",
+    ERASURE_REQUESTED: "silme talebi oluşturuldu",
+  };
+  const entityLabel = entityLabels[item.entityType] ?? "Yönetim kaydı";
+  const actionLabel = actionLabels[item.action] ?? "işlendi";
+  return `${entityLabel} ${actionLabel}`;
+}
+
 async function loadUsers() {
   hideUserError();
   const tbody = $("user-list-body");
@@ -7000,13 +7045,15 @@ async function loadUsers() {
   const params = new URLSearchParams({
     page: userPage,
     pageSize: USER_PAGE_SIZE,
-    segment: userSegment,
   });
+  if (userListState === "ACTIVE") params.set("segment", userSegment);
   if (search) params.set("search", search);
   if (status) params.set("status", status);
 
   try {
-    const res = await userApi(`?${params.toString()}`);
+    const path =
+      userListState === "DELETED" ? `/deleted?${params.toString()}` : `?${params.toString()}`;
+    const res = await userApi(path);
     const body = await parseResponse(res);
     userData = body.items;
     userTotal = body.total;
@@ -7021,6 +7068,21 @@ async function loadUsers() {
 function renderUserList() {
   const tbody = $("user-list-body");
   if (typeof document !== "undefined") {
+    for (const tab of document.querySelectorAll("[data-user-list-state]")) {
+      const selected = tab.dataset.userListState === userListState;
+      tab.setAttribute("aria-pressed", String(selected));
+      tab.classList.toggle("active", selected);
+    }
+    $("user-segment-tabs")?.classList.toggle("hidden", userListState === "DELETED");
+    $("user-create-btn")?.classList.toggle("hidden", userListState === "DELETED");
+    $("user-list-title").textContent =
+      userListState === "DELETED" ? "Silinen Kullanıcılar" : "Kullanıcı Hesapları";
+    $("user-list-description").textContent =
+      userListState === "DELETED"
+        ? "Silinen hesapları geri yükleyin veya ek onayla kalıcı olarak silin."
+        : "Bireysel, kurumsal ve platform hesaplarını; paket ve erişim durumlarını tek yerden yönetin.";
+    $("user-list-extra-heading").textContent =
+      userListState === "DELETED" ? "Silinme tarihi" : "Kurum rolleri";
     for (const tab of document.querySelectorAll("[data-user-segment]")) {
       const selected = tab.dataset.userSegment === userSegment;
       tab.setAttribute("aria-pressed", String(selected));
@@ -7029,33 +7091,41 @@ function renderUserList() {
   }
 
   if (userData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Kullanıcı bulunamadı.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">${userListState === "DELETED" ? "Silinen kullanıcı yok." : "Kullanıcı bulunamadı."}</td></tr>`;
   } else {
     tbody.innerHTML = userData
-      .map(
-        (u) => `
-        <tr>
-          <td data-label="Kullanıcı">
-            <button type="button" class="link-btn" data-user-detail-id="${u.id}">
-              ${escapeHtml(u.displayName)}
-            </button>
-            ${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}
-          </td>
-          <td data-label="Hesap türü">${renderUserAccountType(u)}</td>
-          <td data-label="Kurum / kişisel alan">${renderUserAccountLocations(u)}</td>
-          <td data-label="Paket ve erişim">${renderUserPackageSummary(u)}</td>
-          <td data-label="Hesap durumu">${userStatusBadge(u.status)}</td>
-          <td data-label="Kurum bağlantıları"><div class="user-list-memberships">${renderUserMembershipSummary(u)}<small>${Number(u.membershipCount ?? 0)} kurum bağlantısı</small></div></td>
-          <td data-label="İşlemler" class="text-right">
-            <button type="button" class="btn btn-secondary btn-sm" data-user-detail-id="${escapeHtml(u.id)}">Ayrıntı</button>
-          </td>
-        </tr>`,
-      )
+      .map((u) => {
+        const deleted = userListState === "DELETED";
+        const userCell = deleted
+          ? `<strong>${escapeHtml(u.displayName)}</strong>${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}`
+          : `<button type="button" class="link-btn" data-user-detail-id="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</button>${u.email ? `<div class="cell-muted">${escapeHtml(u.email)}</div>` : ""}`;
+        const extraCell = deleted
+          ? u.deletedAt
+            ? new Date(u.deletedAt).toLocaleString("tr-TR")
+            : "—"
+          : `<div class="user-list-memberships">${renderUserMembershipSummary(u)}<small>${Number(u.membershipCount ?? 0)} kurum bağlantısı</small></div>`;
+        const statusCell = deleted
+          ? '<span class="badge badge-warning">Silindi</span>'
+          : userStatusBadge(u.status);
+        const actions = deleted
+          ? `<div class="user-deleted-actions"><button type="button" class="btn btn-secondary btn-sm" data-user-restore-id="${escapeHtml(u.id)}">Geri yükle</button><button type="button" class="btn btn-danger btn-sm" data-user-permanent-delete-id="${escapeHtml(u.id)}" ${u.platformRole ? 'disabled title="Platform hesapları bu ekrandan kalıcı silinemez"' : ""}>Kalıcı sil</button></div>`
+          : `<button type="button" class="btn btn-secondary btn-sm" data-user-detail-id="${escapeHtml(u.id)}">Ayrıntı</button>`;
+        return `<tr>
+            <td data-label="Kullanıcı">${userCell}</td>
+            <td data-label="Hesap türü">${renderUserAccountType(u)}</td>
+            <td data-label="Kurum / kişisel alan">${renderUserAccountLocations(u)}</td>
+            <td data-label="Paket ve erişim">${renderUserPackageSummary(u)}</td>
+            <td data-label="Hesap durumu">${statusCell}</td>
+            <td data-label="${deleted ? "Silinme tarihi" : "Kurum bağlantıları"}">${extraCell}</td>
+            <td data-label="İşlemler" class="text-right">${actions}</td>
+          </tr>`;
+      })
       .join("");
   }
 
   const totalPages = Math.max(1, Math.ceil(userTotal / USER_PAGE_SIZE));
-  $("user-page-info").textContent = `${userTotal} kullanıcı · sayfa ${userPage}/${totalPages}`;
+  $("user-page-info").textContent =
+    `${userTotal} ${userListState === "DELETED" ? "silinen kullanıcı" : "kullanıcı"} · sayfa ${userPage}/${totalPages}`;
   $("user-prev-btn").disabled = userPage <= 1;
   $("user-next-btn").disabled = userPage >= totalPages;
 }
@@ -7472,7 +7542,7 @@ function renderUserDetail(u, notice = "") {
         <section class="user-profile-panel user-entitlements-panel" aria-labelledby="user-current-access-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Paket ve erişim</span><h3 id="user-current-access-title">Güncel paket durumu</h3><p>Paket hakkı, ödeme aboneliğinden ayrı değerlendirilir.</p></div></div><div class="user-current-access-list">${currentAccessRows}</div></section>
         <section class="user-profile-panel user-entitlements-panel" aria-labelledby="user-entitlements-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Yönetici paketleri</span><h3 id="user-entitlements-title">Paket geçmişi <span class="count-pill">${entitlements.length}</span></h3></div></div><div class="user-entitlement-list">${entitlementRows}</div><p class="user-profile-note">Yalnızca yönetici tarafından tanımlanan paketler buradan değiştirilebilir. Ödeme sağlayıcısı abonelikleri ayrı gösterilir.</p></section>
         <section class="user-profile-panel" aria-labelledby="billing-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Ödeme sistemi</span><h3 id="billing-title">Ödeme abonelikleri</h3></div></div>${billingSubscriptions.length ? `<div class="billing-summary-list">${billingSubscriptions.map((subscription) => `<article><div><strong>${escapeHtml(subscription.tenantName)}</strong><span class="badge ${subscription.status === "ACTIVE" ? "badge-success" : "badge-neutral"}">${escapeHtml(generalStatusLabel(subscription.status))}</span></div><p>${escapeHtml(formatBillingPeriod(subscription.billingPeriod))} · ${subscription.currentPeriodStart ? new Date(subscription.currentPeriodStart).toLocaleDateString("tr-TR") : "—"} – ${subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toLocaleDateString("tr-TR") : "—"}</p><small>${subscription.cancelRequestedAt ? `Yenileme iptal talebi: ${new Date(subscription.cancelRequestedAt).toLocaleDateString("tr-TR")}` : subscription.canceledAt ? `Sonlandırıldı: ${new Date(subscription.canceledAt).toLocaleDateString("tr-TR")}` : "Otomatik yenileme bilgisi bu kayıtta sunulmuyor."}</small></article>`).join("")}</div>` : '<p class="user-empty-state compact">Ödeme sağlayıcısında kayıtlı abonelik yok.</p>'}<h4 class="billing-subheading">Gerçek ödeme kayıtları</h4>${billingPayments.length ? `<div class="billing-summary-list">${billingPayments.map((payment) => `<article><div><strong>${payment.amountMinor !== null && payment.currency ? escapeHtml(new Intl.NumberFormat("tr-TR", { style: "currency", currency: payment.currency }).format(payment.amountMinor / 100)) : "Tutar belirtilmemiş"}</strong><span class="badge ${payment.status === "SUCCEEDED" ? "badge-success" : "badge-neutral"}">${escapeHtml(generalStatusLabel(payment.status))}</span></div><p>${escapeHtml(payment.tenantName)} · ${payment.occurredAt ? new Date(payment.occurredAt).toLocaleString("tr-TR") : new Date(payment.createdAt).toLocaleString("tr-TR")}</p></article>`).join("")}</div>` : '<p class="user-empty-state compact">Henüz doğrulanmış ödeme kaydı yok.</p>'}</section>
-        <section class="user-profile-panel" aria-labelledby="user-activity-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Denetim izi</span><h3 id="user-activity-title">Yönetim geçmişi</h3></div></div>${activity.length ? `<ol class="user-activity-list">${activity.map((item) => `<li><span class="user-activity-dot"></span><div><strong>${escapeHtml(generalStatusLabel(item.action))} · ${escapeHtml(item.entityType)}</strong><p>${new Date(item.createdAt).toLocaleString("tr-TR")}${item.actor?.displayName ? ` · ${escapeHtml(item.actor.displayName)}` : ""}</p></div></li>`).join("")}</ol>` : '<p class="user-empty-state compact">Gösterilebilen işlem geçmişi yok.</p>'}</section>
+        <section class="user-profile-panel" aria-labelledby="user-activity-title"><div class="user-profile-panel-heading"><div><span class="eyebrow">Denetim izi</span><h3 id="user-activity-title">Yönetim geçmişi</h3></div></div>${activity.length ? `<ol class="user-activity-list">${activity.map((item) => `<li><span class="user-activity-dot"></span><div><strong>${escapeHtml(userAuditEventLabel(item))}</strong><p>${new Date(item.createdAt).toLocaleString("tr-TR")}${item.actor?.displayName ? ` · ${escapeHtml(item.actor.displayName)}` : ""}</p></div></li>`).join("")}</ol>` : '<p class="user-empty-state compact">Gösterilebilen işlem geçmişi yok.</p>'}</section>
       </aside>
     </div>`;
   void populateMembershipTenantSelect();
@@ -8058,9 +8128,14 @@ async function addMembership() {
 }
 
 async function deleteUser(id) {
-  const user = userData.find((u) => u.id === id);
+  const user = userDetailCurrent?.id === id ? userDetailCurrent : userData.find((u) => u.id === id);
   const label = user ? user.displayName : id;
-  if (!window.confirm(`"${label}" kullanıcısını silmek istediğinize emin misiniz?`)) return;
+  if (
+    !window.confirm(
+      `"${label}" hesabı silinen kullanıcılara taşınacak. Hesap gizlenecek ve oturumları kapatılacak; bu ekrandan geri yükleyebilirsiniz. Devam edilsin mi?`,
+    )
+  )
+    return;
 
   try {
     const res = await userApi(`/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -8073,16 +8148,98 @@ async function deleteUser(id) {
   }
 }
 
+async function restoreDeletedUser(id, button = null) {
+  if (button) {
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+  }
+  try {
+    await parseResponse(await userApi(`/${encodeURIComponent(id)}/restore`, { method: "POST" }));
+    await loadUsers();
+  } catch (err) {
+    showUserError(err.message || "Kullanıcı geri yüklenemedi.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
+}
+
+function openPermanentDeleteDialog(user) {
+  if (!user || user.deletedAt == null || user.platformRole || permanentDeleteSaving) return;
+  permanentDeleteTarget = { id: user.id, displayName: user.displayName, email: user.email };
+  $("permanent-user-delete-name").textContent = user.displayName || "İsimsiz kullanıcı";
+  $("permanent-user-delete-email").textContent = user.email || "E-posta yok";
+  $("permanent-user-delete-confirmation").value = "";
+  $("permanent-user-delete-submit").disabled = true;
+  $("permanent-user-delete-status").textContent = "";
+  $("permanent-user-delete-status").classList.add("hidden");
+  $("permanent-user-delete-dialog").classList.remove("hidden");
+  $("permanent-user-delete-confirmation").focus();
+}
+
+function closePermanentDeleteDialog() {
+  if (permanentDeleteSaving) return;
+  $("permanent-user-delete-dialog").classList.add("hidden");
+  $("permanent-user-delete-form").reset();
+  permanentDeleteTarget = null;
+}
+
+function updatePermanentDeleteConfirmation() {
+  const confirmed = $("permanent-user-delete-confirmation").value.trim() === "KALICI SİL";
+  $("permanent-user-delete-submit").disabled = !confirmed || permanentDeleteSaving;
+}
+
+async function submitPermanentUserDelete(event) {
+  event.preventDefault();
+  if (!permanentDeleteTarget || permanentDeleteSaving) return;
+  if ($("permanent-user-delete-confirmation").value.trim() !== "KALICI SİL") {
+    updatePermanentDeleteConfirmation();
+    return;
+  }
+  const targetId = permanentDeleteTarget.id;
+  const button = $("permanent-user-delete-submit");
+  const status = $("permanent-user-delete-status");
+  permanentDeleteSaving = true;
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  status.textContent = "Kalıcı silme kontrol ediliyor…";
+  status.classList.remove("hidden");
+  try {
+    await parseResponse(
+      await userApi(`/${encodeURIComponent(targetId)}/permanent`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: "KALICI_SIL" }),
+      }),
+    );
+    permanentDeleteSaving = false;
+    closePermanentDeleteDialog();
+    await loadUsers();
+  } catch (err) {
+    status.textContent = err.message || "Kullanıcı kalıcı olarak silinemedi.";
+  } finally {
+    permanentDeleteSaving = false;
+    button.disabled = $("permanent-user-delete-confirmation").value.trim() !== "KALICI SİL";
+    button.removeAttribute("aria-busy");
+  }
+}
+
 function handleUserListClick(event) {
   const detailBtn = event.target.closest("[data-user-detail-id]");
-  const editBtn = event.target.closest("[data-user-edit-id]");
   const deleteBtn = event.target.closest("[data-user-delete-id]");
+  const restoreBtn = event.target.closest("[data-user-restore-id]");
+  const permanentDeleteBtn = event.target.closest("[data-user-permanent-delete-id]");
 
-  if (detailBtn) {
+  if (restoreBtn) {
+    void restoreDeletedUser(restoreBtn.dataset.userRestoreId, restoreBtn);
+  } else if (permanentDeleteBtn) {
+    const user = userData.find(
+      (item) => item.id === permanentDeleteBtn.dataset.userPermanentDeleteId,
+    );
+    openPermanentDeleteDialog(user);
+  } else if (detailBtn) {
     void openUserDetail(detailBtn.dataset.userDetailId);
-  } else if (editBtn) {
-    const user = userData.find((u) => u.id === editBtn.dataset.userEditId);
-    if (user) void openUserForm("edit", user);
   } else if (deleteBtn) {
     void deleteUser(deleteBtn.dataset.userDeleteId);
   }
@@ -8090,6 +8247,14 @@ function handleUserListClick(event) {
 
 function setupUserEvents() {
   $("user-list-body").addEventListener("click", handleUserListClick);
+
+  $("user-list-state-tabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-user-list-state]");
+    if (!tab || !["ACTIVE", "DELETED"].includes(tab.dataset.userListState)) return;
+    userListState = tab.dataset.userListState;
+    userPage = 1;
+    void loadUsers();
+  });
 
   $("user-search").addEventListener("input", () => {
     userPage = 1;
@@ -8147,14 +8312,18 @@ function setupUserEvents() {
   $("user-detail-close").addEventListener("click", () => {
     returnToUserList();
   });
-  $("user-detail-edit").addEventListener("click", () => {
-    if (!userDetailCurrent) return;
-    void openUserForm("edit", userDetailCurrent);
-  });
   $("user-detail-delete").addEventListener("click", () => {
     if (!userDetailCurrent) return;
     void deleteUser(userDetailCurrent.id);
   });
+
+  $("permanent-user-delete-form").addEventListener("submit", submitPermanentUserDelete);
+  $("permanent-user-delete-confirmation").addEventListener(
+    "input",
+    updatePermanentDeleteConfirmation,
+  );
+  $("permanent-user-delete-close").addEventListener("click", closePermanentDeleteDialog);
+  $("permanent-user-delete-cancel").addEventListener("click", closePermanentDeleteDialog);
 
   $("user-detail-entitlement-start").addEventListener("click", createAdminUserEntitlement);
   $("user-entitlement-form").addEventListener("submit", submitUserEntitlementForm);

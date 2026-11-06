@@ -44,6 +44,11 @@ const PACKAGE_TEST_USER_EMAIL = "admin-package-lifecycle@example.com";
 const SOFT_DELETED_CONTEXT_USER_ID = "99999998-0000-7000-8000-0000000000a5";
 const SOFT_DELETED_CONTEXT_TENANT_ID = "99999998-0000-7000-8000-0000000000b5";
 const SOFT_DELETED_CONTEXT_ENTITLEMENT_ID = "99999998-0000-7000-8000-0000000000c5";
+const PERMANENT_DELETE_USER_ID = "99999998-0000-7000-8000-0000000000a6";
+const PROTECTED_DELETE_USER_ID = "99999998-0000-7000-8000-0000000000a7";
+const PROTECTED_DELETE_TENANT_ID = "99999998-0000-7000-8000-0000000000b6";
+const PERMANENT_DELETE_USER_EMAIL = "admin-permanent-delete@example.com";
+const PROTECTED_DELETE_USER_EMAIL = "admin-protected-delete@example.com";
 
 async function cleanupCreatedUser(email: string): Promise<void> {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
@@ -66,6 +71,18 @@ async function cleanupCreatedUser(email: string): Promise<void> {
   await prisma.user.delete({ where: { id: user.id } });
 }
 
+async function cleanupUserDeletionFixtures(): Promise<void> {
+  const userIds = [PERMANENT_DELETE_USER_ID, PROTECTED_DELETE_USER_ID];
+  await prisma.accountDeletionRequest.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.auditLog.deleteMany({ where: { entityId: { in: userIds } } });
+  await prisma.studentProfile.deleteMany({ where: { studentId: { in: userIds } } });
+  await prisma.membership.deleteMany({
+    where: { OR: [{ userId: { in: userIds } }, { tenantId: PROTECTED_DELETE_TENANT_ID }] },
+  });
+  await prisma.tenant.deleteMany({ where: { id: PROTECTED_DELETE_TENANT_ID } });
+  await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+}
+
 describe("user + membership admin", () => {
   let app: FastifyInstance;
 
@@ -74,6 +91,7 @@ describe("user + membership admin", () => {
     await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
     await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
+    await cleanupUserDeletionFixtures();
 
     // Tekrar çalıştırmalarda kalıcı olabilecek veriyi temizle.
     await prisma.billingPayment.deleteMany({ where: { userId: USER_A_ID } });
@@ -199,6 +217,7 @@ describe("user + membership admin", () => {
     await cleanupCreatedUser(CREATED_ORG_USER_EMAIL);
     await cleanupCreatedUser(CREATED_INDIVIDUAL_USER_EMAIL);
     await cleanupCreatedUser(PACKAGE_TEST_USER_EMAIL);
+    await cleanupUserDeletionFixtures();
     await prisma.accountDeletionRequest.deleteMany({
       where: { userId: SOFT_DELETED_CONTEXT_USER_ID },
     });
@@ -838,6 +857,21 @@ describe("user + membership admin", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().data.deletedAt).toBeTruthy();
 
+    const deletedList = await app.inject({
+      method: "GET",
+      url: "/admin/users/deleted",
+      headers: await superAdminHeaders(),
+    });
+    expect(deletedList.statusCode).toBe(200);
+    expect(
+      deletedList
+        .json()
+        .data.items.some(
+          (user: { id: string; deletedAt: string | null }) =>
+            user.id === USER_A_ID && user.deletedAt !== null,
+        ),
+    ).toBe(true);
+
     // Silinen kullanıcı listede görünmez.
     const list = await app.inject({
       method: "GET",
@@ -866,19 +900,152 @@ describe("user + membership admin", () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it("silinen kullanıcıyı aynı kayıtla geri yükler ve kalıcı silme onayı olmadan silmez", async () => {
+    const restored = await app.inject({
+      method: "POST",
+      url: `/admin/users/${USER_A_ID}/restore`,
+      headers: await superAdminHeaders(),
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().data).toMatchObject({ id: USER_A_ID, deletedAt: null });
+    expect(
+      await prisma.user.findUnique({ where: { id: USER_A_ID }, select: { deletedAt: true } }),
+    ).toEqual({ deletedAt: null });
+    expect(
+      await prisma.auditLog.findFirst({
+        where: { entityId: USER_A_ID, entityType: "USER_RESTORED", actorUserId: PLATFORM_USER_ID },
+      }),
+    ).toBeTruthy();
+    const deletedList = await app.inject({
+      method: "GET",
+      url: "/admin/users/deleted",
+      headers: await superAdminHeaders(),
+    });
+    expect(deletedList.json().data.items.map((user: { id: string }) => user.id)).not.toContain(
+      USER_A_ID,
+    );
+  });
+
+  it("kalıcı silme için açık onay ister ve yalnızca silinen kaydı geri döndürülemez biçimde kaldırır", async () => {
+    await prisma.user.create({
+      data: {
+        id: PERMANENT_DELETE_USER_ID,
+        email: PERMANENT_DELETE_USER_EMAIL,
+        displayName: "Kalıcı silme testi",
+        passwordHash: await hasher.hash(PASSWORD),
+      },
+    });
+    const softDeleted = await app.inject({
+      method: "DELETE",
+      url: `/admin/users/${PERMANENT_DELETE_USER_ID}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(softDeleted.statusCode).toBe(200);
+
+    const withoutConfirmation = await app.inject({
+      method: "DELETE",
+      url: `/admin/users/${PERMANENT_DELETE_USER_ID}/permanent`,
+      headers: await superAdminHeaders(),
+      payload: { confirmation: "" },
+    });
+    expect(withoutConfirmation.statusCode).toBe(400);
+    expect(
+      await prisma.user.findUnique({
+        where: { id: PERMANENT_DELETE_USER_ID },
+        select: { deletedAt: true },
+      }),
+    ).toMatchObject({ deletedAt: expect.any(Date) });
+
+    const permanentlyDeleted = await app.inject({
+      method: "DELETE",
+      url: `/admin/users/${PERMANENT_DELETE_USER_ID}/permanent`,
+      headers: await superAdminHeaders(),
+      payload: { confirmation: "KALICI_SIL" },
+    });
+    expect(permanentlyDeleted.statusCode).toBe(200);
+    expect(permanentlyDeleted.json().data).toMatchObject({
+      id: PERMANENT_DELETE_USER_ID,
+      permanentlyDeleted: true,
+    });
+    expect(await prisma.user.findUnique({ where: { id: PERMANENT_DELETE_USER_ID } })).toBeNull();
+    expect(
+      await prisma.auditLog.findFirst({
+        where: {
+          entityId: PERMANENT_DELETE_USER_ID,
+          entityType: "USER_PERMANENT_DELETE",
+          actorUserId: PLATFORM_USER_ID,
+        },
+      }),
+    ).toBeTruthy();
+    const restore = await app.inject({
+      method: "POST",
+      url: `/admin/users/${PERMANENT_DELETE_USER_ID}/restore`,
+      headers: await superAdminHeaders(),
+    });
+    expect(restore.statusCode).toBe(404);
+  });
+
+  it("öğrenci bağlantısı bulunan silinmiş hesapta kalıcı silmeyi durdurur ve kayıtları korur", async () => {
+    await prisma.user.create({
+      data: {
+        id: PROTECTED_DELETE_USER_ID,
+        email: PROTECTED_DELETE_USER_EMAIL,
+        displayName: "Veri koruma testi",
+        passwordHash: await hasher.hash(PASSWORD),
+      },
+    });
+    await prisma.tenant.create({
+      data: { id: PROTECTED_DELETE_TENANT_ID, type: "INDIVIDUAL", name: "Korunan test alanı" },
+    });
+    const membership = await prisma.membership.create({
+      data: {
+        tenantId: PROTECTED_DELETE_TENANT_ID,
+        userId: PROTECTED_DELETE_USER_ID,
+        role: "STUDENT",
+        status: "ACTIVE",
+      },
+    });
+    const profile = await prisma.studentProfile.create({
+      data: { tenantId: PROTECTED_DELETE_TENANT_ID, studentId: PROTECTED_DELETE_USER_ID },
+    });
+    const softDeleted = await app.inject({
+      method: "DELETE",
+      url: `/admin/users/${PROTECTED_DELETE_USER_ID}`,
+      headers: await superAdminHeaders(),
+    });
+    expect(softDeleted.statusCode).toBe(200);
+
+    const permanentlyDeleted = await app.inject({
+      method: "DELETE",
+      url: `/admin/users/${PROTECTED_DELETE_USER_ID}/permanent`,
+      headers: await superAdminHeaders(),
+      payload: { confirmation: "KALICI_SIL" },
+    });
+    expect(permanentlyDeleted.statusCode).toBe(409);
+    expect(permanentlyDeleted.json().error.message).toContain("Veriler korunarak");
+    expect(
+      await prisma.user.findUnique({
+        where: { id: PROTECTED_DELETE_USER_ID },
+        select: { deletedAt: true },
+      }),
+    ).toMatchObject({ deletedAt: expect.any(Date) });
+    expect(await prisma.membership.findUnique({ where: { id: membership.id } })).toBeTruthy();
+    expect(await prisma.studentProfile.findUnique({ where: { id: profile.id } })).toBeTruthy();
+  });
+
   // ---------- Membership ----------
 
   let membershipId = "";
   let org2MembershipId = "";
   let individualMembershipId = "";
 
-  it("Hazırlık: soft-delete edilen kullanıcı yeniden üye olabilir", async () => {
-    // Yukarıdaki soft-delete testi USER_A'yı sildi; membership senaryoları için
-    // kullanıcıyı geri yükle.
-    await prisma.user.update({
-      where: { id: USER_A_ID },
-      data: { deletedAt: null, status: "ACTIVE" },
+  it("zaten geri yüklenmiş kullanıcı ikinci kez geri yüklenemez: 404 döner", async () => {
+    const restored = await app.inject({
+      method: "POST",
+      url: `/admin/users/${USER_A_ID}/restore`,
+      headers: await superAdminHeaders(),
     });
+    expect(restored.statusCode).toBe(404);
   });
 
   it("Super Admin: kullanıcıya kurum üyeliği ekler (ORGANIZATION)", async () => {

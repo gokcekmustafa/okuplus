@@ -73,6 +73,11 @@ describe("Superadmin kullanıcı yönetimi", () => {
     const elements = {
       "user-list-body": { innerHTML: "" },
       "user-page-info": { textContent: "" },
+      "user-list-title": { textContent: "" },
+      "user-list-description": { textContent: "" },
+      "user-list-extra-heading": { textContent: "" },
+      "user-segment-tabs": { classList: { toggle: vi.fn() } },
+      "user-create-btn": { classList: { toggle: vi.fn() } },
       "user-prev-btn": { disabled: false },
       "user-next-btn": { disabled: false },
     };
@@ -82,6 +87,7 @@ describe("Superadmin kullanıcı yönetimi", () => {
       userPage: 1,
       USER_PAGE_SIZE: 20,
       userSegment: "ORGANIZATION",
+      userListState: "ACTIVE",
       $: (id: keyof typeof elements) => elements[id],
       document: { querySelectorAll: () => [] },
       escapeHtml: (value: unknown) =>
@@ -110,6 +116,117 @@ describe("Superadmin kullanıcı yönetimi", () => {
     expect(personalRow).toContain("Kişisel çalışma alanı");
     expect(personalRow).toContain("Başlangıç");
     expect(output).toContain("İçerik editörü");
+  });
+
+  it("silinen kullanıcıları ayrı listede, geri yükleme ve ek onaylı kalıcı silme işlemleriyle gösterir", () => {
+    const userData = [
+      {
+        id: "deleted-user",
+        displayName: "Silinmiş Hesap",
+        email: "deleted@example.test",
+        status: "ACTIVE",
+        platformRole: null,
+        deletedAt: "2026-10-31T10:00:00.000Z",
+        accountContexts: [],
+        roleConnections: [],
+        unlinkedPackageRights: [],
+      },
+    ];
+    const elements = {
+      "user-list-body": { innerHTML: "" },
+      "user-page-info": { textContent: "" },
+      "user-list-title": { textContent: "" },
+      "user-list-description": { textContent: "" },
+      "user-list-extra-heading": { textContent: "" },
+      "user-segment-tabs": { classList: { toggle: vi.fn() } },
+      "user-create-btn": { classList: { toggle: vi.fn() } },
+      "user-prev-btn": { disabled: false },
+      "user-next-btn": { disabled: false },
+    };
+    const context = createContext({
+      userData,
+      userTotal: 1,
+      userPage: 1,
+      USER_PAGE_SIZE: 20,
+      userSegment: "ORGANIZATION",
+      userListState: "DELETED",
+      $: (id: keyof typeof elements) => elements[id],
+      document: { querySelectorAll: () => [] },
+      escapeHtml: (value: unknown) => String(value),
+      platformRoleLabel: (role: string) => role,
+      userStatusBadge: () => "Etkin",
+      planLabel: (plan: string) => plan,
+      MEMBERSHIP_ROLE_LABELS: {},
+      MEMBERSHIP_STATUS_LABELS: {},
+      Math,
+      Date,
+    });
+    const source = [
+      functionSource("function renderUserAccountType(", "const INDIVIDUAL_ALLOWED_ROLES"),
+      functionSource("function renderUserList()", "function renderUserAccountType("),
+    ].join("\n");
+    runInContext(`${source}; renderUserList`, context)();
+
+    expect(elements["user-list-title"].textContent).toBe("Silinen Kullanıcılar");
+    expect(elements["user-list-extra-heading"].textContent).toBe("Silinme tarihi");
+    expect(elements["user-segment-tabs"].classList.toggle).toHaveBeenCalledWith("hidden", true);
+    expect(elements["user-create-btn"].classList.toggle).toHaveBeenCalledWith("hidden", true);
+    expect(elements["user-list-body"].innerHTML).toContain('data-user-restore-id="deleted-user"');
+    expect(elements["user-list-body"].innerHTML).toContain(
+      'data-user-permanent-delete-id="deleted-user"',
+    );
+    expect(elements["user-list-body"].innerHTML).toContain("Silindi");
+    expect(elements["user-list-body"].innerHTML).toContain("Silinme tarihi");
+  });
+
+  it("kalıcı silme onay düğmesini yalnızca istenen ifade tam girildiğinde etkinleştirir", () => {
+    const confirmation = { value: "" };
+    const submit = { disabled: true };
+    const context = createContext({
+      $: (id: string) =>
+        ({
+          "permanent-user-delete-confirmation": confirmation,
+          "permanent-user-delete-submit": submit,
+        })[id],
+      permanentDeleteSaving: false,
+    });
+    const updateConfirmation = runInContext(
+      `${functionSource("function updatePermanentDeleteConfirmation()", "async function submitPermanentUserDelete(")}; updatePermanentDeleteConfirmation`,
+      context,
+    ) as () => void;
+
+    updateConfirmation();
+    expect(submit.disabled).toBe(true);
+    confirmation.value = "KALICI SIL";
+    updateConfirmation();
+    expect(submit.disabled).toBe(true);
+    confirmation.value = "KALICI SİL";
+    updateConfirmation();
+    expect(submit.disabled).toBe(false);
+    context.permanentDeleteSaving = true;
+    updateConfirmation();
+    expect(submit.disabled).toBe(true);
+  });
+
+  it("kullanıcı ayrıntısındaki yinelenen düzenleme düğmesini kaldırır ve yönetim geçmişini Türkçeleştirir", () => {
+    expect(indexHtml).not.toContain('id="user-detail-edit"');
+    expect(appJs).not.toContain('$("user-detail-edit")');
+    const helperSource = functionSource(
+      "function userAuditEventLabel(item)",
+      "async function loadUsers()",
+    );
+    const label = runInContext(
+      `${helperSource}\nuserAuditEventLabel`,
+      createContext({}),
+    ) as (item: { action: string; entityType: string }) => string;
+
+    expect(label({ action: "UPDATE", entityType: "ENTITLEMENT" })).toBe(
+      "Paket erişimi güncellendi",
+    );
+    expect(label({ action: "DELETE", entityType: "USER_SOFT_DELETE" })).toBe(
+      "Kullanıcı silinenlere taşındı",
+    );
+    expect(label({ action: "UNKNOWN", entityType: "UNKNOWN" })).toBe("Yönetim kaydı işlendi");
   });
 
   it("bireysel kullanıcı oluştururken kurum alanını kapatır ve kurum hesabında zorunlu kılar", () => {

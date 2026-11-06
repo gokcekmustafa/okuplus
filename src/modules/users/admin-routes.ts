@@ -7,8 +7,11 @@ import { requirePlatformRole } from "../../middleware/require-platform.js";
 import {
   createUser,
   getUser,
+  listDeletedUsers,
   listUsers,
+  permanentlyDeleteUser,
   resetUserPassword,
+  restoreDeletedUser,
   restoreUserPersonalContext,
   softDeleteUser,
   updateUser,
@@ -23,12 +26,14 @@ import {
 import {
   createMembershipSchema,
   createUserSchema,
+  listDeletedUsersQuerySchema,
   listMembershipsQuerySchema,
   listUsersQuerySchema,
   updateMembershipSchema,
   updateUserSchema,
   resetUserPasswordSchema,
   restoreUserPersonalContextSchema,
+  permanentlyDeleteUserSchema,
 } from "./schemas.js";
 
 function readParamId(request: FastifyRequest): string {
@@ -72,6 +77,11 @@ export async function userAdminRoutes(
     return ok(await listUsers(query));
   });
 
+  app.get("/admin/users/deleted", { preHandler: platformOnly }, async (request) => {
+    const query = listDeletedUsersQuerySchema.parse(request.query);
+    return ok(await listDeletedUsers(query));
+  });
+
   app.post("/admin/users", { preHandler: platformOnly }, async (request) => {
     const input = createUserSchema.parse(request.body);
     return ok(await createUser(input, readSuperAdminActor(request)));
@@ -79,6 +89,15 @@ export async function userAdminRoutes(
 
   app.get("/admin/users/:id", { preHandler: platformOnly }, async (request) => {
     return ok(await getUser(readParamId(request), readSuperAdminActor(request)));
+  });
+
+  app.post("/admin/users/:id/restore", { preHandler: platformOnly }, async (request) => {
+    return ok(await restoreDeletedUser(readParamId(request), request.authUser!.id));
+  });
+
+  app.delete("/admin/users/:id/permanent", { preHandler: platformOnly }, async (request) => {
+    permanentlyDeleteUserSchema.parse(request.body);
+    return ok(await permanentlyDeleteUser(readParamId(request), request.authUser!.id));
   });
 
   app.post(
@@ -102,7 +121,7 @@ export async function userAdminRoutes(
   });
 
   app.delete("/admin/users/:id", { preHandler: platformOnly }, async (request) => {
-    return ok(await softDeleteUser(readParamId(request)));
+    return ok(await softDeleteUser(readParamId(request), request.authUser!.id));
   });
 
   app.post("/admin/users/:id/password", { preHandler: platformOnly }, async (request) => {

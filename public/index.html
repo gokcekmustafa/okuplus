@@ -2024,12 +2024,35 @@
           <section id="page-users" class="page-view hidden">
             <div id="user-directory-view">
               <div class="page-head">
-                <h2>Kullanıcı Hesapları</h2>
-                <p class="muted">
+                <h2 id="user-list-title">Kullanıcı Hesapları</h2>
+                <p id="user-list-description" class="muted">
                   Bireysel, kurumsal ve platform hesaplarını; paket ve erişim durumlarını tek yerden
                   yönetin.
                 </p>
               </div>
+
+              <nav
+                id="user-list-state-tabs"
+                class="user-list-state-tabs"
+                aria-label="Kullanıcı durumu"
+              >
+                <button
+                  type="button"
+                  class="user-list-state-tab active"
+                  data-user-list-state="ACTIVE"
+                  aria-pressed="true"
+                >
+                  Kullanıcılar
+                </button>
+                <button
+                  type="button"
+                  class="user-list-state-tab"
+                  data-user-list-state="DELETED"
+                  aria-pressed="false"
+                >
+                  Silinen Kullanıcılar
+                </button>
+              </nav>
 
               <nav
                 id="user-segment-tabs"
@@ -2100,7 +2123,7 @@
                       <th>Kurum / kişisel alan</th>
                       <th>Paket ve erişim</th>
                       <th>Durum</th>
-                      <th>Kurum rolleri</th>
+                      <th id="user-list-extra-heading">Kurum rolleri</th>
                       <th class="text-right">İşlemler</th>
                     </tr>
                   </thead>
@@ -2272,11 +2295,8 @@
                   <button id="user-detail-entitlement-start" type="button" class="btn btn-primary">
                     Paket ata
                   </button>
-                  <button id="user-detail-edit" type="button" class="btn btn-secondary">
-                    Kullanıcı bilgilerini düzenle
-                  </button>
                   <button id="user-detail-delete" type="button" class="btn btn-danger">
-                    Hesabı kapat
+                    Silinenlere taşı
                   </button>
                 </div>
               </header>
@@ -2347,6 +2367,59 @@
                       Vazgeç</button
                     ><button id="user-entitlement-submit" type="submit" class="btn btn-primary">
                       Kaydet
+                    </button>
+                  </div>
+                </form>
+              </section>
+            </div>
+
+            <div id="permanent-user-delete-dialog" class="modal-backdrop hidden">
+              <section
+                class="modal permanent-user-delete-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="permanent-user-delete-title"
+              >
+                <div class="modal-head">
+                  <div>
+                    <p class="eyebrow">Geri alınamaz işlem</p>
+                    <h3 id="permanent-user-delete-title">Kullanıcıyı kalıcı olarak sil</h3>
+                  </div>
+                  <button
+                    id="permanent-user-delete-close"
+                    type="button"
+                    class="btn btn-icon"
+                    aria-label="Kapat"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <form id="permanent-user-delete-form" novalidate>
+                  <p>
+                    Bu işlem hesabı geri alınamaz biçimde kaldırır. Giriş kimlikleri ve yönetici
+                    paket kayıtları da silinir. Saklanması gereken öğrenci, kurum veya ödeme
+                    kayıtları varsa sunucu işlemi durdurur.
+                  </p>
+                  <p class="permanent-user-delete-target">
+                    <strong id="permanent-user-delete-name"></strong
+                    ><span id="permanent-user-delete-email" class="muted"></span>
+                  </p>
+                  <label class="field" for="permanent-user-delete-confirmation">
+                    <span>Devam etmek için <strong>KALICI SİL</strong> yazın</span>
+                    <input id="permanent-user-delete-confirmation" type="text" autocomplete="off" />
+                  </label>
+                  <p id="permanent-user-delete-status" class="error hidden" role="alert"></p>
+                  <div class="modal-actions">
+                    <button id="permanent-user-delete-cancel" type="button" class="btn btn-ghost">
+                      Vazgeç
+                    </button>
+                    <button
+                      id="permanent-user-delete-submit"
+                      type="submit"
+                      class="btn btn-danger"
+                      disabled
+                    >
+                      Kalıcı olarak sil
                     </button>
                   </div>
                 </form>
