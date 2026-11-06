@@ -280,11 +280,12 @@ describe("Superadmin kullanıcı yönetimi", () => {
     );
   });
 
-  it("silinmiş bireysel alan kurtarmasını görünür onay adımı ve mevcut API üzerinden başlatır", () => {
+  it("silinmiş bireysel alan kurtarmasında 409 hatasını aynı kartta gösterir", async () => {
     expect(appJs).toContain("/personal-context/restore");
     expect(appJs).toContain("function beginPersonalContextRestore(");
     expect(appJs).toContain("data-personal-context-restore-confirm=");
     expect(appJs).toContain("data-personal-context-restore-cancel=");
+    expect(appJs).toContain("data-personal-context-recovery-status");
     expect(appJs).toContain("Başka bir kullanıcı işlemi sürüyor. Tamamlanınca tekrar deneyin.");
     expect(
       functionSource(
@@ -296,6 +297,95 @@ describe("Superadmin kullanıcı yönetimi", () => {
     expect(appJs).toContain(
       "Aynı kişisel çalışma alanı geri yüklendi. Mevcut öğrenci kayıtları korundu.",
     );
+
+    const message = "Açık hesap silme talebi var; kişisel alan geri yüklenmedi";
+    const localStatus = { textContent: "", dataset: {} as Record<string, string> };
+    const globalStatus = { textContent: "", dataset: {} as Record<string, string> };
+    const panel = {
+      querySelector: (selector: string) =>
+        selector === "[data-personal-context-recovery-status]" ? localStatus : null,
+    };
+    const button = {
+      disabled: false,
+      setAttribute: vi.fn(),
+      removeAttribute: vi.fn(),
+      closest: (selector: string) => (selector === ".personal-context-recovery" ? panel : null),
+    };
+    let request: { path: string; method: string; body: string } | null = null;
+    const context = createContext({
+      userDetailCurrent: { id: "user-1", status: "ACTIVE" },
+      userEntitlementSaving: false,
+      $: (id: string) => (id === "user-profile-action-status" ? globalStatus : null),
+      userApi: (path: string, options: { method: string; body: string }) => {
+        request = { path, ...options };
+        return Promise.resolve({
+          ok: false,
+          status: 409,
+          json: async () => ({ error: { message } }),
+          headers: { get: () => null },
+        });
+      },
+      parseResponse: async (response: {
+        ok: boolean;
+        json: () => Promise<{ error?: { message?: string } }>;
+      }) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error?.message ?? "İstek başarısız");
+        return body;
+      },
+      openUserDetail: vi.fn(),
+      loadUsers: vi.fn(),
+      encodeURIComponent,
+      JSON,
+    });
+    const restoreSource = functionSource(
+      "function setPersonalContextRecoveryStatus(",
+      "function personalContextRecoveryPrompt(",
+    );
+    const requestSource = functionSource(
+      "async function restoreUserPersonalContext(",
+      "async function populateMembershipTenantSelect(",
+    );
+    const restore = runInContext(
+      `${restoreSource}\n${requestSource}\nrestoreUserPersonalContext`,
+      context,
+    ) as (tenantId: string, target: typeof button) => Promise<void>;
+
+    await restore("personal-tenant-1", button);
+
+    expect(request).toMatchObject({
+      path: "/user-1/personal-context/restore",
+      method: "POST",
+      body: JSON.stringify({ tenantId: "personal-tenant-1" }),
+    });
+    expect(localStatus.textContent).toBe(message);
+    expect(localStatus.dataset.state).toBe("error");
+    expect(globalStatus.textContent).toBe("");
+    expect(button.disabled).toBe(false);
+  });
+
+  it("kişisel alan üyelik durumunu ham HTML yerine rozet olarak üretir", () => {
+    const helperSource = functionSource(
+      "function personalContextMembershipBadge(",
+      "async function loadUsers()",
+    );
+    const context = createContext({
+      membershipStatusBadge: (status: string) =>
+        `<span class="badge badge-success">${status === "ACTIVE" ? "Aktif" : status}</span>`,
+    });
+    const renderBadge = runInContext(
+      `${helperSource}\npersonalContextMembershipBadge`,
+      context,
+    ) as (value: { membershipDeleted: boolean; membershipStatus: string }) => string;
+
+    expect(renderBadge({ membershipDeleted: false, membershipStatus: "ACTIVE" })).toBe(
+      '<span class="badge badge-success">Aktif</span>',
+    );
+    expect(renderBadge({ membershipDeleted: true, membershipStatus: "REMOVED" })).toBe(
+      '<span class="badge badge-danger">Üyelik kaldırıldı</span>',
+    );
+    expect(appJs).toContain("· ${membershipState}</dd>");
+    expect(appJs).not.toContain("escapeHtml(membershipState)");
   });
 
   it("yeni tam ekran profilde mevcut paket, ödeme aboneliği ve gerçek ödeme kayıtlarını ayrı sunar", () => {

@@ -6984,6 +6984,12 @@ function membershipStatusBadge(status) {
   return `<span class="${cls ?? "badge"}">${MEMBERSHIP_STATUS_LABELS[status] ?? status}</span>`;
 }
 
+function personalContextMembershipBadge(context) {
+  return context.membershipDeleted
+    ? '<span class="badge badge-danger">Üyelik kaldırıldı</span>'
+    : membershipStatusBadge(context.membershipStatus);
+}
+
 async function loadUsers() {
   hideUserError();
   const tbody = $("user-list-body");
@@ -7395,15 +7401,13 @@ function renderUserDetail(u, notice = "") {
           const contextState = context.tenantDeleted
             ? "Silinmiş alan"
             : generalStatusLabel(context.tenantStatus);
-          const membershipState = context.membershipDeleted
-            ? "Üyelik kaldırıldı"
-            : membershipStatusBadge(context.membershipStatus);
+          const membershipState = personalContextMembershipBadge(context);
           const packageRight = packageContext?.packageRight;
           const restoreAction =
             context.tenantDeleted && u.status === "ACTIVE"
               ? `<div class="personal-context-recovery">${personalContextRecoveryAction(context.tenantId)}</div>`
               : "";
-          return `<article class="personal-context-card"><div class="personal-context-card-heading"><div><span class="eyebrow">Bireysel hesap alanı</span><h4>Kişisel çalışma alanı</h4></div><span class="badge ${context.tenantDeleted || context.tenantStatus !== "ACTIVE" ? "badge-warning" : "badge-success"}">${escapeHtml(contextState)}</span></div><dl class="compact-definition-list"><div><dt>Öğrenci bağlantısı</dt><dd>${escapeHtml(context.membershipRole === "STUDENT" ? "Öğrenci" : (MEMBERSHIP_ROLE_LABELS[context.membershipRole] ?? context.membershipRole))} · ${typeof membershipState === "string" ? escapeHtml(membershipState) : membershipState}</dd></div><div><dt>Oluşturulma</dt><dd>${context.createdAt ? new Date(context.createdAt).toLocaleDateString("tr-TR") : "—"}</dd></div><div><dt>Kişisel paket</dt><dd>${packageRight ? `${escapeHtml(planLabel(packageRight.plan))} · ${escapeHtml(entitlementStatusLabel(packageRight.status))}` : "Varsayılan erişim"}</dd></div><div><dt>Alan kimliği</dt><dd><code>${escapeHtml(context.tenantId)}</code></dd></div></dl>${restoreAction}</article>`;
+          return `<article class="personal-context-card"><div class="personal-context-card-heading"><div><span class="eyebrow">Bireysel hesap alanı</span><h4>Kişisel çalışma alanı</h4></div><span class="badge ${context.tenantDeleted || context.tenantStatus !== "ACTIVE" ? "badge-warning" : "badge-success"}">${escapeHtml(contextState)}</span></div><dl class="compact-definition-list"><div><dt>Öğrenci bağlantısı</dt><dd>${escapeHtml(context.membershipRole === "STUDENT" ? "Öğrenci" : (MEMBERSHIP_ROLE_LABELS[context.membershipRole] ?? context.membershipRole))} · ${membershipState}</dd></div><div><dt>Oluşturulma</dt><dd>${context.createdAt ? new Date(context.createdAt).toLocaleDateString("tr-TR") : "—"}</dd></div><div><dt>Kişisel paket</dt><dd>${packageRight ? `${escapeHtml(planLabel(packageRight.plan))} · ${escapeHtml(entitlementStatusLabel(packageRight.status))}` : "Varsayılan erişim"}</dd></div><div><dt>Alan kimliği</dt><dd><code>${escapeHtml(context.tenantId)}</code></dd></div></dl>${restoreAction}</article>`;
         })
         .join("")
     : '<div class="user-empty-state"><strong>Kişisel çalışma alanı yok</strong><p>Bu hesap bireysel olarak kurulmamış. Kurum üyelikleri ayrı bölümde gösterilir.</p></div>';
@@ -7835,8 +7839,10 @@ function handleUserEntitlementAction(event) {
   }
 }
 
-function setPersonalContextRecoveryStatus(message, state = "") {
-  const status = $("user-profile-action-status");
+function setPersonalContextRecoveryStatus(message, state = "", panel = null) {
+  const status =
+    panel?.querySelector("[data-personal-context-recovery-status]") ??
+    $("user-profile-action-status");
   if (!status) return;
   status.textContent = message;
   if (state) status.dataset.state = state;
@@ -7845,19 +7851,21 @@ function setPersonalContextRecoveryStatus(message, state = "") {
 
 function personalContextRecoveryPrompt(tenantId) {
   const safeTenantId = escapeHtml(tenantId);
-  return `<p>Yalnızca sunucunun aynı öğrenciye ait olduğunu doğruladığı kişisel alan yeniden açılır. Öğrenci profili ve ilerleme kayıtları korunur.</p><div class="personal-context-recovery-actions"><button type="button" class="btn btn-primary btn-sm" data-personal-context-restore-confirm="${safeTenantId}">Geri yüklemeyi onayla</button><button type="button" class="btn btn-ghost btn-sm" data-personal-context-restore-cancel="${safeTenantId}">Vazgeç</button></div>`;
+  return `<p>Yalnızca sunucunun aynı öğrenciye ait olduğunu doğruladığı kişisel alan yeniden açılır. Öğrenci profili ve ilerleme kayıtları korunur.</p><div class="personal-context-recovery-actions"><button type="button" class="btn btn-primary btn-sm" data-personal-context-restore-confirm="${safeTenantId}">Geri yüklemeyi onayla</button><button type="button" class="btn btn-ghost btn-sm" data-personal-context-restore-cancel="${safeTenantId}">Vazgeç</button></div><p class="personal-context-recovery-status" data-personal-context-recovery-status role="status" aria-live="polite"></p>`;
 }
 
 function personalContextRecoveryAction(tenantId) {
   const safeTenantId = escapeHtml(tenantId);
-  return `<p>Sunucu, bu alanın aynı öğrenciye ait olduğunu ve açık silme talebi bulunmadığını doğrulayacaktır.</p><button type="button" class="btn btn-secondary btn-sm" data-personal-context-restore="${safeTenantId}">Kişisel alanı geri yükle</button>`;
+  return `<p>Sunucu, bu alanın aynı öğrenciye ait olduğunu ve açık silme talebi bulunmadığını doğrulayacaktır.</p><button type="button" class="btn btn-secondary btn-sm" data-personal-context-restore="${safeTenantId}">Kişisel alanı geri yükle</button><p class="personal-context-recovery-status" data-personal-context-recovery-status role="status" aria-live="polite"></p>`;
 }
 
 function beginPersonalContextRestore(tenantId, button) {
+  const panel = button.closest(".personal-context-recovery");
   if (!userDetailCurrent) {
     setPersonalContextRecoveryStatus(
       "Kullanıcı ayrıntısı güncel değil. Ayrıntıyı yenileyip tekrar deneyin.",
       "error",
+      panel,
     );
     return;
   }
@@ -7865,6 +7873,7 @@ function beginPersonalContextRestore(tenantId, button) {
     setPersonalContextRecoveryStatus(
       "Hesap etkin olmadığı için kişisel alan geri yüklenemez.",
       "error",
+      panel,
     );
     return;
   }
@@ -7872,10 +7881,10 @@ function beginPersonalContextRestore(tenantId, button) {
     setPersonalContextRecoveryStatus(
       "Başka bir kullanıcı işlemi sürüyor. Tamamlanınca tekrar deneyin.",
       "loading",
+      panel,
     );
     return;
   }
-  const panel = button.closest(".personal-context-recovery");
   if (!panel) {
     setPersonalContextRecoveryStatus(
       "Kurtarma alanı yenilenemedi. Kullanıcı ayrıntısını yenileyip tekrar deneyin.",
@@ -7886,20 +7895,28 @@ function beginPersonalContextRestore(tenantId, button) {
   panel.innerHTML = personalContextRecoveryPrompt(tenantId);
   setPersonalContextRecoveryStatus(
     "Geri yükleme henüz yapılmadı. Devam etmek için aşağıda onaylayın.",
+    "",
+    panel,
   );
 }
 
 function cancelPersonalContextRestore(tenantId, button) {
   const panel = button.closest(".personal-context-recovery");
   if (panel) panel.innerHTML = personalContextRecoveryAction(tenantId);
-  setPersonalContextRecoveryStatus("Geri yükleme iptal edildi; hiçbir kayıt değiştirilmedi.");
+  setPersonalContextRecoveryStatus(
+    "Geri yükleme iptal edildi; hiçbir kayıt değiştirilmedi.",
+    "",
+    panel,
+  );
 }
 
 async function restoreUserPersonalContext(tenantId, button) {
+  const panel = button.closest(".personal-context-recovery");
   if (!userDetailCurrent) {
     setPersonalContextRecoveryStatus(
       "Kullanıcı ayrıntısı güncel değil. Ayrıntıyı yenileyip tekrar deneyin.",
       "error",
+      panel,
     );
     return;
   }
@@ -7907,6 +7924,7 @@ async function restoreUserPersonalContext(tenantId, button) {
     setPersonalContextRecoveryStatus(
       "Hesap etkin olmadığı için kişisel alan geri yüklenemez.",
       "error",
+      panel,
     );
     return;
   }
@@ -7914,6 +7932,7 @@ async function restoreUserPersonalContext(tenantId, button) {
     setPersonalContextRecoveryStatus(
       "Başka bir kullanıcı işlemi sürüyor. Tamamlanınca tekrar deneyin.",
       "loading",
+      panel,
     );
     return;
   }
@@ -7921,7 +7940,7 @@ async function restoreUserPersonalContext(tenantId, button) {
   userEntitlementSaving = true;
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
-  setPersonalContextRecoveryStatus("Kişisel alan güvenli biçimde doğrulanıyor…", "loading");
+  setPersonalContextRecoveryStatus("Kişisel alan güvenli biçimde doğrulanıyor…", "loading", panel);
   try {
     await parseResponse(
       await userApi(`/${encodeURIComponent(userId)}/personal-context/restore`, {
@@ -7938,6 +7957,7 @@ async function restoreUserPersonalContext(tenantId, button) {
     setPersonalContextRecoveryStatus(
       err.message || "Kişisel alan geri yüklenemedi; kayıtlar değiştirilmedi.",
       "error",
+      panel,
     );
   } finally {
     userEntitlementSaving = false;

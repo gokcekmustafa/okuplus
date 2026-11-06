@@ -3579,6 +3579,31 @@ dialog::backdrop {
   flex-wrap: wrap;
   gap: 8px;
 }
+.app.superadmin-shell .personal-context-recovery-status:empty {
+  display: none;
+}
+.app.superadmin-shell .personal-context-recovery-status:not(:empty) {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--admin-line);
+  border-radius: 9px;
+  color: var(--admin-ink);
+  background: var(--admin-surface);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.app.superadmin-shell .personal-context-recovery-status[data-state="loading"] {
+  border-color: color-mix(in srgb, var(--admin-brand) 30%, var(--admin-line));
+  background: color-mix(in srgb, var(--admin-brand) 8%, var(--admin-surface));
+  font-weight: 600;
+}
+.app.superadmin-shell .personal-context-recovery-status[data-state="error"] {
+  border-color: color-mix(in srgb, #d92d20 32%, var(--admin-line));
+  color: color-mix(in srgb, var(--admin-ink) 65%, #b42318);
+  background: color-mix(in srgb, #d92d20 8%, var(--admin-surface));
+  font-weight: 600;
+}
 .app.superadmin-shell .user-profile-student-link {
   display: flex;
   align-items: center;
