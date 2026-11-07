@@ -1061,33 +1061,6 @@
                 </button>
               </div>
             </section>
-            <div id="learning-path-card" class="card learning-path-card" data-student>
-              <div id="learning-path-model" hidden></div>
-              <div
-                id="learning-path"
-                class="learning-path"
-                role="list"
-                aria-label="Öğrenme yolu"
-                aria-busy="true"
-              ></div>
-              <p
-                id="learning-path-transition-status"
-                class="muted hidden"
-                role="status"
-                aria-live="polite"
-              ></p>
-              <button
-                id="learning-path-transition-retry"
-                type="button"
-                class="btn btn-secondary btn-sm hidden"
-              >
-                Yeni öğrenme yolunu tekrar kontrol et
-              </button>
-              <button id="learning-path-retry" type="button" class="btn btn-ghost btn-sm hidden">
-                Öğrenme yolunu yeniden yükle
-              </button>
-            </div>
-
             <section
               id="today-card"
               class="card training-home-card supporting-task-card"
@@ -6152,6 +6125,20 @@
               </div>
               <div class="learning-path-course-header-actions">
                 <div
+                  id="learning-path-view-switch"
+                  class="learning-path-view-switch"
+                  data-student
+                  role="group"
+                  aria-label="Öğrenme yolu görünümü"
+                >
+                  <button type="button" data-learning-path-view="map" aria-pressed="true">
+                    Harita
+                  </button>
+                  <button type="button" data-learning-path-view="list" aria-pressed="false">
+                    Bölüm Listesi
+                  </button>
+                </div>
+                <div
                   id="learning-path-course-summary"
                   class="learning-path-course-summary"
                   aria-live="polite"
@@ -6159,42 +6146,72 @@
                 <button type="button" class="btn btn-secondary" id="lessons-refresh">Yenile</button>
               </div>
             </header>
-            <p
-              id="lessons-status"
-              class="learning-path-course-status"
-              role="status"
-              aria-live="polite"
-            ></p>
-            <div id="lessons-error" class="error hidden" role="alert"></div>
-            <div class="lesson-layout learning-path-course-layout" id="lesson-layout">
-              <aside
-                class="learning-path-module-sidebar"
-                id="lesson-list-panel"
-                aria-labelledby="lesson-list-title"
-              >
-                <div class="learning-path-sidebar-intro">
-                  <p class="learning-path-program-name">9–12. Sınıf Okuma Başlangıç</p>
-                  <div class="learning-path-sidebar-title-row">
-                    <h3 id="lesson-list-title">Bölümler</h3>
-                  </div>
-                </div>
+            <div id="learning-path-map-view" class="learning-path-map-view" data-student>
+              <div id="learning-path-card" class="card learning-path-card">
+                <div id="learning-path-model" hidden></div>
                 <div
-                  id="lesson-list"
-                  class="lesson-list learning-path-module-list"
-                  role="listbox"
-                  aria-label="Öğrenme yolu bölümleri"
+                  id="learning-path"
+                  class="learning-path"
+                  role="list"
+                  aria-label="Öğrenme yolu"
+                  aria-busy="true"
                 ></div>
-              </aside>
-              <main
-                id="lesson-detail"
-                class="insight-panel lesson-detail learning-path-module-content"
+                <p
+                  id="learning-path-transition-status"
+                  class="muted hidden"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+                <button
+                  id="learning-path-transition-retry"
+                  type="button"
+                  class="btn btn-secondary btn-sm hidden"
+                >
+                  Yeni öğrenme yolunu tekrar kontrol et
+                </button>
+                <button id="learning-path-retry" type="button" class="btn btn-ghost btn-sm hidden">
+                  Öğrenme yolunu yeniden yükle
+                </button>
+              </div>
+            </div>
+            <div id="learning-path-list-view" class="learning-path-list-view hidden">
+              <p
+                id="lessons-status"
+                class="learning-path-course-status"
+                role="status"
                 aria-live="polite"
-              >
-                <div class="learning-path-course-placeholder">
-                  <span class="learning-path-placeholder-icon" aria-hidden="true">✦</span>
-                  <p class="muted">Öğrenme yolun hazırlanıyor…</p>
-                </div>
-              </main>
+              ></p>
+              <div id="lessons-error" class="error hidden" role="alert"></div>
+              <div class="lesson-layout learning-path-course-layout" id="lesson-layout">
+                <aside
+                  class="learning-path-module-sidebar"
+                  id="lesson-list-panel"
+                  aria-labelledby="lesson-list-title"
+                >
+                  <div class="learning-path-sidebar-intro">
+                    <p class="learning-path-program-name">9–12. Sınıf Okuma Başlangıç</p>
+                    <div class="learning-path-sidebar-title-row">
+                      <h3 id="lesson-list-title">Bölümler</h3>
+                    </div>
+                  </div>
+                  <div
+                    id="lesson-list"
+                    class="lesson-list learning-path-module-list"
+                    role="listbox"
+                    aria-label="Öğrenme yolu bölümleri"
+                  ></div>
+                </aside>
+                <main
+                  id="lesson-detail"
+                  class="insight-panel lesson-detail learning-path-module-content"
+                  aria-live="polite"
+                >
+                  <div class="learning-path-course-placeholder">
+                    <span class="learning-path-placeholder-icon" aria-hidden="true">✦</span>
+                    <p class="muted">Öğrenme yolun hazırlanıyor…</p>
+                  </div>
+                </main>
+              </div>
             </div>
           </section>
 

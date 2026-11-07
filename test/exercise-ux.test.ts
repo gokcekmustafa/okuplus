@@ -50,6 +50,7 @@ function harness() {
     currentExerciseQuestionIndex: 0,
     isPlatformUser: false,
     learningPathEntryMode: false,
+    learningPathViewMode: "list",
     activeLearningStepNode: null,
     activeLearningStepVisualPosition: null,
     learningPathContinuation: null,
@@ -727,7 +728,8 @@ describe("exercise UX state from production frontend", () => {
 
     await h.run("handleExerciseComplete()");
 
-    expect(h.context.lastNavigatedPage).toBe("dashboard");
+    expect(h.context.lastNavigatedPage).toBe("lessons");
+    expect(h.context.learningPathViewMode).toBe("map");
     expect(h.context.learningPathEntryMode).toBe(false);
   });
 
@@ -768,7 +770,8 @@ describe("exercise UX state from production frontend", () => {
 
     await h.run("handleExerciseComplete()");
 
-    expect(h.context.lastNavigatedPage).toBe("dashboard");
+    expect(h.context.lastNavigatedPage).toBe("lessons");
+    expect(h.context.learningPathViewMode).toBe("map");
     expect(h.context.learningPathEntryMode).toBe(false);
     expect(h.get("exercise-attempt-error").textContent).not.toContain("tamamlanamadı");
   });
@@ -799,7 +802,7 @@ describe("exercise UX state from production frontend", () => {
       };
       await h.run("handleExerciseComplete()");
       expect(h.context.lastNavigation).toMatchObject({
-        page: "dashboard",
+        page: "lessons",
         options: {
           continuation: {
             fromId: "step-35",
@@ -933,6 +936,53 @@ describe("exercise UX state from production frontend", () => {
     await h.run("handleExerciseComplete()");
     expect(h.get("exercise-attempt-feedback").innerHTML).toBe("");
     expect(h.context.exerciseAwaitingNext).toBe(false);
+  });
+
+  it("enables submission only for a valid answer after the guided question finishes loading", () => {
+    const h = harness();
+    h.run(`
+      exerciseLoading = true;
+      const question = $("exercise-current-question");
+      question.dataset = { questionVersionId: "q1", questionType: "TRUE_FALSE" };
+      question.querySelector = () => ({ value: "false" });
+      syncExerciseSubmitAvailability();
+    `);
+    expect(h.get("exercise-submit-attempt").disabled).toBe(true);
+    h.run("exerciseLoading = false; syncExerciseSubmitAvailability()");
+    expect(h.get("exercise-submit-attempt").disabled).toBe(false);
+    h.run("question.querySelector = () => null; syncExerciseSubmitAvailability()");
+    expect(h.get("exercise-submit-attempt").disabled).toBe(true);
+    h.run("exerciseAwaitingNext = true; syncExerciseSubmitAvailability()");
+    expect(h.get("exercise-submit-attempt").disabled).toBe(false);
+  });
+
+  it.each([
+    ["guided", "lessons"],
+    ["activity", "exercise"],
+    ["assignment", "dashboard"],
+    ["daily", "dashboard"],
+  ])("routes the %s back button to %s", (kind, destination) => {
+    const h = harness();
+    const position = { stepId: "q1", viewportTop: 200 };
+    h.context.exerciseMode = kind === "activity" ? "activity" : null;
+    h.context.exerciseSession.learningStepId = "q1";
+    h.context.exerciseSession.assignmentId = kind === "assignment" ? "assignment" : null;
+    h.context.dailyTrainingSessionId = kind === "daily" ? "daily" : null;
+    h.context.activeLearningStepVisualPosition = position;
+    h.context.rememberExerciseSession = vi.fn();
+    h.context.resetDailyTrainingState = vi.fn();
+    h.context.resetExerciseState = vi.fn();
+    h.context.renderExerciseSession = vi.fn();
+    h.context.navigate = vi.fn();
+    h.run("returnToExercisePath()");
+    if (kind === "guided") {
+      expect(h.context.navigate).toHaveBeenCalledExactlyOnceWith(destination, {
+        learningPathReturnPosition: position,
+      });
+      expect(h.context.learningPathViewMode).toBe("map");
+    } else {
+      expect(h.context.navigate).toHaveBeenCalledExactlyOnceWith(destination);
+    }
   });
 
   it("does not make confirmed answer feedback wait for the optional points request", async () => {

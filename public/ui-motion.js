@@ -106,14 +106,6 @@ export function createUiMotion(env = globalThis) {
     ]);
   }
 
-  function stepIsOutsideViewport(element) {
-    const rect = element?.getBoundingClientRect?.();
-    if (!rect) return false;
-    const bottomInset =
-      env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect().height || 72;
-    return rect.top < 72 || rect.bottom > env.innerHeight - bottomInset;
-  }
-
   function scrollByInstantly(delta) {
     const scrollingElement = env.document?.scrollingElement || env.document?.documentElement;
     const root = env.document?.documentElement;
@@ -131,21 +123,33 @@ export function createUiMotion(env = globalThis) {
     }
   }
 
-  function alignStep(element, viewportTop = null) {
+  function alignStep(element, viewportTop = null, nearest = false) {
     if (!element) return;
     const rect = element.getBoundingClientRect?.();
     if (!rect) return;
     if (Number.isFinite(viewportTop)) {
       const delta = rect.top - viewportTop;
       if (Math.abs(delta) > 1) scrollByInstantly(delta);
-    } else if (stepIsOutsideViewport(element)) {
-      const bottomInset =
-        env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect().height || 72;
-      const topInset = 72;
-      const visibleCenter = (topInset + env.innerHeight - bottomInset) / 2;
-      const targetTop = Math.max(topInset, visibleCenter - rect.height / 2);
-      scrollByInstantly(rect.top - targetTop);
+      return;
     }
+    const header = env.document
+      ?.querySelector(".show-map .learning-path-course-header")
+      ?.getBoundingClientRect();
+    const nav = env.document?.querySelector("#student-bottom-nav")?.getBoundingClientRect();
+    const viewport = env.visualViewport;
+    const viewportBottom = viewport ? viewport.offsetTop + viewport.height : env.innerHeight;
+    const top = Math.max(72, viewport?.offsetTop || 0, header?.bottom || 0);
+    const bottom = Math.min(
+      viewportBottom,
+      nav?.height && Number.isFinite(nav.top) ? nav.top : env.innerHeight - (nav?.height || 72),
+    );
+    if (rect.top >= top && rect.bottom <= bottom) return;
+    if (nearest && rect.bottom - rect.top + 16 <= bottom - top) {
+      scrollByInstantly(rect.top < top ? rect.top - top - 8 : rect.bottom - bottom + 8);
+      return;
+    }
+    const targetTop = Math.max(top, (top + bottom - rect.height) / 2);
+    scrollByInstantly(rect.top - targetTop);
   }
 
   function transitionFrames(dx, dy) {
@@ -230,6 +234,7 @@ export function createUiMotion(env = globalThis) {
     // A completed station is the visual anchor while the refreshed map settles.
     // Reduced motion goes straight to the server-selected destination.
     if (plan && allowed() && from) alignStep(from, originViewportTop);
+    else if (to) alignStep(to);
     else if (completedStepId) {
       const completedButton = buttons.find((button) => button.dataset.nodeId === completedStepId);
       if (completedButton) alignStep(completedButton);
@@ -237,6 +242,8 @@ export function createUiMotion(env = globalThis) {
     } else if (current) alignStep(current);
 
     if (plan && allowed() && from && to) {
+      // Keep the origin when both stations fit and scroll only as far as the destination needs.
+      alignStep(to, null, true);
       const fromStep = from.closest?.(".learning-map-v6-step");
       const toStep = to.closest?.(".learning-map-v6-step");
       const character = to.querySelector(".learning-map-v6-character img");

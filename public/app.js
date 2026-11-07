@@ -3091,6 +3091,19 @@ function newLearningPathTransitionSessionId() {
   return `path-${suffix}`.slice(0, 100);
 }
 
+function isLearningPathMapPage() {
+  const lessonsPage = $("page-lessons");
+  return (
+    currentPage === "lessons" &&
+    learningPathViewMode === "map" &&
+    !lessonsPage?.classList?.contains("is-focused-lesson")
+  );
+}
+
+function isLearningPathDataContext() {
+  return currentPage === "dashboard" || isLearningPathMapPage();
+}
+
 function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
   const visualPosition =
     captureLearningPathVisualPosition(node?.id) ||
@@ -3122,7 +3135,8 @@ function returnToLearningPathAfterStep(node, nextStep = null, replay = false) {
     markLearningPathCompletionConfirmed();
   } else learningPathTimingActive = false;
   setLearningPathTransitionStatus("");
-  navigate("dashboard", {
+  learningPathViewMode = "map";
+  navigate("lessons", {
     learningPathReturnPosition: visualPosition || {
       stepId: String(node.id),
       scope: insightScope(),
@@ -3138,7 +3152,7 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
   if (
     continuation !== learningPathContinuation ||
     result?.cancelled ||
-    currentPage !== "dashboard" ||
+    !isLearningPathMapPage() ||
     continuation.scope !== insightScope() ||
     document.visibilityState === "hidden"
   )
@@ -3165,11 +3179,13 @@ async function continueAfterLearningPathMotion(nodes, continuation, settled) {
   if (continuation.ready || continuation.starting) return;
   continuation.targetNode = target;
   continuation.ready = true;
+  learningPathReturnPosition = null;
   clearLearningPathTransitionStatus();
+  syncLearningPathView();
 }
 
 function startLearningPathNodeFromMap(node, button) {
-  if (!node || currentPage !== "dashboard") return;
+  if (!node || (currentPage !== "dashboard" && !isLearningPathMapPage())) return;
   const scope = insightScope();
   const continuation = learningPathContinuation?.scope === scope ? learningPathContinuation : null;
   const isContinuationTarget =
@@ -3322,6 +3338,7 @@ async function startLearningPathNode(
   if (type === "TEACHING") {
     if (!node?.contentVersionId) {
       hideStationTransitionOverlay(transitionRevision);
+      restoreLearningPathBrowseAfterStartFailure();
       alert("Bu öğrenme adımının ders içeriği henüz yayınlanmadı.");
       return;
     }
@@ -3334,6 +3351,7 @@ async function startLearningPathNode(
   }
   if (type === "SMALL_STUDY" && !tv) {
     hideStationTransitionOverlay(transitionRevision);
+    restoreLearningPathBrowseAfterStartFailure();
     alert("Bu kısa çalışmanın yayınlanmış içeriği veya egzersizi henüz hazır değil.");
     return;
   }
@@ -3348,6 +3366,7 @@ async function startLearningPathNode(
       );
     } catch (error) {
       if (!continuation) {
+        restoreLearningPathBrowseAfterStartFailure();
         alert(formatStudentError(error, "Değerlendirme şu anda açılamadı."));
       } else handleLearningPathStationStartFailure(continuation, error);
     }
@@ -3362,6 +3381,7 @@ async function startLearningPathNode(
   }
   if (!tv) {
     hideStationTransitionOverlay(transitionRevision);
+    restoreLearningPathBrowseAfterStartFailure();
     if (type === "SKILL") alert("Bu beceri için henüz içerik yok");
     return;
   }
@@ -3415,8 +3435,11 @@ async function startLearningPathNode(
       stationError.classList.remove("hidden");
     }
     if (continuation) handleLearningPathStationStartFailure(continuation, error);
-    else if (!isPremiumLimitError(error)) {
-      alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
+    else {
+      restoreLearningPathBrowseAfterStartFailure();
+      if (!isPremiumLimitError(error)) {
+        alert("Bu istasyon şu anda açılamadı. Lütfen tekrar dene.");
+      }
     }
   }
 }
@@ -3426,10 +3449,11 @@ function handleLearningPathStationStartFailure(continuation, error) {
     !continuation ||
     continuation !== learningPathContinuation ||
     continuation.scope !== insightScope() ||
-    currentPage !== "dashboard"
+    !isLearningPathMapPage()
   )
     return false;
   continuation.starting = false;
+  learningPathEntryMode = false;
   if (isPremiumLimitError(error)) {
     learningPathContinuation = null;
     setLearningPathTransitionStatus(formatStudentError(error, "Bu istasyon şu anda açılamadı."), {
@@ -3442,6 +3466,15 @@ function handleLearningPathStationStartFailure(continuation, error) {
     );
   }
   return true;
+}
+
+function restoreLearningPathBrowseAfterStartFailure() {
+  const page = $("page-lessons");
+  if (currentPage !== "lessons" || page?.classList?.contains("is-focused-lesson")) return;
+  learningPathEntryMode = false;
+  $("lesson-layout")?.classList?.remove("hidden");
+  $("lessons-status")?.classList?.add("hidden");
+  syncLearningPathView(false);
 }
 
 window.startTodayLearningStep = function () {
@@ -4013,6 +4046,7 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
   bindLearningPathMapNodeClicks(container, nodes);
   const continuation = transition?.continuation || learningPathContinuation;
   const returnPosition = transition?.returnPosition || learningPathReturnPosition;
+  const motionPending = continuation && !continuation.ready && !continuation.motionPresented;
   const settled = uiMotion.enhanceRoadmap(
     container,
     nodes,
@@ -4029,9 +4063,12 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
         duration: 1600,
       });
     },
-    continuation?.fromId,
-    returnPosition,
-    transition?.onMotionStart,
+    motionPending ? continuation.fromId : null,
+    !continuation || motionPending ? returnPosition : null,
+    (detail) => {
+      if (motionPending && detail.started) continuation.motionPresented = true;
+      transition?.onMotionStart?.(detail);
+    },
   );
   void continueAfterLearningPathMotion(nodes, continuation, settled);
   if (!continuation && returnPosition === learningPathReturnPosition)
@@ -4040,10 +4077,16 @@ function renderLearningPathMap(pathGroups, currentLevel, transition = null) {
 }
 
 async function loadLearningPath() {
-  if (learningPathLoading) return;
   var container = $("learning-path");
   var retryEl = $("learning-path-retry");
   if (!container) return;
+  if (learningPathLoading) {
+    if (isLearningPathMapPage() && !container.querySelector(".learning-map-v6")) {
+      container.innerHTML =
+        '<p class="muted" role="status">Öğrenme yolun yükleniyor…</p>' + loadingSkeleton("map");
+    }
+    return;
+  }
   learningPathLoading = true;
   studentHomeNextNode = null;
   studentHomeNextScope = null;
@@ -4063,8 +4106,9 @@ async function loadLearningPath() {
   container.setAttribute("aria-busy", "true");
   retryEl?.classList.add("hidden");
   if (
-    !container.querySelector(".learning-map-v6") ||
-    !uiMotion.hasRoadmap(container, insightsIdentity)
+    isLearningPathMapPage() &&
+    (!container.querySelector(".learning-map-v6") ||
+      !uiMotion.hasRoadmap(container, insightsIdentity))
   ) {
     const preserveCompletionPosition = returnPosition?.scope === scope;
     if (!preserveCompletionPosition) {
@@ -4095,12 +4139,16 @@ async function loadLearningPath() {
     }
     if (
       scope !== insightScope() ||
-      currentPage !== "dashboard" ||
+      !isLearningPathDataContext() ||
       continuation !== learningPathContinuation ||
       returnPosition !== learningPathReturnPosition
     )
       return;
     container.setAttribute("aria-busy", "false");
+    if (isLearningPathMapPage()) {
+      const mapStatus = $("lessons-status");
+      if (mapStatus) mapStatus.textContent = "";
+    }
     const renderSecondaryHomeSections = () => {
       if (
         scope !== insightScope() ||
@@ -4177,34 +4225,36 @@ async function loadLearningPath() {
         renderSecondaryHomeSections();
         return;
       }
-      renderLearningPathEmptyState(data.currentLevel);
+      if (isLearningPathMapPage()) renderLearningPathEmptyState(data.currentLevel);
       renderSecondaryHomeSections();
       return;
     }
-    learningPathPhase = "learning-path-map";
-    markLearningPathTiming("map-render-start", timingSequence);
-    renderLearningPathMap(pathGroups, data.currentLevel, {
-      continuation,
-      returnPosition,
-      onMotionStart: ({ started = true } = {}) => {
-        if (!started) return;
-        markLearningPathTiming("motion-start", timingSequence);
-        measureLearningPathTiming(
-          "completion-to-motion",
-          "completion",
-          "motion-start",
-          timingSequence,
-        );
-        measureLearningPathTiming(
-          "completion-action-to-motion",
-          "completion-action-start",
-          "motion-start",
-          timingSequence,
-        );
-      },
-    });
-    markLearningPathTiming("map-render-end", timingSequence);
-    measureLearningPathTiming("map-render", "map-render-start", "map-render-end", timingSequence);
+    if (isLearningPathMapPage()) {
+      learningPathPhase = "learning-path-map";
+      markLearningPathTiming("map-render-start", timingSequence);
+      renderLearningPathMap(pathGroups, data.currentLevel, {
+        continuation,
+        returnPosition,
+        onMotionStart: ({ started = true } = {}) => {
+          if (!started) return;
+          markLearningPathTiming("motion-start", timingSequence);
+          measureLearningPathTiming(
+            "completion-to-motion",
+            "completion",
+            "motion-start",
+            timingSequence,
+          );
+          measureLearningPathTiming(
+            "completion-action-to-motion",
+            "completion-action-start",
+            "motion-start",
+            timingSequence,
+          );
+        },
+      });
+      markLearningPathTiming("map-render-end", timingSequence);
+      measureLearningPathTiming("map-render", "map-render-start", "map-render-end", timingSequence);
+    }
     if (isCompletionTransition) {
       if (typeof window.requestAnimationFrame === "function")
         window.requestAnimationFrame(() =>
@@ -4217,7 +4267,7 @@ async function loadLearningPath() {
     const pendingCycle = data.routeContinuation?.futureCycles?.find(
       (cycle) => !cycle.graphAvailable,
     );
-    if (pendingCycle) {
+    if (isLearningPathMapPage() && pendingCycle) {
       container.insertAdjacentHTML?.(
         "beforeend",
         `<aside class="learning-route-pending" role="status"><strong>${escapeHtml(pendingCycle.title)}</strong><span>${escapeHtml(String(pendingCycle.stationCount))} istasyon · Yeni bölüm yayına hazırlanıyor.</span></aside>`,
@@ -4226,7 +4276,7 @@ async function loadLearningPath() {
   } catch (error) {
     if (
       scope !== insightScope() ||
-      currentPage !== "dashboard" ||
+      !isLearningPathDataContext() ||
       continuation !== learningPathContinuation ||
       returnPosition !== learningPathReturnPosition
     )
@@ -4239,15 +4289,20 @@ async function loadLearningPath() {
       name: error?.name ?? "UnknownError",
       phase: learningPathPhase,
     });
-    const homeDescription = $("home-work-description");
-    if (homeDescription)
-      homeDescription.textContent = "Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.";
-    const homeRetry = $("home-start-next");
-    if (homeRetry) {
-      homeRetry.disabled = false;
-      homeRetry.setAttribute("data-retry", "true");
-      const label = homeRetry.querySelector?.("span");
-      if (label) label.textContent = "Yeniden dene";
+    if (currentPage === "dashboard") {
+      const homeDescription = $("home-work-description");
+      if (homeDescription)
+        homeDescription.textContent = "Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.";
+      const homeRetry = $("home-start-next");
+      if (homeRetry) {
+        homeRetry.disabled = false;
+        homeRetry.setAttribute("data-retry", "true");
+        const label = homeRetry.querySelector?.("span");
+        if (label) label.textContent = "Yeniden dene";
+      }
+    } else {
+      container.innerHTML =
+        '<p class="error" role="alert" style="text-align:center">Öğrenme yolun yüklenemedi. Tekrar deneyebilirsin.</p>';
     }
     container.setAttribute("aria-busy", "false");
     if (returnPosition?.scope === scope) {
@@ -4271,7 +4326,7 @@ async function loadLearningPath() {
     // A completion may arrive while a previous map read is still in flight.
     // Do not animate or open a station from that pre-completion response.
     if (
-      currentPage === "dashboard" &&
+      isLearningPathDataContext() &&
       ((learningPathContinuation && continuation !== learningPathContinuation) ||
         (learningPathReturnPosition && returnPosition !== learningPathReturnPosition))
     )
@@ -5085,6 +5140,65 @@ function learningPathTargetWithProgress(current, target, direction) {
   };
 }
 
+function syncLearningPathView(
+  focused = Boolean($("page-lessons")?.classList?.contains("is-focused-lesson")),
+) {
+  const page = $("page-lessons");
+  const switcher = $("learning-path-view-switch");
+  const mapView = $("learning-path-map-view");
+  const listView = $("learning-path-list-view");
+  const transitionPending = Boolean(
+    learningPathContinuation?.scope === insightScope() &&
+    !learningPathContinuation.ready &&
+    !learningPathTransitionRetryAction,
+  );
+  page?.classList.toggle("show-map", !focused && learningPathViewMode === "map");
+  page?.classList.toggle("show-list", !focused && learningPathViewMode === "list");
+  switcher?.classList.toggle("hidden", focused);
+  mapView?.classList.toggle("hidden", focused || learningPathViewMode !== "map");
+  listView?.classList.toggle("hidden", !focused && learningPathViewMode !== "list");
+  for (const button of switcher?.querySelectorAll?.("[data-learning-path-view]") || []) {
+    const selected = !focused && button.dataset.learningPathView === learningPathViewMode;
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = button.dataset.learningPathView === "list" && transitionPending;
+  }
+}
+
+function scrollLearningPathViewToTop() {
+  if (typeof window.scrollTo !== "function") return;
+  const rootStyle = document.documentElement?.style;
+  const previousBehavior = rootStyle?.scrollBehavior;
+  if (rootStyle) rootStyle.scrollBehavior = "auto";
+  window.scrollTo(0, 0);
+  if (rootStyle) rootStyle.scrollBehavior = previousBehavior || "";
+}
+
+function setLearningPathView(view) {
+  if (
+    !new Set(["map", "list"]).has(view) ||
+    $("page-lessons")?.classList?.contains("is-focused-lesson")
+  )
+    return false;
+  if (
+    view === "list" &&
+    learningPathContinuation?.scope === insightScope() &&
+    !learningPathContinuation.ready &&
+    !learningPathTransitionRetryAction
+  )
+    return false;
+  const changed = learningPathViewMode !== view;
+  learningPathViewMode = view;
+  syncLearningPathView(false);
+  if (!changed || currentPage !== "lessons") return true;
+  learningPathNavigationRevision++;
+  if (view === "map") void loadLearningPath();
+  else {
+    scrollLearningPathViewToTop();
+    void loadLessons({ scrollToTop: true });
+  }
+  return true;
+}
+
 function setLessonPageMode(focused) {
   $("page-lessons")?.classList.toggle("is-focused-lesson", focused);
   $("lesson-layout")?.classList.toggle("is-learning-path", focused);
@@ -5103,6 +5217,7 @@ function setLessonPageMode(focused) {
       : "Bölümünü seç, adımlarını sırayla tamamla.";
   }
   if (listTitle) listTitle.textContent = "Bölümler";
+  syncLearningPathView(focused);
 }
 
 function learningPathAdjacentSteps(nodes, currentStepId) {
@@ -5337,6 +5452,7 @@ function setLearningPathTransitionStatus(
     learningPathTransitionRetryAction = null;
     if (retryButton) retryButton.textContent = "Yeni öğrenme yolunu tekrar kontrol et";
   }
+  if (typeof syncLearningPathView === "function") syncLearningPathView();
 }
 
 function clearLearningPathTransitionStatus() {
@@ -5351,7 +5467,7 @@ function retryLearningPathTransition() {
       !continuation?.targetNode ||
       continuation.starting ||
       continuation.scope !== insightScope() ||
-      currentPage !== "dashboard"
+      !isLearningPathMapPage()
     )
       return;
     continuation.starting = true;
@@ -5733,22 +5849,36 @@ async function completeFocusedLearningStep() {
   }
 }
 
-async function loadLessons() {
+async function loadLessons({ scrollToTop = false } = {}) {
   const status = $("lessons-status");
   const error = $("lessons-error");
   if (!status) return;
+  learningPathViewMode = "list";
   learningPathEntryMode = false;
   activeLearningStepNode = null;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = null;
   setLessonPageMode(false);
+  $("lesson-layout")?.classList.remove("hidden");
+  const revision = learningPathNavigationRevision;
+  const scope = insightScope();
+  const isCurrent = () =>
+    revision === learningPathNavigationRevision &&
+    scope === insightScope() &&
+    currentPage === "lessons" &&
+    learningPathViewMode === "list" &&
+    !learningPathEntryMode;
   status.textContent = "Öğrenme yolun yükleniyor…";
+  status.classList.remove("hidden");
   error?.classList.add("hidden");
   try {
     const data = await insightApi("learning-path");
+    if (!isCurrent()) return;
     renderLearningPathCourse(data);
     status.textContent = "";
+    if (scrollToTop) scrollLearningPathViewToTop();
   } catch (err) {
+    if (!isCurrent()) return;
     status.textContent = "";
     if (error) {
       error.textContent = formatStudentError(
@@ -5761,6 +5891,10 @@ async function loadLessons() {
 }
 
 function setupLessonEvents() {
+  $("learning-path-view-switch")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-learning-path-view]");
+    if (button && !button.disabled) setLearningPathView(button.dataset.learningPathView);
+  });
   $("lessons-refresh")?.addEventListener("click", () => void loadLessons());
   $("lesson-list")?.addEventListener("click", (event) => {
     const button = event.target.closest("[data-learning-path-module]");
@@ -5797,7 +5931,8 @@ function setupLessonEvents() {
       activeLearningStepNode = null;
       activeLearningStepNavigation = null;
       activeLearningStepNavigationFromStepId = null;
-      navigate("dashboard");
+      learningPathViewMode = "map";
+      navigate("lessons");
     }
   });
 }
@@ -5973,8 +6108,11 @@ function navigate(
   uiMotion.cancel();
   learningPathNavigationRevision++;
   learningPathContinuation = continuation;
+  const returnsToLearningPathMap =
+    page === "dashboard" ||
+    (page === "lessons" && learningPathViewMode === "map" && !learningPathEntryMode);
   learningPathReturnPosition =
-    page === "dashboard" && returnPosition?.scope === insightScope() ? returnPosition : null;
+    returnsToLearningPathMap && returnPosition?.scope === insightScope() ? returnPosition : null;
   if (page !== "dashboard") clearLearningPathTransitionStatus();
   else if (!continuation) clearLearningPathTransitionStatus();
 
@@ -5994,7 +6132,8 @@ function navigate(
   }
   setStudentBottomNavigation(page);
   if (page === "dashboard") {
-    if (learningPathReturnPosition) restoreLearningPathVisualPosition(learningPathReturnPosition);
+    if (Number.isFinite(learningPathReturnPosition?.viewportTop))
+      restoreLearningPathVisualPosition(learningPathReturnPosition);
     if (isPlatformUser === false) recordPilotTelemetry("TODAY_OPENED", {}, "return-session");
     if (!isPlatformUser) {
       void loadLearningPath();
@@ -6047,6 +6186,11 @@ function navigate(
       const lessonStatus = $("lessons-status");
       if (lessonStatus) lessonStatus.textContent = "Sıradaki öğrenme adımın hazırlanıyor…";
       void loadFocusedLearningPathStep(transitionRevision);
+    } else if (isStudentUser && learningPathViewMode === "map") {
+      setLessonPageMode(false);
+      if (Number.isFinite(learningPathReturnPosition?.viewportTop))
+        restoreLearningPathVisualPosition(learningPathReturnPosition);
+      void loadLearningPath();
     } else {
       void loadLessons();
     }
@@ -6743,6 +6887,8 @@ function navigateFromMenu(page) {
     return;
   }
   if (page === "lessons" && isStudentUser) {
+    const alreadyOnMap =
+      currentPage === "lessons" && learningPathViewMode === "map" && !learningPathEntryMode;
     activeLearningStepNode = null;
     activeLearningStepNavigation = null;
     activeLearningStepNavigationFromStepId = null;
@@ -6750,6 +6896,12 @@ function navigateFromMenu(page) {
     // mode is reserved for entering a lesson from the homepage map or from a
     // course step card.
     learningPathEntryMode = false;
+    learningPathViewMode = "map";
+    if (alreadyOnMap) {
+      setStudentBottomNavigation("lessons");
+      closeSidebar();
+      return;
+    }
   }
   navigate(page);
 }
@@ -12149,6 +12301,7 @@ let activeLearningStepVisualPosition = null;
 let activeLearningStepNavigation = null;
 let activeLearningStepNavigationFromStepId = null;
 let learningPathEntryMode = false;
+let learningPathViewMode = "map";
 
 let skillPage = 1;
 const SKILL_PAGE_SIZE = 50;
@@ -14869,6 +15022,8 @@ async function loadExercisePage({ stationTransitionRevision: transitionRevision 
     return;
   }
   exerciseLoading = true;
+  syncExerciseSubmitAvailability();
+  let rendered = false;
   hideExerciseError();
   const isStudent = isPlatformUser === false;
   $("exercise-admin-card").classList.toggle("hidden", isStudent);
@@ -14972,13 +15127,12 @@ async function loadExercisePage({ stationTransitionRevision: transitionRevision 
       if (exerciseSession) await loadExerciseQuestions();
     }
     if (!mayCommit()) return;
-    const rendered = renderExerciseSession();
+    rendered = renderExerciseSession();
     if (exerciseSession) $("exercise-load-status").textContent = "";
     renderTrainingActivities();
     if (transitionRevision !== null && !rendered) {
       throw new Error("The learning-path exercise did not render usable session content");
     }
-    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   } catch (error) {
     if (!mayCommit()) return;
     const activityListError =
@@ -14993,12 +15147,11 @@ async function loadExercisePage({ stationTransitionRevision: transitionRevision 
       retryButton.textContent = "Tekrar dene";
       retryButton.classList.remove("hidden");
     }
-    if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
   } finally {
     exerciseLoading = false;
-    if (mayCommit() && exerciseSession?.status === "IN_PROGRESS" && exerciseQuestions.length) {
-      const button = $("exercise-submit-attempt");
-      if (button) button.disabled = exerciseBusy;
+    if (mayCommit()) {
+      if (rendered) syncExerciseSubmitAvailability();
+      if (transitionRevision !== null) hideStationTransitionOverlay(transitionRevision);
     }
     const pendingLoad = pendingExercisePageLoad;
     pendingExercisePageLoad = null;
@@ -15016,9 +15169,20 @@ async function loadExercisePage({ stationTransitionRevision: transitionRevision 
 function returnToExercisePath() {
   if (exerciseBusy) return;
   const returningToActivities = exerciseMode === "activity";
+  const returningToMap =
+    isPlatformUser === false &&
+    !returningToActivities &&
+    !isDailyTrainingExercise() &&
+    !exerciseSession?.assignmentId &&
+    exerciseSession?.deviceInfo?.source !== "INDEPENDENT_TRAINING" &&
+    Boolean(
+      exerciseSession?.learningStepId || (learningPathEntryMode && activeLearningStepNode?.id),
+    );
+  const returnPosition = activeLearningStepVisualPosition;
   exerciseReviewMode = false;
   learningPathEntryMode = false;
   activeLearningStepNode = null;
+  activeLearningStepVisualPosition = null;
   activeLearningStepNavigation = null;
   activeLearningStepNavigationFromStepId = null;
   rememberExerciseSession(null);
@@ -15029,8 +15193,12 @@ function returnToExercisePath() {
     navigate("exercise");
     return;
   }
+  if (returningToMap) {
+    learningPathViewMode = "map";
+    navigate("lessons", { learningPathReturnPosition: returnPosition });
+    return;
+  }
   navigate("dashboard");
-  $("learning-path")?.scrollIntoView({ block: "start" });
 }
 function returnToLearningPathAfterGuidedExercise(node, nextStep, replay) {
   if (exerciseBusy) return;
@@ -15824,6 +15992,7 @@ function renderExerciseQuestion() {
               card.classList.toggle("selected", input.checked);
               card.setAttribute("aria-checked", String(input.checked));
               card.tabIndex = 0;
+              syncExerciseSubmitAvailability();
               return;
             }
             input.checked = true;
@@ -15833,6 +16002,7 @@ function renderExerciseQuestion() {
               c.setAttribute("aria-checked", String(checked));
               c.tabIndex = checked ? 0 : -1;
             }
+            syncExerciseSubmitAvailability();
           });
           card.addEventListener("keydown", (event) => {
             if (
@@ -15856,19 +16026,18 @@ function renderExerciseQuestion() {
       }
       exerciseAwaitingNext = false;
       $("exercise-attempt-error").classList.add("hidden");
-      // The question can render before optional page state finishes loading.
-      // Keep the CTA aligned with the submit guard until that load completes.
       if (!exerciseBusy) setExerciseSubmitButtonState(false, "Cevabı kontrol et");
-      $("exercise-submit-attempt").disabled = exerciseLoading || exerciseBusy;
       const previous = exerciseAttempts.get(q.questionVersionId);
       const isRetrying = exerciseRetryingQuestionVersionId === q.questionVersionId;
       if (previous && !isRetrying) showExerciseFeedback(previous);
       if (isRetrying) exerciseRetryingQuestionVersionId = null;
+      syncExerciseSubmitAvailability();
     } catch (err) {
       const message = isDailyTrainingExercise()
         ? formatDailyTrainingError(err)
         : "Soru yüklenemedi. Bağlantını kontrol edip tekrar dene.";
       container.innerHTML = `<p class="error">${escapeHtml(message)}</p>`;
+      syncExerciseSubmitAvailability();
     }
   })();
 }
@@ -16026,6 +16195,53 @@ function exerciseAnswerLabel(answer, question) {
     .map((value) => options.find((option) => option.id === value)?.text ?? String(value))
     .join(", ");
 }
+
+function readExerciseAnswer(container) {
+  const type = container.dataset.questionType;
+  if (type === "MULTIPLE_CHOICE") {
+    const selected = Array.from(
+      container.querySelectorAll("[data-exercise-opt]:checked"),
+      (el) => el.value,
+    );
+    return selected.length ? selected : undefined;
+  }
+  if (type === "TRUE_FALSE") {
+    const selected = container.querySelector("[data-exercise-tf]:checked");
+    return selected ? selected.value === "true" : undefined;
+  }
+  if (type === "OPEN_ENDED") {
+    return container.querySelector("#exercise-oe-answer")?.value.trim() || undefined;
+  }
+  if (type === "MATCHING" || type === "FILL_BLANK") {
+    const attribute = type === "MATCHING" ? "data-exercise-match-left" : "data-exercise-blank";
+    const inputs = container.querySelectorAll(`[${attribute}]`);
+    if (!inputs.length) return undefined;
+    const answer = {};
+    for (const input of inputs) {
+      const value = input.value.trim();
+      if (!value) return undefined;
+      answer[input.getAttribute(attribute)] = value;
+    }
+    return answer;
+  }
+  return undefined;
+}
+
+function syncExerciseSubmitAvailability() {
+  const button = $("exercise-submit-attempt");
+  if (!button) return;
+  const container = $("exercise-current-question");
+  const questionId = container?.dataset?.questionVersionId;
+  button.disabled = !(
+    !exerciseLoading &&
+    !exerciseBusy &&
+    exerciseSession?.status === "IN_PROGRESS" &&
+    questionId &&
+    questionId === exerciseQuestions[currentExerciseQuestionIndex]?.questionVersionId &&
+    (exerciseAwaitingNext || readExerciseAnswer(container) !== undefined)
+  );
+}
+
 async function handleExerciseSubmitAttempt() {
   const container = $("exercise-current-question");
   const errEl = $("exercise-attempt-error");
@@ -16056,6 +16272,7 @@ async function handleExerciseSubmitAttempt() {
       });
       $("exercise-attempt-feedback").style.display = "none";
       setExerciseSubmitButtonState(false, "Cevabı kontrol et");
+      syncExerciseSubmitAvailability();
       return;
     }
     if (currentExerciseQuestionIndex === exerciseQuestions.length - 1) {
@@ -16068,48 +16285,13 @@ async function handleExerciseSubmitAttempt() {
   }
   errEl.classList.add("hidden");
   const questionVersionId = container.dataset.questionVersionId;
-  const type = container.dataset.questionType;
-  if (!questionVersionId || !type) return;
-  let answer;
-  try {
-    if (type === "MULTIPLE_CHOICE") {
-      const checked = Array.from(container.querySelectorAll("[data-exercise-opt]:checked")).map(
-        (el) => el.value,
-      );
-      if (checked.length === 0) throw new Error("En az bir seçenek seçin.");
-      answer = checked;
-    } else if (type === "TRUE_FALSE") {
-      const sel = container.querySelector("[data-exercise-tf]:checked");
-      if (!sel) throw new Error("Doğru/Yanlış seçin.");
-      answer = sel.value === "true";
-    } else if (type === "OPEN_ENDED") {
-      const val = (container.querySelector("#exercise-oe-answer")?.value ?? "").trim();
-      if (!val) throw new Error("Cevap boş olamaz.");
-      answer = val;
-    } else if (type === "MATCHING") {
-      const inputs = container.querySelectorAll("[data-exercise-match-left]");
-      const obj = {};
-      for (const sel of inputs) {
-        const leftId = sel.getAttribute("data-exercise-match-left");
-        const rightId = sel.value;
-        if (!rightId) throw new Error("Tüm eşleşmeleri seçin.");
-        obj[leftId] = rightId;
-      }
-      answer = obj;
-    } else if (type === "FILL_BLANK") {
-      const inputs = container.querySelectorAll("[data-exercise-blank]");
-      const obj = {};
-      for (const inp of inputs) {
-        const blankId = inp.getAttribute("data-exercise-blank");
-        const val = inp.value.trim();
-        if (!val) throw new Error(`Boşluk ${blankId} için cevap girin.`);
-        obj[blankId] = val;
-      }
-      answer = obj;
-    } else {
-      throw new Error("Bilinmeyen soru tipi");
-    }
-  } catch {
+  if (
+    !questionVersionId ||
+    questionVersionId !== exerciseQuestions[currentExerciseQuestionIndex]?.questionVersionId
+  )
+    return;
+  const answer = readExerciseAnswer(container);
+  if (answer === undefined) {
     if (errEl) {
       errEl.textContent = "Cevap biçimi geçersiz. Lütfen tekrar dene.";
       errEl.classList.remove("hidden");
@@ -16236,7 +16418,7 @@ async function handleExerciseSubmitAttempt() {
     lockExerciseInputs(exerciseRequest !== null);
   } finally {
     exerciseBusy = false;
-    btn.disabled = false;
+    syncExerciseSubmitAvailability();
     btn.removeAttribute("aria-busy");
     btn.querySelector(".btn-spinner")?.classList.add("hidden");
   }
@@ -16427,8 +16609,10 @@ async function handleExerciseComplete() {
     exerciseAwaitingNext = true;
   } finally {
     exerciseBusy = false;
-    if (student) setExerciseSubmitButtonState(false, "Tekrar dene");
-    else {
+    if (student) {
+      setExerciseSubmitButtonState(false, "Tekrar dene");
+      syncExerciseSubmitAvailability();
+    } else {
       btn.disabled = false;
       btn.removeAttribute("aria-busy");
       btn.textContent = "Oturumu Tamamla";
@@ -16481,6 +16665,9 @@ function setupExerciseEvents() {
   if (loadQBtn) loadQBtn.addEventListener("click", () => void loadExerciseQuestions());
   const submitBtn = $("exercise-submit-attempt");
   if (submitBtn) submitBtn.addEventListener("click", handleExerciseSubmitAttempt);
+  const question = $("exercise-current-question");
+  question?.addEventListener("input", syncExerciseSubmitAvailability);
+  question?.addEventListener("change", syncExerciseSubmitAvailability);
   const prevBtn = $("exercise-prev-question");
   if (prevBtn)
     prevBtn.addEventListener("click", () => {

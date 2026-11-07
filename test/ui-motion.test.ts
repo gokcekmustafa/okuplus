@@ -16,7 +16,11 @@ function harness(reduced = false, innerHeight = 800) {
   const document = {
     visibilityState: "visible",
     addEventListener: vi.fn(),
-    querySelector: () => null,
+    querySelector: vi.fn<
+      (selector: string) => {
+        getBoundingClientRect: () => { top: number; bottom: number; height: number };
+      } | null
+    >(() => null),
     scrollingElement: { scrollTop: 300 },
     documentElement: { style: { scrollBehavior: "smooth" } },
   };
@@ -185,14 +189,27 @@ describe("server-confirmed, optional UI motion", () => {
 
   it("keeps the next station visible on a short mobile viewport", async () => {
     const h = harness(false, 640);
-    h.buttons[1]!.getBoundingClientRect = () => ({ top: 422, bottom: 558 });
+    const bounds = (top: number, bottom: number) => ({
+      getBoundingClientRect: () => ({ top, bottom, height: bottom - top }),
+    });
+    h.document.querySelector.mockImplementation((selector) =>
+      selector === "#student-bottom-nav" ? bounds(550, 640) : bounds(68, 130),
+    );
+    h.buttons[1]!.getBoundingClientRect = () => {
+      const top = 495 - (h.document.scrollingElement.scrollTop - 300);
+      return { top, bottom: top + 136, height: 136 };
+    };
     const pending = h.motion.enhanceRoadmap(h.container, after(), "student", null, "31", {
       stepId: "31",
       viewportTop: 200,
     });
     h.flush();
-    expect(h.buttons[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(72);
-    expect(h.buttons[1]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(568);
+    expect(h.document.scrollingElement.scrollTop).toBe(389);
+    expect(h.buttons[1]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(130);
+    expect(h.buttons[1]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(550);
+    expect(h.animate.mock.calls.find(([frames]) => frames.length === 9)?.[1]).toMatchObject({
+      duration: 1400,
+    });
     h.animations[0]!.finish();
     await expect(pending).resolves.toMatchObject({ cancelled: false });
   });

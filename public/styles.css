@@ -7625,10 +7625,75 @@ textarea:focus-visible {
   }
 }
 
-/* Learning Path course view: the map remains on the home page; this page is
-   the calm, two-pane curriculum browser for choosing a module and a step. */
+/* Learning Path map and course browser share one route and one data source. */
 .student-shell .learning-path-course {
   max-width: 1180px;
+}
+
+.student-shell .learning-path-view-switch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--ui-line);
+  border-radius: 14px;
+  background: var(--ui-brand-soft);
+}
+
+.student-shell .learning-path-view-switch button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.student-shell .learning-path-view-switch button[aria-pressed="true"] {
+  background: var(--ui-surface);
+  color: var(--ui-brand);
+  box-shadow: 0 2px 8px rgb(55 38 115 / 10%);
+}
+
+.student-shell .learning-path-view-switch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.student-shell .learning-path-view-switch button:focus-visible {
+  outline: 3px solid #ba9aff;
+  outline-offset: 2px;
+}
+
+.student-shell .learning-path-course.show-map .learning-path-course-header {
+  position: sticky;
+  top: 68px;
+  z-index: 15;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-block: 4px;
+  background: var(--student-canvas, #f6f7fb);
+}
+
+.student-shell .learning-path-course.show-map .learning-path-course-header > div:first-child,
+.student-shell .learning-path-course.show-map #learning-path-course-summary,
+.student-shell .learning-path-course.show-map #lessons-refresh {
+  display: none !important;
+}
+
+.student-shell .learning-path-course.show-map .learning-path-course-header-actions {
+  width: 100%;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.student-shell #learning-path-map-view #learning-path-card {
+  margin-top: 0;
 }
 
 .student-shell .training-independent-note {
@@ -8184,6 +8249,28 @@ textarea:focus-visible {
 }
 
 @media (max-width: 560px) {
+  .student-shell .learning-path-course.show-list .learning-path-course-header {
+    align-items: stretch;
+  }
+
+  .student-shell .learning-path-course.show-list .learning-path-course-header-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-shell .learning-path-course.show-list .learning-path-view-switch {
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .student-shell .learning-path-course.show-list #learning-path-course-summary {
+    width: 100%;
+  }
+
+  .student-shell .learning-path-course.show-list #lessons-refresh {
+    width: fit-content;
+  }
+
   .student-shell .learning-path-course-header-actions {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
