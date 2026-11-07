@@ -179,6 +179,8 @@ describe("training home and development UI", () => {
     expect(onboarding).not.toContain("void loadToday()");
     expect(onboarding).not.toContain("void loadLearningPath()");
     expect(app).toContain("if (todayLoading) return;");
-    expect(app).toContain("if (learningPathLoading) return;");
+    expect(app).toMatch(
+      /if \(learningPathLoading\) \{\s*if \(isLearningPathMapPage\(\) && !container\.querySelector\("\.learning-map-v6"\)\) \{\s*container\.innerHTML =\s*[\s\S]*?loadingSkeleton\("map"\);\s*\}\s*return;\s*\}/u,
+    );
   });
 });
