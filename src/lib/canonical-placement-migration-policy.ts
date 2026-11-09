@@ -70,7 +70,7 @@ export const CYCLE5_TO_8_GRAPH_ONLY_PENDING_MIGRATION_SHA256 = {
   "20261021150000_add_account_deletion_requests":
     "2753bbc95a9d2afb4bb18582b088d6517207eff549cdf1360bbcc412be84efd9",
   "20261021170000_add_readiness_migration_status_function":
-    "55ee1df852291e6221eed9894733159c73b52034b0451b016642ce0e8e88cbf3",
+    "8f3213411c76ea0896941e88e5fc20485004206ac5ee8bf6f0087a88dbc0798a",
 } as const;
 
 export function verifyCycle5To8GraphOnlyMigrationSources(

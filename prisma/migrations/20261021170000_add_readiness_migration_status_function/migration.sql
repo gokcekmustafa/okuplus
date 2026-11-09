@@ -15,6 +15,14 @@ AS $function$
   )
 $function$;
 
--- Do not make the status function callable by every database role. A narrowly
--- scoped EXECUTE grant must be added only after the runtime role is verified.
+-- Only the verified Neon production runtime role needs explicit access.
 REVOKE ALL ON FUNCTION public.readiness_has_incomplete_migrations() FROM PUBLIC;
+
+-- Local and CI databases do not necessarily have the Neon role.
+DO $grant$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'neondb_owner') THEN
+    GRANT EXECUTE ON FUNCTION public.readiness_has_incomplete_migrations() TO neondb_owner;
+  END IF;
+END;
+$grant$;

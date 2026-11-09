@@ -24,11 +24,16 @@ describe("readiness migration status function security contract", () => {
     expect(migration).not.toMatch(/RETURNS\s+TABLE|RETURNS\s+SETOF/iu);
   });
 
-  it("revokes PUBLIC access and does not guess an application role", () => {
+  it("revokes PUBLIC access and only grants EXECUTE to the verified runtime role when present", () => {
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION public\.readiness_has_incomplete_migrations\(\) FROM PUBLIC/iu,
     );
-    expect(migration).not.toMatch(/^\s*GRANT\s/imu);
+    expect(migration).toMatch(
+      /IF EXISTS \(SELECT 1 FROM pg_catalog\.pg_roles WHERE rolname = 'neondb_owner'\) THEN/iu,
+    );
+    expect(migration.match(/^\s*GRANT\s[^;]+;/gimu)?.map((grant) => grant.trim())).toEqual([
+      "GRANT EXECUTE ON FUNCTION public.readiness_has_incomplete_migrations() TO neondb_owner;",
+    ]);
   });
 
   it("uses the narrow function and fails closed when its result is missing", () => {
