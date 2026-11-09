@@ -24,41 +24,19 @@
   height: 32px;
 }
 .student-shell .student-home-notifications {
-  display: none;
-}
-.student-home-profile {
-  display: none;
-}
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-profile:not(.hidden) {
-  display: grid;
-  width: 40px;
-  height: 44px;
+  display: block;
+  position: relative;
+  order: 2;
   flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--home-ink);
-  cursor: pointer;
 }
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-profile:hover,
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-profile:focus-visible {
-  background: #f0edff;
-  color: var(--home-purple);
+.student-shell .topbar-context {
+  order: 1;
 }
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-profile:focus-visible {
-  outline: 3px solid var(--home-purple);
-  outline-offset: 2px;
+.student-shell .topbar-user {
+  order: 3;
 }
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-profile svg {
-  width: 24px;
-  height: 24px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.student-shell #sidebar-toggle {
+  order: 4;
 }
 .student-shell .app-main:has(#page-dashboard:not(.hidden)) {
   padding-bottom: 0;
@@ -73,13 +51,10 @@
   box-shadow: none;
 }
 .student-shell .app-main:has(#page-dashboard:not(.hidden)) .topbar-context,
-.student-shell .app-main:has(#page-dashboard:not(.hidden)) .topbar-user,
 .student-shell .app-main:has(#page-dashboard:not(.hidden)) #sidebar-toggle {
   display: none;
 }
 .student-shell .app-main:has(#page-dashboard:not(.hidden)) .student-home-notifications {
-  display: block;
-  position: relative;
   margin-left: auto;
 }
 .student-home-notifications summary {

@@ -100,15 +100,16 @@ const pathData = {
 };
 
 describe("student home", () => {
-  it("shows a direct Profilim shortcut on the home top bar through the existing settings route", () => {
-    expect(html).toMatch(
-      /class="student-home-profile"[\s\S]*?data-user-menu-page="settings"[\s\S]*?aria-label="Profilim"/u,
+  it("keeps the standard name, theme and notification controls on the home top bar", () => {
+    expect(html).not.toContain("student-home-profile");
+    expect(html).toContain('id="user-menu-toggle"');
+    expect(html).toContain('id="theme-toggle"');
+    expect(html).toContain('class="student-home-notifications"');
+    expect(homeStyles).not.toMatch(
+      /\.student-shell \.app-main:has\(#page-dashboard:not\(\.hidden\)\) \.topbar-user\s*\{\s*display:\s*none/iu,
     );
     expect(homeStyles).toMatch(
-      /\.student-shell \.app-main:has\(#page-dashboard:not\(\.hidden\)\) \.student-home-profile:not\(\.hidden\)\s*\{[\s\S]*?display:\s*grid/iu,
-    );
-    expect(source).toMatch(
-      /\[data-user-menu-page\][\s\S]*navigateFromMenu\(item\.dataset\.userMenuPage\)/u,
+      /\.student-shell \.student-home-notifications\s*\{\s*display:\s*block/iu,
     );
   });
 
