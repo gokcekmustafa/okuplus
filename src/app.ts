@@ -121,6 +121,7 @@ export async function buildApp(
   });
   await app.register(authRoutes, {
     authProvider,
+    pilotAccessEnv: env,
     socialAuthService,
     googleOAuthClient,
     csrfSecret: env.JWT_SECRET,

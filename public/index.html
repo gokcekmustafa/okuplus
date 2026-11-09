@@ -623,6 +623,13 @@
             ></span>
             <span class="nav-label">Gelişimim</span>
           </button>
+          <button class="nav-item" data-page="settings" data-student type="button">
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#users"></use></svg
+            ></span>
+            <span class="nav-label">Profilim</span>
+          </button>
         </nav>
         <div class="platform-sidebar-footer">
           <span class="platform-footer-indicator" aria-hidden="true"></span>
@@ -6634,125 +6641,253 @@
             </dialog>
           </section>
 
-          <section id="page-settings" class="page-view hidden">
-            <div class="page-head">
-              <h2>Profil</h2>
-              <p class="muted">Hesabını, tercihlerini ve destek seçeneklerini yönet.</p>
-            </div>
-            <section class="settings-card card" aria-labelledby="account-profile-title">
+          <section id="page-settings" class="page-view profile-page hidden">
+            <header class="profile-header">
+              <span class="profile-icon profile-avatar" aria-hidden="true">
+                <svg class="ui-icon" viewBox="0 0 24 24">
+                  <use href="/assets/ui-icons.svg#users"></use>
+                </svg>
+              </span>
               <div>
-                <span class="eyebrow">KİŞİSEL BİLGİLER</span>
-                <h3 id="account-profile-title">Profil bilgilerin</h3>
-                <p class="muted">Hesabındaki kişi bilgilerini güncel tut.</p>
+                <h2>Profilim</h2>
+                <p id="account-profile-heading-name"></p>
+                <p id="account-profile-heading-email"></p>
               </div>
-              <form id="account-profile-form" class="settings-form" novalidate>
-                <label class="field">
-                  <span>Ad Soyad *</span>
-                  <input id="account-profile-name" type="text" maxlength="120" required />
-                </label>
-                <label class="field">
-                  <span>E-posta *</span>
-                  <input id="account-profile-email" type="email" maxlength="254" required />
-                </label>
-                <label class="field">
-                  <span>Telefon</span>
-                  <input
-                    id="account-profile-phone"
-                    type="tel"
-                    inputmode="numeric"
-                    maxlength="30"
-                    placeholder="0 (5xx) xxx xx xx"
-                  />
-                </label>
-                <label class="field">
-                  <span>Doğum yılı</span>
-                  <input id="account-profile-birthyear" type="number" min="1900" max="2026" />
-                </label>
-                <p id="account-profile-error" class="error hidden" role="alert"></p>
-                <p id="account-profile-status" class="muted" role="status"></p>
-                <button id="account-profile-submit" type="submit" class="btn btn-primary">
-                  Kaydet
-                </button>
-              </form>
-            </section>
-            <section class="settings-card card" aria-labelledby="account-deletion-request-title">
-              <div>
-                <span class="eyebrow">HESAP TALEBİ</span>
-                <h3 id="account-deletion-request-title">Hesap silme talebi</h3>
-                <p class="muted">
-                  Talep kaydı hesabını kapatmaz ve verilerini silmez. Ek kimlik doğrulaması ile
-                  kapsam ve saklama kararları tamamlanana kadar işlem başlatılmaz.
-                </p>
-              </div>
-              <p id="account-deletion-request-error" class="error hidden" role="alert"></p>
-              <p
-                id="account-deletion-request-status"
-                class="muted"
-                role="status"
-                aria-live="polite"
-              ></p>
-              <button id="account-deletion-request-submit" type="button" class="btn btn-secondary">
-                Talep oluştur
-              </button>
-            </section>
+            </header>
             <section
-              class="card premium-account-card"
-              data-personal-billing
-              aria-labelledby="premium-account-title"
+              id="profile-progress"
+              class="profile-card card hidden"
+              aria-labelledby="profile-progress-title"
             >
-              <div>
-                <span class="eyebrow">HESAP VE PAKET</span>
-                <h3 id="premium-account-title">Paketini ve kullanımını gör</h3>
-                <p class="muted">Ücretsiz günlük haklarını ve Ücretli Paket bilgisini incele.</p>
+              <div class="profile-card-heading">
+                <h3 id="profile-progress-title">Gelişimim</h3>
+                <button id="profile-open-progress" type="button" class="btn btn-ghost">
+                  Gelişimime git
+                </button>
               </div>
-              <button
-                type="button"
-                class="btn btn-secondary"
-                data-premium-action="OPEN_PREMIUM_INFO"
-              >
-                Ücretli Paket hakkında bilgi
-              </button>
-              <button
-                id="settings-billing-account"
-                type="button"
-                class="btn btn-ghost"
-                data-premium-action="OPEN_BILLING_ACCOUNT"
-              >
-                Aboneliği ve ödemeleri yönet
-              </button>
+              <p id="profile-progress-status" class="muted" role="status"></p>
+              <dl id="profile-progress-metrics" class="profile-metrics hidden">
+                <div hidden>
+                  <dt>Seviye</dt>
+                  <dd id="profile-level"></dd>
+                </div>
+                <div hidden>
+                  <dt>Tamamlanan istasyon</dt>
+                  <dd id="profile-stations"></dd>
+                </div>
+                <div hidden>
+                  <dt>Ölçüm oturumu</dt>
+                  <dd id="profile-sessions"></dd>
+                </div>
+              </dl>
             </section>
-            <div class="settings-card card">
-              <span class="coming-soon-icon" aria-hidden="true">⚙️</span>
-              <div>
-                <h3>Deneyimini kişiselleştir</h3>
-                <p class="muted">Küçük başarı anlarında ses efektlerini kullan.</p>
-                <label class="settings-toggle">
-                  <input type="checkbox" id="sound-effects-toggle" />
-                  <span>Ses efektleri</span>
-                </label>
+            <div class="profile-grid">
+              <section class="profile-card card" aria-labelledby="account-profile-title">
+                <div class="profile-card-heading">
+                  <span class="profile-icon" aria-hidden="true"
+                    ><svg class="ui-icon" viewBox="0 0 24 24">
+                      <use href="/assets/ui-icons.svg#users"></use></svg
+                  ></span>
+                  <h3 id="account-profile-title">Kişisel bilgiler</h3>
+                </div>
+                <form id="account-profile-form">
+                  <fieldset id="account-profile-fields" class="profile-fields" disabled>
+                    <label class="field">
+                      <span>Ad Soyad *</span>
+                      <input
+                        id="account-profile-name"
+                        type="text"
+                        autocomplete="name"
+                        maxlength="120"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>E-posta *</span>
+                      <input
+                        id="account-profile-email"
+                        type="email"
+                        autocomplete="email"
+                        maxlength="254"
+                        required
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Telefon</span>
+                      <input
+                        id="account-profile-phone"
+                        type="tel"
+                        autocomplete="tel"
+                        maxlength="30"
+                        placeholder="0 (5xx) xxx xx xx"
+                      />
+                    </label>
+                    <label class="field">
+                      <span>Doğum yılı</span>
+                      <input
+                        id="account-profile-birthyear"
+                        type="number"
+                        inputmode="numeric"
+                        autocomplete="bday-year"
+                        min="1900"
+                      />
+                    </label>
+                  </fieldset>
+                  <p id="account-profile-error" class="error hidden" role="alert"></p>
+                  <p id="account-profile-status" class="muted" role="status"></p>
+                  <div class="profile-actions">
+                    <button
+                      id="account-profile-submit"
+                      type="submit"
+                      class="btn btn-primary"
+                      disabled
+                    >
+                      Bilgileri kaydet
+                    </button>
+                    <button
+                      id="account-profile-retry"
+                      type="button"
+                      class="btn btn-secondary"
+                      hidden
+                    >
+                      Tekrar dene
+                    </button>
+                  </div>
+                </form>
+              </section>
+              <div class="profile-sidebar">
+                <section
+                  class="profile-card card"
+                  data-personal-billing
+                  aria-labelledby="premium-account-title"
+                >
+                  <div class="profile-card-heading">
+                    <span class="profile-icon" aria-hidden="true"
+                      ><svg class="ui-icon" viewBox="0 0 24 24">
+                        <use href="/assets/ui-icons.svg#credit"></use></svg
+                    ></span>
+                    <h3 id="premium-account-title">Paket ve abonelik</h3>
+                  </div>
+                  <p class="muted">Günlük kullanım haklarını ve ödeme bilgilerini incele.</p>
+                  <div class="profile-actions">
+                    <button
+                      type="button"
+                      class="btn btn-secondary"
+                      data-premium-action="OPEN_PREMIUM_INFO"
+                    >
+                      Ücretli Paket hakkında bilgi
+                    </button>
+                    <button
+                      id="settings-billing-account"
+                      type="button"
+                      class="btn btn-ghost"
+                      data-premium-action="OPEN_BILLING_ACCOUNT"
+                    >
+                      Aboneliği ve ödemeleri yönet
+                    </button>
+                  </div>
+                </section>
+                <section class="profile-card card" aria-labelledby="profile-preferences-title">
+                  <div class="profile-card-heading">
+                    <span class="profile-icon" aria-hidden="true"
+                      ><svg class="ui-icon" viewBox="0 0 24 24">
+                        <use href="/assets/ui-icons.svg#settings"></use></svg
+                    ></span>
+                    <h3 id="profile-preferences-title">Kişiselleştirme</h3>
+                  </div>
+                  <label class="settings-toggle profile-sound">
+                    <input type="checkbox" id="sound-effects-toggle" />
+                    <span>Ses efektleri</span>
+                  </label>
+                </section>
+                <section
+                  class="profile-card card"
+                  data-student
+                  aria-labelledby="pilot-support-title"
+                >
+                  <div class="profile-card-heading">
+                    <span class="profile-icon" aria-hidden="true"
+                      ><svg class="ui-icon" viewBox="0 0 24 24">
+                        <use href="/assets/ui-icons.svg#question"></use></svg
+                    ></span>
+                    <h3 id="pilot-support-title">Yardım ve destek</h3>
+                  </div>
+                  <p id="profile-support-availability" class="muted" role="status"></p>
+                  <div id="profile-support-actions" class="profile-actions" hidden>
+                    <button id="pilot-support-open" type="button" class="btn btn-secondary">
+                      Destek isteği gönder
+                    </button>
+                    <button id="pilot-bug-open" type="button" class="btn btn-ghost">
+                      Bir sorun bildir
+                    </button>
+                  </div>
+                  <p id="pilot-support-status" class="muted" role="status" aria-live="polite"></p>
+                </section>
               </div>
             </div>
-            <section
-              class="settings-card card pilot-support-card"
-              data-student
-              aria-labelledby="pilot-support-title"
-            >
-              <div>
-                <span class="eyebrow">PİLOT DESTEĞİ</span>
-                <h3 id="pilot-support-title">Bir yerde takıldın mı?</h3>
-                <p class="muted">
-                  Sorunu veya önerini teknik ayrıntılarla uğraşmadan bize iletebilirsin.
-                </p>
+            <section class="profile-card card" aria-labelledby="profile-privacy-title">
+              <div class="profile-card-heading">
+                <span class="profile-icon" aria-hidden="true"
+                  ><svg class="ui-icon" viewBox="0 0 24 24">
+                    <use href="/assets/ui-icons.svg#eye"></use></svg
+                ></span>
+                <h3 id="profile-privacy-title">Hesap ve Gizlilik</h3>
               </div>
-              <div class="settings-actions pilot-support-actions">
-                <button id="pilot-support-open" type="button" class="btn btn-secondary">
-                  Destek isteği gönder
-                </button>
-                <button id="pilot-bug-open" type="button" class="btn btn-ghost">
-                  Bir sorun bildir
-                </button>
-              </div>
-              <p id="pilot-support-status" class="muted" role="status" aria-live="polite"></p>
+              <details id="profile-deletion-details" class="profile-deletion">
+                <summary id="account-deletion-request-title">Hesap silme</summary>
+                <div class="profile-deletion-body">
+                  <p class="muted">
+                    Talep kaydı hesabını kapatmaz ve verilerini silmez. İşlemin ilerleyebilmesi için
+                    kimliğinin ayrıca doğrulanması ve talebinin değerlendirilmesi gerekir.
+                  </p>
+                  <p id="account-deletion-request-status" role="status"></p>
+                  <p id="account-deletion-request-error" class="error hidden" role="alert"></p>
+                  <div class="profile-actions">
+                    <button
+                      id="account-deletion-request-retry"
+                      type="button"
+                      class="btn btn-secondary"
+                      hidden
+                    >
+                      Durumu tekrar sorgula
+                    </button>
+                    <button
+                      id="account-deletion-request-submit"
+                      type="button"
+                      class="btn btn-secondary"
+                      hidden
+                    >
+                      Hesap silme talebi gönder
+                    </button>
+                  </div>
+                </div>
+              </details>
+              <dialog
+                id="profile-deletion-confirm"
+                class="dialog profile-confirm"
+                aria-labelledby="profile-confirm-title"
+                aria-describedby="profile-confirm-copy"
+              >
+                <form method="dialog">
+                  <h3 id="profile-confirm-title">Hesap silme talebi gönderilsin mi?</h3>
+                  <p id="profile-confirm-copy" class="muted">
+                    Onaylarsan hesabın için bir talep kaydı açılır. Hesabın ve verilerin bu adımda
+                    silinmez.
+                  </p>
+                  <div class="profile-actions">
+                    <button type="submit" value="cancel" class="btn btn-secondary" autofocus>
+                      Vazgeç
+                    </button>
+                    <button
+                      id="profile-deletion-confirm-send"
+                      type="button"
+                      class="btn btn-primary"
+                    >
+                      Talebi onayla ve gönder
+                    </button>
+                  </div>
+                </form>
+              </dialog>
             </section>
           </section>
         </main>

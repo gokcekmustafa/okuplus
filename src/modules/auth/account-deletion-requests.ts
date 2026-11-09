@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { serviceUnavailableError } from "../../lib/errors.js";
 import type { RequestContext } from "../tenant/context.js";
 import { withTenantContext } from "../tenant/context.js";
 
@@ -42,13 +43,20 @@ function ownerContext(userId: string): RequestContext {
 export async function getCurrentAccountDeletionRequest(
   userId: string,
 ): Promise<AccountDeletionRequestSnapshot | null> {
-  return withTenantContext(ownerContext(userId), (tx) =>
-    tx.accountDeletionRequest.findFirst({
-      where: { userId, status: { in: [...OPEN_STATUSES] } },
-      orderBy: { createdAt: "desc" },
-      select: requestSelect,
-    }),
-  );
+  try {
+    return await withTenantContext(ownerContext(userId), (tx) =>
+      tx.accountDeletionRequest.findFirst({
+        where: { userId, status: { in: [...OPEN_STATUSES] } },
+        orderBy: { createdAt: "desc" },
+        select: requestSelect,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") {
+      throw serviceUnavailableError("Hesap silme talebi geçici olarak kullanılamıyor");
+    }
+    throw error;
+  }
 }
 
 /**

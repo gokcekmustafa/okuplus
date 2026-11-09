@@ -34,6 +34,7 @@ let googleSocialConfig = null;
 const SECURE_SESSION_KEY = "oku.session.v1";
 const nativeSession = { accessToken: null, refreshToken: null, tenantId: null };
 let currentPage = null;
+let profileView = null;
 
 function resolveApiRequest(input) {
   if (!configuredApiBaseUrl || typeof input !== "string" || !input.startsWith("/")) {
@@ -455,6 +456,7 @@ async function setStoredSession(data) {
 }
 
 function clearStoredSession() {
+  profileView = null;
   resetInsights();
   latestEntitlements = null;
   latestBillingSubscription = null;
@@ -1271,17 +1273,16 @@ async function refreshStoredTokens(refreshToken, tenantId) {
 async function authenticatedFetch(path, options = {}) {
   const requestOptions = { ...options, credentials: "include" };
   const method = String(requestOptions.method || "GET").toUpperCase();
-  const requestHeaders = {
-    ...(method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE"
-      ? csrfHeaders()
-      : {}),
-    ...(requestOptions.headers || {}),
-  };
+  const writes = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
   const initialTokens = getStoredTokens();
   const request = (tokens) =>
     fetch(path, {
       ...requestOptions,
-      headers: authenticatedRequestHeaders(requestHeaders, tokens.accessToken, tokens.tenantId),
+      headers: authenticatedRequestHeaders(
+        { ...(writes ? csrfHeaders() : {}), ...(requestOptions.headers || {}) },
+        tokens.accessToken,
+        tokens.tenantId,
+      ),
     });
 
   const response = await request(initialTokens);
@@ -1398,6 +1399,7 @@ function showLogin() {
 }
 
 function showDashboard(me) {
+  profileView = null;
   $("view-login").classList.add("hidden");
   $("view-app").classList.remove("hidden");
   $("view-guest")?.classList.add("hidden");
@@ -1533,6 +1535,11 @@ function openAccountDeletionRequestFromExternalLink() {
   url.searchParams.delete("account-deletion");
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   navigate("settings");
+  const details = $("profile-deletion-details");
+  if (details) {
+    details.open = true;
+    requestAnimationFrame(() => details.open && details.scrollIntoView({ block: "nearest" }));
+  }
   return true;
 }
 
@@ -1543,27 +1550,55 @@ function organizationTenantOption(select) {
   return true;
 }
 
+function fillAccountProfile(data) {
+  $("account-profile-name").value = data.displayName ?? "";
+  $("account-profile-email").value = data.email ?? "";
+  $("account-profile-phone").value = data.phone ?? "";
+  $("account-profile-birthyear").value = data.birthYear ?? "";
+  $("account-profile-heading-name").textContent = data.displayName ?? "";
+  $("account-profile-heading-email").textContent = data.email ?? "";
+}
+
 async function loadAccountProfile() {
-  const form = $("account-profile-form");
-  if (!form) return;
-  const tokens = getStoredTokens();
+  const view = profileView;
+  if (!view || view.profileLoading) return;
+  view.profileLoading = true;
+  const errorEl = $("account-profile-error");
+  const retry = $("account-profile-retry");
+  const status = $("account-profile-status");
+  retry.hidden = true;
+  errorEl.classList.add("hidden");
+  status.textContent = "Profil bilgilerin yükleniyor…";
   try {
     const data = await parseResponse(
-      await fetch("/auth/profile", { headers: authHeaders(tokens.accessToken, tokens.tenantId) }),
+      await authenticatedFetch("/auth/profile", { cache: "no-store" }),
     );
-    $("account-profile-name").value = data.displayName ?? "";
-    $("account-profile-email").value = data.email ?? "";
-    $("account-profile-phone").value = data.phone ?? "";
-    $("account-profile-birthyear").value = data.birthYear ?? "";
-    $("account-profile-error").classList.add("hidden");
+    if (view !== profileView) return;
+    fillAccountProfile(data);
+    $("account-profile-fields").disabled = false;
+    $("account-profile-submit").disabled = false;
+    $("profile-support-actions").hidden = data.pilotSupportAvailable !== true;
+    $("profile-support-availability").textContent = data.pilotSupportAvailable
+      ? "Geri bildirim gönder veya karşılaştığın bir sorunu bildir."
+      : "Uygulama içi destek şu anda kullanılamıyor.";
+    status.textContent = "";
   } catch (error) {
-    $("account-profile-error").textContent = error.message || "Profil bilgileri yüklenemedi.";
-    $("account-profile-error").classList.remove("hidden");
+    if (view !== profileView) return;
+    status.textContent = "";
+    errorEl.textContent = formatStudentError(error, "Profil bilgileri yüklenemedi.");
+    errorEl.classList.remove("hidden");
+    retry.hidden = false;
+  } finally {
+    view.profileLoading = false;
   }
 }
 
 async function submitAccountProfile(event) {
   event.preventDefault();
+  const view = profileView;
+  const fields = $("account-profile-fields");
+  const button = $("account-profile-submit");
+  if (!view || fields.disabled || button.disabled) return;
   const errorEl = $("account-profile-error");
   const status = $("account-profile-status");
   errorEl.classList.add("hidden");
@@ -1576,107 +1611,165 @@ async function submitAccountProfile(event) {
       ? Number($("account-profile-birthyear").value)
       : null,
   };
-  const button = $("account-profile-submit");
+  fields.disabled = true;
   setAsyncButtonState(button, true, "Kaydediliyor…");
   status.textContent = "Profil kaydediliyor…";
   try {
-    const tokens = getStoredTokens();
     const data = await parseResponse(
-      await fetch("/auth/profile", {
+      await authenticatedFetch("/auth/profile", {
         method: "PATCH",
-        headers: {
-          ...authHeaders(tokens.accessToken, tokens.tenantId),
-          ...csrfHeaders(),
-          "content-type": "application/json",
-        },
         body: JSON.stringify(payload),
       }),
     );
-    $("account-profile-name").value = data.displayName ?? "";
-    $("account-profile-email").value = data.email ?? "";
-    $("account-profile-phone").value = data.phone ?? "";
-    $("account-profile-birthyear").value = data.birthYear ?? "";
+    if (view !== profileView) return;
+    fillAccountProfile(data);
     $("user-name").textContent = data.displayName ?? "";
     $("welcome-name").textContent = data.displayName ?? "";
     status.textContent = "Profil bilgilerin kaydedildi.";
   } catch (caughtError) {
-    errorEl.textContent = caughtError.message || "Profil bilgileri kaydedilemedi.";
+    if (view !== profileView) return;
+    status.textContent = "";
+    errorEl.textContent =
+      caughtError.status === 409
+        ? "Bu e-posta adresi zaten kullanımda."
+        : formatStudentError(caughtError, "Profil bilgileri kaydedilemedi. Tekrar dene.");
     errorEl.classList.remove("hidden");
   } finally {
-    setAsyncButtonState(button, false, "Kaydediliyor…");
+    if (view === profileView) {
+      fields.disabled = false;
+      setAsyncButtonState(button, false, "Kaydediliyor…");
+    }
   }
+}
+
+async function loadProfileProgress(view) {
+  const [pathResult, progressResult] = await Promise.allSettled([
+    insightApi("learning-path"),
+    insightApi("progress"),
+  ]);
+  if (view !== profileView) return;
+  const path = pathResult.value;
+  const completed = (path?.routeProgress ?? path?.overallProgress)?.completed;
+  const sessions = progressResult.value?.summary?.sessionCount;
+  const metrics = [
+    ["profile-level", path?.currentLevel?.name],
+    ["profile-stations", Number.isFinite(completed) ? completed : null],
+    ["profile-sessions", Number.isFinite(sessions) ? sessions : null],
+  ];
+  for (const [id, value] of metrics) {
+    const metric = $(id);
+    metric.textContent = value ?? "";
+    metric.parentElement.hidden = value == null || value === "";
+  }
+  const hasMetrics = metrics.some(([, value]) => value != null && value !== "");
+  $("profile-progress-metrics").classList.toggle("hidden", !hasMetrics);
+  $("profile-progress-status").textContent = hasMetrics
+    ? ""
+    : [pathResult, progressResult].some((result) => result.status === "rejected")
+      ? "Gelişim özeti şu anda yüklenemedi."
+      : "Gelişim verilerin hazır olduğunda burada görünecek.";
+}
+
+function openProfileView() {
+  const view = (profileView = { deletionState: "idle" });
+  const button = $("account-profile-submit");
+  setAsyncButtonState(button, false, "Kaydediliyor…");
+  button.disabled = true;
+  $("account-profile-fields").disabled = true;
+  $("account-profile-birthyear").max = new Date().getFullYear();
+  fillAccountProfile({ displayName: $("user-name").textContent });
+  $("profile-support-actions").hidden = true;
+  $("profile-support-availability").textContent = "";
+  $("pilot-support-status").textContent = "";
+  $("profile-deletion-details").open = false;
+  $("profile-deletion-confirm").close();
+  $("account-deletion-request-error").classList.add("hidden");
+  $("account-deletion-request-status").textContent = "";
+  $("account-deletion-request-retry").hidden = true;
+  $("account-deletion-request-submit").hidden = true;
+  $("profile-progress").classList.toggle("hidden", !isStudentUser);
+  $("profile-progress-metrics").classList.add("hidden");
+  $("profile-progress-status").textContent = "Gelişim özeti yükleniyor…";
+  if (isStudentUser) void loadProfileProgress(view);
+  void loadAccountProfile();
 }
 
 function setupAccountProfileEvents() {
   $("account-profile-form")?.addEventListener("submit", submitAccountProfile);
+  $("account-profile-retry")?.addEventListener("click", () => void loadAccountProfile());
+  $("profile-open-progress")?.addEventListener("click", () => navigate("progress"));
 }
 
 function accountDeletionRequestStatusMessage(request) {
   if (!request) return "Henüz bir hesap silme talebin yok.";
   if (request.status === "IDENTITY_REQUIRED") {
-    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor. Bu kayıt hesabını veya verilerini silmez.";
+    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor.";
   }
-  return "Talebin kayıtlı. Hesabın veya verilerin silindiği anlamına gelmez.";
+  return "Hesap silme talebin kayıtlı.";
 }
 
-async function loadAccountDeletionRequest() {
+async function loadAccountDeletionRequest(submit = false) {
+  const view = profileView;
+  if (!view || view.deletionState === "pending" || (submit && view.deletionState !== "ready"))
+    return;
   const status = $("account-deletion-request-status");
   const errorEl = $("account-deletion-request-error");
   const button = $("account-deletion-request-submit");
-  if (!status || !errorEl || !button) return;
-
+  const retry = $("account-deletion-request-retry");
+  view.deletionState = "pending";
+  retry.hidden = button.hidden = true;
+  status.textContent = submit ? "Talebin gönderiliyor…" : "Talep durumu kontrol ediliyor…";
   errorEl.classList.add("hidden");
   try {
-    const tokens = getStoredTokens();
     const data = await parseResponse(
-      await fetch("/auth/account-deletion-requests/current", {
-        headers: authHeaders(tokens.accessToken, tokens.tenantId),
-        cache: "no-store",
-      }),
+      submit
+        ? await authenticatedFetch("/auth/account-deletion-requests", {
+            method: "POST",
+            body: "{}",
+          })
+        : await authenticatedFetch("/auth/account-deletion-requests/current", {
+            cache: "no-store",
+          }),
     );
-    const request = data.request ?? null;
+    if (view !== profileView) return;
+    const request = data?.request;
+    if (request !== null && typeof request?.status !== "string") throw new Error("Invalid request");
+    if (submit && !request) throw new Error("Missing submitted request");
+    view.deletionState = request ? "recorded" : "ready";
     status.textContent = accountDeletionRequestStatusMessage(request);
     button.hidden = Boolean(request);
   } catch (error) {
-    errorEl.textContent = error.message || "Talep durumu yüklenemedi.";
+    if (view !== profileView) return;
+    view.deletionState = "error";
+    status.textContent = "";
+    errorEl.textContent =
+      error.status === 401 || error.status === 403
+        ? formatStudentError(error)
+        : submit
+          ? "Talebin kaydedildiğini doğrulayamadık. Yeniden göndermeden önce durumu kontrol et."
+          : "Talep durumu şu anda yüklenemiyor. Biraz sonra tekrar dene.";
     errorEl.classList.remove("hidden");
-    button.hidden = false;
-  }
-}
-
-async function submitAccountDeletionRequest() {
-  const status = $("account-deletion-request-status");
-  const errorEl = $("account-deletion-request-error");
-  const button = $("account-deletion-request-submit");
-  if (!status || !errorEl || !button || button.disabled) return;
-
-  errorEl.classList.add("hidden");
-  setAsyncButtonState(button, true, "Talep kaydediliyor…");
-  try {
-    const tokens = getStoredTokens();
-    const data = await parseResponse(
-      await fetch("/auth/account-deletion-requests", {
-        method: "POST",
-        headers: {
-          ...authHeaders(tokens.accessToken, tokens.tenantId),
-          ...csrfHeaders(),
-        },
-        body: JSON.stringify({}),
-      }),
-    );
-    status.textContent = data.message || accountDeletionRequestStatusMessage(data.request ?? null);
-    button.hidden = true;
-  } catch (error) {
-    errorEl.textContent = error.message || "Talep kaydedilemedi. Tekrar deneyebilirsin.";
-    errorEl.classList.remove("hidden");
-  } finally {
-    setAsyncButtonState(button, false, "Talep kaydediliyor…");
+    retry.hidden = false;
   }
 }
 
 function setupAccountDeletionRequestEvents() {
+  const details = $("profile-deletion-details");
+  const dialog = $("profile-deletion-confirm");
+  details?.addEventListener("toggle", () => {
+    if (details.open && profileView?.deletionState === "idle") void loadAccountDeletionRequest();
+  });
+  $("account-deletion-request-retry")?.addEventListener(
+    "click",
+    () => void loadAccountDeletionRequest(),
+  );
   $("account-deletion-request-submit")?.addEventListener("click", () => {
-    void submitAccountDeletionRequest();
+    if (profileView?.deletionState === "ready") dialog.showModal();
+  });
+  $("profile-deletion-confirm-send")?.addEventListener("click", () => {
+    if (!dialog.open) return;
+    dialog.close();
+    void loadAccountDeletionRequest(true);
   });
 }
 
@@ -6116,6 +6209,7 @@ function navigate(
   if (page !== "dashboard") clearLearningPathTransitionStatus();
   else if (!continuation) clearLearningPathTransitionStatus();
 
+  if (page !== "settings") profileView = null;
   currentPage = page;
   if (currentPlatformRole === "SUPER_ADMIN") updatePlatformAdminHeading(page);
 
@@ -6146,8 +6240,7 @@ function navigate(
   } else if (page === "billing-account") {
     void loadBillingAccount();
   } else if (page === "settings") {
-    void loadAccountProfile();
-    void loadAccountDeletionRequest();
+    openProfileView();
   } else if (page === "tenants") {
     void loadTenants();
   } else if (page === "users") {

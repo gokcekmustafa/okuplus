@@ -1,4 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { Env } from "../../config/env.js";
+import { isPilotAccessAllowed } from "../pilot/access.js";
 import { ok } from "../../lib/response.js";
 import type {
   AuthProvider,
@@ -132,6 +134,7 @@ export async function authRoutes(
   app: FastifyInstance,
   opts: {
     authProvider: AuthProvider;
+    pilotAccessEnv: Pick<Env, "APP_ENV" | "PILOT_MODE" | "PILOT_STUDENT_ACCESS">;
     socialAuthService: SocialAuthService;
     googleOAuthClient: GoogleOAuthClient;
     csrfSecret: string;
@@ -400,8 +403,13 @@ export async function authRoutes(
     });
   });
 
-  app.get("/auth/profile", { preHandler: [requireAuth(authProvider)] }, async (request) => {
-    return ok(await getAccountProfile(request.authUser!.id));
+  app.get("/auth/profile", { preHandler: [requireAuth(authProvider)] }, async (request, reply) => {
+    setNoStore(reply);
+    const user = request.authUser!;
+    return ok({
+      ...(await getAccountProfile(user.id)),
+      pilotSupportAvailable: !user.platformRole && isPilotAccessAllowed(opts.pilotAccessEnv, user),
+    });
   });
 
   app.patch("/auth/profile", { preHandler: [requireAuth(authProvider)] }, async (request) => {

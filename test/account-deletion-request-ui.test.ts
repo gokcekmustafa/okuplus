@@ -23,34 +23,35 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
     classList: { add: vi.fn(), remove: vi.fn() },
   };
   const button = {
-    hidden: false,
+    hidden: true,
     disabled: false,
-    textContent: "Talep oluştur",
+    textContent: "Hesap silme talebi gönder",
   };
+  const retry = { hidden: true };
   const nodes: Record<string, unknown> = {
     "account-deletion-request-status": status,
     "account-deletion-request-error": error,
     "account-deletion-request-submit": button,
+    "account-deletion-request-retry": retry,
   };
   const fetch = vi.fn(async () => ({}));
   const parseResponse = vi.fn(async () => ({ request: null }));
   const context = createContext({
     $: (id: string) => nodes[id],
-    getStoredTokens: () => ({ accessToken: "current-session", tenantId: "tenant-a" }),
-    authHeaders: (accessToken: string, tenantId: string) => ({
-      authorization: `Bearer ${accessToken}`,
-      "x-tenant-id": tenantId,
-      "content-type": "application/json",
-    }),
-    csrfHeaders: () => ({ "x-csrf-token": "csrf-token" }),
-    setAsyncButtonState: (target: typeof button, busy: boolean) => {
-      target.disabled = busy;
-    },
-    fetch,
+    profileView: { deletionState: "idle" },
+    formatStudentError: () => "Oturumun sona ermiş olabilir.",
+    authenticatedFetch: fetch,
     parseResponse,
     ...overrides,
   });
-  return { context, status, error, button, fetch, parseResponse };
+  runInContext(
+    functionSource(
+      "function accountDeletionRequestStatusMessage(",
+      "function configureOrganizationScopeUi()",
+    ),
+    context,
+  );
+  return { context, status, error, button, retry, fetch, parseResponse, nodes };
 }
 
 describe("account deletion request UI", () => {
@@ -65,8 +66,11 @@ describe("account deletion request UI", () => {
   it("opens account settings after sign-in from the external deletion link and removes its marker", () => {
     const navigate = vi.fn();
     const replaceState = vi.fn();
+    const details = { open: false, scrollIntoView: vi.fn() };
     const context = createContext({
       URL,
+      $: () => details,
+      requestAnimationFrame: (callback: () => void) => callback(),
       window: {
         location: { href: "https://www.okupratik.com/?account-deletion=1&campaign=store#request" },
         history: { replaceState },
@@ -84,6 +88,7 @@ describe("account deletion request UI", () => {
     );
     expect(replaceState).toHaveBeenCalledWith(null, "", "/?campaign=store#request");
     expect(navigate).toHaveBeenCalledExactlyOnceWith("settings");
+    expect(details.open).toBe(true);
     expect(appSource).toContain("if (openAccountDeletionRequestFromExternalLink()) return;");
   });
 
@@ -112,10 +117,11 @@ describe("account deletion request UI", () => {
   });
 
   it("adds an accessible settings entry point that clearly says no data is deleted", () => {
-    expect(htmlSource).toContain('aria-labelledby="account-deletion-request-title"');
+    expect(htmlSource).toContain('id="profile-deletion-details"');
     expect(htmlSource).toContain('id="account-deletion-request-status"');
     expect(htmlSource).toContain('role="alert"');
     expect(htmlSource).toContain('id="account-deletion-request-submit"');
+    expect(htmlSource).toContain('id="profile-deletion-confirm-send"');
     expect(htmlSource).toContain("Talep kaydı hesabını kapatmaz ve verilerini silmez.");
   });
 
@@ -124,10 +130,6 @@ describe("account deletion request UI", () => {
     h.parseResponse.mockResolvedValue({
       request: { id: "request-1", status: "IDENTITY_REQUIRED" },
     });
-    runInContext(
-      `${functionSource("function accountDeletionRequestStatusMessage(", "async function submitAccountDeletionRequest()")}; loadAccountDeletionRequest`,
-      h.context,
-    );
     await runInContext("loadAccountDeletionRequest()", h.context);
 
     expect(h.fetch).toHaveBeenCalledExactlyOnceWith(
@@ -135,53 +137,133 @@ describe("account deletion request UI", () => {
       expect.objectContaining({ cache: "no-store" }),
     );
     expect(h.status.textContent).toContain("ek kimlik doğrulaması bekliyor");
-    expect(h.status.textContent).toContain("verilerini silmez");
     expect(h.button.hidden).toBe(true);
   });
 
-  it("posts an empty body with auth and CSRF headers, then reports request-only success", async () => {
+  it("only posts after confirmation and uses the authenticated fetch wrapper", async () => {
     const h = makeHarness();
+    const events = new Map<string, () => unknown>();
+    const bind = (id: string) => ({
+      addEventListener: (name: string, fn: () => unknown) => events.set(id + name, fn),
+    });
+    const details = { ...bind("details"), open: false };
+    const dialog = {
+      open: false,
+      showModal: vi.fn(() => {
+        dialog.open = true;
+      }),
+      close: vi.fn(() => {
+        dialog.open = false;
+      }),
+    };
+    h.nodes["profile-deletion-details"] = details;
+    h.nodes["profile-deletion-confirm"] = dialog;
+    h.nodes["profile-deletion-confirm-send"] = bind("confirm");
+    Object.assign(h.button, bind("submit"));
+    Object.assign(h.retry, bind("retry"));
+    runInContext("setupAccountDeletionRequestEvents()", h.context);
+    events.get("detailstoggle")!();
+    expect(h.fetch).not.toHaveBeenCalled();
+    await runInContext("loadAccountDeletionRequest()", h.context);
+    expect(h.button.hidden).toBe(false);
+    events.get("submitclick")!();
+    expect(dialog.showModal).toHaveBeenCalledOnce();
+    expect(h.fetch).toHaveBeenCalledTimes(1);
+    dialog.close();
+    events.get("confirmclick")!();
+    expect(h.fetch).toHaveBeenCalledTimes(1);
     h.parseResponse.mockResolvedValue({
       request: { id: "request-2", status: "IDENTITY_REQUIRED" },
-      message: "Talebin kaydedildi; bu kayıt verilerini silmez.",
     });
-    runInContext(
-      `${functionSource("async function submitAccountDeletionRequest()", "function setupAccountDeletionRequestEvents()")}; submitAccountDeletionRequest`,
-      h.context,
+    events.get("submitclick")!();
+    events.get("confirmclick")!();
+    await vi.waitFor(() =>
+      expect(h.status.textContent).toContain("ek kimlik doğrulaması bekliyor"),
     );
-    await runInContext("submitAccountDeletionRequest()", h.context);
 
-    expect(h.fetch).toHaveBeenCalledExactlyOnceWith(
+    expect(h.fetch).toHaveBeenLastCalledWith(
       "/auth/account-deletion-requests",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({
-          authorization: "Bearer current-session",
-          "x-csrf-token": "csrf-token",
-        }),
         body: "{}",
       }),
     );
-    expect(h.status.textContent).toContain("bu kayıt verilerini silmez");
     expect(h.button.hidden).toBe(true);
-    expect(h.button.disabled).toBe(false);
   });
 
-  it("shows a visible error when request creation fails", async () => {
-    const h = makeHarness({
-      parseResponse: async () => {
-        throw new Error("Talep kaydedilemedi");
-      },
+  it("does not expose a failed lookup as an empty result and enables safe retry", async () => {
+    const h = makeHarness();
+    h.parseResponse.mockRejectedValueOnce(new Error("Prisma P2021: relation missing"));
+    await runInContext("loadAccountDeletionRequest()", h.context);
+    expect(h.error.textContent).toContain("Talep durumu şu anda yüklenemiyor");
+    expect(h.error.textContent).not.toContain("Prisma");
+    expect(h.error.classList.remove).toHaveBeenCalledWith("hidden");
+    expect(h.retry.hidden).toBe(false);
+    expect(h.button.hidden).toBe(true);
+    await runInContext("loadAccountDeletionRequest(true)", h.context);
+    expect(h.fetch).toHaveBeenCalledTimes(1);
+    await runInContext("loadAccountDeletionRequest()", h.context);
+    expect(h.retry.hidden).toBe(true);
+    expect(h.button.hidden).toBe(false);
+  });
+
+  it("checks status before offering to resend after an ambiguous POST failure", async () => {
+    const h = makeHarness();
+    await runInContext("loadAccountDeletionRequest()", h.context);
+    h.parseResponse.mockRejectedValueOnce(new Error("Connection lost"));
+    await runInContext("loadAccountDeletionRequest(true)", h.context);
+    expect(h.error.textContent).toContain("Yeniden göndermeden önce");
+    expect(h.retry.hidden).toBe(false);
+    expect(h.button.hidden).toBe(true);
+  });
+
+  it("ignores a response that belongs to an earlier profile view", async () => {
+    const h = makeHarness();
+    const pending = runInContext("loadAccountDeletionRequest()", h.context);
+    runInContext("profileView = { deletionState: 'idle' }", h.context);
+    await pending;
+    expect(h.button.hidden).toBe(true);
+    expect(runInContext("profileView.deletionState", h.context)).toBe("idle");
+  });
+
+  it("retries a cookie-only write with the CSRF token from the refreshed session", async () => {
+    let csrf = "original";
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 401 })
+      .mockResolvedValueOnce({ status: 202 });
+    const refreshStoredTokens = vi.fn(async () => {
+      csrf = "refreshed";
+      return { accessToken: null };
+    });
+    const context = createContext({
+      fetch,
+      refreshStoredTokens,
+      nativeMobileRuntime: false,
+      getStoredTokens: () => ({ accessToken: null, refreshToken: null, tenantId: "tenant-a" }),
+      authHeaders: () => ({ "content-type": "application/json", "x-tenant-id": "tenant-a" }),
+      csrfHeaders: () => ({ "x-csrf-token": csrf }),
     });
     runInContext(
-      `${functionSource("async function submitAccountDeletionRequest()", "function setupAccountDeletionRequestEvents()")}; submitAccountDeletionRequest`,
-      h.context,
+      functionSource(
+        "function authenticatedRequestHeaders(",
+        "async function refreshStoredTokens(",
+      ) + functionSource("async function authenticatedFetch(", "async function logout("),
+      context,
     );
-    await runInContext("submitAccountDeletionRequest()", h.context);
-
-    expect(h.error.textContent).toBe("Talep kaydedilemedi");
-    expect(h.error.classList.remove).toHaveBeenCalledWith("hidden");
-    expect(h.button.hidden).toBe(false);
-    expect(h.button.disabled).toBe(false);
+    await runInContext(
+      'authenticatedFetch("/auth/account-deletion-requests", { method: "POST", body: "{}" })',
+      context,
+    );
+    expect(refreshStoredTokens).toHaveBeenCalledExactlyOnceWith(null, "tenant-a");
+    expect(fetch.mock.calls.map(([, request]) => request.headers)).toEqual(
+      ["original", "refreshed"].map((token) => ({
+        "x-auth-transport": "cookie",
+        "content-type": "application/json",
+        "x-tenant-id": "tenant-a",
+        "x-csrf-token": token,
+      })),
+    );
+    expect(fetch.mock.calls.every(([, request]) => request.credentials === "include")).toBe(true);
   });
 });
