@@ -10,6 +10,7 @@ const homeCode = source.slice(
 const usableStart = source.indexOf("function isUsableLearningPathNode(");
 const usableCode = source.slice(usableStart, source.indexOf("\n}", usableStart) + 2);
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+const homeStyles = readFileSync(new URL("../public/student-home.css", import.meta.url), "utf8");
 
 function harness() {
   type Element = {
@@ -99,6 +100,18 @@ const pathData = {
 };
 
 describe("student home", () => {
+  it("shows a direct Profilim shortcut on the home top bar through the existing settings route", () => {
+    expect(html).toMatch(
+      /class="student-home-profile"[\s\S]*?data-user-menu-page="settings"[\s\S]*?aria-label="Profilim"/u,
+    );
+    expect(homeStyles).toMatch(
+      /\.student-shell \.app-main:has\(#page-dashboard:not\(\.hidden\)\) \.student-home-profile:not\(\.hidden\)\s*\{[\s\S]*?display:\s*grid/iu,
+    );
+    expect(source).toMatch(
+      /\[data-user-menu-page\][\s\S]*navigateFromMenu\(item\.dataset\.userMenuPage\)/u,
+    );
+  });
+
   it("opens the server-unlocked Learning Path station, not independent training", () => {
     const h = harness();
     h.render(pathData);
