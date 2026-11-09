@@ -544,7 +544,7 @@
 }
 @media (min-width: 769px) {
   .student-shell .app-main:has(#page-dashboard:not(.hidden)) > .topbar {
-    padding-inline: max(25px, calc((100% - 400px) / 2));
+    padding-inline: calc(16px + max(0px, (100% - 1392px) / 2));
   }
   .student-shell .page:has(#page-dashboard:not(.hidden)) {
     padding-top: 12px;
@@ -632,4 +632,182 @@
 .home-activity-copy strong,
 .home-activity-copy span {
   font-family: Arial, sans-serif;
+}
+
+/* Give tablet and desktop learners their available workspace while keeping the
+   approved narrow-phone composition unchanged. */
+@media (min-width: 600px) {
+  .student-shell .page-view {
+    max-width: 1360px;
+  }
+
+  .student-shell #page-dashboard {
+    max-width: 1360px;
+    margin-inline: auto;
+  }
+
+  .student-home .home-welcome {
+    margin-inline: 0;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1199px) {
+  .student-home {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .student-home .home-welcome {
+    grid-column: 1 / -1;
+    height: 188px;
+    border-radius: 24px;
+  }
+
+  .student-home .home-work-card {
+    grid-column: 1 / -1;
+    margin-top: -34px;
+  }
+
+  .student-shell #home-insights.home-status-card:not(.hidden) {
+    grid-column: span 7;
+    align-self: start;
+  }
+
+  .student-home .home-recent-card {
+    grid-column: span 5;
+    align-self: start;
+  }
+
+  .student-home .home-card-heading h2 {
+    font-size: 15px;
+  }
+
+  .student-home .home-measurements {
+    gap: 7px;
+  }
+
+  .student-home .home-measurement {
+    gap: 7px;
+    padding-inline: 9px;
+  }
+}
+
+@media (min-width: 769px) {
+  .student-shell #page-dashboard {
+    width: 100%;
+  }
+
+  .student-home {
+    gap: 18px;
+  }
+
+  .student-home .home-welcome {
+    height: clamp(188px, 15vw, 230px);
+    border-radius: 26px;
+    background-position: center 66%;
+  }
+
+  .student-home .home-welcome-copy {
+    max-width: 600px;
+    padding: clamp(26px, 3vw, 40px);
+  }
+
+  .student-home .home-welcome h2 {
+    font-size: clamp(26px, 2.2vw, 32px);
+  }
+
+  .student-home .home-welcome p {
+    max-width: 54ch;
+    font-size: 16px;
+  }
+
+  .student-home .home-work-card {
+    margin-top: -32px;
+  }
+
+  .student-shell #home-insights.home-status-card:not(.hidden) {
+    margin-top: -32px;
+    padding: 14px 14px 12px;
+  }
+
+  .student-home .home-recent-card {
+    padding: 12px 14px 8px;
+  }
+
+  #home-recent-activity {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px;
+    padding-top: 6px;
+  }
+
+  #home-recent-activity .home-activity:nth-child(2) {
+    border-top: 0;
+  }
+
+  .student-shell .learning-path-course {
+    max-width: 1360px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1199px) {
+  .student-shell #home-insights.home-status-card:not(.hidden) {
+    margin-top: 0;
+  }
+
+  #home-recent-activity {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #home-recent-activity .home-activity:nth-child(2) {
+    border-top: 1px solid #f0edf9;
+  }
+}
+
+@media (min-width: 1200px) {
+  .student-home {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .student-home .home-welcome {
+    grid-column: 1 / -1;
+  }
+
+  .student-home .home-work-card {
+    grid-column: span 7;
+  }
+
+  .student-shell #home-insights.home-status-card:not(.hidden) {
+    grid-column: span 5;
+  }
+
+  .student-home .home-recent-card {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 769px) {
+  .student-shell #learning-path-card > #learning-path.learning-path {
+    width: min(100%, 1040px);
+  }
+}
+
+@media (min-width: 1600px) {
+  .student-shell #learning-path-card > #learning-path.learning-path {
+    width: min(100%, 1120px);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  .student-shell .app-main {
+    padding-bottom: 88px;
+  }
+
+  .student-shell #student-bottom-nav {
+    display: grid !important;
+  }
+
+  .student-shell .app-main:has(#page-dashboard:not(.hidden)) #sidebar-toggle {
+    display: inline-flex !important;
+  }
 }
