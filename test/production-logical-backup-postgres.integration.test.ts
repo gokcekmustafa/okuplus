@@ -50,7 +50,7 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
   let ownerDatabaseClient: PrismaClient | undefined;
   let databaseName = "";
   let largeObjectOid: number | undefined;
-  let restorePublicDatabaseTemp = false;
+  let addedPublicDatabaseTemp = false;
 
   function identifier(value: string): string {
     return `"${value.replaceAll('"', '""')}"`;
@@ -196,10 +196,13 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     const publicTempRows = await admin.$queryRaw<Array<{ granted: boolean }>>`
       SELECT has_database_privilege(${fullRole}, current_database(), 'TEMP') AS granted
     `;
-    restorePublicDatabaseTemp = publicTempRows[0]?.granted ?? false;
-    await admin.$executeRawUnsafe(
-      `REVOKE TEMP ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
-    );
+    const hadPublicDatabaseTemp = publicTempRows[0]?.granted ?? false;
+    if (!hadPublicDatabaseTemp) {
+      await admin.$executeRawUnsafe(
+        `GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`,
+      );
+      addedPublicDatabaseTemp = true;
+    }
     await admin.$executeRawUnsafe(
       `REVOKE SELECT ON ${identifier(schemaName)}.read_fixture FROM ${identifier(missingTableRole)}`,
     );
@@ -223,9 +226,9 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     if (largeObjectOid !== undefined) {
       await admin.$queryRawUnsafe(`SELECT lo_unlink(${largeObjectOid})`).catch(() => undefined);
     }
-    if (restorePublicDatabaseTemp) {
+    if (addedPublicDatabaseTemp) {
       await admin
-        .$executeRawUnsafe(`GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`)
+        .$executeRawUnsafe(`REVOKE TEMP ON DATABASE ${identifier(databaseName)} FROM PUBLIC`)
         .catch(() => undefined);
     }
     await admin
@@ -289,7 +292,12 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     });
   });
 
-  it("rejects direct and PUBLIC-derived write or schema-management privileges", async () => {
+  it("allows database TEMP but rejects persistent writes and schema-management privileges", async () => {
+    const temporaryRoleIdentity = await readIdentity(fullRole);
+    expect(temporaryRoleIdentity.role.hasTemporaryPrivilege).toBe(true);
+    expect(temporaryRoleIdentity.role.hasWritePrivileges).toBe(false);
+    expect(validateProductionBackupRole(temporaryRoleIdentity.role)).toEqual({ ok: true });
+
     await admin.$executeRawUnsafe(
       `GRANT UPDATE ON ${identifier(schemaName)}.read_fixture TO ${identifier(directWriterRole)}`,
     );
@@ -340,15 +348,6 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
       );
     }
 
-    await admin.$executeRawUnsafe(`GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`);
-    try {
-      const publicDatabaseTemp = await readIdentity(fullRole);
-      expect(publicDatabaseTemp.role.hasWritePrivileges).toBe(true);
-    } finally {
-      await admin.$executeRawUnsafe(
-        `REVOKE TEMP ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
-      );
-    }
   });
 
   it("rejects memberships and object ownership, including ownership in another database", async () => {

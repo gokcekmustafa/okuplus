@@ -29,6 +29,7 @@ type BackupReport = {
   databaseRoleIsApplication: boolean | null;
   databaseRoleLogin: boolean | null;
   databaseRoleInheritsPrivileges: boolean | null;
+  databaseRoleHasTemporaryPrivilege: boolean | null;
   databaseRoleHasWritePrivileges: boolean | null;
   databaseRoleCanManageRolesOrDatabases: boolean | null;
   databaseRoleHasMemberships: boolean | null;
@@ -107,6 +108,7 @@ function baseReport(): BackupReport {
     databaseRoleIsApplication: null,
     databaseRoleLogin: null,
     databaseRoleInheritsPrivileges: null,
+    databaseRoleHasTemporaryPrivilege: null,
     databaseRoleHasWritePrivileges: null,
     databaseRoleCanManageRolesOrDatabases: null,
     databaseRoleHasMemberships: null,
@@ -203,6 +205,7 @@ async function identityCheck(
       "inheritsPrivileges",
       "superuser",
       "bypassesRls",
+      "hasTemporaryPrivilege",
       "canManageRolesOrDatabases",
       "hasRoleMemberships",
       "hasRlsTables",
@@ -228,6 +231,7 @@ async function identityCheck(
         inheritsPrivileges: parsed.inheritsPrivileges as boolean,
         superuser: parsed.superuser as boolean,
         bypassesRls: parsed.bypassesRls as boolean,
+        hasTemporaryPrivilege: parsed.hasTemporaryPrivilege as boolean,
         canManageRolesOrDatabases: parsed.canManageRolesOrDatabases as boolean,
         hasRoleMemberships: parsed.hasRoleMemberships as boolean,
         hasRlsTables: parsed.hasRlsTables as boolean,
@@ -357,6 +361,7 @@ async function run(): Promise<void> {
         report.databaseRoleIsApplication = identity.role.applicationRole;
         report.databaseRoleLogin = identity.role.canLogin;
         report.databaseRoleInheritsPrivileges = identity.role.inheritsPrivileges;
+        report.databaseRoleHasTemporaryPrivilege = identity.role.hasTemporaryPrivilege;
         report.databaseRoleHasWritePrivileges = identity.role.hasWritePrivileges;
         report.databaseRoleCanManageRolesOrDatabases = identity.role.canManageRolesOrDatabases;
         report.databaseRoleHasMemberships = identity.role.hasRoleMemberships;

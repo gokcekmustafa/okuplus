@@ -29,6 +29,7 @@ const eligibleRole: ProductionBackupRoleIdentity = {
   canLogin: true,
   inheritsPrivileges: false,
   readOnly: true,
+  hasTemporaryPrivilege: true,
   hasWritePrivileges: false,
   superuser: false,
   bypassesRls: true,
@@ -149,6 +150,14 @@ describe("production encrypted logical backup contract", () => {
     expect(validateProductionBackupRole(eligibleRole)).toEqual({ ok: true });
   });
 
+  it("allows TEMP separately from persistent writes and still rejects actual writes", () => {
+    expect(eligibleRole.hasTemporaryPrivilege).toBe(true);
+    expect(validateProductionBackupRole(eligibleRole)).toEqual({ ok: true });
+    expect(
+      validateProductionBackupRole({ ...eligibleRole, hasWritePrivileges: true }),
+    ).toEqual({ ok: false, reason: "DATABASE_ROLE_NOT_READ_ONLY" });
+  });
+
   it.each([
     ["unapproved login", { approvedRoleMatches: false }, "DATABASE_ROLE_NOT_APPROVED"],
     ["application login", { applicationRole: true }, "DATABASE_ROLE_IS_APPLICATION_ROLE"],
@@ -226,6 +235,17 @@ describe("production encrypted logical backup contract", () => {
     expect(backupScript).not.toMatch(
       /console\.(log|error)\([^\n]*(databaseUrl|password|passFile|recipient)/iu,
     );
+  });
+
+  it("reports database TEMP separately from persistent write privileges", () => {
+    const sql = buildProductionBackupIdentitySql("backup_user", "app_user");
+    expect(sql).toContain(
+      "'hasTemporaryPrivilege', has_database_privilege(current_user, current_database(), 'TEMP')",
+    );
+    const writeChecks = sql.split("'hasWritePrivileges',")[1]?.split(")::text AS identity")[0];
+    expect(writeChecks).toBeDefined();
+    expect(writeChecks).toContain("'CREATE'");
+    expect(writeChecks).not.toContain("'TEMP'");
   });
 
   it("quotes approved role names as SQL literals without allowing interpolation", () => {

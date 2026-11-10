@@ -22,6 +22,7 @@ export type ProductionBackupRoleIdentity = {
   canLogin: boolean;
   inheritsPrivileges: boolean;
   readOnly: boolean;
+  hasTemporaryPrivilege: boolean;
   hasWritePrivileges: boolean;
   superuser: boolean;
   bypassesRls: boolean;
@@ -45,9 +46,11 @@ function sqlLiteral(value: string): string {
 }
 
 /**
- * The exact read-only identity query used by the backup runner. Keep privilege
- * checks as PostgreSQL privilege-list calls; PostgreSQL 18 accepts comma-
- * separated privilege names for these has_*_privilege functions.
+ * The exact read-only identity query used by the backup runner. TEMP is
+ * reported separately because it only permits session-scoped temporary tables;
+ * it does not grant writes to persistent objects. Keep persistent write checks
+ * as PostgreSQL privilege-list calls; PostgreSQL 18 accepts comma-separated
+ * privilege names for these has_*_privilege functions.
  */
 export function buildProductionBackupIdentitySql(
   approvedBackupRole: string,
@@ -64,6 +67,9 @@ export function buildProductionBackupIdentitySql(
       'inheritsPrivileges', role.rolinherit,
       'superuser', role.rolsuper,
       'bypassesRls', role.rolbypassrls,
+      -- TEMPORARY is reported independently: it permits session-scoped temp tables,
+      -- not writes to persistent database objects.
+      'hasTemporaryPrivilege', has_database_privilege(current_user, current_database(), 'TEMP'),
       'canManageRolesOrDatabases', role.rolcreatedb OR role.rolcreaterole OR role.rolreplication,
       'hasRoleMemberships', EXISTS (
         SELECT 1 FROM pg_roles AS member_of
@@ -97,7 +103,6 @@ export function buildProductionBackupIdentitySql(
       ),
       'hasWritePrivileges',
         has_database_privilege(current_user, current_database(), 'CREATE')
-        OR has_database_privilege(current_user, current_database(), 'TEMP')
         OR EXISTS (
           SELECT 1 FROM pg_namespace AS n
           WHERE n.nspname <> 'information_schema' AND n.nspname !~ '^pg_'

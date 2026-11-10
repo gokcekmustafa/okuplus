@@ -136,9 +136,10 @@ Mevcut 67 RLS-korumalı kullanıcı tablosunun bütün satırlarını almak içi
 PostgreSQL `pg_dump`, varsayılan olarak RLS'yi kapatıp bütün satırları dump etmeye çalışır; rol bunu
 aşamıyorsa hata verir. `--enable-row-security` erişilebilen satırlarla sınırlı kısmi dump
 oluşturabileceğinden yasaktır. `BYPASSRLS` kendi başına tablo okuma izni vermez; tüm okuma izinleri
-ayrıca kontrol edilir. PostgreSQL 18'de bu niteliği rol oluştururken atamak superuser yetkisi
-gerektirir; bu ayrı yönetici işlemi backup rolüne `CREATEROLE` veya başka yönetim yetkileri vermeyi
-gerektirmez.
+ayrıca kontrol edilir. PostgreSQL 18'de `CREATEROLE` tek başına `BYPASSRLS` atamak için yeterli
+değildir; yeni role bu niteliği verebilmek için yetkili rol superuser olmalı veya kendisi
+`BYPASSRLS` niteliğine sahip olmalıdır. Bu ayrı yönetici işlemi backup rolüne `CREATEROLE` veya
+başka yönetim yetkileri vermeyi gerektirmez.
 
 Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermelidir:
 
@@ -147,10 +148,16 @@ Veritabanı yöneticisi yalnızca gereken nesneler için şu erişimleri vermeli
 - Bütün kullanıcı sequence'larında yalnızca `SELECT`; `USAGE` ve `UPDATE` verilmemeli.
 - Varsa her large object için `SELECT`; hiçbirine `UPDATE` verilmemeli. PostgreSQL `pg_dump` large
   object'leri varsayılan olarak dahil eder.
-- Database `CREATE`/`TEMP` (ikincisi `PUBLIC` üzerinden varsayılan olarak gelse bile),
-  schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım yetkisi; rol üyeliği,
-  rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli. `PUBLIC` ACL'leri de efektif yetki
-  olarak değerlendirilir; bunlardan biri varsa preflight reddeder.
+- Database `CREATE`, schema/table/sequence/large object/tablespace oluşturma, yazma veya bakım
+  yetkisi; rol üyeliği, rol/veritabanı yönetim niteliği ve nesne sahipliği verilmemeli. `PUBLIC`
+  ACL'leri dahil bu kalıcı yazma/yönetim izinleri preflight tarafından reddedilir.
+- Database `TEMPORARY` ayrı raporlanır; bu yetki oturum kapsamındaki geçici tabloları oluşturmaya
+  izin verir, kalıcı tablo veya şemalara yazma izni vermez. PostgreSQL varsayılan olarak `CONNECT`
+  ve `TEMPORARY` yetkilerini `PUBLIC`'e verir. Yedek akışındaki kimlik sorgusu `BEGIN READ ONLY`
+  içinde, `pg_dump` ise `default_transaction_read_only=on` ile çalışır. TEMP hakkı yedek rolüne ek
+  kalıcı veri erişimi sağlamaz; ele geçirilmiş rolün geçici tablolarla oturum kaynaklarını tüketmesi
+  olası operasyonel risktir. Bu nedenle preflight TEMP'ı kalıcı yazma yetkisi saymaz ve `PUBLIC`
+  yetkisini değiştirmez.
 
 ### Veritabanı yöneticisine hazırlık prosedürü (henüz uygulanmadı)
 
@@ -182,11 +189,12 @@ incelenmeli ve gerekiyorsa `GRANT SELECT ON LARGE OBJECT <oid> TO <backup_role>`
 `UPDATE` hiçbir large object'e verilmemelidir. Gelecekte yaratılacak nesneler için default privilege
 değişikliği ancak ilgili her nesne sahibi ve etkisi incelendikten sonra ayrı kararla yapılmalıdır.
 
-Son olarak yönetici, efektif yetkileri (doğrudan, rol üyeliği ve `PUBLIC` dahil), database `TEMP` ve
-`CREATE`, şema/nesne yazma ACL'leri, tüm database'leri kapsayan sahiplik bağımlılıkları ve eksiksiz
+Son olarak yönetici, efektif yetkileri (doğrudan, rol üyeliği ve `PUBLIC` dahil), database `CREATE`,
+şema/nesne yazma ACL'leri, tüm database'leri kapsayan sahiplik bağımlılıkları ve eksiksiz
 tablo/sequence/large-object SELECT erişimini salt-okunur kontrollerle doğrulamalıdır. `PUBLIC` üzerinden
-örneğin database `TEMP` varsa backup preflight bunu reddeder; uygulamalara etkisi incelenmeden
-`PUBLIC` yetkileri değiştirilmemelidir. Herhangi bir belirsizlik veya sorgu/izin hatası NO-GO'dur.
+kalıcı yazma veya yönetim yetkisi varsa backup preflight bunu reddeder. `TEMPORARY` ayrı raporlanır;
+bu nedenle `PUBLIC`'in varsayılan TEMP yetkisini değiştirmek gerekmez. Herhangi bir belirsizlik veya
+sorgu/izin hatası NO-GO'dur.
 Yalnızca yönetici kanıtı ve Environment yapılandırması tamamlandıktan sonra workflow preflight'ı
 geçirip yedeği başlatmaya elverişli olabilir; bu, yedeğin veya restore provasının başarıyla
 tamamlandığı anlamına gelmez.
