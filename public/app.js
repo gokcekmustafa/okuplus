@@ -6360,8 +6360,8 @@ function navigate(
 
   if (page !== "settings") {
     profileView = null;
-    $("profile-deletion-confirm")?.close();
-    $("profile-deletion-cancel-confirm")?.close();
+    $("profile-deletion-confirm")?.close?.();
+    $("profile-deletion-cancel-confirm")?.close?.();
   }
   currentPage = page;
   if (currentPlatformRole === "SUPER_ADMIN") updatePlatformAdminHeading(page);
