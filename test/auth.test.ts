@@ -370,10 +370,23 @@ describe("auth", () => {
       headers: { cookie: "__Host-oku_access=fake-session" },
       payload: {},
     });
+    const cancelWithoutAuth = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests/request-1/cancel",
+      payload: {},
+    });
+    const cancelCookieWithoutCsrf = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests/request-1/cancel",
+      headers: { cookie: "__Host-oku_access=fake-session" },
+      payload: {},
+    });
 
     expect(createWithoutAuth.statusCode).toBe(401);
     expect(statusWithoutAuth.statusCode).toBe(401);
     expect(cookieWithoutCsrf.statusCode).toBe(403);
+    expect(cancelWithoutAuth.statusCode).toBe(401);
+    expect(cancelCookieWithoutCsrf.statusCode).toBe(403);
 
     await app.close();
   });
@@ -470,6 +483,12 @@ describe("auth", () => {
       payload: { status: "COMPLETED" },
     });
     expect(statusMutation.statusCode).toBe(404);
+    const adminListForbidden = await app.inject({
+      method: "GET",
+      url: "/admin/account-deletion-requests",
+      headers,
+    });
+    expect(adminListForbidden.statusCode).toBe(403);
     const completedWrite = withTenantContext(context, (tx) =>
       tx.accountDeletionRequest.update({
         where: { id: requestIds[0] },
@@ -485,6 +504,48 @@ describe("auth", () => {
     );
     expect(requestCount).toBe(1);
 
+    const cancelled = await app.inject({
+      method: "POST",
+      url: `/auth/account-deletion-requests/${requestIds[0]}/cancel`,
+      headers,
+      payload: {},
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json().data.cancelled).toBe(true);
+    expect(cancelled.json().data.request.status).toBe("CANCELLED");
+    expect(cancelled.json().data.request.cancelledAt).toBeTruthy();
+    expect(cancelled.json().data.message).toContain("verilerin etkilenmedi");
+
+    const repeatedCancel = await app.inject({
+      method: "POST",
+      url: `/auth/account-deletion-requests/${requestIds[0]}/cancel`,
+      headers,
+      payload: {},
+    });
+    expect(repeatedCancel.statusCode).toBe(200);
+    expect(repeatedCancel.json().data.cancelled).toBe(false);
+    const currentAfterCancel = await app.inject({
+      method: "GET",
+      url: "/auth/account-deletion-requests/current",
+      headers,
+    });
+    expect(currentAfterCancel.json().data.request).toBeNull();
+
+    const reapplication = await app.inject({
+      method: "POST",
+      url: "/auth/account-deletion-requests",
+      headers,
+      payload: {},
+    });
+    expect(reapplication.statusCode).toBe(202);
+    expect(reapplication.json().data.created).toBe(true);
+    expect(reapplication.json().data.request.id).not.toBe(requestIds[0]);
+    expect(
+      await withTenantContext(context, (tx) =>
+        tx.accountDeletionRequest.count({ where: { userId: USER_ID } }),
+      ),
+    ).toBe(2);
+
     const otherLogin = await app.inject({
       method: "POST",
       url: "/auth/login",
@@ -497,6 +558,46 @@ describe("auth", () => {
     });
     expect(otherStatus.statusCode).toBe(200);
     expect(otherStatus.json().data.request).toBeNull();
+
+    const otherCannotCancel = await app.inject({
+      method: "POST",
+      url: `/auth/account-deletion-requests/${requestIds[0]}/cancel`,
+      headers: { authorization: `Bearer ${otherLogin.json().data.tokens.accessToken}` },
+      payload: {},
+    });
+    expect(otherCannotCancel.statusCode).toBe(404);
+
+    const pendingList = await app.inject({
+      method: "GET",
+      url: "/admin/account-deletion-requests?status=pending&page=1&pageSize=10",
+      headers: { authorization: `Bearer ${otherLogin.json().data.tokens.accessToken}` },
+    });
+    expect(pendingList.statusCode).toBe(200);
+    expect(pendingList.headers["cache-control"]).toContain("no-store");
+    expect(pendingList.json().data.items).toEqual([
+      expect.objectContaining({
+        id: reapplication.json().data.request.id,
+        status: "IDENTITY_REQUIRED",
+        userDisplayName: "Normal Student",
+      }),
+    ]);
+    expect(pendingList.json().data.items[0]).not.toHaveProperty("email");
+    expect(pendingList.json().data.items[0]).not.toHaveProperty("phone");
+    expect(pendingList.json().data.items[0]).not.toHaveProperty("userId");
+
+    const cancelledList = await app.inject({
+      method: "GET",
+      url: "/admin/account-deletion-requests?status=cancelled&page=1&pageSize=10",
+      headers: { authorization: `Bearer ${otherLogin.json().data.tokens.accessToken}` },
+    });
+    expect(cancelledList.statusCode).toBe(200);
+    expect(cancelledList.json().data.total).toBe(1);
+    expect(cancelledList.json().data.items[0]).toMatchObject({
+      id: requestIds[0],
+      status: "CANCELLED",
+      userDisplayName: "Normal Student",
+    });
+    expect(cancelledList.json().data.items[0].cancelledAt).toBeTruthy();
 
     await app.close();
   });

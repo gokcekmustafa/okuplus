@@ -440,6 +440,19 @@
             ></span>
             <span class="nav-label">Kullanıcılar</span>
           </button>
+          <button
+            class="nav-item"
+            data-page="account-deletion-requests"
+            data-admin
+            data-super-admin-only
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#eye"></use></svg
+            ></span>
+            <span class="nav-label">Hesap Silme Talepleri</span>
+          </button>
           <button class="nav-item" data-page="students" data-admin data-management type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -6641,6 +6654,70 @@
             </dialog>
           </section>
 
+          <section
+            id="page-account-deletion-requests"
+            class="page-view hidden"
+            data-super-admin-only
+          >
+            <div class="page-head">
+              <h2>Hesap Silme Talepleri</h2>
+              <p class="muted">
+                Talep kayıtlarını inceleyin. Bu ekranda hesap veya kullanıcı verisi silinmez.
+              </p>
+            </div>
+            <div class="tenant-toolbar">
+              <label class="field inline-field">
+                <span>Talep durumu</span>
+                <select id="account-deletion-admin-filter">
+                  <option value="pending">Bekleyen</option>
+                  <option value="cancelled">Geri çekilen</option>
+                  <option value="all">Tüm talepler</option>
+                </select>
+              </label>
+              <button id="account-deletion-admin-refresh" type="button" class="btn btn-secondary">
+                Yenile
+              </button>
+            </div>
+            <p
+              id="account-deletion-admin-status"
+              class="muted"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <p class="muted">
+              Kimlik doğrulama kanıtı bu sistemde tutulmaz; bekleyen taleplerde yalnızca ek
+              doğrulama gereksinimi gösterilir.
+            </p>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Talep sahibi</th>
+                    <th scope="col">Talep tarihi</th>
+                    <th scope="col">Durum</th>
+                    <th scope="col">Geri çekilme tarihi</th>
+                  </tr>
+                </thead>
+                <tbody id="account-deletion-admin-body">
+                  <tr>
+                    <td colspan="4" class="empty-cell">Talepler yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="tenant-pagination">
+              <span id="account-deletion-admin-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="account-deletion-admin-prev" type="button" class="btn btn-ghost btn-sm">
+                  Önceki
+                </button>
+                <button id="account-deletion-admin-next" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section id="page-settings" class="page-view profile-page hidden">
             <header class="profile-header">
               <span class="profile-icon profile-avatar" aria-hidden="true">
@@ -6859,6 +6936,14 @@
                     >
                       Hesap silme talebi gönder
                     </button>
+                    <button
+                      id="account-deletion-request-cancel"
+                      type="button"
+                      class="btn btn-ghost"
+                      hidden
+                    >
+                      Talebimi geri çek
+                    </button>
                   </div>
                 </div>
               </details>
@@ -6884,6 +6969,32 @@
                       class="btn btn-primary"
                     >
                       Talebi onayla ve gönder
+                    </button>
+                  </div>
+                </form>
+              </dialog>
+              <dialog
+                id="profile-deletion-cancel-confirm"
+                class="dialog profile-confirm"
+                aria-labelledby="profile-cancel-confirm-title"
+                aria-describedby="profile-cancel-confirm-copy"
+              >
+                <form method="dialog">
+                  <h3 id="profile-cancel-confirm-title">Talebin geri çekilsin mi?</h3>
+                  <p id="profile-cancel-confirm-copy" class="muted">
+                    Yalnızca kimlik doğrulaması bekleyen talep geri çekilir. Talep kaydı korunur;
+                    hesabın ve diğer verilerin değişmez.
+                  </p>
+                  <div class="profile-actions">
+                    <button type="submit" value="cancel" class="btn btn-secondary" autofocus>
+                      Vazgeç
+                    </button>
+                    <button
+                      id="profile-deletion-cancel-confirm-send"
+                      type="button"
+                      class="btn btn-primary"
+                    >
+                      Talebi geri çek
                     </button>
                   </div>
                 </form>

@@ -27,12 +27,18 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
     disabled: false,
     textContent: "Hesap silme talebi gönder",
   };
+  const cancelButton = { hidden: true, addEventListener: vi.fn() };
+  const profileFields = { disabled: false };
+  const profileSubmit = { disabled: false };
   const retry = { hidden: true };
   const nodes: Record<string, unknown> = {
     "account-deletion-request-status": status,
     "account-deletion-request-error": error,
     "account-deletion-request-submit": button,
+    "account-deletion-request-cancel": cancelButton,
     "account-deletion-request-retry": retry,
+    "account-profile-fields": profileFields,
+    "account-profile-submit": profileSubmit,
   };
   const fetch = vi.fn(async () => ({}));
   const parseResponse = vi.fn(async () => ({ request: null }));
@@ -51,7 +57,19 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
     ),
     context,
   );
-  return { context, status, error, button, retry, fetch, parseResponse, nodes };
+  return {
+    context,
+    status,
+    error,
+    button,
+    cancelButton,
+    retry,
+    profileFields,
+    profileSubmit,
+    fetch,
+    parseResponse,
+    nodes,
+  };
 }
 
 describe("account deletion request UI", () => {
@@ -122,6 +140,9 @@ describe("account deletion request UI", () => {
     expect(htmlSource).toContain('role="alert"');
     expect(htmlSource).toContain('id="account-deletion-request-submit"');
     expect(htmlSource).toContain('id="profile-deletion-confirm-send"');
+    expect(htmlSource).toContain('id="account-deletion-request-cancel"');
+    expect(htmlSource).toContain('id="profile-deletion-cancel-confirm"');
+    expect(htmlSource).toContain('id="profile-deletion-cancel-confirm-send"');
     expect(htmlSource).toContain("Talep kaydı hesabını kapatmaz ve verilerini silmez.");
   });
 
@@ -180,6 +201,7 @@ describe("account deletion request UI", () => {
     await vi.waitFor(() =>
       expect(h.status.textContent).toContain("ek kimlik doğrulaması bekliyor"),
     );
+    expect(dialog.open).toBe(false);
 
     expect(h.fetch).toHaveBeenLastCalledWith(
       "/auth/account-deletion-requests",
@@ -215,6 +237,166 @@ describe("account deletion request UI", () => {
     expect(h.error.textContent).toContain("Yeniden göndermeden önce");
     expect(h.retry.hidden).toBe(false);
     expect(h.button.hidden).toBe(true);
+  });
+
+  it("only cancels the exact pending request after confirmation and keeps other profile controls available", async () => {
+    const h = makeHarness({
+      profileView: { deletionState: "recorded", requestId: "request-a" },
+    });
+    const events = new Map<string, () => unknown>();
+    const bind = (id: string) => ({
+      addEventListener: (name: string, fn: () => unknown) => events.set(id + name, fn),
+    });
+    const cancelDialog = {
+      open: false,
+      showModal: vi.fn(() => {
+        cancelDialog.open = true;
+      }),
+      close: vi.fn(() => {
+        cancelDialog.open = false;
+      }),
+    };
+    h.nodes["profile-deletion-confirm"] = { open: false, close: vi.fn() };
+    h.nodes["profile-deletion-cancel-confirm"] = cancelDialog;
+    h.nodes["profile-deletion-confirm-send"] = bind("submit-confirm");
+    h.nodes["profile-deletion-cancel-confirm-send"] = bind("cancel-confirm");
+    h.nodes["profile-deletion-details"] = { ...bind("details"), open: false };
+    Object.assign(h.button, bind("submit"));
+    Object.assign(h.retry, bind("retry"));
+    Object.assign(h.cancelButton, bind("cancel"));
+    runInContext("setupAccountDeletionRequestEvents()", h.context);
+
+    events.get("cancelclick")!();
+    expect(cancelDialog.showModal).toHaveBeenCalledOnce();
+    expect(h.fetch).not.toHaveBeenCalled();
+    cancelDialog.open = true;
+    h.parseResponse.mockResolvedValue({
+      cancelled: true,
+      message: "Talebin geri çekildi. Hesabın, profilin ve diğer verilerin etkilenmedi.",
+    });
+    events.get("cancel-confirmclick")!();
+    await vi.waitFor(() => expect(h.status.textContent).toContain("Talebin geri çekildi"));
+
+    expect(cancelDialog.close).toHaveBeenCalledOnce();
+    expect(cancelDialog.open).toBe(false);
+    expect(h.fetch).toHaveBeenCalledExactlyOnceWith(
+      "/auth/account-deletion-requests/request-a/cancel",
+      expect.objectContaining({ method: "POST", body: "{}" }),
+    );
+    expect(h.button.hidden).toBe(false);
+    expect(h.cancelButton.hidden).toBe(true);
+    expect(h.profileFields.disabled).toBe(false);
+    expect(h.profileSubmit.disabled).toBe(false);
+  });
+
+  it("closes both request dialogs whenever the profile view is opened", () => {
+    const requestDialog = { close: vi.fn() };
+    const cancelDialog = { close: vi.fn() };
+    const nodes = {
+      "account-profile-submit": { disabled: false },
+      "account-profile-fields": { disabled: false },
+      "account-profile-birthyear": { max: "" },
+      "user-name": { textContent: "Deneme" },
+      "profile-support-actions": { hidden: false },
+      "profile-support-availability": { textContent: "" },
+      "pilot-support-status": { textContent: "" },
+      "profile-deletion-details": { open: true },
+      "profile-deletion-confirm": requestDialog,
+      "profile-deletion-cancel-confirm": cancelDialog,
+      "account-deletion-request-error": { classList: { add: vi.fn() } },
+      "account-deletion-request-status": { textContent: "" },
+      "account-deletion-request-retry": { hidden: false },
+      "account-deletion-request-submit": { hidden: false },
+      "account-deletion-request-cancel": { hidden: false },
+      "profile-progress": { classList: { toggle: vi.fn() } },
+      "profile-progress-metrics": { classList: { add: vi.fn() } },
+      "profile-progress-status": { textContent: "" },
+    };
+    const context = createContext({
+      $: (id: string) => nodes[id as keyof typeof nodes],
+      profileView: null,
+      isStudentUser: false,
+      setAsyncButtonState: vi.fn(),
+      fillAccountProfile: vi.fn(),
+      loadAccountProfile: vi.fn(),
+      Date,
+    });
+    runInContext(
+      functionSource("function openProfileView()", "function setupAccountProfileEvents()"),
+      context,
+    );
+    runInContext("openProfileView()", context);
+    expect(requestDialog.close).toHaveBeenCalledOnce();
+    expect(cancelDialog.close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the request review page Super Admin only, paginated and limited to the requested PII", async () => {
+    expect(htmlSource).toContain('data-page="account-deletion-requests"');
+    expect(htmlSource).toContain('id="page-account-deletion-requests"');
+    expect(appSource).toContain(
+      'if (page === "account-deletion-requests") return currentPlatformRole === "SUPER_ADMIN";',
+    );
+
+    const body = { innerHTML: "" };
+    const nodes: Record<string, { textContent?: string; innerHTML?: string; disabled?: boolean }> =
+      {
+        "account-deletion-admin-status": { textContent: "" },
+        "account-deletion-admin-body": body,
+        "account-deletion-admin-page-info": { textContent: "" },
+        "account-deletion-admin-prev": { disabled: false },
+        "account-deletion-admin-next": { disabled: false },
+      };
+    const authenticatedFetch = vi.fn(async () => ({}));
+    const parseResponse = vi.fn(async () => ({
+      items: [
+        {
+          userDisplayName: "<img src=x onerror=alert(1)>",
+          createdAt: "2026-11-01T10:00:00.000Z",
+          status: "IDENTITY_REQUIRED",
+          cancelledAt: null,
+        },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+    }));
+    const context = createContext({
+      currentPlatformRole: "SUPER_ADMIN",
+      accountDeletionAdminPage: 1,
+      accountDeletionAdminFilter: "pending",
+      accountDeletionAdminRequestRevision: 0,
+      $: (id: string) => nodes[id],
+      authenticatedFetch,
+      parseResponse,
+      URLSearchParams,
+      Intl,
+      Date,
+      escapeHtml: (value: string) =>
+        value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;"),
+    });
+    runInContext(
+      functionSource(
+        "function formatAccountDeletionRequestDate(",
+        "function configureOrganizationScopeUi()",
+      ),
+      context,
+    );
+    await runInContext("loadAdminAccountDeletionRequests()", context);
+
+    expect(authenticatedFetch).toHaveBeenCalledExactlyOnceWith(
+      "/admin/account-deletion-requests?status=pending&page=1&pageSize=25",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    expect(body.innerHTML).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(body.innerHTML).not.toContain("<img src=x");
+    expect(nodes["account-deletion-admin-page-info"].textContent).toBe("1–1 / 1 talep");
+    expect(nodes["account-deletion-admin-prev"].disabled).toBe(true);
+    expect(nodes["account-deletion-admin-next"].disabled).toBe(true);
   });
 
   it("ignores a response that belongs to an earlier profile view", async () => {

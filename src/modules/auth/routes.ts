@@ -13,6 +13,7 @@ import { signupPersonalAccount, signupSchema } from "./index.js";
 import type { SocialAuthService } from "./social-service.js";
 import { GoogleOAuthClient, safeGoogleOAuthDiagnostic } from "./google-oauth.js";
 import { requireAuth } from "../../middleware/authenticate.js";
+import { requirePlatformRole } from "../../middleware/require-platform.js";
 import {
   clearAuthCookies,
   getCookie,
@@ -29,9 +30,12 @@ import { createCookieOriginGuard, createCsrfToken } from "./csrf.js";
 import { accountProfileSchema } from "./schemas.js";
 import { getAccountProfile, updateAccountProfile } from "./profile-service.js";
 import { validationError } from "../../lib/errors.js";
+import { z } from "zod/v3";
 import {
+  cancelAccountDeletionRequest,
   createAccountDeletionRequest,
   getCurrentAccountDeletionRequest,
+  listAdminAccountDeletionRequests,
 } from "./account-deletion-requests.js";
 
 const loginSchema = {
@@ -94,6 +98,14 @@ const accountDeletionRequestBodySchema = {
   additionalProperties: false,
   properties: {},
 } as const;
+
+const accountDeletionRequestAdminQuerySchema = z
+  .object({
+    status: z.enum(["pending", "cancelled", "all"]).default("pending"),
+    page: z.coerce.number().int().min(1).max(100_000).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  })
+  .strict();
 
 const rejectAccountDeletionRequestBodyFields = async (request: FastifyRequest): Promise<void> => {
   const body = request.body;
@@ -453,6 +465,54 @@ export async function authRoutes(
       setNoStore(reply);
       const current = await getCurrentAccountDeletionRequest(request.authUser!.id);
       return reply.send(ok({ request: current }));
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/auth/account-deletion-requests/:id/cancel",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          additionalProperties: false,
+          properties: { id: { type: "string", minLength: 1, maxLength: 128 } },
+        },
+        body: accountDeletionRequestBodySchema,
+      },
+      preValidation: [rejectAccountDeletionRequestBodyFields],
+      preHandler: [requireAuth(authProvider)],
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const result = await cancelAccountDeletionRequest(request.authUser!.id, request.params.id);
+      return reply.send(
+        ok({
+          ...result,
+          message: result.cancelled
+            ? "Talebin geri çekildi. Hesabın, profilin ve diğer verilerin etkilenmedi."
+            : "Talebin daha önce geri çekilmiş. Hesabın ve verilerin etkilenmedi.",
+        }),
+      );
+    },
+  );
+
+  app.get(
+    "/admin/account-deletion-requests",
+    { preHandler: [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])] },
+    async (request, reply) => {
+      setNoStore(reply);
+      const query = accountDeletionRequestAdminQuerySchema.parse(request.query);
+      return reply.send(
+        ok(
+          await listAdminAccountDeletionRequests({
+            actorUserId: request.authUser!.id,
+            filter: query.status,
+            page: query.page,
+            pageSize: query.pageSize,
+          }),
+        ),
+      );
     },
   );
 }

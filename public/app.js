@@ -35,6 +35,9 @@ const SECURE_SESSION_KEY = "oku.session.v1";
 const nativeSession = { accessToken: null, refreshToken: null, tenantId: null };
 let currentPage = null;
 let profileView = null;
+let accountDeletionAdminPage = 1;
+let accountDeletionAdminFilter = "pending";
+let accountDeletionAdminRequestRevision = 0;
 
 function resolveApiRequest(input) {
   if (!configuredApiBaseUrl || typeof input !== "string" || !input.startsWith("/")) {
@@ -1683,10 +1686,12 @@ function openProfileView() {
   $("pilot-support-status").textContent = "";
   $("profile-deletion-details").open = false;
   $("profile-deletion-confirm").close();
+  $("profile-deletion-cancel-confirm").close();
   $("account-deletion-request-error").classList.add("hidden");
   $("account-deletion-request-status").textContent = "";
   $("account-deletion-request-retry").hidden = true;
   $("account-deletion-request-submit").hidden = true;
+  $("account-deletion-request-cancel").hidden = true;
   $("profile-progress").classList.toggle("hidden", !isStudentUser);
   $("profile-progress-metrics").classList.add("hidden");
   $("profile-progress-status").textContent = "Gelişim özeti yükleniyor…";
@@ -1703,7 +1708,7 @@ function setupAccountProfileEvents() {
 function accountDeletionRequestStatusMessage(request) {
   if (!request) return "Henüz bir hesap silme talebin yok.";
   if (request.status === "IDENTITY_REQUIRED") {
-    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor.";
+    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor. İstersen talebini geri çekebilirsin.";
   }
   return "Hesap silme talebin kayıtlı.";
 }
@@ -1715,9 +1720,10 @@ async function loadAccountDeletionRequest(submit = false) {
   const status = $("account-deletion-request-status");
   const errorEl = $("account-deletion-request-error");
   const button = $("account-deletion-request-submit");
+  const cancelButton = $("account-deletion-request-cancel");
   const retry = $("account-deletion-request-retry");
   view.deletionState = "pending";
-  retry.hidden = button.hidden = true;
+  retry.hidden = button.hidden = cancelButton.hidden = true;
   status.textContent = submit ? "Talebin gönderiliyor…" : "Talep durumu kontrol ediliyor…";
   errorEl.classList.add("hidden");
   try {
@@ -1736,8 +1742,10 @@ async function loadAccountDeletionRequest(submit = false) {
     if (request !== null && typeof request?.status !== "string") throw new Error("Invalid request");
     if (submit && !request) throw new Error("Missing submitted request");
     view.deletionState = request ? "recorded" : "ready";
+    view.requestId = request?.id ?? null;
     status.textContent = accountDeletionRequestStatusMessage(request);
     button.hidden = Boolean(request);
+    cancelButton.hidden = request?.status !== "IDENTITY_REQUIRED";
   } catch (error) {
     if (view !== profileView) return;
     view.deletionState = "error";
@@ -1750,12 +1758,56 @@ async function loadAccountDeletionRequest(submit = false) {
           : "Talep durumu şu anda yüklenemiyor. Biraz sonra tekrar dene.";
     errorEl.classList.remove("hidden");
     retry.hidden = false;
+  } finally {
+    if (submit && view === profileView) $("profile-deletion-confirm")?.close();
+  }
+}
+
+async function cancelAccountDeletionRequest() {
+  const view = profileView;
+  const requestId = view?.requestId;
+  if (!view || view.deletionState !== "recorded" || typeof requestId !== "string") return;
+
+  const status = $("account-deletion-request-status");
+  const errorEl = $("account-deletion-request-error");
+  const retry = $("account-deletion-request-retry");
+  const submit = $("account-deletion-request-submit");
+  const cancel = $("account-deletion-request-cancel");
+  view.deletionState = "pending";
+  retry.hidden = submit.hidden = cancel.hidden = true;
+  status.textContent = "Talebin geri çekiliyor…";
+  errorEl.classList.add("hidden");
+
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch(
+        `/auth/account-deletion-requests/${encodeURIComponent(requestId)}/cancel`,
+        { method: "POST", body: "{}" },
+      ),
+    );
+    if (view !== profileView) return;
+    view.deletionState = "ready";
+    view.requestId = null;
+    status.textContent =
+      data?.message ?? "Talebin geri çekildi. Hesabın ve diğer verilerin etkilenmedi.";
+    submit.hidden = false;
+  } catch (error) {
+    if (view !== profileView) return;
+    view.deletionState = "error";
+    status.textContent = "";
+    errorEl.textContent =
+      error.status === 401 || error.status === 403
+        ? formatStudentError(error)
+        : "Geri çekme durumunu doğrulayamadık. Yeniden denemeden önce talep durumunu kontrol et.";
+    errorEl.classList.remove("hidden");
+    retry.hidden = false;
   }
 }
 
 function setupAccountDeletionRequestEvents() {
   const details = $("profile-deletion-details");
   const dialog = $("profile-deletion-confirm");
+  const cancelDialog = $("profile-deletion-cancel-confirm");
   details?.addEventListener("toggle", () => {
     if (details.open && profileView?.deletionState === "idle") void loadAccountDeletionRequest();
   });
@@ -1770,6 +1822,100 @@ function setupAccountDeletionRequestEvents() {
     if (!dialog.open) return;
     dialog.close();
     void loadAccountDeletionRequest(true);
+  });
+  $("account-deletion-request-cancel")?.addEventListener("click", () => {
+    if (profileView?.deletionState === "recorded" && profileView.requestId && cancelDialog) {
+      cancelDialog.showModal();
+    }
+  });
+  $("profile-deletion-cancel-confirm-send")?.addEventListener("click", () => {
+    if (!cancelDialog?.open) return;
+    cancelDialog.close();
+    void cancelAccountDeletionRequest();
+  });
+}
+
+function formatAccountDeletionRequestDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+async function loadAdminAccountDeletionRequests() {
+  if (currentPlatformRole !== "SUPER_ADMIN") return;
+  const revision = ++accountDeletionAdminRequestRevision;
+  const status = $("account-deletion-admin-status");
+  const body = $("account-deletion-admin-body");
+  const pageInfo = $("account-deletion-admin-page-info");
+  status.textContent = "Talep kayıtları yükleniyor…";
+  body.innerHTML = '<tr><td colspan="4" class="empty-cell">Yükleniyor…</td></tr>';
+
+  const query = new URLSearchParams({
+    status: accountDeletionAdminFilter,
+    page: String(accountDeletionAdminPage),
+    pageSize: "25",
+  });
+  try {
+    const result = await parseResponse(
+      await authenticatedFetch(`/admin/account-deletion-requests?${query}`, {
+        cache: "no-store",
+      }),
+    );
+    if (revision !== accountDeletionAdminRequestRevision) return;
+    const items = Array.isArray(result?.items) ? result.items : [];
+    const total = Number.isSafeInteger(result?.total) ? result.total : 0;
+    const page = Number.isSafeInteger(result?.page) ? result.page : accountDeletionAdminPage;
+    const pageSize = Number.isSafeInteger(result?.pageSize) ? result.pageSize : 25;
+    const statusLabel = (requestStatus) =>
+      requestStatus === "IDENTITY_REQUIRED"
+        ? "Ek kimlik doğrulaması bekliyor"
+        : requestStatus === "CANCELLED"
+          ? "Öğrenci tarafından geri çekildi"
+          : "İnceleme aşamasında";
+
+    body.innerHTML = items.length
+      ? items
+          .map(
+            (item) => `<tr>
+              <td>${escapeHtml(item.userDisplayName || "İsimsiz kullanıcı")}</td>
+              <td>${escapeHtml(formatAccountDeletionRequestDate(item.createdAt))}</td>
+              <td>${escapeHtml(statusLabel(item.status))}</td>
+              <td>${escapeHtml(item.cancelledAt ? formatAccountDeletionRequestDate(item.cancelledAt) : "—")}</td>
+            </tr>`,
+          )
+          .join("")
+      : '<tr><td colspan="4" class="empty-cell">Bu filtrede talep bulunmuyor.</td></tr>';
+    const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+    const last = Math.min(page * pageSize, total);
+    pageInfo.textContent = `${first}–${last} / ${total} talep`;
+    $("account-deletion-admin-prev").disabled = page <= 1;
+    $("account-deletion-admin-next").disabled = page * pageSize >= total;
+    status.textContent = "Talep listesi güncel.";
+  } catch {
+    if (revision !== accountDeletionAdminRequestRevision) return;
+    body.innerHTML = '<tr><td colspan="4" class="empty-cell">Talepler yüklenemedi.</td></tr>';
+    pageInfo.textContent = "—";
+    status.textContent = "Talep listesi şu anda yüklenemiyor. Biraz sonra tekrar deneyin.";
+  }
+}
+
+function setupAdminAccountDeletionRequestEvents() {
+  const filter = $("account-deletion-admin-filter");
+  filter?.addEventListener("change", () => {
+    accountDeletionAdminFilter = filter.value;
+    accountDeletionAdminPage = 1;
+    void loadAdminAccountDeletionRequests();
+  });
+  $("account-deletion-admin-refresh")?.addEventListener("click", () => {
+    void loadAdminAccountDeletionRequests();
+  });
+  $("account-deletion-admin-prev")?.addEventListener("click", () => {
+    accountDeletionAdminPage = Math.max(1, accountDeletionAdminPage - 1);
+    void loadAdminAccountDeletionRequests();
+  });
+  $("account-deletion-admin-next")?.addEventListener("click", () => {
+    accountDeletionAdminPage += 1;
+    void loadAdminAccountDeletionRequests();
   });
 }
 
@@ -6042,6 +6188,7 @@ const PAGES = [
   "billing-account",
   "tenants",
   "users",
+  "account-deletion-requests",
   "students",
   "teachers",
   "branches",
@@ -6067,6 +6214,7 @@ const PLATFORM_PAGES = new Set([
   "dashboard",
   "tenants",
   "users",
+  "account-deletion-requests",
   "contents",
   "questions",
   "curriculum-drafts",
@@ -6124,6 +6272,7 @@ function roleHomePage() {
 
 function canAccessPage(page) {
   if (isPlatformUser === null) return true;
+  if (page === "account-deletion-requests") return currentPlatformRole === "SUPER_ADMIN";
   if (page === "curriculum-drafts") return currentPlatformRole === "SUPER_ADMIN";
   if (page === "premium-info") return isPersonalBillingUser;
   if (page === "billing-account") return isPersonalBillingUser || isOrganizationAdminUser;
@@ -6209,7 +6358,11 @@ function navigate(
   if (page !== "dashboard") clearLearningPathTransitionStatus();
   else if (!continuation) clearLearningPathTransitionStatus();
 
-  if (page !== "settings") profileView = null;
+  if (page !== "settings") {
+    profileView = null;
+    $("profile-deletion-confirm")?.close();
+    $("profile-deletion-cancel-confirm")?.close();
+  }
   currentPage = page;
   if (currentPlatformRole === "SUPER_ADMIN") updatePlatformAdminHeading(page);
 
@@ -6245,6 +6398,8 @@ function navigate(
     void loadTenants();
   } else if (page === "users") {
     void loadUsers();
+  } else if (page === "account-deletion-requests") {
+    void loadAdminAccountDeletionRequests();
   } else if (page === "students") {
     void loadStudents();
     void populateStudentTenantFilter();
@@ -20566,6 +20721,7 @@ async function init() {
   setupPersonDataEvents();
   setupAccountProfileEvents();
   setupAccountDeletionRequestEvents();
+  setupAdminAccountDeletionRequestEvents();
   restoreSession();
   setupModalAccessibility();
   setupTenantEvents();

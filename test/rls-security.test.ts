@@ -247,13 +247,18 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
     expect(visibleCount).toBe(0);
   });
 
-  it("silme talebi RLS'i yalnız sahibine SELECT/INSERT verir; güncelleme ve başkasının kaydı engellenir", async () => {
+  it("silme talebi RLS'i sahibine yalnız iptal izni, SUPER_ADMIN rolüne yalnız okuma izni verir", async () => {
     const request = await withTenantContext(
       { userId: USER_ID, tenantId: null, platformRole: null },
       (tx) =>
         tx.accountDeletionRequest.create({
           data: { id: ACCOUNT_DELETION_REQUEST_ID, userId: USER_ID },
         }),
+      app,
+    );
+    const otherRequest = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.accountDeletionRequest.create({ data: { userId: OTHER_USER_ID } }),
       app,
     );
 
@@ -269,6 +274,7 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
     );
 
     expect(ownRows.map(({ id }) => id)).toContain(request.id);
+    expect(ownRows.map(({ id }) => id)).not.toContain(otherRequest.id);
     expect(otherRows.map(({ id }) => id)).not.toContain(request.id);
     await expect(
       withTenantContext(
@@ -277,6 +283,48 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
           tx.accountDeletionRequest.update({
             where: { id: request.id },
             data: { status: "COMPLETED" },
+          }),
+        app,
+      ),
+    ).rejects.toThrow();
+    await expect(
+      withTenantContext(
+        { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+        (tx) =>
+          tx.accountDeletionRequest.update({
+            where: { id: request.id },
+            data: { status: "CANCELLED", cancelledAt: new Date() },
+          }),
+        app,
+      ),
+    ).rejects.toThrow();
+    const cancelled = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) =>
+        tx.accountDeletionRequest.update({
+          where: { id: request.id },
+          data: { status: "CANCELLED", cancelledAt: new Date() },
+          select: { id: true, status: true, cancelledAt: true },
+        }),
+      app,
+    );
+    expect(cancelled.status).toBe("CANCELLED");
+    expect(cancelled.cancelledAt).toBeInstanceOf(Date);
+
+    const adminRows = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: "SUPER_ADMIN" },
+      (tx) => tx.accountDeletionRequest.findMany({ select: { id: true } }),
+      app,
+    );
+    expect(adminRows.map(({ id }) => id)).toContain(request.id);
+    expect(adminRows.map(({ id }) => id)).toContain(otherRequest.id);
+    await expect(
+      withTenantContext(
+        { userId: USER_ID, tenantId: null, platformRole: "SUPER_ADMIN" },
+        (tx) =>
+          tx.accountDeletionRequest.update({
+            where: { id: otherRequest.id },
+            data: { status: "CANCELLED", cancelledAt: new Date() },
           }),
         app,
       ),
