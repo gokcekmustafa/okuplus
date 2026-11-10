@@ -153,9 +153,10 @@ describe("production encrypted logical backup contract", () => {
   it("allows TEMP separately from persistent writes and still rejects actual writes", () => {
     expect(eligibleRole.hasTemporaryPrivilege).toBe(true);
     expect(validateProductionBackupRole(eligibleRole)).toEqual({ ok: true });
-    expect(
-      validateProductionBackupRole({ ...eligibleRole, hasWritePrivileges: true }),
-    ).toEqual({ ok: false, reason: "DATABASE_ROLE_NOT_READ_ONLY" });
+    expect(validateProductionBackupRole({ ...eligibleRole, hasWritePrivileges: true })).toEqual({
+      ok: false,
+      reason: "DATABASE_ROLE_NOT_READ_ONLY",
+    });
   });
 
   it.each([

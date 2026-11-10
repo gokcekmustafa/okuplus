@@ -198,9 +198,7 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
     `;
     const hadPublicDatabaseTemp = publicTempRows[0]?.granted ?? false;
     if (!hadPublicDatabaseTemp) {
-      await admin.$executeRawUnsafe(
-        `GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`,
-      );
+      await admin.$executeRawUnsafe(`GRANT TEMP ON DATABASE ${identifier(databaseName)} TO PUBLIC`);
       addedPublicDatabaseTemp = true;
     }
     await admin.$executeRawUnsafe(
@@ -347,7 +345,6 @@ describePostgres("production backup identity SQL on PostgreSQL 18", () => {
         `REVOKE CREATE ON DATABASE ${identifier(databaseName)} FROM PUBLIC`,
       );
     }
-
   });
 
   it("rejects memberships and object ownership, including ownership in another database", async () => {
