@@ -616,12 +616,13 @@ model AuthSession {
 
 /// Self-service silme talebinin yalnızca teknik kaydıdır; veri işçisi/anonimleştirme değildir.
 model AccountDeletionRequest {
-  id        String   @id @default(dbgenerated("uuidv7()"))
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  status    String   @default("IDENTITY_REQUIRED")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(dbgenerated("uuidv7()"))
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status      String    @default("IDENTITY_REQUIRED")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  cancelledAt DateTime?
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
