@@ -25,7 +25,7 @@ export async function notifySuperAdmins(
       ${input.kind},
       ${input.targetType},
       ${input.targetId}
-    )
+    ) IS NULL AS notified
   `;
 }
 
