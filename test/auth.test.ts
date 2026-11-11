@@ -23,15 +23,36 @@ const TENANT_B = "eeeeeeee-0000-7000-8000-00000000000b";
 const USER_ID = "aaaaaaaa-0000-7000-8000-000000000001";
 const SUSPENDED_USER_ID = "aaaaaaaa-0000-7000-8000-000000000002";
 const PLATFORM_USER_ID = "aaaaaaaa-0000-7000-8000-000000000003";
+const DELETION_FIXTURE_USER_IDS = [USER_ID, SUSPENDED_USER_ID, PLATFORM_USER_ID];
 
 const PASSWORD = "test-pass-123!";
+
+async function cleanupAccountDeletionFixtures() {
+  const requests = await prisma.accountDeletionRequest.findMany({
+    where: { userId: { in: DELETION_FIXTURE_USER_IDS } },
+    select: { id: true },
+  });
+  const requestIds = requests.map(({ id }) => id);
+  if (requestIds.length > 0) {
+    await prisma.notification.deleteMany({
+      where: { targetType: "ACCOUNT_DELETION_REQUEST", targetId: { in: requestIds } },
+    });
+    await prisma.accountDeletionRequestMessage.deleteMany({
+      where: { requestId: { in: requestIds } },
+    });
+    await prisma.accountDeletionRequestActivity.deleteMany({
+      where: { requestId: { in: requestIds } },
+    });
+  }
+  await prisma.accountDeletionRequest.deleteMany({
+    where: { userId: { in: DELETION_FIXTURE_USER_IDS } },
+  });
+}
 
 describe("auth", () => {
   beforeAll(async () => {
     await prisma.$connect();
-    await prisma.accountDeletionRequest.deleteMany({
-      where: { userId: { in: [USER_ID, SUSPENDED_USER_ID, PLATFORM_USER_ID] } },
-    });
+    await cleanupAccountDeletionFixtures();
     await prisma.studentBadge.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
@@ -100,9 +121,7 @@ describe("auth", () => {
   });
 
   afterAll(async () => {
-    await prisma.accountDeletionRequest.deleteMany({
-      where: { userId: { in: [USER_ID, SUSPENDED_USER_ID, PLATFORM_USER_ID] } },
-    });
+    await cleanupAccountDeletionFixtures();
     await prisma.studentBadge.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.pointEvent.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
     await prisma.studentStreak.deleteMany({ where: { tenantId: { in: [TENANT_A, TENANT_B] } } });
