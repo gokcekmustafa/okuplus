@@ -43,7 +43,9 @@ describe("account deletion request cancellation and admin read", () => {
       cancelledAt,
     }));
     withTenantContext.mockImplementation(async (_context, callback) =>
-      callback({ accountDeletionRequest: { updateMany, findFirst } } as never),
+      callback({
+        accountDeletionRequest: { updateMany, findFirst },
+      } as never),
     );
 
     const result = await cancelAccountDeletionRequest("owner-1", "request-1");
@@ -119,7 +121,9 @@ describe("account deletion request cancellation and admin read", () => {
       { userId: "admin-1", tenantId: null, platformRole: "SUPER_ADMIN" },
       expect.any(Function),
     );
-    expect(count).toHaveBeenCalledWith({ where: { status: "IDENTITY_REQUIRED" } });
+    expect(count).toHaveBeenCalledWith({
+      where: { status: { in: ["IDENTITY_REQUIRED", "UNDER_REVIEW", "AWAITING_USER"] } },
+    });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         skip: 10,

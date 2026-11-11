@@ -453,6 +453,19 @@
             ></span>
             <span class="nav-label">Hesap Silme Talepleri</span>
           </button>
+          <button
+            class="nav-item"
+            data-page="support-tickets"
+            data-admin
+            data-super-admin-only
+            type="button"
+          >
+            <span class="nav-icon" aria-hidden="true"
+              ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <use href="/assets/ui-icons.svg#question"></use></svg
+            ></span>
+            <span class="nav-label">Destek Talepleri</span>
+          </button>
           <button class="nav-item" data-page="students" data-admin data-management type="button">
             <span class="nav-icon" aria-hidden="true"
               ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -658,17 +671,25 @@
             <img src="/assets/student-home-logo.svg" width="34" height="32" alt="" />
             <span>OkuPratik</span>
           </div>
-          <details class="student-home-notifications" data-student>
-            <summary aria-label="Bildirimler">
+          <details class="student-home-notifications">
+            <summary aria-label="Bildirimler" aria-controls="notification-panel">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4M12 1v2" />
               </svg>
+              <span
+                id="notification-unread-count"
+                class="notification-unread-count hidden"
+                aria-live="polite"
+                >0</span
+              >
             </summary>
-            <div class="student-notification-panel">
-              <strong>Bildirimler</strong>
-              <p>Ödev ve değerlendirmelerini ilgili ekranlardan takip edebilirsin.</p>
-              <button type="button" data-user-menu-page="assignments">Ödevlerim</button>
-              <button type="button" data-user-menu-page="assessments">Değerlendirmelerim</button>
+            <div id="notification-panel" class="student-notification-panel">
+              <div class="notification-panel-heading">
+                <strong>Bildirimler</strong><span id="notification-unread-label">Güncel</span>
+              </div>
+              <div id="notification-list" class="notification-list" aria-live="polite">
+                <p class="notification-empty">Bildirimlerin yükleniyor…</p>
+              </div>
             </div>
           </details>
           <button
@@ -2093,6 +2114,162 @@
                 </div>
               </div>
             </div>
+            <section
+              id="account-deletion-admin-detail"
+              class="support-detail-card card hidden"
+              aria-labelledby="account-deletion-detail-title"
+            >
+              <div class="profile-card-heading">
+                <h3 id="account-deletion-detail-title">Talep ayrıntısı</h3>
+                <button
+                  id="account-deletion-detail-close"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                >
+                  Listeye dön
+                </button>
+              </div>
+              <p id="account-deletion-detail-summary" class="muted"></p>
+              <div id="account-deletion-detail-messages" class="support-conversation"></div>
+              <form id="account-deletion-admin-action-form" class="support-reply-form">
+                <label class="field"
+                  ><span>Durum</span
+                  ><select id="account-deletion-admin-next-status">
+                    <option value="">Durumu değiştirme</option>
+                    <option value="IDENTITY_REQUIRED">Ek kimlik doğrulaması bekliyor</option>
+                    <option value="UNDER_REVIEW">İnceleniyor</option>
+                    <option value="AWAITING_USER">Kullanıcıdan ek bilgi bekleniyor</option>
+                    <option value="DECLINED">Talep uygun bulunmadı</option>
+                  </select></label
+                >
+                <label class="field"
+                  ><span>Kullanıcıya mesaj veya iç not</span
+                  ><textarea
+                    id="account-deletion-admin-body"
+                    rows="4"
+                    maxlength="5000"
+                    placeholder="Kimlik belgesi veya hassas kanıt istemeden, gerekli sonraki adımı açıklayın."
+                  ></textarea>
+                </label>
+                <label class="field"
+                  ><span>Mesaj görünürlüğü</span
+                  ><select id="account-deletion-admin-visibility">
+                    <option value="USER">Kullanıcıya gönder</option>
+                    <option value="INTERNAL">Yalnızca yönetici iç notu</option>
+                  </select></label
+                >
+                <p id="account-deletion-admin-action-status" class="muted" role="status"></p>
+                <button
+                  id="account-deletion-admin-action-submit"
+                  type="submit"
+                  class="btn btn-primary"
+                >
+                  Güncellemeyi kaydet
+                </button>
+              </form>
+            </section>
+          </section>
+
+          <section id="page-support-tickets" class="page-view hidden" data-super-admin-only>
+            <div class="page-head">
+              <h2>Destek Talepleri</h2>
+              <p class="muted">
+                Kullanıcı mesajlarını yanıtlayın, durumları güncelleyin ve işlem geçmişini koruyun.
+              </p>
+            </div>
+            <div class="tenant-toolbar">
+              <label class="field inline-field"
+                ><span>Talep durumu</span
+                ><select id="admin-support-filter">
+                  <option value="ALL">Tüm talepler</option>
+                  <option value="NEW">Yeni</option>
+                  <option value="IN_PROGRESS">İnceleniyor</option>
+                  <option value="WAITING_FOR_USER">Kullanıcı yanıtı bekleniyor</option>
+                  <option value="RESOLVED">Çözüldü</option>
+                  <option value="CLOSED">Kapatıldı</option>
+                </select></label
+              >
+              <button id="admin-support-refresh" type="button" class="btn btn-secondary">
+                Yenile
+              </button>
+            </div>
+            <p id="admin-support-status" class="muted" role="status" aria-live="polite"></p>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Kullanıcı</th>
+                    <th>Konu</th>
+                    <th>Kategori</th>
+                    <th>Durum</th>
+                    <th>Güncelleme</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="admin-support-body">
+                  <tr>
+                    <td colspan="6" class="empty-cell">Talepler yükleniyor…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="tenant-pagination">
+              <span id="admin-support-page-info" class="muted">—</span>
+              <div class="pagination-actions">
+                <button id="admin-support-prev" type="button" class="btn btn-ghost btn-sm">
+                  Önceki</button
+                ><button id="admin-support-next" type="button" class="btn btn-ghost btn-sm">
+                  Sonraki
+                </button>
+              </div>
+            </div>
+            <section
+              id="admin-support-detail"
+              class="support-detail-card card hidden"
+              aria-labelledby="admin-support-detail-title"
+            >
+              <div class="profile-card-heading">
+                <h3 id="admin-support-detail-title">Destek talebi</h3>
+                <button id="admin-support-detail-close" type="button" class="btn btn-ghost btn-sm">
+                  Listeye dön
+                </button>
+              </div>
+              <p id="admin-support-detail-summary" class="muted"></p>
+              <div id="admin-support-detail-messages" class="support-conversation"></div>
+              <form id="admin-support-action-form" class="support-reply-form">
+                <label class="field"
+                  ><span>Durum</span
+                  ><select id="admin-support-action-status">
+                    <option value="">Durumu değiştirme</option>
+                    <option value="NEW">Yeni</option>
+                    <option value="IN_PROGRESS">İnceleniyor</option>
+                    <option value="WAITING_FOR_USER">Kullanıcı yanıtı bekleniyor</option>
+                    <option value="RESOLVED">Çözüldü</option>
+                    <option value="CLOSED">Kapatıldı</option>
+                  </select></label
+                >
+                <label class="field"
+                  ><span>Kullanıcıya yanıt</span
+                  ><textarea
+                    id="admin-support-action-message"
+                    rows="4"
+                    maxlength="5000"
+                    placeholder="Kullanıcının görebileceği yanıt"
+                  ></textarea>
+                </label>
+                <label class="field"
+                  ><span>Yönetici iç notu <small>(isteğe bağlı)</small></span
+                  ><textarea
+                    id="admin-support-action-note"
+                    rows="3"
+                    maxlength="5000"
+                    placeholder="Yalnızca Super Admin görünümünde saklanır"
+                  ></textarea>
+                </label>
+                <p id="admin-support-action-status-message" class="muted" role="status"></p>
+                <button type="submit" class="btn btn-primary">Güncellemeyi kaydet</button>
+              </form>
+            </section>
           </section>
 
           <!-- Kullanıcılar -->
@@ -6670,7 +6847,9 @@
                 <span>Talep durumu</span>
                 <select id="account-deletion-admin-filter">
                   <option value="pending">Bekleyen</option>
+                  <option value="open">Açık talepler</option>
                   <option value="cancelled">Geri çekilen</option>
+                  <option value="declined">Uygun bulunmayan</option>
                   <option value="all">Tüm talepler</option>
                 </select>
               </label>
@@ -6877,11 +7056,7 @@
                     <span>Ses efektleri</span>
                   </label>
                 </section>
-                <section
-                  class="profile-card card"
-                  data-student
-                  aria-labelledby="pilot-support-title"
-                >
+                <section class="profile-card card" aria-labelledby="pilot-support-title">
                   <div class="profile-card-heading">
                     <span class="profile-icon" aria-hidden="true"
                       ><svg class="ui-icon" viewBox="0 0 24 24">
@@ -6889,16 +7064,103 @@
                     ></span>
                     <h3 id="pilot-support-title">Yardım ve destek</h3>
                   </div>
-                  <p id="profile-support-availability" class="muted" role="status"></p>
-                  <div id="profile-support-actions" class="profile-actions" hidden>
-                    <button id="pilot-support-open" type="button" class="btn btn-secondary">
-                      Destek isteği gönder
+                  <p class="muted">
+                    Bir sorunun olduğunda destek talebi oluşturabilir, yanıtları bu ekrandan takip
+                    edebilirsin.
+                  </p>
+                  <form id="support-create-form" class="support-reply-form">
+                    <label class="field"
+                      ><span>Konu</span
+                      ><input
+                        id="support-create-subject"
+                        required
+                        minlength="3"
+                        maxlength="160"
+                        placeholder="Kısaca ne konuda destek istiyorsun?"
+                    /></label>
+                    <label class="field"
+                      ><span>Kategori</span
+                      ><select id="support-create-category">
+                        <option value="ACCOUNT">Hesap sorunu</option>
+                        <option value="TECHNICAL">Teknik sorun</option>
+                        <option value="LEARNING_PATH">Öğrenme yolu</option>
+                        <option value="PAYMENT">Ödeme / abonelik</option>
+                        <option value="OTHER">Diğer</option>
+                      </select></label
+                    >
+                    <label class="field"
+                      ><span>Açıklama</span
+                      ><textarea
+                        id="support-create-body"
+                        rows="4"
+                        required
+                        maxlength="5000"
+                        placeholder="Sorunu veya isteğini anlat. Şifre ya da özel kimlik bilgisi yazma."
+                      ></textarea>
+                    </label>
+                    <p
+                      id="support-create-status"
+                      class="muted"
+                      role="status"
+                      aria-live="polite"
+                    ></p>
+                    <button id="support-create-submit" type="submit" class="btn btn-secondary">
+                      Destek talebi oluştur
                     </button>
-                    <button id="pilot-bug-open" type="button" class="btn btn-ghost">
-                      Bir sorun bildir
+                  </form>
+                  <div class="support-list-heading">
+                    <h4>Destek taleplerim</h4>
+                    <button id="support-refresh" type="button" class="btn btn-ghost btn-sm">
+                      Yenile
                     </button>
                   </div>
-                  <p id="pilot-support-status" class="muted" role="status" aria-live="polite"></p>
+                  <p id="support-list-status" class="muted" role="status"></p>
+                  <div id="support-ticket-list" class="support-ticket-list">
+                    <p class="muted">Talepler yükleniyor…</p>
+                  </div>
+                  <section
+                    id="support-ticket-detail"
+                    class="support-detail-card hidden"
+                    aria-labelledby="support-ticket-detail-title"
+                  >
+                    <div class="profile-card-heading">
+                      <h4 id="support-ticket-detail-title">Talep ayrıntısı</h4>
+                      <button
+                        id="support-ticket-detail-close"
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                      >
+                        Listeye dön
+                      </button>
+                    </div>
+                    <p id="support-ticket-detail-summary" class="muted"></p>
+                    <div id="support-ticket-detail-messages" class="support-conversation"></div>
+                    <form id="support-ticket-reply-form" class="support-reply-form">
+                      <label class="field"
+                        ><span>Yanıtın</span
+                        ><textarea
+                          id="support-ticket-reply-body"
+                          rows="3"
+                          required
+                          maxlength="5000"
+                          placeholder="Bu talep üzerinden yanıt yaz"
+                        ></textarea>
+                      </label>
+                      <p
+                        id="support-ticket-reply-status"
+                        class="muted"
+                        role="status"
+                        aria-live="polite"
+                      ></p>
+                      <button
+                        id="support-ticket-reply-submit"
+                        type="submit"
+                        class="btn btn-secondary"
+                      >
+                        Yanıt gönder
+                      </button>
+                    </form>
+                  </section>
                 </section>
               </div>
             </div>
@@ -6945,6 +7207,31 @@
                       Talebimi geri çek
                     </button>
                   </div>
+                  <div id="account-deletion-history" class="account-deletion-history">
+                    <h4>Talep geçmişim</h4>
+                    <p class="muted">Kayıtlar yükleniyor…</p>
+                  </div>
+                  <section
+                    id="account-deletion-user-detail"
+                    class="support-detail-card hidden"
+                    aria-labelledby="account-deletion-user-detail-title"
+                  >
+                    <h4 id="account-deletion-user-detail-title">Talep ayrıntısı</h4>
+                    <div id="account-deletion-user-messages" class="support-conversation"></div>
+                    <form id="account-deletion-user-reply-form" class="support-reply-form hidden">
+                      <label class="field"
+                        ><span>Ek bilgin</span
+                        ><textarea
+                          id="account-deletion-user-reply-body"
+                          rows="3"
+                          maxlength="5000"
+                          placeholder="Yalnızca istenen açıklamayı yaz; kimlik belgesi ekleme."
+                        ></textarea>
+                      </label>
+                      <p id="account-deletion-user-reply-status" class="muted" role="status"></p>
+                      <button type="submit" class="btn btn-secondary">Yanıt gönder</button>
+                    </form>
+                  </section>
                 </div>
               </details>
               <dialog

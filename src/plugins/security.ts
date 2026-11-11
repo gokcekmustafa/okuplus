@@ -133,7 +133,7 @@ function rateLimitGroup(path: string): RateLimitGroup {
   if (path === "/billing/iyzico/webhook" || path.includes("/webhooks/")) return "webhook";
   if (path.startsWith("/auth/")) return "auth";
   if (path.startsWith("/billing/")) return "billing";
-  if (path.startsWith("/student/pilot/")) return "pilot";
+  if (path.startsWith("/student/pilot/") || path.startsWith("/support/")) return "pilot";
   return "default";
 }
 

@@ -38,6 +38,8 @@ import { healthRoutes } from "./modules/health/routes.js";
 import { mediaAdminRoutes } from "./modules/media/index.js";
 import { progressStudentRoutes } from "./modules/progress/index.js";
 import { pilotRoutes } from "./modules/pilot/index.js";
+import { notificationRoutes } from "./modules/notifications/index.js";
+import { supportRoutes } from "./modules/support/index.js";
 import { questionAdminRoutes } from "./modules/questions/index.js";
 import { questionStudentRoutes } from "./modules/questions/student-routes.js";
 import { sessionAdminRoutes } from "./modules/sessions/admin-routes.js";
@@ -129,6 +131,8 @@ export async function buildApp(
     enforceAuthOrigin: env.AUTH_ORIGIN_ENFORCEMENT === "on",
     cookieAuthEnabled: env.AUTH_COOKIE_TRANSPORT === "on",
   });
+  await app.register(notificationRoutes, { authProvider });
+  await app.register(supportRoutes, { authProvider });
   await app.register(tenantAdminRoutes, { authProvider });
   await app.register(userAdminRoutes, { authProvider });
   await app.register(studentAdminRoutes, { authProvider });

@@ -2,20 +2,11 @@ import { Prisma } from "@prisma/client";
 import { conflictError, notFoundError, serviceUnavailableError } from "../../lib/errors.js";
 import type { RequestContext } from "../tenant/context.js";
 import { withTenantContext } from "../tenant/context.js";
+import { notifySuperAdmins, notifyUser } from "../notifications/service.js";
 
 export const ACCOUNT_DELETION_REQUEST_STATUS = "IDENTITY_REQUIRED" as const;
 
-// Future states are included in the lookup contract so a later lifecycle
-// phase can expand the DB constraint and partial index without changing the
-// owner-scoped API. This phase only creates IDENTITY_REQUIRED rows.
-const OPEN_STATUSES = [
-  "RECEIVED",
-  "IDENTITY_REQUIRED",
-  "AUTHORITY_REVIEW",
-  "SCOPE_REVIEW",
-  "PROCESSING",
-  "RETRYABLE_FAILURE",
-] as const;
+const OPEN_STATUSES = ["IDENTITY_REQUIRED", "UNDER_REVIEW", "AWAITING_USER"] as const;
 
 const requestSelect = {
   id: true,
@@ -47,7 +38,8 @@ export type CancelledAccountDeletionRequest = {
   cancelled: boolean;
 };
 
-export type AdminAccountDeletionRequestFilter = "pending" | "cancelled" | "all";
+export type AdminAccountDeletionRequestFilter =
+  "pending" | "open" | "cancelled" | "declined" | "all";
 
 export type AdminAccountDeletionRequestPage = {
   items: Array<
@@ -94,12 +86,30 @@ export async function createAccountDeletionRequest(
   if (existing) return { request: existing, created: false };
 
   try {
-    const request = await withTenantContext(ownerContext(userId), (tx) =>
-      tx.accountDeletionRequest.create({
+    const request = await withTenantContext(ownerContext(userId), async (tx) => {
+      const created = await tx.accountDeletionRequest.create({
         data: { userId, status: ACCOUNT_DELETION_REQUEST_STATUS },
         select: requestSelect,
-      }),
-    );
+      });
+      await tx.accountDeletionRequestActivity.create({
+        data: {
+          requestId: created.id,
+          actorUserId: userId,
+          eventType: "CREATED",
+          toStatus: created.status,
+          note: "Talep kaydedildi.",
+          visibleToUser: true,
+        },
+      });
+      await notifySuperAdmins(tx, {
+        actorUserId: userId,
+        eventKey: `account-deletion:${created.id}:created`,
+        kind: "ACCOUNT_DELETION_REQUEST_CREATED",
+        targetType: "ACCOUNT_DELETION_REQUEST",
+        targetId: created.id,
+      });
+      return created;
+    });
     return { request, created: true };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -137,7 +147,9 @@ export async function cancelAccountDeletionRequest(
         select: requestSelect,
       });
       if (!request) throw notFoundError("Hesap silme talebi bulunamadı");
-      if (updated.count === 1) return { request, cancelled: true };
+      if (updated.count === 1) {
+        return { request, cancelled: true };
+      }
       if (request.status === "CANCELLED") return { request, cancelled: false };
       throw conflictError("Bu talep artık geri çekilemez");
     });
@@ -160,10 +172,10 @@ export async function listAdminAccountDeletionRequests(input: {
   pageSize: number;
 }): Promise<AdminAccountDeletionRequestPage> {
   const where =
-    input.filter === "pending"
-      ? { status: ACCOUNT_DELETION_REQUEST_STATUS }
-      : input.filter === "cancelled"
-        ? { status: "CANCELLED" }
+    input.filter === "pending" || input.filter === "open"
+      ? { status: { in: [...OPEN_STATUSES] } }
+      : input.filter === "cancelled" || input.filter === "declined"
+        ? { status: input.filter === "cancelled" ? "CANCELLED" : "DECLINED" }
         : {};
 
   try {
@@ -201,4 +213,257 @@ export async function listAdminAccountDeletionRequests(input: {
     }
     throw error;
   }
+}
+
+export async function getAccountDeletionRequestHistory(input: {
+  userId: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const page = input.page ?? 1;
+  const pageSize = input.pageSize ?? 20;
+  return withTenantContext(ownerContext(input.userId), async (tx) => {
+    const [items, total] = await Promise.all([
+      tx.accountDeletionRequest.findMany({
+        where: { userId: input.userId },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: requestSelect,
+      }),
+      tx.accountDeletionRequest.count({ where: { userId: input.userId } }),
+    ]);
+    return { items, page, pageSize, total };
+  });
+}
+
+function mapAccountDeletionDetail(
+  row: {
+    id: string;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+    cancelledAt: Date | null;
+    user?: { displayName: string };
+    messages: Array<{
+      id: string;
+      body: string;
+      visibleToUser: boolean;
+      createdAt: Date;
+      author: { displayName: string; platformRole: string | null };
+    }>;
+    activities: Array<{
+      id: string;
+      eventType: string;
+      fromStatus: string | null;
+      toStatus: string | null;
+      note: string | null;
+      visibleToUser: boolean;
+      createdAt: Date;
+      actor: { displayName: string; platformRole: string | null } | null;
+    }>;
+  },
+  isSuperAdmin: boolean,
+) {
+  return {
+    request: {
+      id: row.id,
+      status: row.status,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      cancelledAt: row.cancelledAt,
+      ...(row.user ? { userDisplayName: row.user.displayName } : {}),
+    },
+    messages: row.messages.map((message) => ({
+      id: message.id,
+      body: message.body,
+      createdAt: message.createdAt,
+      authorLabel:
+        message.author.platformRole === "SUPER_ADMIN" && !isSuperAdmin
+          ? "OkuPratik Destek"
+          : message.author.displayName,
+      visibleToUser: message.visibleToUser,
+    })),
+    activities: row.activities.map((activity) => ({
+      id: activity.id,
+      eventType: activity.eventType,
+      fromStatus: activity.fromStatus,
+      toStatus: activity.toStatus,
+      note: activity.note,
+      createdAt: activity.createdAt,
+      actorLabel:
+        activity.actor?.platformRole === "SUPER_ADMIN" && !isSuperAdmin
+          ? "OkuPratik Destek"
+          : (activity.actor?.displayName ?? "OkuPratik"),
+      visibleToUser: activity.visibleToUser,
+    })),
+  };
+}
+
+export async function getAccountDeletionRequestDetail(input: {
+  actorUserId: string;
+  requestId: string;
+  isSuperAdmin: boolean;
+}) {
+  const context: RequestContext = input.isSuperAdmin
+    ? { userId: input.actorUserId, tenantId: null, platformRole: "SUPER_ADMIN" }
+    : ownerContext(input.actorUserId);
+  const row = await withTenantContext(context, (tx) =>
+    tx.accountDeletionRequest.findFirst({
+      where: { id: input.requestId, ...(input.isSuperAdmin ? {} : { userId: input.actorUserId }) },
+      select: {
+        ...requestSelect,
+        ...(input.isSuperAdmin ? { user: { select: { displayName: true } } } : {}),
+        messages: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            body: true,
+            visibleToUser: true,
+            createdAt: true,
+            author: { select: { displayName: true, platformRole: true } },
+          },
+        },
+        activities: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true,
+            eventType: true,
+            fromStatus: true,
+            toStatus: true,
+            note: true,
+            visibleToUser: true,
+            createdAt: true,
+            actor: { select: { displayName: true, platformRole: true } },
+          },
+        },
+      },
+    }),
+  );
+  if (!row) throw notFoundError("Hesap silme talebi bulunamadı");
+  return mapAccountDeletionDetail(row, input.isSuperAdmin);
+}
+
+export async function sendAccountDeletionRequestMessage(input: {
+  userId: string;
+  requestId: string;
+  body: string;
+}) {
+  return withTenantContext(ownerContext(input.userId), async (tx) => {
+    const request = await tx.accountDeletionRequest.findFirst({
+      where: { id: input.requestId, userId: input.userId },
+      select: { id: true, status: true },
+    });
+    if (!request) throw notFoundError("Hesap silme talebi bulunamadı");
+    if (request.status !== "AWAITING_USER") {
+      throw conflictError("Şu anda bu talebe yanıt gönderilemiyor");
+    }
+    const message = await tx.accountDeletionRequestMessage.create({
+      data: {
+        requestId: request.id,
+        authorUserId: input.userId,
+        body: input.body,
+        visibleToUser: true,
+      },
+      select: { id: true, createdAt: true },
+    });
+    const changed = await tx.accountDeletionRequest.updateMany({
+      where: { id: request.id, userId: input.userId, status: "AWAITING_USER" },
+      data: { status: "UNDER_REVIEW" },
+    });
+    if (changed.count !== 1)
+      throw conflictError("Talep aynı anda güncellendi; yeniden yükleyip dene");
+    await notifySuperAdmins(tx, {
+      actorUserId: input.userId,
+      eventKey: `account-deletion:${request.id}:user-message:${message.id}`,
+      kind: "ACCOUNT_DELETION_REQUEST_USER_MESSAGE",
+      targetType: "ACCOUNT_DELETION_REQUEST",
+      targetId: request.id,
+    });
+    return { message, status: "UNDER_REVIEW" };
+  });
+}
+
+const ACCOUNT_DELETION_TRANSITIONS: Record<string, readonly string[]> = {
+  IDENTITY_REQUIRED: ["UNDER_REVIEW", "AWAITING_USER", "DECLINED"],
+  UNDER_REVIEW: ["IDENTITY_REQUIRED", "AWAITING_USER", "DECLINED"],
+  AWAITING_USER: ["UNDER_REVIEW", "DECLINED"],
+};
+
+export async function applyAdminAccountDeletionAction(input: {
+  actorUserId: string;
+  requestId: string;
+  status?: "IDENTITY_REQUIRED" | "UNDER_REVIEW" | "AWAITING_USER" | "DECLINED";
+  body?: string;
+  visibility?: "USER" | "INTERNAL";
+}) {
+  return withTenantContext(
+    { userId: input.actorUserId, tenantId: null, platformRole: "SUPER_ADMIN" },
+    async (tx) => {
+      const current = await tx.accountDeletionRequest.findUnique({
+        where: { id: input.requestId },
+        select: { id: true, userId: true, status: true, updatedAt: true },
+      });
+      if (!current) throw notFoundError("Hesap silme talebi bulunamadı");
+      const body = input.body?.trim();
+      if (!input.status && !body) throw conflictError("Durum veya not girilmeli");
+      if (input.status && input.status !== current.status) {
+        const allowed = ACCOUNT_DELETION_TRANSITIONS[current.status] ?? [];
+        if (!allowed.includes(input.status)) {
+          throw conflictError("Bu başvuruda bu durum geçişine izin verilmiyor");
+        }
+      }
+      const nextStatus = input.status ?? current.status;
+      if (nextStatus !== current.status) {
+        const changed = await tx.accountDeletionRequest.updateMany({
+          where: { id: current.id, status: current.status, updatedAt: current.updatedAt },
+          data: { status: nextStatus },
+        });
+        if (changed.count !== 1)
+          throw conflictError("Talep aynı anda güncellendi; yeniden yükleyip tekrar deneyin");
+      }
+
+      let notificationEventKey: string | null = null;
+      if (body && input.visibility === "INTERNAL") {
+        await tx.accountDeletionRequestActivity.create({
+          data: {
+            requestId: current.id,
+            actorUserId: input.actorUserId,
+            eventType: "INTERNAL_NOTE",
+            fromStatus: nextStatus === current.status ? null : current.status,
+            toStatus: nextStatus === current.status ? null : nextStatus,
+            note: body,
+            visibleToUser: false,
+          },
+        });
+      } else if (body) {
+        const message = await tx.accountDeletionRequestMessage.create({
+          data: {
+            requestId: current.id,
+            authorUserId: input.actorUserId,
+            body,
+            visibleToUser: true,
+          },
+          select: { id: true },
+        });
+        notificationEventKey = `account-deletion:${current.id}:admin-message:${message.id}`;
+      }
+
+      if (nextStatus !== current.status || (body && input.visibility !== "INTERNAL")) {
+        await notifyUser(tx, {
+          actorUserId: input.actorUserId,
+          recipientUserId: current.userId,
+          eventKey:
+            notificationEventKey ??
+            `account-deletion:${current.id}:admin-status:${current.updatedAt.toISOString()}:${nextStatus}`,
+          kind: "ACCOUNT_DELETION_REQUEST_UPDATED",
+          title: "Hesap silme talebinde güncelleme",
+          body: "Talebinin durumu güncellendi veya sana yeni bir yanıt gönderildi.",
+          targetType: "ACCOUNT_DELETION_REQUEST",
+          targetId: current.id,
+        });
+      }
+      return { requestId: current.id, status: nextStatus };
+    },
+  );
 }

@@ -1,4 +1,13 @@
 /* Student home: the welcome, overlapping work card, status and history form one layout. */
+.app {
+  --home-ink: var(--ui-ink, #101049);
+  --home-purple: #7639f5;
+  --home-muted: var(--ui-muted, #44496e);
+  --home-canvas: var(--ui-canvas, #fafaff);
+  --home-card: var(--ui-surface, #fff);
+  --home-line: var(--ui-line, #efedf9);
+  --home-shadow: 0 3px 7px rgb(46 32 110 / 8%), 0 10px 22px rgb(65 45 120 / 3%);
+}
 .student-shell {
   --home-ink: #101049;
   --home-purple: #7639f5;
@@ -550,6 +559,239 @@
 .student-shell #student-bottom-nav button:focus-visible {
   outline: 3px solid #ba9aff;
   outline-offset: 3px;
+}
+
+/* Authenticated notification center, shared by learner and administrator shells. */
+.student-home-notifications {
+  display: block;
+  position: relative;
+  z-index: 30;
+  order: 3;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.student-home-notifications summary {
+  position: relative;
+}
+.notification-unread-count {
+  position: absolute;
+  top: 3px;
+  right: 0;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #e34b5e;
+  color: #fff;
+  font:
+    700 10px/1 Arial,
+    sans-serif;
+}
+.notification-panel-heading,
+.support-list-heading,
+.support-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.notification-panel-heading > span {
+  color: var(--home-muted);
+  font-size: 11px;
+}
+.notification-list {
+  display: grid;
+  max-height: min(420px, 65vh);
+  margin-top: 10px;
+  overflow-y: auto;
+  gap: 7px;
+}
+.notification-item {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--home-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--home-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.notification-item.is-unread {
+  border-color: #cfc0ff;
+  background: #f6f2ff;
+}
+.notification-item-body,
+.notification-item time {
+  color: var(--home-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.notification-empty {
+  margin: 10px 0 0;
+  color: var(--home-muted);
+  font-size: 13px;
+}
+.support-list-heading {
+  margin: 18px 0 8px;
+}
+.support-list-heading h4,
+.account-deletion-history h4 {
+  margin: 0;
+  color: var(--home-ink);
+}
+.support-ticket-list,
+.account-deletion-history {
+  display: grid;
+  gap: 7px;
+}
+.support-ticket-row,
+.account-deletion-history-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--home-line);
+  border-radius: 12px;
+  background: var(--home-card);
+  color: var(--home-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.support-ticket-row > span:first-child,
+.account-deletion-history-row > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.support-ticket-row small,
+.account-deletion-history-row small {
+  overflow-wrap: anywhere;
+  color: var(--home-muted);
+  font-size: 11px;
+}
+.support-status-chip {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #f0edff;
+  color: #5925cb;
+  font-size: 11px;
+}
+.support-detail-card {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--home-line);
+  border-radius: 14px;
+  background: var(--home-canvas);
+}
+.support-conversation {
+  display: grid;
+  max-height: 440px;
+  margin: 12px 0;
+  overflow-y: auto;
+  gap: 8px;
+}
+.support-message,
+.support-activity {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--home-line);
+  border-radius: 12px;
+  background: var(--home-card);
+  color: var(--home-ink);
+}
+.support-message p,
+.support-activity p {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.support-message time,
+.support-activity time {
+  color: var(--home-muted);
+  font-size: 11px;
+}
+.support-activity {
+  background: #f7f5ff;
+}
+.support-activity > span {
+  margin-left: 7px;
+  color: #5925cb;
+  font-size: 12px;
+}
+.support-activity time {
+  display: block;
+  margin-top: 7px;
+}
+.support-reply-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.support-reply-form textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+.support-detail-card .profile-card-heading {
+  align-items: flex-start;
+}
+.support-ticket-unread {
+  background: #f7f3ff;
+}
+.support-unread-label {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #e9ddff;
+  color: #5120b7;
+  font-size: 10px;
+}
+#account-deletion-history {
+  margin-top: 16px;
+}
+@media (min-width: 769px) {
+  .app:not(.student-shell) .topbar > #sidebar-toggle {
+    order: 1;
+  }
+  .app:not(.student-shell) .topbar > .topbar-context {
+    order: 2;
+    flex: 1;
+  }
+  .app:not(.student-shell) .topbar > .student-home-notifications {
+    order: 3;
+    margin-left: 0;
+  }
+  .app:not(.student-shell) .topbar > .topbar-user {
+    order: 4;
+  }
+}
+@media (max-width: 768px) {
+  .student-notification-panel {
+    position: fixed;
+    top: 66px;
+    right: 12px;
+    width: min(360px, calc(100vw - 24px));
+    max-height: calc(100dvh - 86px);
+    overflow-y: auto;
+  }
+  .support-ticket-row,
+  .account-deletion-history-row {
+    align-items: flex-start;
+  }
+  .support-status-chip {
+    white-space: normal;
+    text-align: right;
+  }
 }
 @media (min-width: 769px) {
   .student-shell .app-main:has(#page-dashboard:not(.hidden)) > .topbar {

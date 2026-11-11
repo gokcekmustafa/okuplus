@@ -34,8 +34,12 @@ import { z } from "zod/v3";
 import {
   cancelAccountDeletionRequest,
   createAccountDeletionRequest,
+  applyAdminAccountDeletionAction,
+  getAccountDeletionRequestDetail,
+  getAccountDeletionRequestHistory,
   getCurrentAccountDeletionRequest,
   listAdminAccountDeletionRequests,
+  sendAccountDeletionRequestMessage,
 } from "./account-deletion-requests.js";
 
 const loginSchema = {
@@ -101,7 +105,7 @@ const accountDeletionRequestBodySchema = {
 
 const accountDeletionRequestAdminQuerySchema = z
   .object({
-    status: z.enum(["pending", "cancelled", "all"]).default("pending"),
+    status: z.enum(["pending", "open", "cancelled", "declined", "all"]).default("pending"),
     page: z.coerce.number().int().min(1).max(100_000).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   })
@@ -118,6 +122,17 @@ const rejectAccountDeletionRequestBodyFields = async (request: FastifyRequest): 
     throw validationError("Hesap silme talebi isteğinde ek alan kabul edilmiyor");
   }
 };
+
+const accountDeletionIdParams = z.object({ id: z.string().trim().min(1).max(128) }).strict();
+const accountDeletionMessageBody = z.object({ body: z.string().trim().min(1).max(5000) }).strict();
+const accountDeletionAdminActionBody = z
+  .object({
+    status: z.enum(["IDENTITY_REQUIRED", "UNDER_REVIEW", "AWAITING_USER", "DECLINED"]).optional(),
+    body: z.string().trim().min(1).max(5000).optional(),
+    visibility: z.enum(["USER", "INTERNAL"]).default("USER"),
+  })
+  .strict()
+  .refine((value) => value.status || value.body, "Durum veya mesaj girilmeli");
 
 const allowEmptyRefreshBody = async (request: FastifyRequest): Promise<void> => {
   if (request.body === undefined) request.body = {};
@@ -468,6 +483,70 @@ export async function authRoutes(
     },
   );
 
+  app.get(
+    "/auth/account-deletion-requests/history",
+    { preHandler: [requireAuth(authProvider)] },
+    async (request, reply) => {
+      setNoStore(reply);
+      return reply.send(
+        ok(await getAccountDeletionRequestHistory({ userId: request.authUser!.id })),
+      );
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/auth/account-deletion-requests/:id",
+    { preHandler: [requireAuth(authProvider)] },
+    async (request, reply) => {
+      setNoStore(reply);
+      const { id } = accountDeletionIdParams.parse(request.params);
+      return reply.send(
+        ok(
+          await getAccountDeletionRequestDetail({
+            actorUserId: request.authUser!.id,
+            requestId: id,
+            isSuperAdmin: false,
+          }),
+        ),
+      );
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/auth/account-deletion-requests/:id/messages",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          additionalProperties: false,
+          properties: { id: { type: "string", minLength: 1, maxLength: 128 } },
+        },
+        body: {
+          type: "object",
+          required: ["body"],
+          additionalProperties: false,
+          properties: { body: { type: "string", minLength: 1, maxLength: 5000 } },
+        },
+      },
+      preHandler: [requireAuth(authProvider)],
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const { id } = accountDeletionIdParams.parse(request.params);
+      const { body } = accountDeletionMessageBody.parse(request.body);
+      return reply.code(201).send(
+        ok(
+          await sendAccountDeletionRequestMessage({
+            userId: request.authUser!.id,
+            requestId: id,
+            body,
+          }),
+        ),
+      );
+    },
+  );
+
   app.post<{ Params: { id: string } }>(
     "/auth/account-deletion-requests/:id/cancel",
     {
@@ -510,6 +589,65 @@ export async function authRoutes(
             filter: query.status,
             page: query.page,
             pageSize: query.pageSize,
+          }),
+        ),
+      );
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/admin/account-deletion-requests/:id",
+    { preHandler: [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])] },
+    async (request, reply) => {
+      setNoStore(reply);
+      const { id } = accountDeletionIdParams.parse(request.params);
+      return reply.send(
+        ok(
+          await getAccountDeletionRequestDetail({
+            actorUserId: request.authUser!.id,
+            requestId: id,
+            isSuperAdmin: true,
+          }),
+        ),
+      );
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/admin/account-deletion-requests/:id/actions",
+    {
+      schema: {
+        params: {
+          type: "object",
+          required: ["id"],
+          additionalProperties: false,
+          properties: { id: { type: "string", minLength: 1, maxLength: 128 } },
+        },
+        body: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            status: {
+              type: "string",
+              enum: ["IDENTITY_REQUIRED", "UNDER_REVIEW", "AWAITING_USER", "DECLINED"],
+            },
+            body: { type: "string", minLength: 1, maxLength: 5000 },
+            visibility: { type: "string", enum: ["USER", "INTERNAL"] },
+          },
+        },
+      },
+      preHandler: [requireAuth(authProvider), requirePlatformRole(["SUPER_ADMIN"])],
+    },
+    async (request, reply) => {
+      setNoStore(reply);
+      const { id } = accountDeletionIdParams.parse(request.params);
+      const action = accountDeletionAdminActionBody.parse(request.body);
+      return reply.send(
+        ok(
+          await applyAdminAccountDeletionAction({
+            actorUserId: request.authUser!.id,
+            requestId: id,
+            ...action,
           }),
         ),
       );

@@ -350,6 +350,7 @@ describe("account deletion request UI", () => {
     const parseResponse = vi.fn(async () => ({
       items: [
         {
+          id: "request-1",
           userDisplayName: "<img src=x onerror=alert(1)>",
           createdAt: "2026-11-01T10:00:00.000Z",
           status: "IDENTITY_REQUIRED",
@@ -371,6 +372,7 @@ describe("account deletion request UI", () => {
       URLSearchParams,
       Intl,
       Date,
+      accountDeletionStatusLabel: (status: string) => status,
       escapeHtml: (value: string) =>
         value
           .replaceAll("&", "&amp;")

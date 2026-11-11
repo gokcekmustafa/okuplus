@@ -38,6 +38,11 @@ let profileView = null;
 let accountDeletionAdminPage = 1;
 let accountDeletionAdminFilter = "pending";
 let accountDeletionAdminRequestRevision = 0;
+let supportAdminPage = 1;
+let supportAdminRequestRevision = 0;
+let notificationPollingTimer = null;
+let notificationRequestRevision = 0;
+let notificationItems = [];
 
 function resolveApiRequest(input) {
   if (!configuredApiBaseUrl || typeof input !== "string" || !input.startsWith("/")) {
@@ -1394,6 +1399,9 @@ async function restoreSession() {
 // ---------- Ekran geçişleri ----------
 
 function showLogin() {
+  stopNotificationPolling();
+  currentUserId = null;
+  currentPlatformRole = null;
   $("view-login").classList.remove("hidden");
   $("view-app").classList.add("hidden");
   $("view-guest")?.classList.add("hidden");
@@ -1429,6 +1437,7 @@ function showDashboard(me) {
     !isPlatform && currentTenantType === "INDIVIDUAL" && (isStudentUser || isParentUser);
   currentUserId = user.id;
   currentPlatformRole = user.platformRole ?? null;
+  startNotificationPolling();
   $("view-app").classList.toggle("superadmin-shell", currentPlatformRole === "SUPER_ADMIN");
   const analyticsScopeCopy = $("analytics-scope-copy");
   if (analyticsScopeCopy) {
@@ -1580,10 +1589,6 @@ async function loadAccountProfile() {
     fillAccountProfile(data);
     $("account-profile-fields").disabled = false;
     $("account-profile-submit").disabled = false;
-    $("profile-support-actions").hidden = data.pilotSupportAvailable !== true;
-    $("profile-support-availability").textContent = data.pilotSupportAvailable
-      ? "Geri bildirim gönder veya karşılaştığın bir sorunu bildir."
-      : "Uygulama içi destek şu anda kullanılamıyor.";
     status.textContent = "";
   } catch (error) {
     if (view !== profileView) return;
@@ -1681,9 +1686,12 @@ function openProfileView() {
   $("account-profile-fields").disabled = true;
   $("account-profile-birthyear").max = new Date().getFullYear();
   fillAccountProfile({ displayName: $("user-name").textContent });
-  $("profile-support-actions").hidden = true;
-  $("profile-support-availability").textContent = "";
-  $("pilot-support-status").textContent = "";
+  $("support-create-form")?.reset?.();
+  if ($("support-create-status")) $("support-create-status").textContent = "";
+  if ($("support-list-status")) $("support-list-status").textContent = "";
+  $("support-ticket-detail")?.classList.add("hidden");
+  if ($("support-ticket-list"))
+    $("support-ticket-list").innerHTML = '<p class="muted">Talepler yükleniyor…</p>';
   $("profile-deletion-details").open = false;
   $("profile-deletion-confirm").close();
   $("profile-deletion-cancel-confirm").close();
@@ -1692,11 +1700,17 @@ function openProfileView() {
   $("account-deletion-request-retry").hidden = true;
   $("account-deletion-request-submit").hidden = true;
   $("account-deletion-request-cancel").hidden = true;
+  if ($("account-deletion-history"))
+    $("account-deletion-history").innerHTML =
+      '<h4>Talep geçmişim</h4><p class="muted">Kayıtlar yükleniyor…</p>';
+  $("account-deletion-user-detail")?.classList.add("hidden");
   $("profile-progress").classList.toggle("hidden", !isStudentUser);
   $("profile-progress-metrics").classList.add("hidden");
   $("profile-progress-status").textContent = "Gelişim özeti yükleniyor…";
   if (isStudentUser) void loadProfileProgress(view);
   void loadAccountProfile();
+  if (typeof loadSupportTickets === "function") void loadSupportTickets();
+  if (typeof loadAccountDeletionHistory === "function") void loadAccountDeletionHistory();
 }
 
 function setupAccountProfileEvents() {
@@ -1705,12 +1719,279 @@ function setupAccountProfileEvents() {
   $("profile-open-progress")?.addEventListener("click", () => navigate("progress"));
 }
 
+function supportStatusLabel(status) {
+  return (
+    {
+      NEW: "Yeni",
+      IN_PROGRESS: "İnceleniyor",
+      WAITING_FOR_USER: "Yanıtınız bekleniyor",
+      RESOLVED: "Çözüldü",
+      CLOSED: "Kapatıldı",
+    }[status] || "Durum bilgisi yok"
+  );
+}
+
+function supportCategoryLabel(category) {
+  return (
+    {
+      ACCOUNT: "Hesap sorunu",
+      TECHNICAL: "Teknik sorun",
+      LEARNING_PATH: "Öğrenme yolu",
+      PAYMENT: "Ödeme / abonelik",
+      OTHER: "Diğer",
+    }[category] || "Diğer"
+  );
+}
+
+function renderSupportConversation(targetId, data) {
+  const target = $(targetId);
+  if (!target) return;
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  const activities = Array.isArray(data?.activities) ? data.activities : [];
+  const entries = [
+    ...messages.map((item) => ({ ...item, entryType: "message" })),
+    ...activities.map((item) => ({ ...item, entryType: "activity" })),
+  ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  target.innerHTML = entries.length
+    ? entries
+        .map((item) => {
+          const date = escapeHtml(formatAccountDeletionRequestDate(item.createdAt));
+          if (item.entryType === "message") {
+            return `<article class="support-message"><div class="support-message-meta"><strong>${escapeHtml(item.authorLabel || "Kullanıcı")}</strong><time>${date}</time></div><p>${escapeHtml(item.body || "")}</p></article>`;
+          }
+          const statusChange =
+            item.fromStatus && item.toStatus
+              ? `${accountDeletionStatusLabel(item.fromStatus) === item.fromStatus ? supportStatusLabel(item.fromStatus) : accountDeletionStatusLabel(item.fromStatus)} → ${accountDeletionStatusLabel(item.toStatus) === item.toStatus ? supportStatusLabel(item.toStatus) : accountDeletionStatusLabel(item.toStatus)}`
+              : "Güncelleme";
+          return `<article class="support-activity"><strong>${escapeHtml(item.actorLabel || "OkuPratik")}</strong><span>${escapeHtml(statusChange)}</span>${item.note ? `<p>${escapeHtml(item.note)}</p>` : ""}<time>${date}</time></article>`;
+        })
+        .join("")
+    : '<p class="muted">Henüz mesaj veya işlem geçmişi yok.</p>';
+}
+
+async function loadSupportTickets() {
+  const list = $("support-ticket-list");
+  const status = $("support-list-status");
+  if (!list || !currentUserId) return;
+  list.innerHTML = '<p class="muted">Destek talepleri yükleniyor…</p>';
+  try {
+    const result = await parseResponse(
+      await authenticatedFetch("/support/tickets?page=1&pageSize=30", { cache: "no-store" }),
+    );
+    const items = Array.isArray(result?.items) ? result.items : [];
+    list.innerHTML = items.length
+      ? items
+          .map(
+            (item) =>
+              `<button type="button" class="support-ticket-row" data-support-ticket-open="${escapeHtml(item.id)}"><span><strong>${escapeHtml(item.subject)}</strong><small>${escapeHtml(supportCategoryLabel(item.category))} · ${escapeHtml(formatAccountDeletionRequestDate(item.updatedAt))}</small></span><span class="support-status-chip">${escapeHtml(supportStatusLabel(item.status))}</span></button>`,
+          )
+          .join("")
+      : '<p class="muted">Henüz destek talebin yok.</p>';
+    if (status) status.textContent = "";
+  } catch {
+    list.innerHTML = '<p class="muted">Destek talepleri şu anda yüklenemiyor.</p>';
+    if (status) status.textContent = "Daha sonra yeniden deneyebilirsin.";
+  }
+}
+
+async function openSupportTicket(ticketId) {
+  const detail = $("support-ticket-detail");
+  if (!detail) return;
+  detail.classList.remove("hidden");
+  $("support-ticket-detail-summary").textContent = "Talep ayrıntısı yükleniyor…";
+  $("support-ticket-detail-messages").innerHTML = "";
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch(`/support/tickets/${encodeURIComponent(ticketId)}`, {
+        cache: "no-store",
+      }),
+    );
+    const ticket = data?.ticket;
+    if (!ticket) throw new Error("Talep bulunamadı");
+    detail.dataset.ticketId = ticket.id;
+    $("support-ticket-detail-title").textContent = ticket.subject;
+    $("support-ticket-detail-summary").textContent =
+      `${supportCategoryLabel(ticket.category)} · ${supportStatusLabel(ticket.status)} · ${formatAccountDeletionRequestDate(ticket.createdAt)}`;
+    renderSupportConversation("support-ticket-detail-messages", data);
+    $("support-ticket-reply-form").classList.toggle("hidden", ticket.status === "CLOSED");
+    $("support-ticket-reply-status").textContent =
+      ticket.status === "CLOSED" ? "Bu talep kapatılmış. Yanıt yazdığında yeniden açılır." : "";
+  } catch (error) {
+    $("support-ticket-detail-summary").textContent = formatStudentError(
+      error,
+      "Talep ayrıntısı yüklenemedi.",
+    );
+  }
+}
+
+async function submitSupportTicket(event) {
+  event.preventDefault();
+  const button = $("support-create-submit");
+  const status = $("support-create-status");
+  const subject = $("support-create-subject").value.trim();
+  const body = $("support-create-body").value.trim();
+  if (subject.length < 3 || !body) return;
+  button.disabled = true;
+  status.textContent = "Talep gönderiliyor…";
+  try {
+    const result = await parseResponse(
+      await authenticatedFetch("/support/tickets", {
+        method: "POST",
+        body: JSON.stringify({ subject, category: $("support-create-category").value, body }),
+      }),
+    );
+    $("support-create-form").reset();
+    status.textContent = "Destek talebin kaydedildi.";
+    await loadSupportTickets();
+    if (result?.ticket?.id) await openSupportTicket(result.ticket.id);
+  } catch (error) {
+    status.textContent = formatStudentError(error, "Talep gönderilemedi. Biraz sonra tekrar dene.");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function submitSupportTicketReply(event) {
+  event.preventDefault();
+  const form = $("support-ticket-reply-form");
+  const ticketId = form?.closest("#support-ticket-detail")?.dataset.ticketId;
+  const body = $("support-ticket-reply-body").value.trim();
+  const status = $("support-ticket-reply-status");
+  if (!ticketId || !body) return;
+  status.textContent = "Yanıt gönderiliyor…";
+  try {
+    await parseResponse(
+      await authenticatedFetch(`/support/tickets/${encodeURIComponent(ticketId)}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      }),
+    );
+    $("support-ticket-reply-body").value = "";
+    status.textContent = "Yanıtın gönderildi.";
+    await Promise.all([openSupportTicket(ticketId), loadSupportTickets()]);
+  } catch (error) {
+    status.textContent = formatStudentError(error, "Yanıt gönderilemedi.");
+  }
+}
+
+function setupSupportEvents() {
+  $("support-create-form")?.addEventListener("submit", submitSupportTicket);
+  $("support-refresh")?.addEventListener("click", () => void loadSupportTickets());
+  $("support-ticket-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-support-ticket-open]");
+    if (button) void openSupportTicket(button.dataset.supportTicketOpen);
+  });
+  $("support-ticket-detail-close")?.addEventListener("click", () =>
+    $("support-ticket-detail").classList.add("hidden"),
+  );
+  $("support-ticket-reply-form")?.addEventListener("submit", submitSupportTicketReply);
+}
+
 function accountDeletionRequestStatusMessage(request) {
   if (!request) return "Henüz bir hesap silme talebin yok.";
-  if (request.status === "IDENTITY_REQUIRED") {
-    return "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor. İstersen talebini geri çekebilirsin.";
+  const messages = {
+    IDENTITY_REQUIRED:
+      "Talebin kaydedildi ve ek kimlik doğrulaması bekliyor. İstersen talebini geri çekebilirsin.",
+    UNDER_REVIEW: "Talebin inceleniyor.",
+    AWAITING_USER: "Talebin için senden ek bilgi bekleniyor.",
+    DECLINED: "Talebin uygun bulunmadı. Ayrıntıyı talep geçmişinde görebilirsin.",
+    CANCELLED: "Talebin geri çekildi. Hesabın ve verilerin etkilenmedi.",
+  };
+  return messages[request.status] || "Talebin kaydedildi; durumu talep geçmişinde görebilirsin.";
+}
+
+function accountDeletionStatusLabel(status) {
+  return (
+    {
+      IDENTITY_REQUIRED: "Ek doğrulama bekliyor",
+      UNDER_REVIEW: "İnceleniyor",
+      AWAITING_USER: "Senden ek bilgi bekleniyor",
+      DECLINED: "Uygun bulunmadı",
+      CANCELLED: "Geri çekildi",
+    }[status] || status
+  );
+}
+
+async function loadAccountDeletionHistory() {
+  const container = $("account-deletion-history");
+  if (!container || !currentUserId) return;
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch("/auth/account-deletion-requests/history", { cache: "no-store" }),
+    );
+    const items = Array.isArray(data?.items) ? data.items : [];
+    container.innerHTML = `<h4>Talep geçmişim</h4>${items.length ? items.map((item) => `<button type="button" class="account-deletion-history-row" data-account-deletion-open="${escapeHtml(item.id)}"><span><strong>${escapeHtml(accountDeletionStatusLabel(item.status))}</strong><small>${escapeHtml(formatAccountDeletionRequestDate(item.createdAt))}</small></span><span aria-hidden="true">›</span></button>`).join("") : '<p class="muted">Henüz hesap silme talebin yok.</p>'}`;
+  } catch {
+    container.innerHTML =
+      '<h4>Talep geçmişim</h4><p class="muted">Talep geçmişin şu anda yüklenemiyor.</p>';
   }
-  return "Hesap silme talebin kayıtlı.";
+}
+
+async function openAccountDeletionRequestDetail(requestId) {
+  const section = $("account-deletion-user-detail");
+  if (!section) return;
+  section.classList.remove("hidden");
+  $("account-deletion-user-detail-title").textContent = "Talep ayrıntısı yükleniyor…";
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch(`/auth/account-deletion-requests/${encodeURIComponent(requestId)}`, {
+        cache: "no-store",
+      }),
+    );
+    const request = data?.request;
+    if (!request) throw new Error("Talep bulunamadı");
+    section.dataset.requestId = request.id;
+    $("account-deletion-user-detail-title").textContent =
+      `Talep · ${accountDeletionStatusLabel(request.status)}`;
+    renderSupportConversation("account-deletion-user-messages", data);
+    $("account-deletion-user-reply-form").classList.toggle(
+      "hidden",
+      request.status !== "AWAITING_USER",
+    );
+    $("account-deletion-user-reply-status").textContent =
+      request.status === "AWAITING_USER"
+        ? "İstenen ek bilgiyi burada iletebilirsin. Kimlik belgesi yükleme alanı bulunmuyor."
+        : "";
+  } catch (error) {
+    $("account-deletion-user-detail-title").textContent = formatStudentError(
+      error,
+      "Talep ayrıntısı yüklenemedi.",
+    );
+  }
+}
+
+async function submitAccountDeletionRequestReply(event) {
+  event.preventDefault();
+  const form = $("account-deletion-user-reply-form");
+  const requestId = form?.closest("#account-deletion-user-detail")?.dataset.requestId;
+  const body = $("account-deletion-user-reply-body").value.trim();
+  const status = $("account-deletion-user-reply-status");
+  if (!requestId || !body) return;
+  status.textContent = "Yanıt gönderiliyor…";
+  try {
+    await parseResponse(
+      await authenticatedFetch(
+        `/auth/account-deletion-requests/${encodeURIComponent(requestId)}/messages`,
+        { method: "POST", body: JSON.stringify({ body }) },
+      ),
+    );
+    $("account-deletion-user-reply-body").value = "";
+    status.textContent = "Yanıtın gönderildi; talebin yeniden incelemeye alındı.";
+    await Promise.all([loadAccountDeletionHistory(), openAccountDeletionRequestDetail(requestId)]);
+  } catch (error) {
+    status.textContent = formatStudentError(error, "Yanıt gönderilemedi.");
+  }
+}
+
+function setupAccountDeletionHistoryEvents() {
+  $("account-deletion-history")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-account-deletion-open]");
+    if (button) void openAccountDeletionRequestDetail(button.dataset.accountDeletionOpen);
+  });
+  $("account-deletion-user-reply-form")?.addEventListener(
+    "submit",
+    submitAccountDeletionRequestReply,
+  );
 }
 
 async function loadAccountDeletionRequest(submit = false) {
@@ -1746,6 +2027,7 @@ async function loadAccountDeletionRequest(submit = false) {
     status.textContent = accountDeletionRequestStatusMessage(request);
     button.hidden = Boolean(request);
     cancelButton.hidden = request?.status !== "IDENTITY_REQUIRED";
+    void loadAccountDeletionHistory();
   } catch (error) {
     if (view !== profileView) return;
     view.deletionState = "error";
@@ -1809,8 +2091,12 @@ function setupAccountDeletionRequestEvents() {
   const dialog = $("profile-deletion-confirm");
   const cancelDialog = $("profile-deletion-cancel-confirm");
   details?.addEventListener("toggle", () => {
-    if (details.open && profileView?.deletionState === "idle") void loadAccountDeletionRequest();
+    if (details.open) {
+      if (profileView?.deletionState === "idle") void loadAccountDeletionRequest();
+      void loadAccountDeletionHistory();
+    }
   });
+  setupAccountDeletionHistoryEvents();
   $("account-deletion-request-retry")?.addEventListener(
     "click",
     () => void loadAccountDeletionRequest(),
@@ -1866,12 +2152,7 @@ async function loadAdminAccountDeletionRequests() {
     const total = Number.isSafeInteger(result?.total) ? result.total : 0;
     const page = Number.isSafeInteger(result?.page) ? result.page : accountDeletionAdminPage;
     const pageSize = Number.isSafeInteger(result?.pageSize) ? result.pageSize : 25;
-    const statusLabel = (requestStatus) =>
-      requestStatus === "IDENTITY_REQUIRED"
-        ? "Ek kimlik doğrulaması bekliyor"
-        : requestStatus === "CANCELLED"
-          ? "Öğrenci tarafından geri çekildi"
-          : "İnceleme aşamasında";
+    const statusLabel = (requestStatus) => accountDeletionStatusLabel(requestStatus);
 
     body.innerHTML = items.length
       ? items
@@ -1879,7 +2160,7 @@ async function loadAdminAccountDeletionRequests() {
             (item) => `<tr>
               <td>${escapeHtml(item.userDisplayName || "İsimsiz kullanıcı")}</td>
               <td>${escapeHtml(formatAccountDeletionRequestDate(item.createdAt))}</td>
-              <td>${escapeHtml(statusLabel(item.status))}</td>
+              <td><button type="button" class="link-btn" data-account-deletion-admin-open="${escapeHtml(item.id)}">${escapeHtml(statusLabel(item.status))} · Ayrıntıyı aç</button></td>
               <td>${escapeHtml(item.cancelledAt ? formatAccountDeletionRequestDate(item.cancelledAt) : "—")}</td>
             </tr>`,
           )
@@ -1896,6 +2177,91 @@ async function loadAdminAccountDeletionRequests() {
     body.innerHTML = '<tr><td colspan="4" class="empty-cell">Talepler yüklenemedi.</td></tr>';
     pageInfo.textContent = "—";
     status.textContent = "Talep listesi şu anda yüklenemiyor. Biraz sonra tekrar deneyin.";
+  }
+}
+
+async function loadAdminAccountDeletionDetail(requestId) {
+  const section = $("account-deletion-admin-detail");
+  if (!section || currentPlatformRole !== "SUPER_ADMIN") return;
+  section.classList.remove("hidden");
+  section.dataset.requestId = requestId;
+  $("account-deletion-detail-summary").textContent = "Talep ayrıntısı yükleniyor…";
+  $("account-deletion-detail-messages").innerHTML = "";
+  $("account-deletion-admin-action-status").textContent = "";
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch(
+        `/admin/account-deletion-requests/${encodeURIComponent(requestId)}`,
+        { cache: "no-store" },
+      ),
+    );
+    const request = data?.request;
+    if (!request) throw new Error("Talep bulunamadı");
+    section.dataset.requestId = request.id;
+    $("account-deletion-detail-title").textContent =
+      `Hesap silme talebi · ${request.userDisplayName || "Kullanıcı"}`;
+    $("account-deletion-detail-summary").textContent =
+      `${accountDeletionStatusLabel(request.status)} · ${formatAccountDeletionRequestDate(request.createdAt)}${request.cancelledAt ? ` · Geri çekilme: ${formatAccountDeletionRequestDate(request.cancelledAt)}` : ""}. Bu ekrandan hesap silinmez.`;
+    renderSupportConversation("account-deletion-detail-messages", data);
+    const select = $("account-deletion-admin-next-status");
+    const transitions =
+      {
+        IDENTITY_REQUIRED: ["UNDER_REVIEW", "AWAITING_USER", "DECLINED"],
+        UNDER_REVIEW: ["IDENTITY_REQUIRED", "AWAITING_USER", "DECLINED"],
+        AWAITING_USER: ["UNDER_REVIEW", "DECLINED"],
+      }[request.status] || [];
+    const labels = {
+      IDENTITY_REQUIRED: "Ek kimlik doğrulaması bekliyor",
+      UNDER_REVIEW: "İnceleniyor",
+      AWAITING_USER: "Kullanıcıdan ek bilgi bekleniyor",
+      DECLINED: "Talep uygun bulunmadı",
+    };
+    select.innerHTML = `<option value="">Durumu değiştirme</option>${transitions.map((value) => `<option value="${value}">${labels[value]}</option>`).join("")}`;
+    select.disabled = transitions.length === 0;
+    $("account-deletion-admin-body").value = "";
+    $("account-deletion-admin-visibility").value = "USER";
+    $("account-deletion-admin-action-submit").textContent =
+      transitions.length > 0 ? "Güncellemeyi kaydet" : "İç notu kaydet";
+  } catch (error) {
+    $("account-deletion-detail-summary").textContent = formatStudentError(
+      error,
+      "Talep ayrıntısı yüklenemedi.",
+    );
+  }
+}
+
+async function submitAdminAccountDeletionAction(event) {
+  event.preventDefault();
+  const detail = $("account-deletion-admin-detail");
+  const requestId = detail?.dataset.requestId;
+  if (!requestId) return;
+  const status = $("account-deletion-admin-next-status").value;
+  const body = $("account-deletion-admin-body").value.trim();
+  const visibility = $("account-deletion-admin-visibility").value;
+  const message = $("account-deletion-admin-action-status");
+  if (!status && !body) {
+    message.textContent = "Durum değiştir veya bir mesaj/iç not yaz.";
+    return;
+  }
+  const payload = { ...(status ? { status } : {}), ...(body ? { body } : {}), visibility };
+  message.textContent = "Güncelleme kaydediliyor…";
+  try {
+    await parseResponse(
+      await authenticatedFetch(
+        `/admin/account-deletion-requests/${encodeURIComponent(requestId)}/actions`,
+        { method: "POST", body: JSON.stringify(payload) },
+      ),
+    );
+    message.textContent = "Talep güncellendi. Hesap veya veri silinmedi.";
+    await Promise.all([
+      loadAdminAccountDeletionDetail(requestId),
+      loadAdminAccountDeletionRequests(),
+    ]);
+  } catch (error) {
+    message.textContent = formatStudentError(
+      error,
+      "Güncelleme kaydedilemedi. Talep durumunu yenileyip tekrar deneyin.",
+    );
   }
 }
 
@@ -1916,6 +2282,272 @@ function setupAdminAccountDeletionRequestEvents() {
   $("account-deletion-admin-next")?.addEventListener("click", () => {
     accountDeletionAdminPage += 1;
     void loadAdminAccountDeletionRequests();
+  });
+  $("account-deletion-admin-action-form")?.addEventListener(
+    "submit",
+    submitAdminAccountDeletionAction,
+  );
+  $("account-deletion-detail-close")?.addEventListener("click", () =>
+    $("account-deletion-admin-detail").classList.add("hidden"),
+  );
+  $("page-account-deletion-requests")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-account-deletion-admin-open]");
+    if (button) void loadAdminAccountDeletionDetail(button.dataset.accountDeletionAdminOpen);
+  });
+}
+
+async function loadAdminSupportTickets() {
+  if (currentPlatformRole !== "SUPER_ADMIN") return;
+  const revision = ++supportAdminRequestRevision;
+  const body = $("admin-support-body");
+  const status = $("admin-support-status");
+  const pageInfo = $("admin-support-page-info");
+  if (!body) return;
+  status.textContent = "Destek talepleri yükleniyor…";
+  body.innerHTML = '<tr><td colspan="6" class="empty-cell">Yükleniyor…</td></tr>';
+  const query = new URLSearchParams({
+    status: $("admin-support-filter").value || "ALL",
+    page: String(supportAdminPage),
+    pageSize: "25",
+  });
+  try {
+    const result = await parseResponse(
+      await authenticatedFetch(`/admin/support/tickets?${query}`, { cache: "no-store" }),
+    );
+    if (revision !== supportAdminRequestRevision) return;
+    const items = Array.isArray(result?.items) ? result.items : [];
+    const total = Number.isSafeInteger(result?.total) ? result.total : 0;
+    const page = Number.isSafeInteger(result?.page) ? result.page : supportAdminPage;
+    const pageSize = Number.isSafeInteger(result?.pageSize) ? result.pageSize : 25;
+    body.innerHTML = items.length
+      ? items
+          .map(
+            (item) =>
+              `<tr class="${item.unread ? "support-ticket-unread" : ""}"><td>${escapeHtml(item.userDisplayName || "Kullanıcı")}${item.unread ? '<span class="support-unread-label">Yeni yanıt</span>' : ""}</td><td><button type="button" class="link-btn" data-admin-support-open="${escapeHtml(item.id)}">${escapeHtml(item.subject)}</button></td><td>${escapeHtml(supportCategoryLabel(item.category))}</td><td>${escapeHtml(supportStatusLabel(item.status))}</td><td>${escapeHtml(formatAccountDeletionRequestDate(item.updatedAt))}</td><td><button type="button" class="btn btn-ghost btn-sm" data-admin-support-open="${escapeHtml(item.id)}">Aç</button></td></tr>`,
+          )
+          .join("")
+      : '<tr><td colspan="6" class="empty-cell">Bu filtrede destek talebi yok.</td></tr>';
+    const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+    pageInfo.textContent = `${first}–${Math.min(page * pageSize, total)} / ${total} talep`;
+    $("admin-support-prev").disabled = page <= 1;
+    $("admin-support-next").disabled = page * pageSize >= total;
+    status.textContent = "Talep listesi güncel.";
+  } catch {
+    if (revision !== supportAdminRequestRevision) return;
+    body.innerHTML =
+      '<tr><td colspan="6" class="empty-cell">Destek talepleri yüklenemedi.</td></tr>';
+    pageInfo.textContent = "—";
+    status.textContent = "Destek talepleri şu anda yüklenemiyor.";
+  }
+}
+
+async function loadAdminSupportTicketDetail(ticketId) {
+  const section = $("admin-support-detail");
+  if (!section || currentPlatformRole !== "SUPER_ADMIN") return;
+  section.classList.remove("hidden");
+  section.dataset.ticketId = ticketId;
+  $("admin-support-detail-summary").textContent = "Talep ayrıntısı yükleniyor…";
+  try {
+    const data = await parseResponse(
+      await authenticatedFetch(`/admin/support/tickets/${encodeURIComponent(ticketId)}`, {
+        cache: "no-store",
+      }),
+    );
+    const ticket = data?.ticket;
+    if (!ticket) throw new Error("Talep bulunamadı");
+    section.dataset.ticketId = ticket.id;
+    $("admin-support-detail-title").textContent = ticket.subject;
+    $("admin-support-detail-summary").textContent =
+      `${ticket.userDisplayName || "Kullanıcı"} · ${supportCategoryLabel(ticket.category)} · ${supportStatusLabel(ticket.status)} · ${formatAccountDeletionRequestDate(ticket.createdAt)}`;
+    renderSupportConversation("admin-support-detail-messages", data);
+    const transitions =
+      {
+        NEW: ["IN_PROGRESS", "WAITING_FOR_USER", "RESOLVED", "CLOSED"],
+        IN_PROGRESS: ["WAITING_FOR_USER", "RESOLVED", "CLOSED"],
+        WAITING_FOR_USER: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
+        RESOLVED: ["IN_PROGRESS", "CLOSED"],
+        CLOSED: ["IN_PROGRESS"],
+      }[ticket.status] || [];
+    const supportStatusOptions = {
+      NEW: "Yeni",
+      IN_PROGRESS: "İnceleniyor",
+      WAITING_FOR_USER: "Kullanıcı yanıtı bekleniyor",
+      RESOLVED: "Çözüldü",
+      CLOSED: "Kapatıldı",
+    };
+    $("admin-support-action-status").innerHTML =
+      `<option value="">Durumu değiştirme</option>${transitions.map((value) => `<option value="${value}">${supportStatusOptions[value]}</option>`).join("")}`;
+    $("admin-support-action-message").value = "";
+    $("admin-support-action-note").value = "";
+    $("admin-support-action-status-message").textContent = "";
+  } catch (error) {
+    $("admin-support-detail-summary").textContent = formatStudentError(
+      error,
+      "Talep ayrıntısı yüklenemedi.",
+    );
+  }
+}
+
+async function submitAdminSupportAction(event) {
+  event.preventDefault();
+  const detail = $("admin-support-detail");
+  const ticketId = detail?.dataset.ticketId;
+  if (!ticketId) return;
+  const status = $("admin-support-action-status").value;
+  const message = $("admin-support-action-message").value.trim();
+  const internalNote = $("admin-support-action-note").value.trim();
+  const feedback = $("admin-support-action-status-message");
+  if (!status && !message && !internalNote) {
+    feedback.textContent = "Durum değiştir, kullanıcıya yanıt ver veya iç not yaz.";
+    return;
+  }
+  feedback.textContent = "Güncelleme kaydediliyor…";
+  try {
+    await parseResponse(
+      await authenticatedFetch(`/admin/support/tickets/${encodeURIComponent(ticketId)}/actions`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...(status ? { status } : {}),
+          ...(message ? { message } : {}),
+          ...(internalNote ? { internalNote } : {}),
+        }),
+      }),
+    );
+    feedback.textContent = "Destek talebi güncellendi.";
+    await Promise.all([loadAdminSupportTicketDetail(ticketId), loadAdminSupportTickets()]);
+  } catch (error) {
+    feedback.textContent = formatStudentError(
+      error,
+      "Güncelleme kaydedilemedi. Talebi yenileyip tekrar deneyin.",
+    );
+  }
+}
+
+function setupAdminSupportEvents() {
+  $("admin-support-filter")?.addEventListener("change", () => {
+    supportAdminPage = 1;
+    void loadAdminSupportTickets();
+  });
+  $("admin-support-refresh")?.addEventListener("click", () => void loadAdminSupportTickets());
+  $("admin-support-prev")?.addEventListener("click", () => {
+    supportAdminPage = Math.max(1, supportAdminPage - 1);
+    void loadAdminSupportTickets();
+  });
+  $("admin-support-next")?.addEventListener("click", () => {
+    supportAdminPage += 1;
+    void loadAdminSupportTickets();
+  });
+  $("page-support-tickets")?.addEventListener("click", (event) => {
+    const openButton = event.target.closest("[data-admin-support-open]");
+    if (openButton) void loadAdminSupportTicketDetail(openButton.dataset.adminSupportOpen);
+  });
+  $("admin-support-detail-close")?.addEventListener("click", () =>
+    $("admin-support-detail").classList.add("hidden"),
+  );
+  $("admin-support-action-form")?.addEventListener("submit", submitAdminSupportAction);
+}
+
+function renderNotifications(items, unreadCount) {
+  notificationItems = Array.isArray(items) ? items : [];
+  const list = $("notification-list");
+  const count = $("notification-unread-count");
+  const label = $("notification-unread-label");
+  if (list) {
+    list.innerHTML = notificationItems.length
+      ? notificationItems
+          .map(
+            (item) =>
+              `<button type="button" class="notification-item ${item.readAt ? "is-read" : "is-unread"}" data-notification-id="${escapeHtml(item.id)}"><span class="notification-item-title">${escapeHtml(item.title)}</span><span class="notification-item-body">${escapeHtml(item.body)}</span><time>${escapeHtml(formatAccountDeletionRequestDate(item.createdAt))}</time></button>`,
+          )
+          .join("")
+      : '<p class="notification-empty">Henüz bildirimin yok.</p>';
+  }
+  const total = Number.isSafeInteger(unreadCount) ? unreadCount : 0;
+  if (count) {
+    count.textContent = total > 99 ? "99+" : String(total);
+    count.classList.toggle("hidden", total === 0);
+    count.setAttribute("aria-label", `${total} okunmamış bildirim`);
+  }
+  if (label) label.textContent = total ? `${total} okunmamış` : "Tüm bildirimler görüldü";
+}
+
+async function loadNotifications() {
+  if (!currentUserId || document.visibilityState === "hidden") return;
+  const revision = ++notificationRequestRevision;
+  try {
+    const result = await parseResponse(
+      await authenticatedFetch("/notifications?limit=30", { cache: "no-store" }),
+    );
+    if (revision !== notificationRequestRevision || !currentUserId) return;
+    renderNotifications(result?.items, result?.unreadCount);
+  } catch {
+    if (revision === notificationRequestRevision) {
+      $("notification-list").innerHTML =
+        '<p class="notification-empty">Bildirimler şu anda yüklenemiyor.</p>';
+    }
+  }
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling();
+  void loadNotifications();
+  notificationPollingTimer = window.setInterval(() => void loadNotifications(), 45_000);
+}
+
+function stopNotificationPolling() {
+  if (notificationPollingTimer !== null) window.clearInterval(notificationPollingTimer);
+  notificationPollingTimer = null;
+  notificationRequestRevision += 1;
+  notificationItems = [];
+  renderNotifications([], 0);
+}
+
+async function openNotification(notificationId) {
+  const item = notificationItems.find((notification) => notification.id === notificationId);
+  if (!item) return;
+  try {
+    await parseResponse(
+      await authenticatedFetch(`/notifications/${encodeURIComponent(item.id)}/read`, {
+        method: "POST",
+        body: "{}",
+      }),
+    );
+  } catch {
+    // Navigation remains available; a later poll can retry the read state.
+  }
+  await loadNotifications();
+  const isSuperAdmin = currentPlatformRole === "SUPER_ADMIN";
+  if (item.targetType === "ACCOUNT_DELETION_REQUEST") {
+    if (isSuperAdmin) {
+      navigate("account-deletion-requests");
+      await loadAdminAccountDeletionDetail(item.targetId);
+    } else {
+      navigate("settings");
+      await openAccountDeletionRequestDetail(item.targetId);
+    }
+  } else if (item.targetType === "SUPPORT_TICKET") {
+    if (isSuperAdmin) {
+      navigate("support-tickets");
+      await loadAdminSupportTicketDetail(item.targetId);
+    } else {
+      navigate("settings");
+      await openSupportTicket(item.targetId);
+    }
+  }
+  $("notification-panel")?.closest("details")?.removeAttribute("open");
+}
+
+function setupNotificationEvents() {
+  const details = $("notification-panel")?.closest("details");
+  details?.addEventListener("toggle", () => {
+    if (details.open) void loadNotifications();
+  });
+  $("notification-list")?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-notification-id]");
+    if (button) void openNotification(button.dataset.notificationId);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && currentUserId) void loadNotifications();
   });
 }
 
@@ -6189,6 +6821,7 @@ const PAGES = [
   "tenants",
   "users",
   "account-deletion-requests",
+  "support-tickets",
   "students",
   "teachers",
   "branches",
@@ -6215,6 +6848,7 @@ const PLATFORM_PAGES = new Set([
   "tenants",
   "users",
   "account-deletion-requests",
+  "support-tickets",
   "contents",
   "questions",
   "curriculum-drafts",
@@ -6273,6 +6907,7 @@ function roleHomePage() {
 function canAccessPage(page) {
   if (isPlatformUser === null) return true;
   if (page === "account-deletion-requests") return currentPlatformRole === "SUPER_ADMIN";
+  if (page === "support-tickets") return currentPlatformRole === "SUPER_ADMIN";
   if (page === "curriculum-drafts") return currentPlatformRole === "SUPER_ADMIN";
   if (page === "premium-info") return isPersonalBillingUser;
   if (page === "billing-account") return isPersonalBillingUser || isOrganizationAdminUser;
@@ -6400,6 +7035,8 @@ function navigate(
     void loadUsers();
   } else if (page === "account-deletion-requests") {
     void loadAdminAccountDeletionRequests();
+  } else if (page === "support-tickets") {
+    void loadAdminSupportTickets();
   } else if (page === "students") {
     void loadStudents();
     void populateStudentTenantFilter();
@@ -20722,6 +21359,9 @@ async function init() {
   setupAccountProfileEvents();
   setupAccountDeletionRequestEvents();
   setupAdminAccountDeletionRequestEvents();
+  setupSupportEvents();
+  setupAdminSupportEvents();
+  setupNotificationEvents();
   restoreSession();
   setupModalAccessibility();
   setupTenantEvents();

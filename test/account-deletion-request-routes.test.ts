@@ -4,10 +4,14 @@ import type { AuthProvider } from "../src/modules/auth/index.js";
 import { authRoutes } from "../src/modules/auth/routes.js";
 
 const requestServices = vi.hoisted(() => ({
+  applyAdminAccountDeletionAction: vi.fn(),
   cancelAccountDeletionRequest: vi.fn(),
   createAccountDeletionRequest: vi.fn(),
+  getAccountDeletionRequestDetail: vi.fn(),
+  getAccountDeletionRequestHistory: vi.fn(),
   getCurrentAccountDeletionRequest: vi.fn(),
   listAdminAccountDeletionRequests: vi.fn(),
+  sendAccountDeletionRequestMessage: vi.fn(),
 }));
 
 vi.mock("../src/modules/auth/account-deletion-requests.js", () => requestServices);
@@ -132,6 +136,53 @@ describe("account deletion request routes", () => {
       "request-id",
     );
     expect(forgedBody.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("keeps request details owner-scoped and review actions Super Admin only", async () => {
+    requestServices.getAccountDeletionRequestDetail.mockResolvedValue({
+      request: { id: "request-id", status: "IDENTITY_REQUIRED" },
+      messages: [],
+      activities: [],
+    });
+    requestServices.applyAdminAccountDeletionAction.mockResolvedValue({
+      requestId: "request-id",
+      status: "UNDER_REVIEW",
+    });
+    const app = await makeApp();
+    const ownerRead = await app.inject({
+      method: "GET",
+      url: "/auth/account-deletion-requests/request-id",
+      headers: { authorization: "Bearer owner" },
+    });
+    const adminDenied = await app.inject({
+      method: "POST",
+      url: "/admin/account-deletion-requests/request-id/actions",
+      headers: { authorization: "Bearer editor" },
+      payload: { status: "UNDER_REVIEW" },
+    });
+    const adminAction = await app.inject({
+      method: "POST",
+      url: "/admin/account-deletion-requests/request-id/actions",
+      headers: { authorization: "Bearer superAdmin" },
+      payload: { status: "UNDER_REVIEW", body: "İnceleme başladı.", visibility: "USER" },
+    });
+
+    expect(ownerRead.statusCode).toBe(200);
+    expect(adminDenied.statusCode).toBe(403);
+    expect(adminAction.statusCode).toBe(200);
+    expect(requestServices.getAccountDeletionRequestDetail).toHaveBeenCalledWith({
+      actorUserId: "owner-id",
+      requestId: "request-id",
+      isSuperAdmin: false,
+    });
+    expect(requestServices.applyAdminAccountDeletionAction).toHaveBeenCalledWith({
+      actorUserId: "super-admin-id",
+      requestId: "request-id",
+      status: "UNDER_REVIEW",
+      body: "İnceleme başladı.",
+      visibility: "USER",
+    });
     await app.close();
   });
 });
