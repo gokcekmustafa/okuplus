@@ -346,7 +346,7 @@ describe("account deletion request UI", () => {
         "account-deletion-admin-prev": { disabled: false },
         "account-deletion-admin-next": { disabled: false },
       };
-    const authenticatedFetch = vi.fn(async () => ({}));
+    const authenticatedFetch = vi.fn(async (_path: string, _options: unknown) => ({}));
     const parseResponse = vi.fn(async () => ({
       items: [
         {
@@ -368,6 +368,8 @@ describe("account deletion request UI", () => {
       accountDeletionAdminRequestRevision: 0,
       $: (id: string) => nodes[id],
       authenticatedFetch,
+      authenticatedFetchWithTimeout: (path: string, options: unknown) =>
+        authenticatedFetch(path, options),
       parseResponse,
       URLSearchParams,
       Intl,

@@ -1316,6 +1316,16 @@ async function authenticatedFetch(path, options = {}) {
   }
 }
 
+async function authenticatedFetchWithTimeout(path, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await authenticatedFetch(path, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 async function logout(refreshToken, tenantId) {
   const res = await fetch("/auth/logout", {
     method: "POST",
@@ -2133,6 +2143,7 @@ async function loadAdminAccountDeletionRequests() {
   const status = $("account-deletion-admin-status");
   const body = $("account-deletion-admin-body");
   const pageInfo = $("account-deletion-admin-page-info");
+  if (!status || !body || !pageInfo) return;
   status.textContent = "Talep kayıtları yükleniyor…";
   body.innerHTML = '<tr><td colspan="4" class="empty-cell">Yükleniyor…</td></tr>';
 
@@ -2143,7 +2154,7 @@ async function loadAdminAccountDeletionRequests() {
   });
   try {
     const result = await parseResponse(
-      await authenticatedFetch(`/admin/account-deletion-requests?${query}`, {
+      await authenticatedFetchWithTimeout(`/admin/account-deletion-requests?${query}`, {
         cache: "no-store",
       }),
     );
@@ -2174,9 +2185,10 @@ async function loadAdminAccountDeletionRequests() {
     status.textContent = "Talep listesi güncel.";
   } catch {
     if (revision !== accountDeletionAdminRequestRevision) return;
-    body.innerHTML = '<tr><td colspan="4" class="empty-cell">Talepler yüklenemedi.</td></tr>';
+    body.innerHTML =
+      '<tr><td colspan="4" class="empty-cell">Talepler yanıt vermedi veya yüklenemedi.</td></tr>';
     pageInfo.textContent = "—";
-    status.textContent = "Talep listesi şu anda yüklenemiyor. Biraz sonra tekrar deneyin.";
+    status.textContent = "Talep listesi yüklenemedi. Bağlantıyı kontrol edip Yenile’ye basın.";
   }
 }
 
@@ -2190,7 +2202,7 @@ async function loadAdminAccountDeletionDetail(requestId) {
   $("account-deletion-admin-action-status").textContent = "";
   try {
     const data = await parseResponse(
-      await authenticatedFetch(
+      await authenticatedFetchWithTimeout(
         `/admin/account-deletion-requests/${encodeURIComponent(requestId)}`,
         { cache: "no-store" },
       ),
@@ -2302,17 +2314,22 @@ async function loadAdminSupportTickets() {
   const body = $("admin-support-body");
   const status = $("admin-support-status");
   const pageInfo = $("admin-support-page-info");
-  if (!body) return;
+  const filter = $("admin-support-filter");
+  const previous = $("admin-support-prev");
+  const next = $("admin-support-next");
+  if (!body || !status || !pageInfo || !filter || !previous || !next) return;
   status.textContent = "Destek talepleri yükleniyor…";
   body.innerHTML = '<tr><td colspan="6" class="empty-cell">Yükleniyor…</td></tr>';
   const query = new URLSearchParams({
-    status: $("admin-support-filter").value || "ALL",
+    status: filter.value || "ALL",
     page: String(supportAdminPage),
     pageSize: "25",
   });
   try {
     const result = await parseResponse(
-      await authenticatedFetch(`/admin/support/tickets?${query}`, { cache: "no-store" }),
+      await authenticatedFetchWithTimeout(`/admin/support/tickets?${query}`, {
+        cache: "no-store",
+      }),
     );
     if (revision !== supportAdminRequestRevision) return;
     const items = Array.isArray(result?.items) ? result.items : [];
@@ -2335,9 +2352,9 @@ async function loadAdminSupportTickets() {
   } catch {
     if (revision !== supportAdminRequestRevision) return;
     body.innerHTML =
-      '<tr><td colspan="6" class="empty-cell">Destek talepleri yüklenemedi.</td></tr>';
+      '<tr><td colspan="6" class="empty-cell">Destek talepleri yanıt vermedi veya yüklenemedi.</td></tr>';
     pageInfo.textContent = "—";
-    status.textContent = "Destek talepleri şu anda yüklenemiyor.";
+    status.textContent = "Destek talepleri yüklenemedi. Bağlantıyı kontrol edip Yenile’ye basın.";
   }
 }
 
@@ -2349,9 +2366,12 @@ async function loadAdminSupportTicketDetail(ticketId) {
   $("admin-support-detail-summary").textContent = "Talep ayrıntısı yükleniyor…";
   try {
     const data = await parseResponse(
-      await authenticatedFetch(`/admin/support/tickets/${encodeURIComponent(ticketId)}`, {
-        cache: "no-store",
-      }),
+      await authenticatedFetchWithTimeout(
+        `/admin/support/tickets/${encodeURIComponent(ticketId)}`,
+        {
+          cache: "no-store",
+        },
+      ),
     );
     const ticket = data?.ticket;
     if (!ticket) throw new Error("Talep bulunamadı");
@@ -2476,7 +2496,7 @@ async function loadNotifications() {
   const revision = ++notificationRequestRevision;
   try {
     const result = await parseResponse(
-      await authenticatedFetch("/notifications?limit=30", { cache: "no-store" }),
+      await authenticatedFetchWithTimeout("/notifications?limit=30", { cache: "no-store" }),
     );
     if (revision !== notificationRequestRevision || !currentUserId) return;
     renderNotifications(result?.items, result?.unreadCount);
@@ -2507,7 +2527,7 @@ async function openNotification(notificationId) {
   if (!item) return;
   try {
     await parseResponse(
-      await authenticatedFetch(`/notifications/${encodeURIComponent(item.id)}/read`, {
+      await authenticatedFetchWithTimeout(`/notifications/${encodeURIComponent(item.id)}/read`, {
         method: "POST",
         body: "{}",
       }),
