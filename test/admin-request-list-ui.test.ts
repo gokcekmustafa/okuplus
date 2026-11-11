@@ -20,12 +20,21 @@ function makeListHarness(
     kind === "deletion"
       ? [
           "account-deletion-admin-status",
-          "account-deletion-admin-body",
+          "account-deletion-admin-table-body",
           "account-deletion-admin-page-info",
           "account-deletion-admin-filter",
           "account-deletion-admin-prev",
           "account-deletion-admin-next",
           "account-deletion-admin-action-form",
+          "account-deletion-admin-detail",
+          "account-deletion-detail-title",
+          "account-deletion-detail-summary",
+          "account-deletion-detail-messages",
+          "account-deletion-admin-next-status",
+          "account-deletion-admin-message-body",
+          "account-deletion-admin-visibility",
+          "account-deletion-admin-action-submit",
+          "account-deletion-admin-action-status",
           "account-deletion-detail-close",
           "page-account-deletion-requests",
         ]
@@ -173,7 +182,8 @@ describe("Super Admin talep listeleri", () => {
       const h = makeListHarness(kind, response);
       const loader =
         kind === "deletion" ? "loadAdminAccountDeletionRequests" : "loadAdminSupportTickets";
-      const bodyId = kind === "deletion" ? "account-deletion-admin-body" : "admin-support-body";
+      const bodyId =
+        kind === "deletion" ? "account-deletion-admin-table-body" : "admin-support-body";
 
       await runInContext(`${loader}()`, h.context);
 
@@ -188,7 +198,8 @@ describe("Super Admin talep listeleri", () => {
       const h = makeListHarness(kind, { items: [], total: 0, page: 1, pageSize: 25 }, true);
       const loader =
         kind === "deletion" ? "loadAdminAccountDeletionRequests" : "loadAdminSupportTickets";
-      const bodyId = kind === "deletion" ? "account-deletion-admin-body" : "admin-support-body";
+      const bodyId =
+        kind === "deletion" ? "account-deletion-admin-table-body" : "admin-support-body";
       const statusId =
         kind === "deletion" ? "account-deletion-admin-status" : "admin-support-status";
       const refreshId =
@@ -225,6 +236,63 @@ describe("Super Admin talep listeleri", () => {
       expect(String(h.nodes[statusId].textContent)).toContain("güncel");
     },
   );
+
+  it("opens the selected request detail from its row and returns to the list", async () => {
+    const h = makeListHarness("deletion");
+    h.context.parseResponse = vi.fn(async () => ({
+      request: {
+        id: "request-1",
+        status: "UNDER_REVIEW",
+        createdAt: "2026-11-09T10:00:00.000Z",
+        cancelledAt: null,
+        userDisplayName: "Deneme Öğrencisi",
+      },
+      messages: [],
+      activities: [],
+    }));
+    h.context.renderSupportConversation = vi.fn();
+    h.context.formatStudentError = () => "Talep yüklenemedi.";
+    runInContext(
+      functionSource(
+        "async function loadAdminAccountDeletionDetail(",
+        "async function submitAdminAccountDeletionAction(",
+      ),
+      h.context,
+    );
+    runInContext(
+      functionSource(
+        "function setupAdminAccountDeletionRequestEvents()",
+        "async function loadAdminSupportTickets()",
+      ) + "\nsetupAdminAccountDeletionRequestEvents();",
+      h.context,
+    );
+
+    h.listeners.get("page-account-deletion-requests:click")?.({
+      target: {
+        closest: () => ({ dataset: { accountDeletionAdminOpen: "request-1" } }),
+      },
+    });
+    await vi.waitFor(() =>
+      expect(h.nodes["account-deletion-admin-detail"].classList.remove).toHaveBeenCalledWith(
+        "hidden",
+      ),
+    );
+    expect(h.authenticatedFetch).toHaveBeenCalledWith(
+      "/admin/account-deletion-requests/request-1",
+      expect.objectContaining({ cache: "no-store" }),
+    );
+    await vi.waitFor(() =>
+      expect(String(h.nodes["account-deletion-detail-summary"].textContent)).toContain(
+        "UNDER_REVIEW",
+      ),
+    );
+    expect(String(h.nodes["account-deletion-detail-summary"].textContent)).toContain(
+      "UNDER_REVIEW",
+    );
+
+    h.listeners.get("account-deletion-detail-close:click")?.();
+    expect(h.nodes["account-deletion-admin-detail"].classList.add).toHaveBeenCalledWith("hidden");
+  });
 
   it.each([
     ["ACCOUNT_DELETION_REQUEST", "account-deletion-requests"],

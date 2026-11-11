@@ -146,6 +146,22 @@ describe("account deletion request UI", () => {
     expect(htmlSource).toContain("Talep kaydı hesabını kapatmaz ve verilerini silmez.");
   });
 
+  it("keeps the admin table, message field, and request detail in the review page", () => {
+    const ids = [...htmlSource.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+    const accountPageStart = htmlSource.indexOf('id="page-account-deletion-requests"');
+    const accountPageEnd = htmlSource.indexOf('id="page-settings"', accountPageStart);
+    const detailIndex = htmlSource.indexOf('id="account-deletion-admin-detail"');
+
+    expect(ids.filter((id) => id === "account-deletion-admin-table-body")).toHaveLength(1);
+    expect(ids.filter((id) => id === "account-deletion-admin-message-body")).toHaveLength(1);
+    expect(ids).not.toContain("account-deletion-admin-body");
+    expect(detailIndex).toBeGreaterThan(accountPageStart);
+    expect(detailIndex).toBeLessThan(accountPageEnd);
+    expect(appSource).toContain('data-account-deletion-admin-open="${escapeHtml(item.id)}"');
+    expect(appSource).toContain('$("account-deletion-admin-table-body")');
+    expect(appSource).toContain('$("account-deletion-admin-message-body").value.trim()');
+  });
+
   it("loads only the current session owner's status and hides duplicate request action", async () => {
     const h = makeHarness();
     h.parseResponse.mockResolvedValue({
@@ -341,7 +357,7 @@ describe("account deletion request UI", () => {
     const nodes: Record<string, { textContent?: string; innerHTML?: string; disabled?: boolean }> =
       {
         "account-deletion-admin-status": { textContent: "" },
-        "account-deletion-admin-body": body,
+        "account-deletion-admin-table-body": body,
         "account-deletion-admin-page-info": { textContent: "" },
         "account-deletion-admin-prev": { disabled: false },
         "account-deletion-admin-next": { disabled: false },
@@ -401,6 +417,62 @@ describe("account deletion request UI", () => {
     expect(nodes["account-deletion-admin-page-info"].textContent).toBe("1–1 / 1 talep");
     expect(nodes["account-deletion-admin-prev"].disabled).toBe(true);
     expect(nodes["account-deletion-admin-next"].disabled).toBe(true);
+  });
+
+  it("sends status, user replies, and internal notes from the dedicated message field", async () => {
+    const detail = { dataset: { requestId: "request-1" } };
+    const controls: Record<
+      string,
+      { value?: string; textContent?: string; dataset?: Record<string, string> }
+    > = {
+      "account-deletion-admin-detail": detail,
+      "account-deletion-admin-next-status": { value: "AWAITING_USER" },
+      "account-deletion-admin-message-body": { value: "Lütfen ek bilgi gönderin." },
+      "account-deletion-admin-visibility": { value: "USER" },
+      "account-deletion-admin-action-status": { textContent: "" },
+    };
+    const authenticatedFetch = vi.fn(async (_path: string, _options: { body: string }) => ({}));
+    const parseResponse = vi.fn(async () => ({}));
+    const reloadDetail = vi.fn(async () => undefined);
+    const reloadList = vi.fn(async () => undefined);
+    const context = createContext({
+      $: (id: string) => controls[id],
+      authenticatedFetch,
+      parseResponse,
+      loadAdminAccountDeletionDetail: reloadDetail,
+      loadAdminAccountDeletionRequests: reloadList,
+      formatStudentError: () => "İşlem başarısız.",
+    });
+    runInContext(
+      functionSource(
+        "async function submitAdminAccountDeletionAction(",
+        "function setupAdminAccountDeletionRequestEvents()",
+      ),
+      context,
+    );
+    const event = { preventDefault: vi.fn() };
+    context.event = event;
+
+    await runInContext("submitAdminAccountDeletionAction(event)", context);
+    expect(authenticatedFetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(authenticatedFetch.mock.calls[0][1].body)).toEqual({
+      status: "AWAITING_USER",
+      body: "Lütfen ek bilgi gönderin.",
+      visibility: "USER",
+    });
+    expect(reloadDetail).toHaveBeenCalledWith("request-1");
+    expect(reloadList).toHaveBeenCalledOnce();
+
+    controls["account-deletion-admin-next-status"].value = "";
+    controls["account-deletion-admin-message-body"].value = "Yalnızca iç not.";
+    controls["account-deletion-admin-visibility"].value = "INTERNAL";
+    await runInContext("submitAdminAccountDeletionAction(event)", context);
+    expect(authenticatedFetch).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(authenticatedFetch.mock.calls[1][1].body)).toEqual({
+      body: "Yalnızca iç not.",
+      visibility: "INTERNAL",
+    });
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a response that belongs to an earlier profile view", async () => {

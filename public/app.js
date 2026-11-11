@@ -2141,7 +2141,7 @@ async function loadAdminAccountDeletionRequests() {
   if (currentPlatformRole !== "SUPER_ADMIN") return;
   const revision = ++accountDeletionAdminRequestRevision;
   const status = $("account-deletion-admin-status");
-  const body = $("account-deletion-admin-body");
+  const body = $("account-deletion-admin-table-body");
   const pageInfo = $("account-deletion-admin-page-info");
   if (!status || !body || !pageInfo) return;
   status.textContent = "Talep kayıtları yükleniyor…";
@@ -2230,7 +2230,7 @@ async function loadAdminAccountDeletionDetail(requestId) {
     };
     select.innerHTML = `<option value="">Durumu değiştirme</option>${transitions.map((value) => `<option value="${value}">${labels[value]}</option>`).join("")}`;
     select.disabled = transitions.length === 0;
-    $("account-deletion-admin-body").value = "";
+    $("account-deletion-admin-message-body").value = "";
     $("account-deletion-admin-visibility").value = "USER";
     $("account-deletion-admin-action-submit").textContent =
       transitions.length > 0 ? "Güncellemeyi kaydet" : "İç notu kaydet";
@@ -2248,7 +2248,7 @@ async function submitAdminAccountDeletionAction(event) {
   const requestId = detail?.dataset.requestId;
   if (!requestId) return;
   const status = $("account-deletion-admin-next-status").value;
-  const body = $("account-deletion-admin-body").value.trim();
+  const body = $("account-deletion-admin-message-body").value.trim();
   const visibility = $("account-deletion-admin-visibility").value;
   const message = $("account-deletion-admin-action-status");
   if (!status && !body) {

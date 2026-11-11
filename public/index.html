@@ -2114,60 +2114,6 @@
                 </div>
               </div>
             </div>
-            <section
-              id="account-deletion-admin-detail"
-              class="support-detail-card card hidden"
-              aria-labelledby="account-deletion-detail-title"
-            >
-              <div class="profile-card-heading">
-                <h3 id="account-deletion-detail-title">Talep ayrıntısı</h3>
-                <button
-                  id="account-deletion-detail-close"
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                >
-                  Listeye dön
-                </button>
-              </div>
-              <p id="account-deletion-detail-summary" class="muted"></p>
-              <div id="account-deletion-detail-messages" class="support-conversation"></div>
-              <form id="account-deletion-admin-action-form" class="support-reply-form">
-                <label class="field"
-                  ><span>Durum</span
-                  ><select id="account-deletion-admin-next-status">
-                    <option value="">Durumu değiştirme</option>
-                    <option value="IDENTITY_REQUIRED">Ek kimlik doğrulaması bekliyor</option>
-                    <option value="UNDER_REVIEW">İnceleniyor</option>
-                    <option value="AWAITING_USER">Kullanıcıdan ek bilgi bekleniyor</option>
-                    <option value="DECLINED">Talep uygun bulunmadı</option>
-                  </select></label
-                >
-                <label class="field"
-                  ><span>Kullanıcıya mesaj veya iç not</span
-                  ><textarea
-                    id="account-deletion-admin-body"
-                    rows="4"
-                    maxlength="5000"
-                    placeholder="Kimlik belgesi veya hassas kanıt istemeden, gerekli sonraki adımı açıklayın."
-                  ></textarea>
-                </label>
-                <label class="field"
-                  ><span>Mesaj görünürlüğü</span
-                  ><select id="account-deletion-admin-visibility">
-                    <option value="USER">Kullanıcıya gönder</option>
-                    <option value="INTERNAL">Yalnızca yönetici iç notu</option>
-                  </select></label
-                >
-                <p id="account-deletion-admin-action-status" class="muted" role="status"></p>
-                <button
-                  id="account-deletion-admin-action-submit"
-                  type="submit"
-                  class="btn btn-primary"
-                >
-                  Güncellemeyi kaydet
-                </button>
-              </form>
-            </section>
           </section>
 
           <section id="page-support-tickets" class="page-view hidden" data-super-admin-only>
@@ -6877,7 +6823,7 @@
                     <th scope="col">Geri çekilme tarihi</th>
                   </tr>
                 </thead>
-                <tbody id="account-deletion-admin-body">
+                <tbody id="account-deletion-admin-table-body">
                   <tr>
                     <td colspan="4" class="empty-cell">Talepler yükleniyor…</td>
                   </tr>
@@ -6895,6 +6841,60 @@
                 </button>
               </div>
             </div>
+            <section
+              id="account-deletion-admin-detail"
+              class="support-detail-card card hidden"
+              aria-labelledby="account-deletion-detail-title"
+            >
+              <div class="profile-card-heading">
+                <h3 id="account-deletion-detail-title">Talep ayrıntısı</h3>
+                <button
+                  id="account-deletion-detail-close"
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                >
+                  Listeye dön
+                </button>
+              </div>
+              <p id="account-deletion-detail-summary" class="muted"></p>
+              <div id="account-deletion-detail-messages" class="support-conversation"></div>
+              <form id="account-deletion-admin-action-form" class="support-reply-form">
+                <label class="field"
+                  ><span>Durum</span
+                  ><select id="account-deletion-admin-next-status">
+                    <option value="">Durumu değiştirme</option>
+                    <option value="IDENTITY_REQUIRED">Ek kimlik doğrulaması bekliyor</option>
+                    <option value="UNDER_REVIEW">İnceleniyor</option>
+                    <option value="AWAITING_USER">Kullanıcıdan ek bilgi bekleniyor</option>
+                    <option value="DECLINED">Talep uygun bulunmadı</option>
+                  </select></label
+                >
+                <label class="field"
+                  ><span>Kullanıcıya mesaj veya iç not</span
+                  ><textarea
+                    id="account-deletion-admin-message-body"
+                    rows="4"
+                    maxlength="5000"
+                    placeholder="Kimlik belgesi veya hassas kanıt istemeden, gerekli sonraki adımı açıklayın."
+                  ></textarea>
+                </label>
+                <label class="field"
+                  ><span>Mesaj görünürlüğü</span
+                  ><select id="account-deletion-admin-visibility">
+                    <option value="USER">Kullanıcıya gönder</option>
+                    <option value="INTERNAL">Yalnızca yönetici iç notu</option>
+                  </select></label
+                >
+                <p id="account-deletion-admin-action-status" class="muted" role="status"></p>
+                <button
+                  id="account-deletion-admin-action-submit"
+                  type="submit"
+                  class="btn btn-primary"
+                >
+                  Güncellemeyi kaydet
+                </button>
+              </form>
+            </section>
           </section>
 
           <section id="page-settings" class="page-view profile-page hidden">
