@@ -570,6 +570,13 @@ model User {
   authIdentities           AuthIdentity[]
   authSessions             AuthSession[]
   accountDeletionRequests  AccountDeletionRequest[]
+  accountDeletionMessages  AccountDeletionRequestMessage[]  @relation("AccountDeletionRequestMessageAuthor")
+  accountDeletionActivities AccountDeletionRequestActivity[] @relation("AccountDeletionRequestActivityActor")
+  supportTickets           SupportTicket[]                  @relation("SupportTicketOwner")
+  supportMessages          SupportTicketMessage[]           @relation("SupportTicketMessageAuthor")
+  supportActivities        SupportTicketActivity[]          @relation("SupportTicketActivityActor")
+  notificationsReceived    Notification[]                   @relation("NotificationRecipient")
+  notificationsSent        Notification[]                   @relation("NotificationActor")
   learningPathRouteOverrides StudentLearningPath[] @relation("LearningPathRouteOverride")
 
   @@index([status])
@@ -623,9 +630,112 @@ model AccountDeletionRequest {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   cancelledAt DateTime?
+  messages    AccountDeletionRequestMessage[]
+  activities  AccountDeletionRequestActivity[]
 
   @@index([userId, createdAt])
   @@index([status, updatedAt])
+}
+
+/// Denetlenebilir başvuru konuşması. Kullanıcıya gösterilmeyen iç notlar
+/// visibleToUser=false olarak yalnızca Super Admin tarafından okunur.
+model AccountDeletionRequestMessage {
+  id            String                 @id @default(dbgenerated("uuidv7()"))
+  requestId     String
+  request       AccountDeletionRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  authorUserId  String
+  author        User                   @relation("AccountDeletionRequestMessageAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  body          String                 @db.Text
+  visibleToUser Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+
+  @@index([requestId, createdAt])
+}
+
+/// Append-only status and note history for account deletion requests.
+model AccountDeletionRequestActivity {
+  id            String                 @id @default(dbgenerated("uuidv7()"))
+  requestId     String
+  request       AccountDeletionRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorUserId   String?
+  actor         User?                  @relation("AccountDeletionRequestActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  eventType     String
+  fromStatus    String?
+  toStatus      String?
+  note          String?                @db.Text
+  visibleToUser Boolean                @default(true)
+  createdAt     DateTime               @default(now())
+
+  @@index([requestId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model SupportTicket {
+  id          String                  @id @default(dbgenerated("uuidv7()"))
+  ownerUserId String
+  owner       User                    @relation("SupportTicketOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  subject     String                  @db.VarChar(160)
+  category    String                  @db.VarChar(32)
+  status      String                  @default("NEW") @db.VarChar(32)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  closedAt    DateTime?
+  messages    SupportTicketMessage[]
+  activities  SupportTicketActivity[]
+
+  @@index([ownerUserId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model SupportTicketMessage {
+  id           String        @id @default(dbgenerated("uuidv7()"))
+  ticketId     String
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  authorUserId String
+  author       User          @relation("SupportTicketMessageAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+  body         String        @db.Text
+  createdAt    DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
+/// Append-only audit history for support ticket status changes and internal notes.
+model SupportTicketActivity {
+  id            String        @id @default(dbgenerated("uuidv7()"))
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  actorUserId   String?
+  actor         User?         @relation("SupportTicketActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  eventType     String        @db.VarChar(32)
+  fromStatus    String?       @db.VarChar(32)
+  toStatus      String?       @db.VarChar(32)
+  note          String?       @db.Text
+  visibleToUser Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model Notification {
+  id                String    @id @default(dbgenerated("uuidv7()"))
+  recipientUserId   String
+  recipient         User      @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  actorUserId       String?
+  actor             User?     @relation("NotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  recipientAudience String    @db.VarChar(24)
+  kind              String    @db.VarChar(48)
+  title             String    @db.VarChar(120)
+  body              String    @db.VarChar(280)
+  targetType        String    @db.VarChar(40)
+  targetId          String    @db.VarChar(128)
+  dedupeKey         String    @unique @db.VarChar(240)
+  createdAt         DateTime  @default(now())
+  readAt            DateTime?
+
+  @@index([recipientUserId, readAt, createdAt])
+  @@index([targetType, targetId, readAt])
 }
 
 model Tenant {

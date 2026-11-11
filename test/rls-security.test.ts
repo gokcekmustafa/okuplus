@@ -37,6 +37,9 @@ const TENANT_B = "99999995-0000-7000-8000-00000000000b";
 const USER_ID = "99999995-0000-7000-8000-000000000001";
 const OTHER_USER_ID = "99999995-0000-7000-8000-000000000002";
 const ACCOUNT_DELETION_REQUEST_ID = "99999995-0000-7000-8000-0000000000d1";
+const SUPPORT_TICKET_ID = "99999995-0000-7000-8000-0000000000d2";
+const OTHER_SUPPORT_TICKET_ID = "99999995-0000-7000-8000-0000000000d3";
+const SUPPORT_NOTIFICATION_ID = "99999995-0000-7000-8000-0000000000d4";
 
 const GLOBAL_CONTENT = "99999995-0000-7000-8000-0000000000c1";
 const CONTENT_A = "99999995-0000-7000-8000-0000000000a1";
@@ -56,6 +59,22 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
 
     // Olası kesinti kalıntısını temizle (idempotent): yalnızca bu testin
     // kendi ID'lerini siler, demo/gerçek veriye dokunmaz.
+    await prisma.supportTicketMessage.deleteMany({
+      where: { ticketId: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.supportTicketActivity.deleteMany({
+      where: { ticketId: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.supportTicket.deleteMany({
+      where: { id: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.notification.deleteMany({ where: { id: SUPPORT_NOTIFICATION_ID } });
+    await prisma.accountDeletionRequestMessage.deleteMany({
+      where: { request: { userId: { in: [USER_ID, OTHER_USER_ID] } } },
+    });
+    await prisma.accountDeletionRequestActivity.deleteMany({
+      where: { request: { userId: { in: [USER_ID, OTHER_USER_ID] } } },
+    });
     await prisma.accountDeletionRequest.deleteMany({
       where: { userId: { in: [USER_ID, OTHER_USER_ID] } },
     });
@@ -72,6 +91,54 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
           displayName: "RLS Other",
         },
       ],
+    });
+
+    await prisma.supportTicket.createMany({
+      data: [
+        {
+          id: SUPPORT_TICKET_ID,
+          ownerUserId: USER_ID,
+          subject: "RLS owner support ticket",
+          category: "TECHNICAL",
+          status: "NEW",
+        },
+        {
+          id: OTHER_SUPPORT_TICKET_ID,
+          ownerUserId: OTHER_USER_ID,
+          subject: "RLS other support ticket",
+          category: "ACCOUNT",
+          status: "NEW",
+        },
+      ],
+    });
+    await prisma.supportTicketMessage.createMany({
+      data: [
+        {
+          id: "99999995-0000-7000-8000-0000000000d5",
+          ticketId: SUPPORT_TICKET_ID,
+          authorUserId: USER_ID,
+          body: "Owner message",
+        },
+        {
+          id: "99999995-0000-7000-8000-0000000000d6",
+          ticketId: OTHER_SUPPORT_TICKET_ID,
+          authorUserId: OTHER_USER_ID,
+          body: "Other message",
+        },
+      ],
+    });
+    await prisma.notification.create({
+      data: {
+        id: SUPPORT_NOTIFICATION_ID,
+        recipientUserId: USER_ID,
+        recipientAudience: "USER",
+        kind: "SUPPORT_TICKET_UPDATED",
+        title: "Support update",
+        body: "Your ticket was updated.",
+        targetType: "SUPPORT_TICKET",
+        targetId: SUPPORT_TICKET_ID,
+        dedupeKey: "rls-security-support-notification-owner",
+      },
     });
 
     // Tenant tablosunda RLS yok; oku_app INSERT yetkisine sahip.
@@ -137,6 +204,22 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
   afterAll(async () => {
     // Yalnızca bu testin oluşturduğu kayıtları siler; TRUNCATE kullanmaz,
     // böylece demo/gerçek geliştirme verisi asla silinmez.
+    await prisma.supportTicketMessage.deleteMany({
+      where: { ticketId: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.supportTicketActivity.deleteMany({
+      where: { ticketId: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.supportTicket.deleteMany({
+      where: { id: { in: [SUPPORT_TICKET_ID, OTHER_SUPPORT_TICKET_ID] } },
+    });
+    await prisma.notification.deleteMany({ where: { id: SUPPORT_NOTIFICATION_ID } });
+    await prisma.accountDeletionRequestMessage.deleteMany({
+      where: { request: { userId: { in: [USER_ID, OTHER_USER_ID] } } },
+    });
+    await prisma.accountDeletionRequestActivity.deleteMany({
+      where: { request: { userId: { in: [USER_ID, OTHER_USER_ID] } } },
+    });
     await prisma.accountDeletionRequest.deleteMany({
       where: { userId: { in: [USER_ID, OTHER_USER_ID] } },
     });
@@ -247,7 +330,7 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
     expect(visibleCount).toBe(0);
   });
 
-  it("silme talebi RLS'i sahibine yalnız iptal izni, SUPER_ADMIN rolüne yalnız okuma izni verir", async () => {
+  it("silme talebi RLS'i sahibe iptal/yanıt, SUPER_ADMIN'e sınırlı inceleme izni verir", async () => {
     const request = await withTenantContext(
       { userId: USER_ID, tenantId: null, platformRole: null },
       (tx) =>
@@ -329,6 +412,36 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
         app,
       ),
     ).rejects.toThrow();
+    await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: "SUPER_ADMIN" },
+      (tx) =>
+        tx.accountDeletionRequest.update({
+          where: { id: otherRequest.id },
+          data: { status: "AWAITING_USER" },
+        }),
+      app,
+    );
+    const ownerReplyTransition = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) =>
+        tx.accountDeletionRequest.updateMany({
+          where: { id: otherRequest.id, status: "AWAITING_USER" },
+          data: { status: "UNDER_REVIEW" },
+        }),
+      app,
+    );
+    expect(ownerReplyTransition.count).toBe(1);
+    await expect(
+      withTenantContext(
+        { userId: USER_ID, tenantId: null, platformRole: null },
+        (tx) =>
+          tx.accountDeletionRequest.updateMany({
+            where: { id: otherRequest.id, status: "UNDER_REVIEW" },
+            data: { status: "IDENTITY_REQUIRED" },
+          }),
+        app,
+      ),
+    ).resolves.toEqual({ count: 0 });
     await expect(
       withTenantContext(
         { userId: USER_ID, tenantId: null, platformRole: null },
@@ -336,5 +449,50 @@ describe("RLS: app.platform_role boş string / NULL asla yetki vermez", () => {
         app,
       ),
     ).rejects.toThrow();
+
+    const ownerTickets = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.supportTicket.findMany({ select: { id: true } }),
+      app,
+    );
+    const otherTickets = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.supportTicket.findMany({ select: { id: true } }),
+      app,
+    );
+    const ownerMessages = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.supportTicketMessage.findMany({ select: { id: true } }),
+      app,
+    );
+    const otherNotifications = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) => tx.notification.findMany({ select: { id: true } }),
+      app,
+    );
+    expect(ownerTickets.map(({ id }) => id)).toEqual([SUPPORT_TICKET_ID]);
+    expect(otherTickets.map(({ id }) => id)).toEqual([OTHER_SUPPORT_TICKET_ID]);
+    expect(ownerMessages.map(({ id }) => id)).toEqual(["99999995-0000-7000-8000-0000000000d5"]);
+    expect(otherNotifications).toEqual([]);
+    const foreignRead = await withTenantContext(
+      { userId: OTHER_USER_ID, tenantId: null, platformRole: null },
+      (tx) =>
+        tx.notification.updateMany({
+          where: { id: SUPPORT_NOTIFICATION_ID },
+          data: { readAt: new Date() },
+        }),
+      app,
+    );
+    expect(foreignRead.count).toBe(0);
+    const ownerRead = await withTenantContext(
+      { userId: USER_ID, tenantId: null, platformRole: null },
+      (tx) =>
+        tx.notification.updateMany({
+          where: { id: SUPPORT_NOTIFICATION_ID },
+          data: { readAt: new Date() },
+        }),
+      app,
+    );
+    expect(ownerRead.count).toBe(1);
   });
 });
