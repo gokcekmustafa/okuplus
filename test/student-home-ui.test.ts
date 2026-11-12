@@ -90,6 +90,7 @@ const active = {
 const pathData = {
   currentLevel: { name: "3. Seviye" },
   routeProgress: { completed: 2, total: 3, percent: 67 },
+  overallProgress: { completed: 1, total: 9, percent: 11 },
   paths: [
     {
       path: { title: "Temel Beceriler" },
@@ -127,7 +128,20 @@ describe("student home", () => {
     );
     expect(h.get("home-start-next").disabled).toBe(false);
     expect(h.get("home-work-percent").textContent).toBe("%67");
-    expect(h.get("home-work-description").textContent).toContain("3 istasyondan 2");
+    expect(h.get("home-work-description").textContent).toContain("Rota genelinde 3 istasyondan 2");
+    expect(h.get("home-work-progress").attrs.get("aria-label")).toBe("Rota ilerlemesi");
+    expect(html).toContain('aria-label="Rota ilerlemesi"');
+  });
+  it("labels the fallback current-section count by its narrower scope", () => {
+    const h = harness();
+    h.render({
+      currentLevel: { name: "3. Seviye" },
+      overallProgress: { completed: 1, total: 9, percent: 11 },
+      paths: [{ path: { title: "Temel Beceriler" }, nodes: [active] }],
+    });
+    expect(h.get("home-work-percent").textContent).toBe("%11");
+    expect(h.get("home-work-description").textContent).toContain("Mevcut bölümde 9 adımdan 1");
+    expect(h.get("home-work-progress").attrs.get("aria-label")).toBe("Mevcut bölüm ilerlemesi");
   });
   it("does not open locked, unavailable or another student's cached station", () => {
     const h = harness();
@@ -144,7 +158,7 @@ describe("student home", () => {
     h.activate();
     expect(h.start).not.toHaveBeenCalled();
   });
-  it("uses actual comprehension measurements rather than a general accuracy score", () => {
+  it("labels practice accuracy and saved reading speed without presenting them as formal measurements", () => {
     const h = harness();
     h.render(pathData, {
       summary: { accuracy: 0.95 },
@@ -158,9 +172,14 @@ describe("student home", () => {
         },
       ],
     });
-    expect(h.get("home-insights-values").innerHTML).toContain("162");
-    expect(h.get("home-insights-values").innerHTML).toContain("%78");
-    expect(h.get("home-insights-values").innerHTML).not.toContain("%95");
+    const content = h.get("home-insights-values").innerHTML;
+    expect(content).toContain("Kayıtlı okuma hızı");
+    expect(content).toContain("162");
+    expect(content).toContain("resmi ölçme sonucu değildir");
+    expect(content).toContain("Anlama alıştırması doğruluğu");
+    expect(content).toContain("%78");
+    expect(content).not.toContain("%95");
+    expect(content).not.toContain("Son anlama ölçümü");
   });
   it("shows recorded activity scores and leaves unknown measurements unscored", () => {
     const h = harness();
@@ -179,7 +198,8 @@ describe("student home", () => {
     expect(activity).toContain("Ormanların Önemi");
     expect(activity).toContain("%80");
     expect(activity.match(/home-activity-score/g)).toHaveLength(1);
-    expect(h.get("home-insights-values").innerHTML).toContain("Henüz ölçülmedi");
+    expect(h.get("home-insights-values").innerHTML).toContain("Henüz puanlanan alıştırma yok");
+    expect(h.get("home-insights-values").innerHTML).toContain("Henüz kayıt yok");
   });
   it("presents empty states without fake zero scores or an enabled start button", () => {
     const h = harness();

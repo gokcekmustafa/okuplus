@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 const source = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const code = source.slice(
   source.indexOf("function insightScope()"),
   source.indexOf(
@@ -55,6 +56,36 @@ function harness(missingIds: string[] = []) {
   return { get, context, run: (s: string) => runInContext(s, context) };
 }
 describe("progress/gamification production UI helpers", () => {
+  it("labels route-wide and current-section progress separately and keeps practice counts distinct", async () => {
+    const h = harness();
+    h.run(`insightApi=(path)=>Promise.resolve(path==='progress'?{
+      summary:{sessionCount:8,attemptCount:5,correctCount:4,scoredCount:5,accuracy:.8},
+      training:{completedTrainingSessionCount:2,skills:[]},items:[],development:[]
+    }:path==='gamification'?{
+      totalPoints:0,currentDays:0,longestDays:0,badges:[],trophies:[],recentPointEvents:[],categoryProgress:{},nextTargets:[]
+    }:path.startsWith('history')?{page:1,total:0,pageSize:5,items:[]}: {
+      currentLevel:{name:'3. Seviye'},overallProgress:{completed:2,total:9,percent:22},
+      routeProgress:{completed:6,total:22,percent:27},paths:[],today:{recentActivity:[]}
+    })`);
+
+    await h.run("loadProgress()");
+
+    const metrics = h.get("progress-summary").innerHTML;
+    const routeProgress = h.get("progress-path").innerHTML;
+    expect(metrics).toContain("Tamamlanan antrenman");
+    expect(metrics).toContain('<strong id="progress-sessions">2</strong>');
+    expect(metrics).not.toContain('<strong id="progress-sessions">8</strong>');
+    expect(metrics).toContain("Alıştırma doğruluğu");
+    expect(routeProgress).toContain("MEVCUT BÖLÜM İLERLEMESİ");
+    expect(routeProgress).toContain("2 / 9 adım tamamlandı");
+    expect(routeProgress).not.toContain("6 / 22");
+    expect(routeProgress).toContain('aria-label="Mevcut bölüm ilerlemesi"');
+    expect(h.get("progress-study").innerHTML).toContain(
+      "Tamamlanan bireysel alıştırma oturumlarındaki yanıtlar",
+    );
+    expect(index).toContain('aria-label="Mevcut bölüm ilerlemesi"');
+  });
+
   it("keeps UTC reporting week boundaries on the correct calendar date", () => {
     const h = harness();
     expect(h.run('insightDate("2026-09-06T23:59:59.999Z", false, true)')).toBe("06.09.2026");

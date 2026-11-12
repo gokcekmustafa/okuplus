@@ -21561,7 +21561,9 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
         (isUsableLearningPathNode(node) || node.type === "NEXT_LEARNING"),
     ) || null;
   studentHomeNextScope = insightScope();
+  const hasRouteProgress = Boolean(path.routeProgress);
   const progress = path.routeProgress || path.overallProgress;
+  const progressLabel = hasRouteProgress ? "Rota ilerlemesi" : "Mevcut bölüm ilerlemesi";
   const hasProgress =
     Number.isFinite(progress?.completed) && Number.isFinite(progress?.total) && progress.total > 0;
   const percent = hasProgress
@@ -21578,6 +21580,7 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
       )
     : null;
   const track = $("home-work-progress");
+  track?.setAttribute?.("aria-label", progressLabel);
   if (percent === null) track?.removeAttribute?.("aria-valuenow");
   else track?.setAttribute?.("aria-valuenow", String(percent));
   const fill = $("home-work-fill");
@@ -21587,7 +21590,9 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
   const progressDescription = $("home-work-description");
   if (progressDescription)
     progressDescription.textContent = hasProgress
-      ? `${progress.total} istasyondan ${progress.completed} tanesi tamamlandı`
+      ? hasRouteProgress
+        ? `Rota genelinde ${progress.total} istasyondan ${progress.completed} tanesi tamamlandı`
+        : `Mevcut bölümde ${progress.total} adımdan ${progress.completed} tanesi tamamlandı`
       : "Öğrenme yolun hazır olduğunda ilerlemen burada görünecek.";
   const startButton = $("home-start-next");
   if (startButton) {
@@ -21607,7 +21612,7 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
   const newest = (items) =>
     [...items].sort((a, b) => new Date(b.lastAttemptAt || 0) - new Date(a.lastAttemptAt || 0))[0];
   const speed = newest(measurements.filter((item) => Number.isFinite(item.fluencyWcpm)));
-  // A general accuracy score may include other skills. Only an actual reading-comprehension measurement belongs here.
+  // StudentProgress is built from completed individual practice sessions, not formal assessments.
   const comprehension = newest(
     measurements.filter(
       (item) =>
@@ -21625,8 +21630,8 @@ function renderHomeInsights(path, progressData = null, historyData = null) {
     `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/ui-icons.svg#${name}"></use></svg>`;
   values.innerHTML = `<div class="home-level"><span class="home-icon-tile" aria-hidden="true"><svg class="home-bars" viewBox="0 0 28 28"><rect x="3" y="17" width="5" height="9" rx="1.5"/><rect x="11" y="10" width="5" height="16" rx="1.5"/><rect x="19" y="3" width="5" height="23" rx="1.5"/></svg></span><span>Seviye</span><div class="home-level-value"><strong>${escapeHtml(level)}</strong>${levelDetail ? `<small>${escapeHtml(levelDetail)}</small>` : ""}</div></div>
     <div class="home-measurements">
-      <article class="home-measurement"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 22a11 11 0 1 1 18 0M5 17l3-1M8 9l2 2M14 6v3M21 9l-2 2M23 17l-3-1M14 17l5-5"/><circle cx="14" cy="17" r="2"/></svg><div><small>Okuma Hızım</small>${speed ? `<strong>${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(speed.fluencyWcpm)}</strong><span class="home-unit">kelime/dk</span>` : '<strong class="home-no-measurement">Henüz ölçülmedi</strong>'}</div></article>
-      <article class="home-measurement home-comprehension"${comprehension ? ` title="Son anlama ölçümü: ${escapeHtml(comprehension.skillName || "Okuduğunu anlama")}"` : ""}>${icon("book")}<div><small>Anlama Sonucum</small><strong${comprehension ? "" : ' class="home-no-measurement"'}>${comprehension ? `%${Math.round(comprehension.accuracy * 100)}` : "Henüz ölçülmedi"}</strong></div></article>
+      <article class="home-measurement" title="Kaydedilmiş beceri verisidir; resmi ölçme sonucu değildir."><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M5 22a11 11 0 1 1 18 0M5 17l3-1M8 9l2 2M14 6v3M21 9l-2 2M23 17l-3-1M14 17l5-5"/><circle cx="14" cy="17" r="2"/></svg><div><small>Kayıtlı okuma hızı</small>${speed ? `<strong>${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(speed.fluencyWcpm)}</strong><span class="home-unit">kelime/dk</span>` : '<strong class="home-no-measurement">Henüz kayıt yok</strong>'}</div></article>
+      <article class="home-measurement home-comprehension"${comprehension ? ` title="Tamamlanan bireysel alıştırmalardaki puanlanan ${escapeHtml(comprehension.skillName || "okuduğunu anlama")} cevaplarının doğruluğu."` : ""}>${icon("book")}<div><small>Anlama alıştırması doğruluğu</small><strong${comprehension ? "" : ' class="home-no-measurement"'}>${comprehension ? `%${Math.round(comprehension.accuracy * 100)}` : "Henüz puanlanan alıştırma yok"}</strong></div></article>
     </div>`;
   const completedSessions = Array.isArray(historyData?.items)
     ? historyData.items.filter((item) => item.status === "COMPLETED")
@@ -21957,13 +21962,13 @@ async function loadProgress() {
     insightMetric(
       "📚",
       "Tamamlanan antrenman",
-      progress?.training?.completedTrainingSessionCount ?? summary?.sessionCount ?? "—",
+      progress?.training?.completedTrainingSessionCount ?? "—",
       "",
       "progress-sessions",
     ) +
     insightMetric(
       "🎯",
-      "Doğruluk",
+      "Alıştırma doğruluğu",
       formatAccuracy(summary?.accuracy),
       "insight-purple",
       "progress-accuracy",
@@ -21973,14 +21978,14 @@ async function loadProgress() {
   if (progress) {
     renderProgressList(progress.items, progress.training?.skills);
     $("progress-study").innerHTML =
-      `<dl class="insight-facts"><div><dt>Cevap</dt><dd id="progress-attempts">${summary.attemptCount}</dd></div><div><dt>Doğru</dt><dd id="progress-correct">${summary.correctCount}</dd></div><div><dt>Puanlanan</dt><dd>${summary.scoredCount}</dd></div></dl><p class="muted">Tamamlanan oturumların tüm cevapları. Doğruluk yalnızca puanlanan cevaplar üzerinden hesaplanır.</p>`;
+      `<dl class="insight-facts"><div><dt>Cevap</dt><dd id="progress-attempts">${summary.attemptCount}</dd></div><div><dt>Doğru</dt><dd id="progress-correct">${summary.correctCount}</dd></div><div><dt>Puanlanan</dt><dd>${summary.scoredCount}</dd></div></dl><p class="muted">Tamamlanan bireysel alıştırma oturumlarındaki yanıtlar. Alıştırma doğruluğu yalnızca puanlanan yanıtlar üzerinden hesaplanır.</p>`;
   }
   if (history) renderInsightHistory(history);
   if (gamma) renderDevelopmentGamification(gamma);
   if (path) {
     const p = path.overallProgress;
     $("progress-path").innerHTML =
-      `<div><p class="insight-eyebrow">ÖĞRENME YOLUN</p><h3>${path.currentLevel ? escapeHtml(path.currentLevel.name) : "Seviyen henüz belirlenmedi"}</h3><p>${p.completed} / ${p.total} adım tamamlandı · ${p.percent}%</p>${insightBar(p.total ? p.completed / p.total : null, "Öğrenme yolu")}</div><button type="button" class="btn btn-primary" data-insight-path>Öğrenme yoluna git</button>`;
+      `<div><p class="insight-eyebrow">MEVCUT BÖLÜM İLERLEMESİ</p><h3>${path.currentLevel ? escapeHtml(path.currentLevel.name) : "Seviyen henüz belirlenmedi"}</h3><p>${p.completed} / ${p.total} adım tamamlandı · ${p.percent}%</p>${insightBar(p.total ? p.completed / p.total : null, "Mevcut bölüm ilerlemesi")}</div><button type="button" class="btn btn-primary" data-insight-path>Öğrenme yoluna git</button>`;
     renderHomeInsights(path, progress, history);
   }
   if (gamma) observeInsightAwards(gamma);
