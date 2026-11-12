@@ -411,8 +411,10 @@ describe("student dashboard release 0.4", () => {
   it("keeps empty or unmeasurable progress honest", () => {
     expect(app).toContain("formatAccuracy(summary?.accuracy)");
     expect(app).toContain(
-      "Tamamlanan oturumların tüm cevapları. Doğruluk yalnızca puanlanan cevaplar üzerinden hesaplanır.",
+      "Tamamlanan bireysel alıştırma oturumlarındaki yanıtlar. Alıştırma doğruluğu yalnızca puanlanan yanıtlar üzerinden hesaplanır.",
     );
+    expect(app).toContain('"Alıştırma doğruluğu"');
+    expect(app).not.toContain('summary?.sessionCount ?? "—"');
     expect(app).toContain("summary.scoredCount");
   });
 
